@@ -2399,12 +2399,18 @@ const enUS: Record<string, string> = {
   "settings.modelProviderDescription":
     "Pi providers and models from ~/.pi/agent/models.json and auth.json.",
   "settings.modelProvider.pi.source":
-    "Models come from Pi Agent (~/.pi/agent/models.json and auth.json). Switch them in the chat composer.",
+    "Models come from Pi Agent (~/.pi/agent/models.json and auth.json). Add or edit providers here.",
   "settings.modelProvider.pi.refresh": "Refresh",
   "settings.modelProvider.pi.loading": "Loading Pi model catalog…",
-  "settings.modelProvider.pi.empty":
-    "No Pi models yet. Add providers in ~/.pi/agent/models.json.",
+  "settings.modelProvider.pi.empty": "No Pi models yet. Click Add provider to start.",
   "settings.modelProvider.pi.default": "Default",
+  "settings.modelProvider.pi.defaultModel": "Default model",
+  "settings.modelProvider.pi.providerId": "Provider ID",
+  "settings.modelProvider.pi.apiKeyKeep": "Leave blank to keep the current key",
+  "settings.modelProvider.pi.fetchModels": "Fetch models",
+  "settings.modelProvider.pi.loadFailed": "Couldn't load model config",
+  "settings.modelProvider.pi.saveFailed": "Couldn't save model config",
+  "settings.modelProvider.pi.invalid": "Need an ID, Base URL, and at least one model",
   "settings.modelProvider.add": "Add provider",
   "settings.modelProvider.createCustomProvider": "Create custom provider",
   "settings.modelProvider.templateCreateFailed":

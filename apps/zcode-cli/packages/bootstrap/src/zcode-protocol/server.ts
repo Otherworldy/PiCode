@@ -50,6 +50,7 @@ import {
 import { listChildProcesses } from "./process-child-processes.js";
 import { ProtocolRuntimeResources } from "./runtime-resources.js";
 import {
+  mutatePiModels,
   readWorkspacePresentation,
   testProviderModelConnectivity,
 } from "./workspace-model-runtime.js";
@@ -637,6 +638,8 @@ export class ZCodeProtocolAgentServer {
         return await closeSession(this.context, request.params);
       case zcodeProtocolMethods.workspaceReadPresentation:
         return await readWorkspacePresentation(this.context, request.params);
+      case zcodeProtocolMethods.piModelsMutate:
+        return await mutatePiModels(request.params);
       case zcodeProtocolMethods.workspaceHookTrustGrant: {
         const grantResult = await grantWorkspaceHookTrustForProtocol(request.params, {
           appVersion: this.context.deps.version,

@@ -16,6 +16,8 @@ import type {
   ZCodeSessionStateSnapshot,
   ZCodeStateUpdatedNotification,
   ZCodeWorkspacePresentation,
+  ZCodePiModelsMutateParams,
+  ZCodePiModelsMutateResult,
 } from "@zcode/shared";
 import { createServiceDescriptor } from "#src/descriptors.js";
 
@@ -26,6 +28,7 @@ export interface ZCodeSessionWorkspaceTarget {
 }
 
 export type ZCodeSessionReadWorkspacePresentationParams = ZCodeSessionWorkspaceTarget;
+export type ZCodeSessionMutatePiModelsParams = ZCodeSessionWorkspaceTarget & ZCodePiModelsMutateParams;
 
 export interface ZCodeTaskTarget extends ZCodeSessionWorkspaceTarget {
   sessionId: string;
@@ -140,6 +143,7 @@ export interface IZCodeSessionService {
   readWorkspacePresentation(
     params: ZCodeSessionReadWorkspacePresentationParams,
   ): Promise<ZCodeWorkspacePresentation>;
+  mutatePiModels(params: ZCodeSessionMutatePiModelsParams): Promise<ZCodePiModelsMutateResult>;
   createSession(params: ZCodeSessionCreateParams): Promise<ZCodeSessionStateSnapshot>;
   resumeSession(params: ZCodeSessionResumeParams): Promise<ZCodeSessionStateSnapshot>;
   listSessions(params: ZCodeSessionListParams): Promise<ZCodeSessionInfo[]>;

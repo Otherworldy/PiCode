@@ -22,6 +22,18 @@ import {
   type ZCodeModelStreamPort,
 } from "./model-delegate.js";
 import type { CreatePiSession, PiHostEvent, PiSessionPort } from "./types.js";
+import {
+  deleteProvider,
+  discoverPiModels,
+  loadModelsJson,
+  saveModelsJson,
+  storedApiKey,
+  toPiModelConfigView,
+  toRuntimeConfig,
+  upsertProvider,
+  type PiModelConfigView,
+  type PiProviderDraft,
+} from "./model-config-file.js";
 
 const TOOL_NAMES =
   process.platform === "win32"
@@ -104,6 +116,52 @@ export async function listPiCatalog(): Promise<{
     defaultModel: settings.getDefaultModel(),
     defaultThought: settings.getDefaultThinkingLevel() ?? "medium",
   };
+}
+
+export type PiModelsAction = "get" | "upsert" | "delete" | "setDefault" | "discover";
+
+export async function mutatePiCatalog(input: {
+  action: PiModelsAction;
+  provider?: PiProviderDraft;
+  providerId?: string;
+  defaultProvider?: string;
+  defaultModel?: string;
+}): Promise<PiModelConfigView & { discovered?: Array<{ id: string; name: string }> }> {
+  const agentDir = getAgentDir();
+  const settings = SettingsManager.create(process.cwd(), agentDir);
+  let file = await loadModelsJson(agentDir);
+
+  if (input.action === "upsert" && input.provider) {
+    file = upsertProvider(file, input.provider);
+    await saveModelsJson(agentDir, file);
+    const runtime = await getProductionModelRuntime();
+    const stored = file.providers?.[input.provider.id];
+    if (stored) runtime.registerProvider(input.provider.id, toRuntimeConfig(stored) as never);
+  } else if (input.action === "delete" && input.providerId) {
+    file = deleteProvider(file, input.providerId);
+    await saveModelsJson(agentDir, file);
+    const runtime = await getProductionModelRuntime();
+    runtime.unregisterProvider(input.providerId);
+  } else if (input.action === "setDefault" && input.defaultProvider && input.defaultModel) {
+    settings.setDefaultModelAndProvider(input.defaultProvider, input.defaultModel);
+    await settings.flush();
+  } else if (input.action === "discover") {
+    const baseUrl = input.provider?.baseUrl ?? "";
+    const apiKey = input.provider?.apiKey || storedApiKey(file, input.providerId ?? input.provider?.id ?? "");
+    const discovered = await discoverPiModels(baseUrl, apiKey);
+    return {
+      ...toPiModelConfigView(file, {
+        defaultProvider: settings.getDefaultProvider(),
+        defaultModel: settings.getDefaultModel(),
+      }),
+      discovered,
+    };
+  }
+
+  return toPiModelConfigView(file, {
+    defaultProvider: settings.getDefaultProvider(),
+    defaultModel: settings.getDefaultModel(),
+  });
 }
 
 export function createSdkSessionFactory(options: {

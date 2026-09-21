@@ -43,6 +43,7 @@ const HIDDEN_SETTINGS_SECTIONS = new Set<SettingsSectionId>([
   // 编辑页代码保留，放开时从这里移除即可。
   "workspaceFileSearch",
   "computerUse",
+  "usage",
 ]);
 
 interface SettingsSectionIntentEventDetail {

@@ -1,8 +1,9 @@
 /* eslint-disable max-lines -- workspace 模型协议与兼容请求处理仍集中在本文件。 */
 import { createInMemorySessionEventStore } from "@zcode/adapters/storage";
 import type { ModelSelection } from "@zcode/contracts";
-import { listPiCatalog } from "@zcode/pi-host";
+import { listPiCatalog, mutatePiCatalog } from "@zcode/pi-host";
 import {
+  zcodePiModelsMutateParamsSchema,
   zcodeProviderTestModelConnectivityParamsSchema,
   zcodeWorkspaceReadPresentationParamsSchema,
   type ZCodeWorkspaceRef,
@@ -42,6 +43,17 @@ export async function readWorkspacePresentation(
         }
       : {}),
   };
+}
+
+export async function mutatePiModels(rawParams: unknown) {
+  const params = parseParams(zcodePiModelsMutateParamsSchema, rawParams);
+  return mutatePiCatalog({
+    action: params.action,
+    ...(params.provider ? { provider: params.provider } : {}),
+    ...(params.providerId ? { providerId: params.providerId } : {}),
+    ...(params.defaultProvider ? { defaultProvider: params.defaultProvider } : {}),
+    ...(params.defaultModel ? { defaultModel: params.defaultModel } : {}),
+  });
 }
 
 export async function testProviderModelConnectivity(

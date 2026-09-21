@@ -15,7 +15,8 @@ export {
   type DelegateProvider,
   type ZCodeModelStreamPort,
 } from "./model-delegate.js";
-export { createSdkSessionFactory, listPiCatalog } from "./session-factory.js";
+export { createSdkSessionFactory, listPiCatalog, mutatePiCatalog } from "./session-factory.js";
+export type { PiModelConfigView, PiProviderDraft } from "./model-config-file.js";
 export { gateTool, type ToolPermissionCheck } from "./permission-gate.js";
 export type {
   CreatePiSession,

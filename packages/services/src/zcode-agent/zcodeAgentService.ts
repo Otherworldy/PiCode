@@ -94,6 +94,7 @@ import {
   zcodeStateUpdatedNotificationSchema,
   zcodeUserInputRequestParamsSchema,
   zcodeWorkspacePresentationSchema,
+  zcodePiModelsMutateResultSchema,
   zcodeWorkspaceCancelGenerateTextResultSchema,
   zcodeWorkspaceGenerateTextResultSchema,
   zcodeWorkspaceHookTrustGrantResultSchema,
@@ -158,6 +159,7 @@ import type {
   ZCodeAgentListSessionsParams,
   ZCodeAgentListSessionSubagentsParams,
   ZCodeAgentReadWorkspacePresentationParams,
+  ZCodeAgentMutatePiModelsParams,
   ZCodeAgentReadSessionEventsParams,
   ZCodeAgentReadSessionMessagesParams,
   ZCodeAgentReadSessionParams,
@@ -3791,6 +3793,26 @@ export function createZCodeAgentService(
         });
         throw error;
       }
+    },
+
+    async mutatePiModels(params: ZCodeAgentMutatePiModelsParams) {
+      const client = await getReadOnlyClient(params);
+      const result = await client.request(
+        zcodeProtocolMethods.piModelsMutate,
+        {
+          workspace: buildWorkspaceRef(params),
+          action: params.action,
+          ...(params.providerId ? { providerId: params.providerId } : {}),
+          ...(params.provider ? { provider: params.provider } : {}),
+          ...(params.defaultProvider ? { defaultProvider: params.defaultProvider } : {}),
+          ...(params.defaultModel ? { defaultModel: params.defaultModel } : {}),
+        },
+        zcodePiModelsMutateResultSchema,
+      );
+      if (params.action !== "discover") {
+        await this.readWorkspacePresentation(params).catch(() => undefined);
+      }
+      return result;
     },
 
     async grantWorkspaceHookTrust(params: ZCodeAgentGrantWorkspaceHookTrustParams) {

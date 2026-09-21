@@ -888,7 +888,7 @@ function RootInner({
     onOpenWorkspace: handleOpenWorkspace,
     allowOpenWorkspace,
     onLogin: undefined,
-    onLogout: user ? handleLogout : undefined,
+    onLogout: undefined,
     user,
   };
 
@@ -973,7 +973,7 @@ function RootInner({
             remoteWorkspaceSessions={remoteWorkspaceSessions}
             allowRemoteWorkspace={allowRemoteWorkspace}
             handleBackFromSettings={handleBackFromSettings}
-            handleLogout={user ? handleLogout : undefined}
+            handleLogout={undefined}
             onLogin={undefined}
             user={user}
             reconnectingRemoteWorkspaceKeys={reconnectingRemoteWorkspaceKeys}

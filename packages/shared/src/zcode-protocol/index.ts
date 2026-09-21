@@ -2016,6 +2016,49 @@ export const zcodeWorkspacePresentationSchema = z
   })
   .strict();
 export type ZCodeWorkspacePresentation = z.infer<typeof zcodeWorkspacePresentationSchema>;
+export const zcodePiModelsMutateParamsSchema = z
+  .object({
+    workspace: zcodeWorkspaceRefSchema.optional(),
+    action: z.enum(["get", "upsert", "delete", "setDefault", "discover"]),
+    providerId: z.string().min(1).optional(),
+    provider: z
+      .object({
+        id: z.string().min(1),
+        name: z.string().optional(),
+        baseUrl: z.string().min(1),
+        api: z.string().min(1),
+        apiKey: z.string().optional(),
+        models: z.array(
+          z.object({
+            id: z.string().min(1),
+            name: z.string().optional(),
+          }),
+        ),
+      })
+      .optional(),
+    defaultProvider: z.string().min(1).optional(),
+    defaultModel: z.string().min(1).optional(),
+  })
+  .strict();
+export type ZCodePiModelsMutateParams = z.infer<typeof zcodePiModelsMutateParamsSchema>;
+export const zcodePiModelsMutateResultSchema = z
+  .object({
+    providers: z.array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        baseUrl: z.string(),
+        api: z.string(),
+        hasApiKey: z.boolean(),
+        models: z.array(z.object({ id: z.string(), name: z.string() })),
+      }),
+    ),
+    defaultProvider: z.string().optional(),
+    defaultModel: z.string().optional(),
+    discovered: z.array(z.object({ id: z.string(), name: z.string() })).optional(),
+  })
+  .strict();
+export type ZCodePiModelsMutateResult = z.infer<typeof zcodePiModelsMutateResultSchema>;
 const workspaceHookSha256DigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 export const zcodeWorkspaceHookTrustGrantParamsSchema = z
   .object({
@@ -3607,6 +3650,7 @@ export const zcodeProtocolMethods = {
   sessionSetThoughtLevel: "session/setThoughtLevel",
   sessionSetMode: "session/setMode",
   workspaceReadPresentation: "workspace/readPresentation",
+  piModelsMutate: "pi/models",
   workspaceHookTrustGrant: "workspace/hooks/trustGrant",
   // 进程级 Account Provider Config 与 workspace 运行目录分离。
   providerUpdateAccountConfig: "provider/updateAccountConfig",
