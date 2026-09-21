@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { ConversationDelta, DeliveryProfileName } from "@zcode/shared/zcode-protocol-v4";
@@ -7,6 +7,7 @@ import { createHostExtensionUi } from "./extension-ui-bridge.js";
 import { ExtensionUiHost } from "./extension-ui-host.js";
 import { HostQueue } from "./host-queue.js";
 import { workspaceKey } from "./identity.js";
+import { readPiJsonl } from "./jsonl-history.js";
 import { mapThought } from "./model-delegate.js";
 import { PiToV4Projector } from "./projector.js";
 import type { ToolPermissionCheck } from "./permission-gate.js";
@@ -35,9 +36,26 @@ export interface HostedSession {
   setFeedback(entityId: string, feedback: "like" | "dislike" | null): void;
   requestConfirm(title: string, message: string): Promise<boolean>;
   dispose(): void;
+  hydrateHistory(content: string): void;
   onDeltas(listener: (deltas: ConversationDelta[]) => void): () => void;
   onNotify(listener: (message: string, notifyType: "info" | "warning" | "error") => void): () => void;
 }
+
+export type PiStoredSummary = {
+  sessionId: string;
+  sessionFile: string;
+  title: string;
+  createdAt: number;
+  lastActivityAt: number;
+  lastAssistantPreview?: string;
+};
+
+export type PiStoredSession = {
+  sessionId: string;
+  sessionFile: string;
+  identity: string;
+  workspacePath: string;
+};
 
 export interface RegistryOptions {
   storageRoot: string;
@@ -69,6 +87,10 @@ export class HostSessionRegistry {
     parentSessionId?: string;
     viaRegistry?: boolean;
   }): Promise<HostedSession> {
+    if (input.sessionId) {
+      const existing = this.sessions.get(input.sessionId);
+      if (existing) return existing;
+    }
     const identity = workspaceKey(input.workspaceIdentity, input.workspacePath);
     const sessionId = input.sessionId ?? randomUUID();
     const dir = join(this.options.storageRoot, "pi-host-sessions", encodeKey(identity));
@@ -96,16 +118,7 @@ export class HostSessionRegistry {
       viaRegistry: input.viaRegistry ?? Boolean(input.parentSessionId),
       workId: input.parentSessionId ? sessionId : undefined,
     });
-    this.sessions.set(sessionId, hosted);
-    if (this.options.createToolPermission) {
-      this.toolChecks.set(sessionId, this.options.createToolPermission(hosted));
-    }
-    if (input.parentSessionId) {
-      const set = this.children.get(input.parentSessionId) ?? new Set();
-      set.add(sessionId);
-      this.children.set(input.parentSessionId, set);
-    }
-    return hosted;
+    return this.register(hosted);
   }
 
   async spawn(parentId: string): Promise<HostedSession> {
@@ -138,7 +151,6 @@ export class HostSessionRegistry {
         return check(request);
       },
     });
-    await pi.navigateTree?.(entryId);
     const hosted = this.wrap(pi, {
       sessionId,
       identity: parent.identity,
@@ -146,10 +158,8 @@ export class HostSessionRegistry {
       sessionFile,
       viaRegistry: true,
     });
-    this.sessions.set(sessionId, hosted);
-    if (this.options.createToolPermission) {
-      this.toolChecks.set(sessionId, this.options.createToolPermission(hosted));
-    }
+    await this.register(hosted);
+    await hosted.navigateTree(entryId);
     return hosted;
   }
 
@@ -169,16 +179,77 @@ export class HostSessionRegistry {
     await rm(hosted.sessionFile, { force: true });
   }
 
-  async list(identity: string): Promise<Array<{ sessionId: string; sessionFile: string }>> {
+  async list(identity: string): Promise<PiStoredSummary[]> {
     const dir = join(this.options.storageRoot, "pi-host-sessions", encodeKey(identity));
     try {
       const files = await readdir(dir);
-      return files
-        .filter((file) => file.endsWith(".jsonl"))
-        .map((file) => ({ sessionId: file.replace(/\.jsonl$/u, ""), sessionFile: join(dir, file) }));
+      const summaries: PiStoredSummary[] = [];
+      for (const file of files) {
+        if (!file.endsWith(".jsonl")) continue;
+        const sessionFile = join(dir, file);
+        const content = await readFile(sessionFile, "utf8").catch(() => "");
+        const summary = readPiJsonl(content).summary;
+        if (!summary) continue;
+        summaries.push({
+          sessionId: file.replace(/\.jsonl$/u, ""),
+          sessionFile,
+          title: summary.title,
+          createdAt: summary.createdAt,
+          lastActivityAt: summary.lastActivityAt,
+          ...(summary.lastAssistantPreview
+            ? { lastAssistantPreview: summary.lastAssistantPreview }
+            : {}),
+        });
+      }
+      return summaries;
     } catch {
       return [];
     }
+  }
+
+  async find(sessionId: string): Promise<PiStoredSession | null> {
+    const root = join(this.options.storageRoot, "pi-host-sessions");
+    let dirs: string[] = [];
+    try {
+      dirs = await readdir(root);
+    } catch {
+      return null;
+    }
+    for (const dir of dirs) {
+      const sessionFile = join(root, dir, `${sessionId}.jsonl`);
+      const content = await readFile(sessionFile, "utf8").catch(() => "");
+      if (!content) continue;
+      const summary = readPiJsonl(content).summary;
+      if (!summary) continue;
+      let identity = dir;
+      try {
+        identity = Buffer.from(dir, "base64url").toString("utf8") || dir;
+      } catch {
+        identity = dir;
+      }
+      return {
+        sessionId,
+        sessionFile,
+        identity,
+        workspacePath: summary.cwd ?? identity,
+      };
+    }
+    return null;
+  }
+
+  private async register(hosted: HostedSession): Promise<HostedSession> {
+    const content = await readFile(hosted.sessionFile, "utf8").catch(() => "");
+    hosted.hydrateHistory(content);
+    this.sessions.set(hosted.sessionId, hosted);
+    if (this.options.createToolPermission) {
+      this.toolChecks.set(hosted.sessionId, this.options.createToolPermission(hosted));
+    }
+    if (hosted.parentSessionId) {
+      const set = this.children.get(hosted.parentSessionId) ?? new Set();
+      set.add(hosted.sessionId);
+      this.children.set(hosted.parentSessionId, set);
+    }
+    return hosted;
   }
 
   private wrap(
@@ -203,8 +274,13 @@ export class HostSessionRegistry {
     const bridge = new CommandBridge(pi, queue);
     const deltaListeners = new Set<(deltas: ConversationDelta[]) => void>();
     const notifyListeners = new Set<(message: string, notifyType: "info" | "warning" | "error") => void>();
+    const pendingDeltas: ConversationDelta[] = [];
     const emit = (deltas: ConversationDelta[]) => {
       if (deltas.length === 0) return;
+      if (deltaListeners.size === 0) {
+        pendingDeltas.push(...deltas);
+        return;
+      }
       for (const listener of deltaListeners) listener(deltas);
     };
     const handleUi = (event: Extract<PiHostEvent, { type: "extension_ui_request" }>) => {
@@ -298,8 +374,16 @@ export class HostSessionRegistry {
         unsubscribe();
         pi.dispose();
       },
+      hydrateHistory: (content) => {
+        const parsed = readPiJsonl(content);
+        for (const event of parsed.events) emit(projector.apply(event));
+        if (parsed.summary?.title) emit(projector.setTitle(parsed.summary.title, "generated"));
+      },
       onDeltas: (listener) => {
         deltaListeners.add(listener);
+        if (pendingDeltas.length > 0) {
+          listener(pendingDeltas.splice(0, pendingDeltas.length));
+        }
         return () => {
           deltaListeners.delete(listener);
         };

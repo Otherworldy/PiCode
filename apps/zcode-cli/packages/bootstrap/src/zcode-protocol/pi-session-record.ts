@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import {
   createInMemorySessionEventStore,
   createRootTraceContext,
@@ -5,7 +6,7 @@ import {
   type SessionId,
   type WorkspaceId,
 } from "@zcode/contracts";
-import type { HostedSession, HostSessionRegistry } from "@zcode/pi-host";
+import { summarizePiJsonl, type HostedSession, type HostSessionRegistry } from "@zcode/pi-host";
 import type { ZCodeWorkspaceRef } from "@zcode/shared";
 import { projectIdFromDirectory } from "../app/paths.js";
 import { createPiHostedApp } from "../app/pi-hosted-app.js";
@@ -49,14 +50,14 @@ export async function bindHostedSession(
   const unsubscribeDeltas = hosted.onDeltas((deltas) => {
     context.v4Gateway?.ingestPiDeltas(sessionId, deltas);
   });
+  const summary = summarizePiJsonl(await readFile(hosted.sessionFile, "utf8").catch(() => ""));
   return {
     app,
     memoryEnabled: false,
     nativeSearchEnhancementsEnabled: false,
     modelContextBudgetStrategy: "legacy",
-    createdAt: Date.now(),
+    createdAt: summary?.createdAt ?? Date.now(),
     eventStore: context.deps.createSessionEventStore?.(sessionId) ?? createInMemorySessionEventStore(),
-    persistence: "deferred",
     protocolEventSequences: new Map(),
     protocolToolInputTransmissions: new Map(),
     stateRevision: 0,
@@ -65,8 +66,9 @@ export async function bindHostedSession(
       unsubscribeDeltas();
       hosted.dispose();
     },
-    updatedAt: Date.now(),
+    updatedAt: summary?.lastActivityAt ?? Date.now(),
     workspace,
+    persistence: summary ? "immediate" : "deferred",
   };
 }
 
@@ -94,15 +96,16 @@ export async function listPiStoredSummaries(
   workspaceId: string,
 ) {
   const listed = await registry.list(workspaceId);
-  const now = Date.now();
   return listed.map((item) => ({
     sessionId: item.sessionId,
     workspaceId,
-    title: "",
-    phase: "draft" as const,
+    title: item.title,
+    titleSource: "generated" as const,
+    phase: "completedSuccess" as const,
     sessionEnded: false,
     hasBackgroundWork: false,
-    lastActivityAt: now,
-    createdAt: now,
+    lastActivityAt: item.lastActivityAt,
+    createdAt: item.createdAt,
+    ...(item.lastAssistantPreview ? { lastAssistantPreview: item.lastAssistantPreview } : {}),
   }));
 }

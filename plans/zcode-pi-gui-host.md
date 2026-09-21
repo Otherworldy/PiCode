@@ -178,8 +178,8 @@ Desktop `continuous` 与手机 `replayable` 同一投影所有者、两套 flush
 
 ### 步骤 9 — 收口删除旧循环与终端 TUI
 
-- [ ] `create-app` / V4 handlers 去掉对 `AgentRuntime.executeTurn` 的依赖。
-- [ ] 删除或停止编译 turn-loop、内置 handlers、workflow/CUA/Cron 主路径。
+- [x] `create-app` / V4 handlers 去掉对 `AgentRuntime.executeTurn` 的依赖。
+- [x] 删除或停止编译 turn-loop、内置 handlers、workflow/CUA/Cron 主路径。`executeTurn`/`executeTurnCommand` 已切断；`turn-loop.ts` 停止编译。create-app 仍装配未接主路径的 workflow 端口（残留，不跑循环）。
 - [x] 删除 `@zcode/tui`：`apps/zcode-cli/packages/tui/`，以及 `cli/src/tui-*.ts`、`run.ts` 里 `runTuiCommand`。无参不再 `(positional ?? "tui") === "tui"`。
 - [x] `zcode --web` 与 `app-server --stdio` 保留。无参输出 help。
 - [x] 更新 `AGENTS.md` / README：Agent 能力源是 Pi；不再提供终端 TUI；UI 禁止再假设 ZCode 工具名（除 presentation 映射表）。

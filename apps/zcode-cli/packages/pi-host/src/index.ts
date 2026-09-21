@@ -6,7 +6,14 @@ export { PiToV4Projector } from "./projector.js";
 export { HostQueue } from "./host-queue.js";
 export { ExtensionUiHost } from "./extension-ui-host.js";
 export { CommandBridge } from "./command-bridge.js";
-export { HostSessionRegistry, type HostedSession, type RegistryOptions } from "./session-registry.js";
+export {
+  HostSessionRegistry,
+  type HostedSession,
+  type PiStoredSession,
+  type PiStoredSummary,
+  type RegistryOptions,
+} from "./session-registry.js";
+export { readPiJsonl, replayPiJsonl, summarizePiJsonl } from "./jsonl-history.js";
 export {
   createDelegateModel,
   createDelegateProvider,
@@ -16,7 +23,7 @@ export {
   type ZCodeModelStreamPort,
 } from "./model-delegate.js";
 export { createSdkSessionFactory, listPiCatalog, mutatePiCatalog } from "./session-factory.js";
-export type { PiModelConfigView, PiProviderDraft } from "./model-config-file.js";
+export type { PiDiscoveredModel, PiModelConfigView, PiProviderDraft } from "./model-config-file.js";
 export { gateTool, type ToolPermissionCheck } from "./permission-gate.js";
 export type {
   CreatePiSession,

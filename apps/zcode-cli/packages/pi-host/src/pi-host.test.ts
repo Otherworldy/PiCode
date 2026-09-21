@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -263,5 +263,35 @@ test("registry spawn has workId; bypass does not", async () => {
   assert.equal(child.viaRegistry, true);
   const bypass = new FakePiSession("raw");
   assert.equal("workId" in bypass, false);
+  await rm(root, { recursive: true, force: true });
+});
+
+test("list skips empty jsonl and hydrateHistory rebuilds rows", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    createSession: async (input) => new FakePiSession(input.sessionId, input.sessionFile),
+  });
+  const empty = await registry.create({ workspacePath: root, sessionId: "sess_empty" });
+  const dir = join(root, "pi-host-sessions", Buffer.from(root).toString("base64url"));
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    join(dir, "sess_chat.jsonl"),
+    [
+      '{"type":"session","timestamp":"2026-01-02T03:04:05.000Z","cwd":"C:\\work"}',
+      '{"type":"message","id":"u1","timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"user","content":[{"type":"text","text":"hello pi"}]}}',
+      '{"type":"message","id":"a1","timestamp":"2026-01-02T03:04:07.000Z","message":{"role":"assistant","content":[{"type":"text","text":"hi"}]}}',
+    ].join("\n"),
+  );
+  const listed = await registry.list(root);
+  assert.equal(listed.some((item) => item.sessionId === empty.sessionId), false);
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0]?.title, "hello pi");
+  const found = await registry.find("sess_chat");
+  assert.equal(found?.sessionId, "sess_chat");
+  const opened = await registry.create({ workspacePath: root, sessionId: "sess_chat" });
+  const kinds = opened.projector.getSnapshot().rows.window.map((row) => row.kind);
+  assert.ok(kinds.includes("userInput"));
+  assert.ok(kinds.includes("assistantText"));
   await rm(root, { recursive: true, force: true });
 });

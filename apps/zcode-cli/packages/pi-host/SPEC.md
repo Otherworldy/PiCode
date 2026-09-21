@@ -72,7 +72,7 @@ ZCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代理
 
 ## 持久化与旧会话
 
-Pi jsonl 按 identity 分目录。sessions-index 只枚举这些文件。不打开、不导入旧 ZCode event log。
+Pi jsonl 按 identity 分目录，是对话树唯一真相。sessions-index 只枚举这些文件里**有过用户消息**的会话（标题 / 时间 / 预览从 jsonl 解析）。打开或冷订阅时 Registry 用同一份 jsonl 重放到 `PiToV4Projector`，V4 snapshot 是派生缓存。无用户消息的空 jsonl 不当会话列出。不打开、不导入旧 ZCode event log。
 
 ## Model
 
@@ -81,6 +81,19 @@ Pi jsonl 按 identity 分目录。sessions-index 只枚举这些文件。不打�
 **目录所有者：** Pi `ModelRuntime.getAvailableSnapshot()`。CLI 在 `workspace/readPresentation` 上行目录；Host `IModelSelectionService` 只投影这份目录，不再用 ZCode Provider Registry 当聊天/设置页候选。投影必须把 `getView(input.selection)` 写成 `effectiveSelection`，否则 Composer 触发器拿不到当前草稿模型。Composer 与设置「模型设置」共用该视图。`switchModelConfig` 走 `session.setModel`。
 
 设置页通过 `pi/models` 读写 `~/.pi/agent/models.json`（apiKey 只写不读）和 `settings.json` 默认模型；保存后 `registerProvider`/`unregisterProvider` 更新活着的 `ModelRuntime`。壳不另写 ZCode 供应商库。ZCode 账号登录、升级套餐、Coding Plan 使用统计不再作为产品面。
+
+编辑供应商是双面板：左侧发现/勾选模型，右侧为每个已选模型写 Pi 原生字段。状态所有者仍是 `models.json`，不另建一套绑定表。
+
+|界面|落盘（Pi `models.json` 模型项）|
+|---|---|
+|别名|`name`|
+|上下文窗口|`contextWindow`|
+|最大输出|`maxTokens`|
+|图片输入|`input` 含 `image`|
+|启用的思考等级|`thinkingLevelMap` 的 key；已有 value（含自定义 mapping）保留|
+|默认思考等级|附加字段 `defaultThinkingLevel`，仅设置页回显；`ModelRuntime` 不消费|
+
+测试连接复用 `discover`（`GET {baseUrl}/models`），不走旧 ZCode `testModelConnectivity`。不做拖拽排序、高级 Headers/超时、子智能体可用、PDF 能力——Pi schema 没有对应字段。
 
 测试可仍传 `stream`/`delegate` 走隔离 `InMemoryCredentialStore` + `zcode-delegate`，不碰磅真实 Pi 凭证。
 

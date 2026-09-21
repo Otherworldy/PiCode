@@ -1288,6 +1288,17 @@ export function createConversationV4Gateway(
       resumeThoughtLevel,
       workspace?: ZCodeWorkspaceRef,
     ) => {
+      if (context.piHost) {
+        if (context.sessions.get(sessionId)) return { status: "resumed" };
+        const found = await context.piHost.find(sessionId);
+        if (!found) return { status: "notFound" };
+        const record = await createPiSessionRecord(context, {
+          workspace: workspace ?? resolveWorkspaceRefFromId(found.identity),
+          sessionId,
+        });
+        context.sessions.set(record.app.sessionId, record);
+        return { status: "resumed" };
+      }
       const persisted = await context.deps.sessionStore?.getSession(sessionId as SessionId);
       if (!persisted) {
         context.logger?.warn("ZCode Protocol v4 cold resume has no persisted session", {
@@ -1590,6 +1601,9 @@ export function createConversationV4Gateway(
     // 是已完成正文权威，session_entry 只补 legacy goal，内存事件只补
     // 未持久 in-flight 和 queue/permission/control 等 ephemeral 状态。
     loadPersistedEvents: async (sessionId, persistedMessages) => {
+      if (context.piHost?.get(sessionId)) {
+        return { events: [], synthesized: false, sourceEventSeq: 0 };
+      }
       // dwf workflow actor / subagent 这类 detached live child 没有自己的
       // bootstrap record（事件经 ingestDetachedLiveSession 走父 record 的 sink 路由）。
       // context.sessions.get 取不到 record 时不能直接返回 synthesized:false——
