@@ -1996,11 +1996,23 @@ export type ZCodeSessionCloseResult = z.infer<typeof zcodeSessionCloseResultSche
 export const zcodeWorkspaceReadPresentationParamsSchema = z
   .object({ workspace: zcodeWorkspaceRefSchema })
   .strict();
+export const zcodePiCatalogModelSchema = z
+  .object({
+    providerId: z.string().min(1),
+    modelId: z.string().min(1),
+    name: z.string().min(1).optional(),
+    thoughtLevels: z.array(z.string().min(1)).optional(),
+  })
+  .strict();
 export const zcodeWorkspacePresentationSchema = z
   .object({
     workspace: zcodeWorkspaceRefSchema,
     mode: zcodeSessionModeSchema,
     slashCommands: z.array(zcodeSlashCommandSchema),
+    models: z.array(zcodePiCatalogModelSchema).optional(),
+    defaultProvider: z.string().min(1).optional(),
+    defaultModel: z.string().min(1).optional(),
+    defaultThought: z.string().min(1).optional(),
   })
   .strict();
 export type ZCodeWorkspacePresentation = z.infer<typeof zcodeWorkspacePresentationSchema>;

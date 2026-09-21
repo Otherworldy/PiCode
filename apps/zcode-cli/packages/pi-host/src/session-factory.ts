@@ -73,6 +73,39 @@ async function createIsolatedRuntime(delegate: DelegateProvider): Promise<ModelR
   return runtime;
 }
 
+let productionRuntime: Promise<ModelRuntime> | undefined;
+
+function getProductionModelRuntime(): Promise<ModelRuntime> {
+  productionRuntime ??= ModelRuntime.create();
+  return productionRuntime;
+}
+
+function thoughtLevelsOf(model: { thinkingLevelMap?: Record<string, unknown> }): string[] {
+  const keys = Object.keys(model.thinkingLevelMap ?? {});
+  return keys.length > 0 ? keys : ["off", "low", "medium", "high"];
+}
+
+export async function listPiCatalog(): Promise<{
+  models: Array<{ providerId: string; modelId: string; name?: string; thoughtLevels: string[] }>;
+  defaultProvider?: string;
+  defaultModel?: string;
+  defaultThought?: string;
+}> {
+  const runtime = await getProductionModelRuntime();
+  const settings = SettingsManager.create(process.cwd(), getAgentDir());
+  return {
+    models: runtime.getAvailableSnapshot().map((model) => ({
+      providerId: model.provider,
+      modelId: model.id,
+      name: model.name,
+      thoughtLevels: thoughtLevelsOf(model),
+    })),
+    defaultProvider: settings.getDefaultProvider(),
+    defaultModel: settings.getDefaultModel(),
+    defaultThought: settings.getDefaultThinkingLevel() ?? "medium",
+  };
+}
+
 export function createSdkSessionFactory(options: {
   delegate?: DelegateProvider;
   stream?: ZCodeModelStreamPort["stream"];
@@ -104,7 +137,7 @@ export function createSdkSessionFactory(options: {
   let runtimePromise: Promise<ModelRuntime> | undefined;
   const runtime = () => {
     runtimePromise ??=
-      isolated && delegate ? createIsolatedRuntime(delegate) : ModelRuntime.create();
+      isolated && delegate ? createIsolatedRuntime(delegate) : getProductionModelRuntime();
     return runtimePromise;
   };
 
@@ -150,6 +183,7 @@ export function createSdkSessionFactory(options: {
         modelRuntime.getAvailableSnapshot().map((model) => ({
           providerId: model.provider,
           modelId: model.id,
+          name: model.name,
         })),
       get isStreaming() {
         return session.isStreaming;

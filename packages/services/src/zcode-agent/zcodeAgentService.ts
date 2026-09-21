@@ -1,4 +1,5 @@
 import { requestPluginReferenceCatalog } from "#src/zcode-agent/pluginReferenceCatalogRequest.js";
+import { publishPiModelCatalog } from "#src/zcode-agent/piModelCatalog.js";
 import {
   localTtftFactsSchema,
   sessionDebugSnapshotSchema,
@@ -3766,9 +3767,20 @@ export function createZCodeAgentService(
         logger.info(undefined, "ZCode Protocol workspace/readPresentation 完成", {
           durationMs: Date.now() - startedAt,
           slashCommandCount: presentation.slashCommands.length,
+          modelCount: presentation.models?.length ?? 0,
           workspaceKey: resolveWorkspaceKey(params),
           workspacePath: params.workspacePath,
         });
+        if (presentation.models?.length) {
+          publishPiModelCatalog({
+            models: presentation.models,
+            ...(presentation.defaultProvider
+              ? { defaultProvider: presentation.defaultProvider }
+              : {}),
+            ...(presentation.defaultModel ? { defaultModel: presentation.defaultModel } : {}),
+            ...(presentation.defaultThought ? { defaultThought: presentation.defaultThought } : {}),
+          });
+        }
         return presentation;
       } catch (error) {
         logger.warn(undefined, "ZCode Protocol workspace/readPresentation 失败", {

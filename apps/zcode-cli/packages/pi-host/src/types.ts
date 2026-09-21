@@ -98,7 +98,7 @@ export interface PiSessionPort {
   readonly sessionFile?: string;
   readonly isStreaming: boolean;
   readonly currentModel?: { providerId: string; modelId: string };
-  listModels?(): Array<{ providerId: string; modelId: string }>;
+  listModels?(): Array<{ providerId: string; modelId: string; name?: string }>;
   prompt(text: string): Promise<boolean>;
   waitTurn?(): Promise<void>;
   steer(text: string): Promise<void>;

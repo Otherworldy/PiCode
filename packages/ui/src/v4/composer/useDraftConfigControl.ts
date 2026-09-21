@@ -166,6 +166,14 @@ export function useDraftConfigControl(params: {
             modelSelection: sessionConfig?.modelSelection,
           };
   }
+  // Pi 目录晚于 Composer 首次落 mode 时，补默认模型，否则触发器一直停在「选择模型」。
+  if (
+    initializeAsNewTask &&
+    modelSelectionView?.preferredSelection &&
+    !draft.modelSelection
+  ) {
+    draft = { ...draft, modelSelection: modelSelectionView.preferredSelection };
+  }
   if (sessionConfig) {
     draft = applyComposerPlanTransition(draft, sessionConfig.planTransition);
     draft = applyComposerPermissionGrant(draft, sessionConfig.permissionGrant);

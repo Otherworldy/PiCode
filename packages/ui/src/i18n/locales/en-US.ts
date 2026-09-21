@@ -2397,7 +2397,14 @@ const enUS: Record<string, string> = {
     "Disabled {plugin} in this workspace (overriding User default)",
   "settings.plugins.toggle.failed": "Couldn't update {plugin}. Try again.",
   "settings.modelProviderDescription":
-    "Manage custom model providers. Once configured, they can be selected during chat.",
+    "Pi providers and models from ~/.pi/agent/models.json and auth.json.",
+  "settings.modelProvider.pi.source":
+    "Models come from Pi Agent (~/.pi/agent/models.json and auth.json). Switch them in the chat composer.",
+  "settings.modelProvider.pi.refresh": "Refresh",
+  "settings.modelProvider.pi.loading": "Loading Pi model catalog…",
+  "settings.modelProvider.pi.empty":
+    "No Pi models yet. Add providers in ~/.pi/agent/models.json.",
+  "settings.modelProvider.pi.default": "Default",
   "settings.modelProvider.add": "Add provider",
   "settings.modelProvider.createCustomProvider": "Create custom provider",
   "settings.modelProvider.templateCreateFailed":
