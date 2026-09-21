@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import type { TuiWriteClipboardText } from "@zcode/tui";
+import type { TuiWriteClipboardText } from "./tui-types.js";
 
 const DEFAULT_MAX_CLIPBOARD_TEXT_BYTES = 1024 * 1024;
 const OSC_52_CLIPBOARD_TARGET = "c";

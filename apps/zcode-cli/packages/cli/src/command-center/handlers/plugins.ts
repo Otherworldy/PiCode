@@ -1,4 +1,4 @@
-import type { TuiSelection, TuiSubmitPromptResult } from "@zcode/tui";
+import type { TuiSelection, TuiSubmitPromptResult } from "../../tui-types.js";
 import { resolvePluginDisplayName } from "@zcode/shared";
 import type {
   CommandCenterDeps,

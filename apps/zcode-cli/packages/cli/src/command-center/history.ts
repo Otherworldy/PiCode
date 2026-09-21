@@ -1,4 +1,4 @@
-import type { TuiPromptInput } from "@zcode/tui";
+import type { TuiPromptInput } from "../tui-types.js";
 import type { SlashCommand } from "./slash-command-types.js";
 import type { CommandCenterDeps } from "./types.js";
 

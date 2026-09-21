@@ -41,6 +41,7 @@ const cliWorkspaceBuilds = [
   // dynamic-workflow-runtime 的类型入口是 dist/index.d.ts，必须先于 bootstrap 构建。
   { packageName: "@zcode/dynamic-workflow-runtime", packageDir: "dynamic-workflow-runtime" },
   { packageName: "@zcode/core", packageDir: "core" },
+  { packageName: "@zcode/pi-host", packageDir: "pi-host" },
   { packageName: "@zcode/adapters", packageDir: "adapters" },
   { packageName: "@zcode/i18n", packageDir: "i18n" },
   { packageName: "@zcode/telemetry", packageDir: "telemetry" },

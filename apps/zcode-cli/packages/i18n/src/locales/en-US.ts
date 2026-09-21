@@ -12,7 +12,7 @@ export const enUS: ZCodeCopy = {
 Usage:
   zcode [command] [options]
 
-With no command, zcode opens the full-screen TUI.
+With no command, zcode prints this help. Use Desktop/Web or app-server --stdio.
 
 Commands:
   app-server Run the ZCode Protocol stdio app server
@@ -22,13 +22,12 @@ Commands:
   logout     Remove the shared Z.AI login credentials
   plugins    Manage plugins and marketplaces (\`plugins list|install|uninstall|enable|disable|update|validate|marketplace ...\`; alias: plugin)
   skills     List local skills (\`skills list\`)
-  tui        Open the terminal UI
   version    Print the CLI version
 
 Options:
   -h, --help       Show help
   -v, --version    Show version
-  -p, --prompt <text>  Run a single prompt without opening the TUI
+  -p, --prompt <text>  Run a single prompt without starting a GUI session
   --memory-bench   With --prompt, enable automatic Memory extraction and wait before exiting (requires Memory enabled)
   --browser-use <mode> Enable Browser Use backend (supported: headless)
   --surface <surface>  Presentation surface for headless prompts/app-server: terminal or desktop

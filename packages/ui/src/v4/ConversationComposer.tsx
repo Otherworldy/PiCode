@@ -151,7 +151,7 @@ import { useOpenPptxElementReference } from "@/v4/composer/useOpenPptxElementRef
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import { useConversationSelectionReferences } from "@/v4/composer/useConversationSelectionReferences.js";
 import { ConversationBackgroundWorkTrigger } from "@/v4/composer/ConversationBackgroundWorkTrigger.js";
-import { V4ComposerCuaEntry } from "@/v4/composer/V4ComposerCuaEntry.js";
+import { ExtensionChrome } from "@/v4/ExtensionChrome.js";
 import {
   V4ComposerModeSwitch,
   V4ComposerModelControls,
@@ -2149,14 +2149,6 @@ function ConversationComposerImpl({
           onConfigPickerOpenChange={handleConfigPickerOpenChange}
           onSwitchMode={onSwitchMode}
         />
-        {/* 附件画廊重构曾整段覆盖 leadingActions，误删 CUA 常驻入口。
-            入口自身继续负责平台、远程与设置可见性，不在 composer 重复判定。 */}
-        <V4ComposerCuaEntry
-          workspacePath={workspacePath}
-          workspaceIdentity={workspaceIdentity}
-          remoteSessionId={remoteSessionId}
-          currentSessionBusy={canStop}
-        />
         <ConversationBackgroundWorkTrigger
           backgroundWorks={snapshot?.backgroundWorks ?? []}
           runningSubagentCount={runningSubagentCount}
@@ -2213,6 +2205,8 @@ function ConversationComposerImpl({
         className="hidden"
         onChange={attachmentsApi.handleAttachmentInputChange}
       />
+      <ExtensionChrome snapshot={snapshot} placement="status" />
+      <ExtensionChrome snapshot={snapshot} placement="aboveEditor" />
       {visibleError ? (
         // 仅展示附件错误会漏掉会话级 lastError，任务失败后也应在输入框上方显示原因。
         // 这里复用旧 ChatErrorBanner 壳，只接收 SessionPane 已归一化后的当前错误。
@@ -2297,6 +2291,7 @@ function ConversationComposerImpl({
           </p>
         ) : null}
       </div>
+      <ExtensionChrome snapshot={snapshot} placement="belowEditor" />
       <ImagePreviewDialog
         initialIndex={attachmentPreviewIndex}
         items={composerMediaPreviewItems}

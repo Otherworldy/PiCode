@@ -11,7 +11,40 @@ const executableFileMode = 0o755;
 const packageJsonFile = "package.json";
 const rootPackageVersionError = "Root package.json must define a non-empty string version.";
 const desktopAgentBuildFlag = "--desktop-agent";
-export const resolveBuildExternal = () => ["@zcode/tui", "playwright-core", "koffi"];
+export const resolveBuildExternal = () => ["playwright-core", "koffi"];
+
+/**
+ * CLI CJS banner wraps the bundle in `else { ... }` so `--licenses` never evaluates Agent.
+ * esbuild then emits `import.meta` as `{}`, and Pi's `fileURLToPath(import.meta.url)` crashes.
+ * Rewrite those ESM URLs to the CJS filename before bundling.
+ */
+function createCjsImportMetaUrlPlugin() {
+  const filter =
+    /[/\\]node_modules[/\\](?:@earendil-works[/\\][^/\\]+|jiti)[/\\].*\.(cjs|mjs|js)$/;
+  return {
+    name: "zcode-cjs-import-meta-url",
+    setup(builder) {
+      builder.onLoad({ filter }, async (args) => {
+        const text = await readFile(args.path, "utf8");
+        if (!text.includes("import.meta")) return;
+        return {
+          contents: text
+            .replaceAll("fileURLToPath(import.meta.url)", "module.filename")
+            .replaceAll(
+              "import.meta.url",
+              'process.getBuiltinModule("url").pathToFileURL(module.filename).href',
+            )
+            .replaceAll(
+              "import.meta.dirname",
+              'process.getBuiltinModule("path").dirname(module.filename)',
+            )
+            .replaceAll("import.meta.filename", "module.filename"),
+          loader: "js",
+        };
+      });
+    },
+  };
+}
 
 export const readZodBuildVersion = async () => {
   const sharedPackage = JSON.parse(
@@ -250,7 +283,10 @@ export const buildCli = async ({
     logLevel: "info",
     minify,
     metafile: true,
-    plugins: [createZodDedupePlugin({ expectedV4Version: await readZodBuildVersion() })],
+    plugins: [
+      createCjsImportMetaUrlPlugin(),
+      createZodDedupePlugin({ expectedV4Version: await readZodBuildVersion() }),
+    ],
     outfile,
     platform: "node",
     sourcemap,

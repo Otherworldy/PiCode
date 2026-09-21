@@ -1,4 +1,4 @@
-import type { TuiSubmitPromptResult } from "@zcode/tui";
+import type { TuiSubmitPromptResult } from "../../tui-types.js";
 import { parseModelPickerValue, type ModelSelection } from "@zcode/shared/model-selection";
 import { listAppEffortOptions } from "../effort-options.js";
 import { rememberCurrentModelSelection } from "../model-selection.js";

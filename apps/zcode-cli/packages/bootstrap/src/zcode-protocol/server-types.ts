@@ -30,6 +30,7 @@ import {
 } from "@zcode/shared";
 import type { ZCodeApp, ZCodeAppOptions } from "../app/types.js";
 import type { V4InteractionRegistry } from "../zcode-protocol-v4/interaction-registry.js";
+import type { HostSessionRegistry, ZCodeModelStreamPort } from "@zcode/pi-host";
 import type { ConversationV4Gateway } from "../zcode-protocol-v4/v4-gateway.js";
 import type { SessionResidentPool, SessionResidentPoolOptions } from "./session-resident-pool.js";
 
@@ -63,6 +64,9 @@ export interface ZCodeProtocolAgentDependencies {
   syncAccountProviderConfig?: (snapshot: AccountProviderConfigSnapshot) => Promise<boolean>;
   /** 连接测试前主动重读当前进程的 Config Source 并等待 Registry 发布。 */
   refreshProviderRegistry?: (reason: string) => Promise<void>;
+  /** 测试可注入 Pi delegate stream；主路径走 Pi ModelRuntime / auth.json。 */
+  piModelStream?: ZCodeModelStreamPort["stream"];
+  defaultPiModel?: { providerId: string; modelId: string; thought?: string };
 }
 
 export type ZCodeProtocolAgentResolvedDependencies = ZCodeProtocolAgentDependencies & {
@@ -141,6 +145,7 @@ export interface ZCodeProtocolAgentServerContext {
   // 竖切：v4 conversation 通道（订阅/帧/命令），与旧 session/* 方法并存。
   // 构造顺序问题（gateway 闭包持有 context）用可选字段收口，server 构造完立即赋值。
   v4Gateway?: ConversationV4Gateway;
+  piHost?: HostSessionRegistry;
   // v4 前向命令 resolveInteraction 与反向请求（permission/AskUserQuestion）的汇合点。
   // broker 注册 deferred、v4 命令面投递应答（同一实例经 binder 注入 V4CommandCoreHost）。
   v4Interactions: V4InteractionRegistry;

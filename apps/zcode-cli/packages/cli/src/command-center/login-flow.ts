@@ -1,7 +1,11 @@
-import type { TuiSelection, TuiSubmitPrompt } from "@zcode/tui";
+import type { TuiSelection, TuiSubmitPrompt } from "../tui-types.js";
 import { getZCodeCopy } from "@zcode/i18n";
 import type { CommandCenterApp, CommandCenterLoginResult } from "./types.js";
 import { randomUUID } from "node:crypto";
+
+export function loginRequiredResponse(locale?: string): string {
+  return getZCodeCopy(locale).tui.loginRequired.message;
+}
 
 export function buildLoginSelection(locale?: string): TuiSelection {
   const copy = getZCodeCopy(locale).tui.loginSetup;

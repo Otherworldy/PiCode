@@ -6,7 +6,8 @@ import {
   zcodeWorkspaceHookTrustGrantParamsSchema,
 } from "@zcode/shared";
 import type { BrowserControlPort } from "@zcode/contracts";
-import { InMemoryWorkspaceHookPolicyProvider } from "@zcode/core";
+import { InMemoryWorkspaceHookPolicyProvider, PermissionService } from "@zcode/core";
+import type { CollaborationMode } from "@zcode/contracts";
 import {
   V4_METHODS,
   V4_NOTIFICATIONS,
@@ -114,6 +115,13 @@ import {
   type ZCodeProtocolAgentServerContext,
   type ZCodeProtocolSessionRecord,
 } from "./server-types.js";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import {
+  createSdkSessionFactory,
+  HostSessionRegistry,
+  mapPiToolName,
+} from "@zcode/pi-host";
 import { createInMemorySessionEventStore } from "@zcode/contracts";
 
 export type { ZCodeProtocolAgentDependencies, ZCodeProtocolSessionRecord };
@@ -262,6 +270,31 @@ export class ZCodeProtocolAgentServer {
       v4Interactions: new V4InteractionRegistry(
         resolveV4InteractionRegistryOptionsFromEnv(deps.env ?? process.env),
       ),
+      piHost: new HostSessionRegistry({
+        storageRoot: join(homedir(), ".zcode"),
+        createSession: createSdkSessionFactory(),
+        loadExtensions: true,
+        createToolPermission: (hosted) => {
+          const service = new PermissionService();
+          return async ({ toolName, args }) => {
+            const mapped = mapPiToolName(toolName);
+            const mode =
+              (hosted.projector.getSnapshot().config.mode as CollaborationMode) || "build";
+            const result = service.checkPermission({
+              toolName: mapped,
+              input: args,
+              riskLevel: service.getRiskLevel(mapped),
+              mode,
+              workingDirectory: hosted.workspacePath,
+            });
+            if (result.decision === "allow") return "allow";
+            if (result.decision === "deny") return "deny";
+            return (await hosted.requestConfirm(mapped, result.reason ?? `Allow ${mapped}?`))
+              ? "allow"
+              : "deny";
+          };
+        },
+      }),
     };
     // v4 通道：gateway 闭包持有 context 做帧出口与命令副作用，构造完立即挂回。
     this.context.v4Gateway = createConversationV4Gateway(this.context);

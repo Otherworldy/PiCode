@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { isZCodeAgentProvider, ZCODE_AGENT_PROVIDER, type ZCodeProvider } from "@zcode/shared";
+import { ZCODE_AGENT_PROVIDER, type ZCodeProvider } from "@zcode/shared";
 import type { IModelSelectionService, ModelSelectionView } from "@zcode/services";
 import {
   buildModelConfigMissingUiError,
@@ -46,10 +46,11 @@ export function useDraftModelReadinessGate(params: {
   sessionId: string | null;
   modelSelectionService: Pick<IModelSelectionService, "getView" | "onDidChange">;
 }): DraftModelReadinessGate {
-  const { workspacePath, workspaceIdentity, provider, sessionId, modelSelectionService } = params;
+  const { workspacePath, workspaceIdentity, provider, modelSelectionService } = params;
   const workspaceKey = workspaceIdentity?.trim() || workspacePath;
   const displayProvider = provider ?? ZCODE_AGENT_PROVIDER;
-  const enabled = sessionId === null && isZCodeAgentProvider(displayProvider);
+  // Pi Host 用 Pi ModelRuntime，草稿首发不再等 ZCode provider registry。
+  const enabled = false;
   const gateKey = `${workspaceKey}\u0000${displayProvider}`;
   const [state, setState] = useState<DraftModelReadinessState>(() => ({
     gateKey,

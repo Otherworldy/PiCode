@@ -1,4 +1,3 @@
-import { interceptTuiStderr, isTuiInvocation } from "./tui-stderr.js";
 import { interceptKnownRuntimeWarnings } from "./runtime-warnings.js";
 import { installStderrConsoleBoundary } from "./protocol-console.js";
 import { setCliProcessTitle } from "./process-name.js";
@@ -21,7 +20,6 @@ async function main(): Promise<void> {
   // 入口先清洗用户 shell 注入的 NODE_ENV、代理和证书变量；网络变量只封存给后续 Bash/tool 子进程恢复。
   applyCliRuntimeEnvSanitization(process.env);
   const isProtocol = isProtocolServerInvocation(argv);
-  const isTui = isTuiInvocation(argv);
   if (isProtocol) installProtocolStderrBoundary(process.stderr);
   const lifecycle =
     isProtocol && !argv.includes("--prepare-storage")
@@ -31,11 +29,11 @@ async function main(): Promise<void> {
   // console.debug 等普通输出不能直接写入 stdout。必须在加载 run/bootstrap 之前将
   // 进程级 console 统一引导到 stderr，否则任意依赖的一行普通日志都会触发传输层 JSON 解析崩溃。
   // TUI 同样独占 stdout；AI SDK 的首条提示使用 console.info，不能绕过 stderr 捕获。
-  const restoreConsole =
-    isProtocol || isTui ? installStderrConsoleBoundary(process.stderr) : undefined;
+  const restoreConsole = isProtocol
+    ? installStderrConsoleBoundary(process.stderr)
+    : undefined;
   const runtimeWarnings = interceptKnownRuntimeWarnings(process.stderr);
-  const tuiStderr = isTui ? interceptTuiStderr(process.stderr) : undefined;
-  const stderr = tuiStderr?.passthrough ?? process.stderr;
+  const stderr = process.stderr;
   const disposeProcessErrorBoundary = isProtocol
     ? installCliProcessErrorBoundary({
         stderr,
@@ -92,9 +90,6 @@ async function main(): Promise<void> {
     if (lifecycle) {
       await lifecycle.complete(normalizeProcessExitCode(process.exitCode));
     } else {
-      if (tuiStderr) {
-        tuiStderr.restore();
-      }
       runtimeWarnings.restore();
       disposeProcessErrorBoundary?.();
       // plugin-host 的 main() 在 MCP server.connect() 完成后会返回，但此时

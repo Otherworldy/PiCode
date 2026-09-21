@@ -1,4 +1,4 @@
-import type { TuiSubmitPromptResult } from "@zcode/tui";
+import type { TuiSubmitPromptResult } from "../../tui-types.js";
 import type { CommandCenterDeps, TuiSubmitOptions } from "../types.js";
 
 type ParsedExpertCommand =

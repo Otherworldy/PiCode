@@ -1,4 +1,4 @@
-import type { TuiReadClipboardImage, TuiWriteClipboardText } from "@zcode/tui";
+import type { TuiReadClipboardImage, TuiWriteClipboardText } from "./tui-types.js";
 import type { UiLocale } from "@zcode/i18n";
 import type { Logger } from "@zcode/contracts";
 import type {
@@ -42,7 +42,6 @@ import type {
 import type { CliEnv, DotenvLoadResult, LoadCliDotenvOptions } from "./env.js";
 import type { PluginsCommandOverrides } from "./plugins-command.js";
 import type { CliShutdownProcess } from "./shutdown.js";
-import type { resolveWorkspaceGitBranch } from "./tui-workspace-git.js";
 
 export type BootstrapModule = typeof import("@zcode/bootstrap");
 
@@ -101,10 +100,8 @@ export interface RunDependencies extends PluginsCommandOverrides {
   resolveLatestSession?: (
     options: ResolveLatestSessionOptions,
   ) => ReturnType<typeof resolveLatestSession>;
-  resolveWorkspaceGitBranch?: typeof resolveWorkspaceGitBranch;
   logoutZCodeCli?: (options?: LogoutZCodeCliOptions) => ReturnType<typeof logoutZCodeCli>;
   runZCodeProtocolAgent?: (options?: RunZCodeProtocolAgentOptions) => Promise<void>;
-  runTui?: typeof import("@zcode/tui").runTui;
   skipUserConfig?: boolean;
   userConfigPath?: string;
   exitProcess?: (code: number) => void;

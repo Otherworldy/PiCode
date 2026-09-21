@@ -28,7 +28,7 @@ import type {
   TurnId,
   FileSystemErrorCode,
 } from "@zcode/contracts";
-import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationDelta, ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
 import { SessionEventType, isFileSystemPortError } from "@zcode/contracts";
 import type { ZCodeWorkspaceRef } from "@zcode/shared";
 import { extractMarkdownArtifactImageRefs } from "@zcode/shared";
@@ -2842,6 +2842,16 @@ export class ConversationV4Gateway {
     const reservation = publisher.reserveFlush(state.subscriptionId);
     if (!reservation || !reservation.commit()) return null;
     return reservation.frame;
+  }
+
+  ingestPiDeltas(sessionId: string, deltas: readonly ConversationDelta[]): void {
+    if (this.disposed || deltas.length === 0) return;
+    const publisher = this.ensurePublisher(sessionId);
+    publisher.ingestDeltas(deltas);
+    for (const [routeKey, state] of this.flushStates) {
+      if (state.sessionId !== sessionId) continue;
+      this.scheduleFlush(routeKey, state, publisher);
+    }
   }
 
   private ensurePublisher(sessionId: string): ConversationTopicPublisher {

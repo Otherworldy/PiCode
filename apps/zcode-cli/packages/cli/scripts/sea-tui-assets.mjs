@@ -23,7 +23,12 @@ export const opentuiNativePackageForTarget = (target) => {
   return `@mbears/opentui-core-${packagePlatform}-${arch}`;
 };
 
-export const collectSeaTuiAssets = async ({ root, stagingDirectory, target }) => {
+export const collectSeaTuiAssets = async ({ stagingDirectory }) => {
+  await rm(stagingDirectory, { force: true, recursive: true }).catch(() => undefined);
+  return { assets: {}, manifest: { files: [] } };
+};
+
+const _unusedCollectSeaTuiAssets = async ({ root, stagingDirectory, target }) => {
   const workspacePackageDirectories = await discoverWorkspacePackageDirectories(root);
   const packageEntries = await runtimePackageNames({
     root,

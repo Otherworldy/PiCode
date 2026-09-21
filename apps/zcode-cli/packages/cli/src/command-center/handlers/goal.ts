@@ -1,4 +1,4 @@
-import type { TuiSubmitPromptResult } from "@zcode/tui";
+import type { TuiSubmitPromptResult } from "../../tui-types.js";
 import { attachCurrentSessionMetadata } from "../metadata.js";
 import { buildTargetReplaceSelection } from "../selections.js";
 import type {

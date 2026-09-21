@@ -499,6 +499,45 @@ export class ProductProjection {
     return this.snapshot;
   }
 
+  /** Pi Host 直接投递 ConversationDelta，绕过 SessionEvent / EventReducer。 */
+  applyExternalDeltas(deltas: readonly ConversationDelta[], seq: number): void {
+    if (deltas.length === 0) {
+      this.snapshot = { ...this.snapshot, seq };
+      return;
+    }
+    const previousRowsLength = this.snapshot.rows.window.length;
+    this.snapshot = {
+      ...applyConversationDeltas(this.snapshot, deltas),
+      seq,
+    };
+    this.updateRowIndexAfterImmutableApply(previousRowsLength, deltas);
+    this.indexPiHostRows();
+  }
+
+  private indexPiHostRows(): void {
+    this.messageIdByRowId.clear();
+    this.entityIdByRowId.clear();
+    this.editTargetByEntityId.clear();
+    this.turnHeaderRowIdByTurnId.clear();
+    this.currentEditableEntityId = null;
+    for (const row of this.snapshot.rows.window) {
+      if (row.kind === "turnHeader") this.turnHeaderRowIdByTurnId.set(row.turnId, row.rowId);
+      if (!row.entityId) continue;
+      this.entityIdByRowId.set(row.rowId, row.entityId);
+      this.messageIdByRowId.set(row.rowId, row.entityId);
+      if (row.kind === "userInput" && row.origin === "realUser") {
+        this.editTargetByEntityId.set(row.entityId, {
+          entityId: row.entityId,
+          productTurnId: row.productTurnId ?? row.turnId,
+          transcriptMessageId: row.entityId,
+          coveredByStableCompact: false,
+          intent: { kind: "sendText", text: row.text },
+        });
+        if (row.actions?.canEdit) this.currentEditableEntityId = row.entityId;
+      }
+    }
+  }
+
   /** assistant 守恒：被拒收的正文流事件数（>0 = 投影可能缺段，需重 hydration）。 */
   getDroppedContentStreamEventCount(): number {
     return this.droppedContentStreamEventCount;

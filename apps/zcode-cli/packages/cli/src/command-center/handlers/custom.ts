@@ -1,4 +1,4 @@
-import type { TuiSubmitPromptResult } from "@zcode/tui";
+import type { TuiSubmitPromptResult } from "../../tui-types.js";
 import { buildCustomCommandPrompt } from "../../command-center-custom.js";
 import { attachCurrentSessionMetadata } from "../metadata.js";
 import type { CommandCenterDeps, TuiSubmitOptions } from "../types.js";

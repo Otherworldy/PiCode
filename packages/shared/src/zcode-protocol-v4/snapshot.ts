@@ -502,6 +502,24 @@ export const conversationSnapshotSchema = z.object({
   // 旧快照/旧发送端不携带此字段 → 解析得 null,不破坏兼容性(遵守冻结规则)。
   // pendingCount === 0 时投影层置 null(提示条消失)。
   workspaceHookAdmission: workspaceHookAdmissionStateSchema.nullable().default(null),
+  // Pi extension UI：RPC setWidget / setStatus。optional 兼容旧快照。
+  extensionWidgets: z
+    .array(
+      z.object({
+        key: z.string().min(1),
+        lines: z.array(z.string()),
+        placement: z.enum(["aboveEditor", "belowEditor"]),
+      }),
+    )
+    .optional(),
+  extensionStatuses: z
+    .array(
+      z.object({
+        key: z.string().min(1),
+        text: z.string(),
+      }),
+    )
+    .optional(),
   // B 区
   rows: rowsWindowSchema,
 });

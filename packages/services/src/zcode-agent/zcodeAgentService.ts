@@ -3044,25 +3044,15 @@ export function createZCodeAgentService(
     if (waiting.cancelled || waitingWorkspaceStartups.get(workspaceKey) !== waiting) {
       throw createRuntimeUnavailableError(params);
     }
+    // Pi Host 的模型在 CLI 内由 Pi ModelRuntime 解决，不再把空的 ZCode registry 当启动门禁。
     const readiness = readinessSnapshot?.readiness;
-    if (!readinessSnapshot || !readiness?.ready) {
-      const revision = readinessSnapshot?.revision ?? "missing";
-      if (waiting.lastLoggedRevision !== revision) {
-        waiting.lastLoggedRevision = revision;
-        logger.info(
-          undefined,
-          active
-            ? "provider/model 尚未就绪，ZCode agent 保持只读"
-            : "provider/model 尚未就绪，ZCode agent 保持未启动",
-          {
-            providerCount: readinessSnapshot?.providerCount ?? 0,
-            revision: readinessSnapshot?.revision ?? null,
-            workspaceKey,
-            workspacePath: params.workspacePath,
-          },
-        );
-      }
-      throw createProviderNotReadyError({ snapshot: readinessSnapshot, workspace: params });
+    if (readinessSnapshot && !readiness?.ready) {
+      logger.info(undefined, "ZCode registry 无可用模型，仍启动 Pi Host agent", {
+        providerCount: readinessSnapshot.providerCount,
+        revision: readinessSnapshot.revision,
+        workspaceKey,
+        workspacePath: params.workspacePath,
+      });
     }
 
     const entry = await getOrStartReadOnlyClient(params);
@@ -3074,9 +3064,9 @@ export function createZCodeAgentService(
     entry.workspace = params;
     waitingWorkspaceStartups.delete(workspaceKey);
     logger.info(undefined, "provider/model 就绪，允许 ZCode agent 模型执行", {
-      modelId: readiness.modelId,
-      providerId: readiness.providerId,
-      revision: readinessSnapshot.revision,
+      modelId: readiness?.modelId ?? "pi",
+      providerId: readiness?.providerId ?? "pi",
+      revision: readinessSnapshot?.revision,
       workspaceKey,
       workspacePath: params.workspacePath,
     });

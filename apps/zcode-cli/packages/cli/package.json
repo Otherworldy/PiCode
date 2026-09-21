@@ -33,7 +33,6 @@
     "@zcode/provider-node": "workspace:*",
     "@zcode/shared": "workspace:*",
     "@zcode/shared-types": "workspace:*",
-    "@zcode/tui": "workspace:*",
     "dotenv": "^17.4.2",
     "playwright-core": "1.59.1"
   }

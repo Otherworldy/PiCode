@@ -1,4 +1,4 @@
-import type { TuiSlashCommandSuggestion } from "@zcode/tui";
+import type { TuiSlashCommandSuggestion } from "./tui-types.js";
 import { expandCliCustomCommandPrompt } from "./custom-command-expand.js";
 
 const customCommandNotFoundPattern = /not found/i;

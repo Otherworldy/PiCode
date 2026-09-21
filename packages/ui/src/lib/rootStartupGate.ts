@@ -41,11 +41,12 @@ export function shouldShowRootStartupLoading(state: RootStartupLoadingVisibility
 }
 
 export function shouldEnableProviderAvailabilityLoginEntryGuard(): boolean {
-  return true;
+  // Pi Host 用 Pi 模型鉴权，不再用 ZCode OAuth/登录页当启动门禁。
+  return false;
 }
 
-export function shouldResolveProviderStartupState(state: ProviderStartupResolutionState): boolean {
-  return state.providerStartupSyncPending || !state.providerAvailabilityStartupCheckCompleted;
+export function shouldResolveProviderStartupState(_state: ProviderStartupResolutionState): boolean {
+  return false;
 }
 
 export function shouldOpenFallbackWorkspaceAfterCreate(

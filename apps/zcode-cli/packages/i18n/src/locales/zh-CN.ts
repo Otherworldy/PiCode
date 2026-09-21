@@ -12,7 +12,7 @@ export const zhCN: ZCodeCopy = {
 用法:
   zcode [command] [options]
 
-不传 command 时，zcode 会打开全屏 TUI。
+不传 command 时打印本帮助。GUI 请用 Desktop/Web 或 app-server --stdio。
 
 命令:
   app-server 运行 ZCode Protocol stdio app server
@@ -22,13 +22,12 @@ export const zhCN: ZCodeCopy = {
   logout     删除共享的 Z.AI 登录凭据
   plugins    管理插件与市场（\`plugins list|install|uninstall|enable|disable|update|validate|marketplace ...\`；别名 plugin）
   skills     列出本地 skills（\`skills list\`）
-  tui        打开终端 UI
   version    打印 CLI 版本
 
 选项:
   -h, --help       显示帮助
   -v, --version    显示版本
-  -p, --prompt <text>  单次运行 prompt，不打开 TUI
+  -p, --prompt <text>  单次运行 prompt，不启动 GUI 会话
   --memory-bench   配合 --prompt 开启自动 Memory 提取并等待后退出（需已开启 Memory）
   --browser-use <mode> 启用 Browser Use backend（当前支持：headless）
   --surface <surface>  设置无头 prompt/app-server 的呈现面：terminal 或 desktop

@@ -31,7 +31,7 @@
 - `packages/ui`：共享 React 组件、hooks 与 Zustand store。
 - `packages/services`：业务服务；`packages/rpc`：RPC 框架。
 - `packages/shared`：共享协议与类型；`packages/client`：Agent 客户端 SDK。
-- `apps/zcode-cli`：Agent CLI 与运行时。
+- `apps/zcode-cli`：Agent CLI 与运行时。Agent 循环在 `@zcode/pi-host`（Pi `AgentSession`）；不要再给主路径加 ZCode 工具 handler。
 - `CONTEXT.md`：插件商店领域词汇；修改相关 UI 前阅读。
 - `DESIGN.md`：UI 设计规范；修改 UI 前阅读。
 
@@ -56,7 +56,8 @@
 
 ## 进程、协议与远程控制
 
-- Desktop app 通过 stdio 与 Agent 通信。协议改动同步更新 `packages/shared/src/zcode-protocol/index.ts`，提供严格类型与运行时校验。
+- Desktop app 通过 stdio 与 Agent 通信。协议改动同步更新 `packages/shared/src/zcode-protocol/index.ts` 与 `packages/shared/src/zcode-protocol-v4/`，提供严格类型与运行时校验。
+- Agent 能力源是 Pi（内置工具 + `~/.pi/agent/extensions`）。UI 工具卡只认 presentation 映射后的 V4 `toolName`（`read`→`Read` 等），未知走 Fallback。不提供终端 TUI；`zcode` 无参输出 help，Desktop 走 `app-server --stdio`。
 - Main 负责窗口、原生操作、进程调度和消息转发，不承载 task/session 业务状态。
 - 每个窗口使用一个 window-scoped Local Host；本地 workspace 共享该 Host。远程 workspace 由窗口内的连接注册表管理，不另建 Desktop Remote Host。
 - 手机远控连接桌面已有 Host attachment，复用会话运行时；不为手机另起 Agent、Local Host 或远程会话。

@@ -23,22 +23,36 @@ export function createComposerSubmissionConfig(
     return null;
   }
   const selection = composer.modelSelection;
-  const mode = submissionModeSchema.safeParse(composer.mode);
+  const mode = submissionModeSchema.safeParse(composer.mode ?? "build");
+  if (!mode.success) return null;
+  const catalogHasProviders = (view?.providers.length ?? 0) > 0;
   const model =
     selection &&
     view?.providers
       .find((provider) => provider.providerId === selection.providerId)
       ?.models.find((candidate) => candidate.modelId === selection.modelId);
-  if (!mode.success || !selection || !model || !validateModelSelectionOptions(model, selection).ok)
-    return null;
-  // 不读取 Session 或显示别名；复制所有选择叶子，防止 await 后用户切模改变本次请求。
+  if (catalogHasProviders) {
+    if (!selection || !model || !validateModelSelectionOptions(model, selection).ok) return null;
+    return Object.freeze({
+      mode: mode.data === "plan" ? "build" : mode.data,
+      planEnabled: resolveExecutionState(composer).planEnabled,
+      modelSelection: Object.freeze({
+        providerId: selection.providerId,
+        modelId: selection.modelId,
+        options: Object.freeze({ reasoningLevel: selection.options!.reasoningLevel! }),
+      }),
+    });
+  }
+  // Pi Host：ZCode registry 为空时不再挡发送。Host 用 Pi ModelRuntime 当前/默认模型。
   return Object.freeze({
     mode: mode.data === "plan" ? "build" : mode.data,
     planEnabled: resolveExecutionState(composer).planEnabled,
     modelSelection: Object.freeze({
-      providerId: selection.providerId,
-      modelId: selection.modelId,
-      options: Object.freeze({ reasoningLevel: selection.options!.reasoningLevel! }),
+      providerId: selection?.providerId || "pi",
+      modelId: selection?.modelId || "default",
+      options: Object.freeze({
+        reasoningLevel: selection?.options?.reasoningLevel || "medium",
+      }),
     }),
   });
 }

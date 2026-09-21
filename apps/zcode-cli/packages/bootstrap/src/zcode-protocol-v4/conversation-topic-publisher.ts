@@ -525,6 +525,23 @@ export class ConversationTopicPublisher {
       if (evicted) this.floorSeq = evicted.seq;
     }
     if (deltas.length === 0) return;
+    this.fanout(deltas);
+  }
+
+  /** Pi projector 的权威 delta，不经 SessionEvent。 */
+  ingestDeltas(deltas: readonly ConversationDelta[]): void {
+    if (deltas.length === 0) return;
+    const seq = this.currentSeq + 1;
+    this.projection.applyExternalDeltas(deltas, seq);
+    this.log.push({ seq, deltas: [...deltas] });
+    while (this.log.length > this.retention) {
+      const evicted = this.log.shift();
+      if (evicted) this.floorSeq = evicted.seq;
+    }
+    this.fanout(deltas);
+  }
+
+  private fanout(deltas: readonly ConversationDelta[]): void {
     for (const subscription of this.subscriptions.values()) {
       if (subscription.resyncRequired) continue;
       const filtered = filterConversationDeltasForProfile(deltas, subscription.profile);

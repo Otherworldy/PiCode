@@ -73,6 +73,8 @@ export async function executeTurn(
   attachments?: TurnState["attachments"],
   options?: ExecuteTurnOptions,
 ): Promise<TurnResult> {
+  // Pi Host 接管主路径后 executeTurn 不再是 Agent 循环入口。V4 / Desktop 走 session.prompt。
+  throw new Error("executeTurn is disabled; use Pi Host session.prompt");
   return await enqueueCancellableRuntimeCommand<TurnResult, PromptRuntimeCommand>(this, {
     abortSignal: options?.abortSignal,
     createCommand: ({ reject, resolve }) => ({

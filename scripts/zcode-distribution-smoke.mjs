@@ -2,8 +2,7 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
+import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout } from "node:timers/promises";
@@ -25,7 +24,6 @@ const env = {
   TERM: "xterm-256color",
 };
 let web;
-let terminal;
 try {
   await exec("tar", ["-xzf", resolve(archive), "-C", directory]);
   await mkdir(workspace);
@@ -33,47 +31,8 @@ try {
   const version = (
     await exec(process.execPath, [runner, "--version"], { cwd: workspace, env })
   ).stdout.trim();
-  const require = createRequire(join(root, "package.json"));
-  const pty = require("node-pty");
-  const runtimeCheck = join(root, "agent/check-tui.mjs");
-  await writeFile(
-    runtimeCheck,
-    'import { runTui } from "@zcode/tui"; if (typeof runTui !== "function") throw new Error("Missing TUI export"); console.log("tui-runtime-ok");',
-  );
-  const imported = await exec(process.execPath, [runtimeCheck], { cwd: workspace, env });
-  assert.match(imported.stdout, /tui-runtime-ok/);
-
-  terminal = pty.spawn(process.execPath, [runner], { cwd: workspace, env, cols: 110, rows: 32 });
-  let screen = "";
-  let terminalExit;
-  terminal.onData((data) => {
-    screen += data;
-  });
-  const tuiExited = new Promise((done) =>
-    terminal.onExit((event) => {
-      terminalExit = event;
-      done(event);
-    }),
-  );
-  await until(
-    () => /ZCode/.test(screen) && /(?:登录|\/login|输入提示词|Type a prompt)/i.test(screen),
-    "TUI initialized render",
-    () => screen,
-  );
-  assert.equal(terminalExit, undefined, screen);
-  assert.doesNotMatch(screen, /Cannot find (?:module|package)|ERR_MODULE_NOT_FOUND/);
-  // 保留真实键盘退出链路；不发送 prompt，不调用模型。
-  terminal.write("\u0003");
-  await setTimeout(200);
-  if (!terminalExit) terminal.write("\u0003");
-  const tuiExit = await Promise.race([
-    tuiExited,
-    setTimeout(8000).then(() => {
-      throw new Error("TUI keyboard exit timed out");
-    }),
-  ]);
-  assert.equal(tuiExit.exitCode, 0, screen);
-  terminal = undefined;
+  const noArgs = await exec(process.execPath, [runner], { cwd: workspace, env });
+  assert.match(`${noArgs.stdout}${noArgs.stderr}`, /Usage|help|app-server/i);
 
   let webOutput = "";
   web = spawn(process.execPath, [runner, "--web", "--workspace", workspace, "--no-open"], {
@@ -131,13 +90,12 @@ try {
       version,
       platform: process.platform,
       arch: process.arch,
-      tui: "native import, initialized render, keyboard exit passed",
+      tui: "removed; no-args prints help",
       web: "HTML, server-info, workspace, WebSocket, shutdown passed",
       isolated: true,
     }),
   );
 } finally {
-  terminal?.kill();
   web?.kill();
   await rm(directory, { recursive: true, force: true });
 }

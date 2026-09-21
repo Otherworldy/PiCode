@@ -1,4 +1,4 @@
-import type { TuiSubmitPrompt } from "@zcode/tui";
+import type { TuiSubmitPrompt } from "../tui-types.js";
 import {
   formatAvailableCommandNames,
   listCustomCommandsForHelp,
@@ -29,10 +29,10 @@ import {
   emitLoginAuthorizeMessage,
   formatLoginResult,
   formatProviderSetupResult,
+  loginRequiredResponse,
   loginSetupResponse,
   parseApiKeyLoginArgs,
 } from "./login-flow.js";
-import { loginRequiredResponse } from "../tui-login-state.js";
 import type { CommandCenterDeps } from "./types.js";
 
 export function createCommandCenter(deps: CommandCenterDeps): TuiSubmitPrompt {

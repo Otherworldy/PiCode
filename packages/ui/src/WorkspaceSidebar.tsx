@@ -13,8 +13,6 @@ import {
 } from "react";
 import {
   Archive,
-  Blocks,
-  CalendarClock,
   Clock3,
   Cloud,
   Folder,
@@ -51,7 +49,6 @@ import { BUILTIN_MODEL_PROVIDER_IDS } from "@zcode/shared";
 import {
   TID_CONVERSATION_NEW_TASK,
   TID_CONVERSATION_SECTION,
-  TID_AUTOMATIONS_OPEN,
   TID_PROJECT_ADD,
   TID_PROJECT_SECTION,
   TID_SIDEBAR,
@@ -90,7 +87,6 @@ import {
   reorderSidebarPurposeSections,
 } from "@/lib/sidebarPurposeSectionPreferences.js";
 import { useShortcutCommandLabel } from "@/shortcuts/useShortcutBindings.js";
-import { setPendingSettingsSectionIntent } from "@/lib/settingsNavigation.js";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
 import {
   increaseWorkspaceTaskVisibleLimit,
@@ -258,9 +254,9 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
   goForwardShortcutLabel: _goForwardShortcutLabel,
   onOpenCommandCenter,
   onOpenAutomations,
-  onOpenPluginStore,
-  automationsActive = false,
-  pluginStoreActive = false,
+  onOpenPluginStore: _onOpenPluginStore,
+  automationsActive: _automationsActive = false,
+  pluginStoreActive: _pluginStoreActive = false,
   onFileTreeOpenChange,
 }: {
   workspacePath: string;
@@ -749,9 +745,6 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
     [setLocalePreference],
   );
 
-  const handleOpenPluginStoreMain = useCallback(() => {
-    onOpenPluginStore?.();
-  }, [onOpenPluginStore]);
   const handleOpenAutomationsMain = useCallback(() => {
     onOpenAutomations?.();
   }, [onOpenAutomations]);
@@ -1316,36 +1309,6 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
                 }
               />
             ) : null} */}
-            <Button
-              variant="ghost"
-              onClick={handleOpenAutomationsMain}
-              data-icon="inline-start"
-              data-testid={TID_AUTOMATIONS_OPEN}
-              size="lg"
-              aria-pressed={automationsActive}
-              className={cn(
-                "w-full justify-start gap-2 text-foreground hover:bg-surface-hover hover:text-foreground",
-                automationsActive && "bg-selected text-foreground",
-              )}
-            >
-              <CalendarClock className="size-4" />
-              {intl.formatMessage({ id: "workspace.openScheduledSettings" })}
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={handleOpenPluginStoreMain}
-              data-icon="inline-start"
-              data-testid="plugin-store-sidebar-open"
-              size="lg"
-              aria-pressed={pluginStoreActive}
-              className={cn(
-                "w-full justify-start gap-2 text-foreground hover:bg-surface-hover hover:text-foreground",
-                pluginStoreActive && "bg-selected text-foreground",
-              )}
-            >
-              <Blocks className="size-4" />
-              {intl.formatMessage({ id: "workspace.openPluginsSettings" })}
-            </Button>
           </div>
 
           <div className="relative flex min-h-0 flex-1 flex-col">

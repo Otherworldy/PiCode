@@ -47,6 +47,23 @@ async function resolveInteraction(
   envelope: CommandEnvelope,
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["resolveInteraction"];
+  const hosted =
+    envelope.sessionId === null
+      ? undefined
+      : (host.getRecord(envelope.sessionId)?.app as { piHosted?: { ui: { respond: (r: { id: string; confirmed?: boolean; value?: string; cancelled?: boolean }) => boolean } } } | undefined)?.piHosted;
+  if (hosted) {
+    const answer = payload.answer;
+    if (answer.action === "cancel" || answer.optionId === "no") {
+      hosted.ui.respond({ id: payload.interactionId, cancelled: true });
+    } else if (answer.action === "accept" || answer.optionId === "yes") {
+      hosted.ui.respond({ id: payload.interactionId, confirmed: true });
+    } else {
+      hosted.ui.respond({
+        id: payload.interactionId,
+        value: answer.freeText ?? answer.optionId ?? "",
+      });
+    }
+  }
   const delivered =
     payload.answer.optionId === PERMISSION_FULL_ACCESS_OPTION_ID
       ? ((await host.interactions?.resolveFullAccess(payload.interactionId, envelope.sessionId!)) ??

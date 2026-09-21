@@ -1,5 +1,5 @@
 import { getZCodeCopy, type UiLocale } from "@zcode/i18n";
-import type { TuiEffortOption } from "@zcode/tui";
+import type { TuiEffortOption } from "../tui-types.js";
 import type { CommandCenterApp } from "./types.js";
 
 export async function listAppEffortOptions(

@@ -47,6 +47,23 @@ export const statePatchSchema = z.object({
   plan: planStateSchema.nullable().optional(),
   // 软门禁：null = pending 清零(提示条消失);对象 = 待审核状态更新。
   workspaceHookAdmission: workspaceHookAdmissionStateSchema.nullable().optional(),
+  extensionWidgets: z
+    .array(
+      z.object({
+        key: z.string().min(1),
+        lines: z.array(z.string()),
+        placement: z.enum(["aboveEditor", "belowEditor"]),
+      }),
+    )
+    .optional(),
+  extensionStatuses: z
+    .array(
+      z.object({
+        key: z.string().min(1),
+        text: z.string(),
+      }),
+    )
+    .optional(),
 });
 export type StatePatch = z.infer<typeof statePatchSchema>;
 

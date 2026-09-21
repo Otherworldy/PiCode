@@ -91,6 +91,15 @@ export async function runZCodeProtocolAgent(
     });
     return;
   }
+  const [
+    { ApiProviderModelRuntime },
+    { createModelAdapter },
+    { createRuntimeAiSdkModelExecutionConfig },
+  ] = await Promise.all([
+    import("./app/provider-registry-model-runtime.js"),
+    import("./model-factory.js"),
+    import("./model-config.js"),
+  ]);
   const startupStartedAt = startupNow();
   const presentationSurface = options.presentationSurface ?? "terminal";
   const input = options.input ?? process.stdin;
@@ -246,6 +255,21 @@ export async function runZCodeProtocolAgent(
       activeProviderRegistryRuntime.runtime.registryService,
     );
     options.lifecycle?.signal.throwIfAborted();
+    const modelAdapter = createModelAdapter({
+      env: runtimeEnv,
+      logger,
+      executionConfig: createRuntimeAiSdkModelExecutionConfig(runtimeEnv, {
+        appVersion: options.version,
+        network: configResult.config.network,
+        sourceTitle: "electron",
+      }),
+      streamIdleTimeoutMs: configResult.config.modelStream.idleTimeoutMs,
+    });
+    const providerModelRuntime = new ApiProviderModelRuntime({
+      registry: activeProviderRegistryRuntime.runtime.registryService,
+      modelAdapter,
+    });
+    providerModelRuntime.start();
     const server = (serverForCleanup = new ZCodeProtocolAgentServer({
       createZCodeApp: (appOptions = {}) =>
         createZCodeApp({
