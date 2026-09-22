@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
 import { CommandBridge } from "./command-bridge.js";
 import { ExtensionUiHost } from "./extension-ui-host.js";
@@ -202,6 +202,27 @@ test("extension ui request/response and empty custom registry", async () => {
   assert.equal(custom.widgets[0]?.lines[0], "(unsupported plugin view)");
 });
 
+test("tool permission ask projects PermissionDialog payload", async () => {
+  const ui = new ExtensionUiHost();
+  const waiting = ui.wait("perm:1");
+  const next = ui.askPermission({
+    id: "perm:1",
+    toolName: "Bash",
+    summary: "Tool has side effects and requires approval",
+    detail: { command: "Start-Sleep -Seconds 1" },
+  });
+  assert.equal(next.pending[0]?.kind, "permission");
+  assert.equal(next.pending[0]?.payload.kind, "permission");
+  if (next.pending[0]?.payload.kind !== "permission") throw new Error("expected permission");
+  assert.equal(next.pending[0].payload.toolName, "Bash");
+  assert.deepEqual(
+    next.pending[0].payload.options.map((option) => option.optionId),
+    ["allowOnce", "allowAlways", "deny"],
+  );
+  assert.equal(ui.respond({ id: "perm:1", value: "allowAlways" }), true);
+  assert.equal((await waiting).id, "perm:1");
+});
+
 test("gateTool denies", async () => {
   await assert.rejects(
     () => gateTool(async () => "deny", "bash", {}),
@@ -214,6 +235,7 @@ test("navigateTree truncates and fork copies jsonl", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-host-"));
   const registry = new HostSessionRegistry({
     storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
     createSession: async (input) => new FakePiSession(input.sessionId, input.sessionFile),
   });
   const parent = await registry.create({ workspacePath: root });
@@ -251,6 +273,7 @@ test("registry spawn has workId; bypass does not", async () => {
   const fakes = new Map<string, FakePiSession>();
   const registry = new HostSessionRegistry({
     storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
     createSession: async (input) => {
       const fake = new FakePiSession(input.sessionId, input.sessionFile);
       fakes.set(input.sessionId, fake);
@@ -270,9 +293,11 @@ test("list skips empty jsonl and hydrateHistory rebuilds rows", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-host-"));
   const registry = new HostSessionRegistry({
     storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
     createSession: async (input) => new FakePiSession(input.sessionId, input.sessionFile),
   });
   const empty = await registry.create({ workspacePath: root, sessionId: "sess_empty" });
+  assert.equal(empty.sessionFile.startsWith(join(root, "pi-sessions")), true);
   const dir = join(root, "pi-host-sessions", Buffer.from(root).toString("base64url"));
   await mkdir(dir, { recursive: true });
   await writeFile(
@@ -293,5 +318,38 @@ test("list skips empty jsonl and hydrateHistory rebuilds rows", async () => {
   const kinds = opened.projector.getSnapshot().rows.window.map((row) => row.kind);
   assert.ok(kinds.includes("userInput"));
   assert.ok(kinds.includes("assistantText"));
+  await rm(root, { recursive: true, force: true });
+});
+
+test("list and resume native Pi jsonl by header id", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const nativeRoot = join(root, "pi-sessions");
+  const cwd = join(root, "proj");
+  await mkdir(cwd, { recursive: true });
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: nativeRoot,
+    createSession: async (input) => new FakePiSession(input.sessionId, input.sessionFile),
+  });
+  const resolved = resolve(cwd);
+  const safePath = `--${resolved.replace(/^[\\/]/u, "").replace(/[\\/:]/gu, "-")}--`;
+  const dir = join(nativeRoot, safePath);
+  await mkdir(dir, { recursive: true });
+  const sessionFile = join(dir, "2026-01-02T03-04-05_01native.jsonl");
+  await writeFile(
+    sessionFile,
+    [
+      `{"type":"session","id":"01native","timestamp":"2026-01-02T03:04:05.000Z","cwd":${JSON.stringify(cwd)}}`,
+      '{"type":"message","id":"u1","timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"user","content":[{"type":"text","text":"from pi tui"}]}}',
+    ].join("\n"),
+  );
+  const listed = await registry.list(cwd);
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0]?.sessionId, "01native");
+  assert.equal(listed[0]?.title, "from pi tui");
+  const found = await registry.find("01native");
+  assert.equal(found?.sessionFile, sessionFile);
+  const opened = await registry.create({ workspacePath: cwd, sessionId: "01native" });
+  assert.equal(opened.sessionFile, sessionFile);
   await rm(root, { recursive: true, force: true });
 });

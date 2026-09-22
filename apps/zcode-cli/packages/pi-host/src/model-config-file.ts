@@ -1,7 +1,18 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-export type PiProviderModelDraft = { id: string; name?: string };
+export const DEFAULT_THINKING_LEVELS = ["off", "low", "medium", "high"] as const;
+
+export type PiProviderModelDraft = {
+  id: string;
+  name?: string;
+  contextWindow?: number;
+  maxTokens?: number;
+  reasoning?: boolean;
+  thinkingLevels?: string[];
+  defaultThinkingLevel?: string;
+  input?: Array<"text" | "image">;
+};
 
 export type PiProviderDraft = {
   id: string;
@@ -12,6 +23,24 @@ export type PiProviderDraft = {
   models: PiProviderModelDraft[];
 };
 
+export type PiModelView = {
+  id: string;
+  name: string;
+  contextWindow: number;
+  maxTokens: number;
+  reasoning: boolean;
+  thinkingLevels: string[];
+  defaultThinkingLevel?: string;
+  input: Array<"text" | "image">;
+};
+
+export type PiDiscoveredModel = {
+  id: string;
+  name: string;
+  contextWindow?: number;
+  maxTokens?: number;
+};
+
 export type PiModelConfigView = {
   providers: Array<{
     id: string;
@@ -19,7 +48,7 @@ export type PiModelConfigView = {
     baseUrl: string;
     api: string;
     hasApiKey: boolean;
-    models: Array<{ id: string; name: string }>;
+    models: PiModelView[];
   }>;
   defaultProvider?: string;
   defaultModel?: string;
@@ -67,15 +96,8 @@ export function toPiModelConfigView(
       hasApiKey: typeof raw.apiKey === "string" && raw.apiKey.length > 0,
       models: models.flatMap((entry) => {
         if (!entry || typeof entry !== "object") return [];
-        const model = entry as { id?: unknown; name?: unknown };
-        const modelId = typeof model.id === "string" ? model.id : "";
-        if (!modelId) return [];
-        return [
-          {
-            id: modelId,
-            name: typeof model.name === "string" && model.name ? model.name : modelId,
-          },
-        ];
+        const model = toViewModel(entry as Record<string, unknown>);
+        return model ? [model] : [];
       }),
     };
   });
@@ -86,25 +108,88 @@ export function toPiModelConfigView(
   };
 }
 
+function asInput(value: unknown): Array<"text" | "image"> {
+  const items = Array.isArray(value)
+    ? value.filter((item): item is "text" | "image" => item === "text" || item === "image")
+    : [];
+  return items.includes("text") ? items : ["text", ...items];
+}
+
+function positiveInt(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function thinkingLevelsOf(model: Record<string, unknown>): string[] {
+  const map = model.thinkingLevelMap;
+  if (map && typeof map === "object" && !Array.isArray(map)) {
+    const keys = Object.keys(map);
+    if (keys.length > 0) return keys;
+  }
+  return model.reasoning === false ? ["off"] : [...DEFAULT_THINKING_LEVELS];
+}
+
+function thinkingLevelMapFrom(
+  levels: string[] | undefined,
+  existing: unknown,
+): Record<string, string | null> {
+  const prev =
+    existing && typeof existing === "object" && !Array.isArray(existing)
+      ? (existing as Record<string, unknown>)
+      : {};
+  const keys = levels ?? (Object.keys(prev).length > 0 ? Object.keys(prev) : [...DEFAULT_THINKING_LEVELS]);
+  const next: Record<string, string | null> = {};
+  for (const level of keys) {
+    const value = prev[level];
+    next[level] = typeof value === "string" || value === null ? value : level;
+  }
+  return next;
+}
+
+function toViewModel(model: Record<string, unknown>): PiModelView | undefined {
+  const id = typeof model.id === "string" ? model.id : "";
+  if (!id) return undefined;
+  const thinkingLevels = thinkingLevelsOf(model);
+  const defaultThinkingLevel =
+    typeof model.defaultThinkingLevel === "string" && model.defaultThinkingLevel
+      ? model.defaultThinkingLevel
+      : undefined;
+  return {
+    id,
+    name: typeof model.name === "string" && model.name ? model.name : id,
+    contextWindow: positiveInt(model.contextWindow, 128000),
+    maxTokens: positiveInt(model.maxTokens, 8192),
+    reasoning: model.reasoning !== false,
+    thinkingLevels,
+    ...(defaultThinkingLevel ? { defaultThinkingLevel } : {}),
+    input: asInput(model.input),
+  };
+}
+
 function defaultModelRecord(
   draft: PiProviderModelDraft,
   existing?: Record<string, unknown>,
 ): Record<string, unknown> {
-  if (existing) {
-    return {
-      ...existing,
-      id: draft.id,
-      ...(draft.name ? { name: draft.name } : {}),
-    };
-  }
+  const thinkingLevelMap = thinkingLevelMapFrom(draft.thinkingLevels, existing?.thinkingLevelMap);
+  const reasoning =
+    draft.reasoning ??
+    (draft.thinkingLevels
+      ? draft.thinkingLevels.some((level) => level !== "off")
+      : existing?.reasoning !== false);
   return {
+    ...(existing ?? { cost: { ...ZERO_COST } }),
     id: draft.id,
-    name: draft.name ?? draft.id,
-    reasoning: true,
-    input: ["text"],
-    contextWindow: 128000,
-    maxTokens: 8192,
-    cost: { ...ZERO_COST },
+    name: draft.name ?? (typeof existing?.name === "string" && existing.name ? existing.name : draft.id),
+    reasoning,
+    thinkingLevelMap,
+    input: draft.input ?? asInput(existing?.input),
+    contextWindow: draft.contextWindow ?? positiveInt(existing?.contextWindow, 128000),
+    maxTokens: draft.maxTokens ?? positiveInt(existing?.maxTokens, 8192),
+    ...(draft.defaultThinkingLevel || typeof existing?.defaultThinkingLevel === "string"
+      ? {
+          defaultThinkingLevel:
+            draft.defaultThinkingLevel ?? (existing?.defaultThinkingLevel as string),
+        }
+      : {}),
   };
 }
 
@@ -147,6 +232,7 @@ export function toRuntimeConfig(raw: Record<string, unknown>): {
     id: string;
     name: string;
     reasoning: boolean;
+    thinkingLevelMap?: Record<string, string | null>;
     input: Array<"text" | "image">;
     contextWindow: number;
     maxTokens: number;
@@ -164,22 +250,16 @@ export function toRuntimeConfig(raw: Record<string, unknown>): {
       const model = entry as Record<string, unknown>;
       const id = typeof model.id === "string" ? model.id : "";
       if (!id) return [];
+      const thinkingLevelMap = thinkingLevelMapFrom(undefined, model.thinkingLevelMap);
       return [
         {
           id,
           name: typeof model.name === "string" && model.name ? model.name : id,
           reasoning: model.reasoning !== false,
-          input: Array.isArray(model.input)
-            ? (model.input.filter((item) => item === "text" || item === "image") as Array<
-                "text" | "image"
-              >)
-            : ["text"],
-          contextWindow:
-            typeof model.contextWindow === "number" && model.contextWindow > 0
-              ? model.contextWindow
-              : 128000,
-          maxTokens:
-            typeof model.maxTokens === "number" && model.maxTokens > 0 ? model.maxTokens : 8192,
+          thinkingLevelMap,
+          input: asInput(model.input),
+          contextWindow: positiveInt(model.contextWindow, 128000),
+          maxTokens: positiveInt(model.maxTokens, 8192),
           cost:
             model.cost && typeof model.cost === "object"
               ? {
@@ -195,10 +275,18 @@ export function toRuntimeConfig(raw: Record<string, unknown>): {
   };
 }
 
+function optionalPositive(entry: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = entry[key];
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
+  }
+  return undefined;
+}
+
 export async function discoverPiModels(
   baseUrl: string,
   apiKey?: string,
-): Promise<Array<{ id: string; name: string }>> {
+): Promise<PiDiscoveredModel[]> {
   const root = baseUrl.replace(/\/+$/, "");
   const response = await fetch(`${root}/models`, {
     headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
@@ -219,11 +307,24 @@ export async function discoverPiModels(
       return [{ id: entry.trim(), name: entry.trim() }];
     }
     if (!entry || typeof entry !== "object") return [];
-    const id = String(
-      (entry as { id?: unknown }).id ?? (entry as { name?: unknown }).name ?? "",
-    ).trim();
+    const row = entry as Record<string, unknown>;
+    const id = String(row.id ?? row.name ?? "").trim();
     if (!id) return [];
-    const name = String((entry as { name?: unknown }).name ?? id).trim() || id;
-    return [{ id, name }];
+    const name = String(row.name ?? id).trim() || id;
+    const contextWindow = optionalPositive(row, [
+      "context_window",
+      "contextWindow",
+      "context_length",
+      "max_model_len",
+    ]);
+    const maxTokens = optionalPositive(row, ["max_output_tokens", "maxTokens", "max_tokens"]);
+    return [
+      {
+        id,
+        name,
+        ...(contextWindow ? { contextWindow } : {}),
+        ...(maxTokens ? { maxTokens } : {}),
+      },
+    ];
   });
 }

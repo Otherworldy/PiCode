@@ -290,7 +290,7 @@ export class ZCodeProtocolAgentServer {
             });
             if (result.decision === "allow") return "allow";
             if (result.decision === "deny") return "deny";
-            return (await hosted.requestConfirm(mapped, result.reason ?? `Allow ${mapped}?`))
+            return (await hosted.requestConfirm(mapped, result.reason ?? `Allow ${mapped}?`, args))
               ? "allow"
               : "deny";
           };

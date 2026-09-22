@@ -53,10 +53,19 @@ async function resolveInteraction(
       : (host.getRecord(envelope.sessionId)?.app as { piHosted?: { ui: { respond: (r: { id: string; confirmed?: boolean; value?: string; cancelled?: boolean }) => boolean } } } | undefined)?.piHosted;
   if (hosted) {
     const answer = payload.answer;
-    if (answer.action === "cancel" || answer.optionId === "no") {
+    if (answer.action === "cancel" || answer.optionId === "no" || answer.optionId === "deny") {
       hosted.ui.respond({ id: payload.interactionId, cancelled: true });
-    } else if (answer.action === "accept" || answer.optionId === "yes") {
-      hosted.ui.respond({ id: payload.interactionId, confirmed: true });
+    } else if (
+      answer.action === "accept" ||
+      answer.optionId === "yes" ||
+      answer.optionId === "allowOnce" ||
+      answer.optionId === "allowAlways"
+    ) {
+      hosted.ui.respond(
+        answer.optionId === "allowAlways"
+          ? { id: payload.interactionId, value: "allowAlways" }
+          : { id: payload.interactionId, confirmed: true },
+      );
     } else {
       hosted.ui.respond({
         id: payload.interactionId,

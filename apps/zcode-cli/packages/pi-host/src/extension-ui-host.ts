@@ -34,6 +34,40 @@ export class ExtensionUiHost {
     return { pending: this.pending, widgets: this.widgets, statuses: this.statuses };
   }
 
+  askPermission(input: {
+    id: string;
+    toolName: string;
+    summary: string;
+    detail?: unknown;
+  }): Omit<ExtensionUiState, "sideEffects"> {
+    if (this.autoConfirm) {
+      this.deliver({ id: input.id, confirmed: true });
+      return this.snapshot();
+    }
+    this.pending = [
+      ...this.pending,
+      {
+        interactionId: input.id,
+        kind: "permission",
+        anchorRowId: null,
+        createdAt: Date.now(),
+        payload: {
+          kind: "permission",
+          toolCallId: input.id,
+          toolName: input.toolName,
+          summary: input.summary,
+          detail: input.detail ?? {},
+          options: [
+            { optionId: "allowOnce", label: "Allow once", kind: "allowOnce" },
+            { optionId: "allowAlways", label: "Allow for session", kind: "allowAlways" },
+            { optionId: "deny", label: "Block", kind: "deny" },
+          ],
+        },
+      },
+    ];
+    return this.snapshot();
+  }
+
   handle(event: PiExtensionUiEvent): ExtensionUiState {
     const sideEffects: ExtensionUiSideEffect[] = [];
     switch (event.method) {

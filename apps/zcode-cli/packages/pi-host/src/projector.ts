@@ -177,8 +177,14 @@ export class PiToV4Projector {
       case "message_end":
         return event.message.role === "assistant" ? this.flushAssistant(event.message.content) : [];
       case "message_start":
-        if (event.message.role === "assistant" && event.message.id) {
-          this.assistantMessageId = event.message.id;
+        if (event.message.role === "assistant") {
+          // 同一轮里 Pi 会连续写多条 assistant（工具来回、插件 custom_message）。
+          // 上一条正文留下的 streaming 行会让 flushAssistant 把后面的正文全部丢掉。
+          if (!event.message.id || event.message.id !== this.assistantMessageId) {
+            this.streamingTextRowId = null;
+            this.streamingReasoningRowId = null;
+          }
+          if (event.message.id) this.assistantMessageId = event.message.id;
           return [];
         }
         return event.message.role === "user"

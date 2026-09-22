@@ -2016,6 +2016,38 @@ export const zcodeWorkspacePresentationSchema = z
   })
   .strict();
 export type ZCodeWorkspacePresentation = z.infer<typeof zcodeWorkspacePresentationSchema>;
+const zcodePiProviderModelDraftSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().optional(),
+    contextWindow: z.number().int().positive().optional(),
+    maxTokens: z.number().int().positive().optional(),
+    reasoning: z.boolean().optional(),
+    thinkingLevels: z.array(z.string().min(1)).optional(),
+    defaultThinkingLevel: z.string().min(1).optional(),
+    input: z.array(z.enum(["text", "image"])).optional(),
+  })
+  .strict();
+const zcodePiProviderModelViewSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    contextWindow: z.number(),
+    maxTokens: z.number(),
+    reasoning: z.boolean(),
+    thinkingLevels: z.array(z.string()),
+    defaultThinkingLevel: z.string().optional(),
+    input: z.array(z.enum(["text", "image"])),
+  })
+  .strict();
+const zcodePiDiscoveredModelSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    contextWindow: z.number().optional(),
+    maxTokens: z.number().optional(),
+  })
+  .strict();
 export const zcodePiModelsMutateParamsSchema = z
   .object({
     workspace: zcodeWorkspaceRefSchema.optional(),
@@ -2028,12 +2060,7 @@ export const zcodePiModelsMutateParamsSchema = z
         baseUrl: z.string().min(1),
         api: z.string().min(1),
         apiKey: z.string().optional(),
-        models: z.array(
-          z.object({
-            id: z.string().min(1),
-            name: z.string().optional(),
-          }),
-        ),
+        models: z.array(zcodePiProviderModelDraftSchema),
       })
       .optional(),
     defaultProvider: z.string().min(1).optional(),
@@ -2050,12 +2077,12 @@ export const zcodePiModelsMutateResultSchema = z
         baseUrl: z.string(),
         api: z.string(),
         hasApiKey: z.boolean(),
-        models: z.array(z.object({ id: z.string(), name: z.string() })),
+        models: z.array(zcodePiProviderModelViewSchema),
       }),
     ),
     defaultProvider: z.string().optional(),
     defaultModel: z.string().optional(),
-    discovered: z.array(z.object({ id: z.string(), name: z.string() })).optional(),
+    discovered: z.array(zcodePiDiscoveredModelSchema).optional(),
   })
   .strict();
 export type ZCodePiModelsMutateResult = z.infer<typeof zcodePiModelsMutateResultSchema>;

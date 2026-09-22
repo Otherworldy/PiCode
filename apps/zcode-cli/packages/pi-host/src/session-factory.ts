@@ -1,5 +1,6 @@
+import { existsSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   createAgentSession,
   createCodingTools,
@@ -31,6 +32,7 @@ import {
   toPiModelConfigView,
   toRuntimeConfig,
   upsertProvider,
+  type PiDiscoveredModel,
   type PiModelConfigView,
   type PiProviderDraft,
 } from "./model-config-file.js";
@@ -126,7 +128,7 @@ export async function mutatePiCatalog(input: {
   providerId?: string;
   defaultProvider?: string;
   defaultModel?: string;
-}): Promise<PiModelConfigView & { discovered?: Array<{ id: string; name: string }> }> {
+}): Promise<PiModelConfigView & { discovered?: PiDiscoveredModel[] }> {
   const agentDir = getAgentDir();
   const settings = SettingsManager.create(process.cwd(), agentDir);
   let file = await loadModelsJson(agentDir);
@@ -161,6 +163,29 @@ export async function mutatePiCatalog(input: {
   return toPiModelConfigView(file, {
     defaultProvider: settings.getDefaultProvider(),
     defaultModel: settings.getDefaultModel(),
+  });
+}
+
+function sessionFileHasContent(path: string): boolean {
+  try {
+    return existsSync(path) && statSync(path).size > 0;
+  } catch {
+    return false;
+  }
+}
+
+function openOrCreateSession(input: {
+  sessionId: string;
+  cwd: string;
+  sessionFile: string;
+  parentSessionId?: string;
+}) {
+  if (sessionFileHasContent(input.sessionFile)) {
+    return SessionManager.open(input.sessionFile, undefined, input.cwd);
+  }
+  return SessionManager.create(input.cwd, dirname(input.sessionFile), {
+    id: input.sessionId,
+    parentSession: input.parentSessionId,
   });
 }
 
@@ -223,7 +248,7 @@ export function createSdkSessionFactory(options: {
       customTools: customTools as never,
       noTools: "builtin",
       resourceLoader,
-      sessionManager: SessionManager.open(input.sessionFile, undefined, input.cwd),
+      sessionManager: openOrCreateSession(input),
       settingsManager,
     });
     const session = created.session;

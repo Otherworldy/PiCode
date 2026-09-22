@@ -96,7 +96,7 @@ function updateBlockingLoadingState(
   return Object.fromEntries(uniqueKeys.map((workspaceKey) => [workspaceKey, true]));
 }
 
-// workspace 分组结果以 tasks-index task rows 为持久行，sessions-index 只补 activity/detail。
+// workspace 分组：sessions-index（Pi jsonl）是行集合，tasks-index 补 pin/archive/unread。
 // remote shard 使用自己的 endpoint task service，返回与旧协议同形的 group map。
 async function buildWorkspaceGroupsFromSessions(params: {
   service: IServiceAccessor["zcodeTaskService"];

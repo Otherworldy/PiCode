@@ -47,7 +47,7 @@ ZCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代理
 
 删除（协议 + UI）：`sendGoalCommand`、`pauseGoal`、`resumeGoal`、`resumeWorkflowRun`、`startSavedWorkflow`、`amendWorkflowRunSettings`、workspace hook 审核三件套、`switchCollaborationMode`、`applyFileRewind`、`discardSharedContext`。
 
-`switchCollaborationMode` 不恢复为 ZCode 协作模式机。危险工具仍走 ZCode `PermissionService`（Pi 无权限面）：allow 放行、deny 拒绝、ask 用壳 confirm。`mode=yolo` 只作为 PermissionService 的模式输入。
+`switchCollaborationMode` 不恢复为 ZCode 协作模式机。危险工具仍走 ZCode `PermissionService`（Pi 无权限面）：allow 放行、deny 拒绝、ask 投影 `kind: permission` 给壳 PermissionDialog（Allow once / Allow for session / Block）。session allow 由 HostedSession 记忆。`mode=yolo` 只作为 PermissionService 的模式输入。插件 `confirm/select` 仍走底栏 userInput，不用 viewport overlay。
 
 ## 死面
 
@@ -72,7 +72,7 @@ ZCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代理
 
 ## 持久化与旧会话
 
-Pi jsonl 按 identity 分目录，是对话树唯一真相。sessions-index 只枚举这些文件里**有过用户消息**的会话（标题 / 时间 / 预览从 jsonl 解析）。打开或冷订阅时 Registry 用同一份 jsonl 重放到 `PiToV4Projector`，V4 snapshot 是派生缓存。无用户消息的空 jsonl 不当会话列出。不打开、不导入旧 ZCode event log。
+对话树真相是 Pi jsonl，与 Pi TUI 共用 `~/.pi/agent/sessions/<encoded-cwd>/`（文件名 `timestamp_<id>.jsonl`，header id 为 sessionId）。新建/fork 写这里，不预建空文件（Pi 在首条 assistant 落盘）。仍枚举旧 `~/.zcode/pi-host-sessions/<identity>/` 以免丢本 Host 已写过的会话。sessions-index 只列出有过用户消息（或 `session_info.name`）的文件。壳项目列表以这份摘要为行集合，tasks-index 只提供 pin/archive/unread。打开或冷订阅时 Registry 用同一份 jsonl 重放到 `PiToV4Projector`。不打开、不导入旧 ZCode event log。
 
 ## Model
 

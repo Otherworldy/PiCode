@@ -1,5 +1,6 @@
-import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { copyFile, mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { ConversationDelta, DeliveryProfileName } from "@zcode/shared/zcode-protocol-v4";
 import { CommandBridge } from "./command-bridge.js";
@@ -11,7 +12,7 @@ import { readPiJsonl } from "./jsonl-history.js";
 import { mapThought } from "./model-delegate.js";
 import { PiToV4Projector } from "./projector.js";
 import type { ToolPermissionCheck } from "./permission-gate.js";
-import type { CreatePiSession, PiHostEvent, PiSessionPort } from "./types.js";
+import type { CreatePiSession, PiExtensionUiResponse, PiHostEvent, PiSessionPort } from "./types.js";
 
 export interface HostedSession {
   readonly sessionId: string;
@@ -34,7 +35,7 @@ export interface HostedSession {
   setModel(provider: string, modelId: string, thought?: string): Promise<void>;
   setThinkingLevel(level: string): void;
   setFeedback(entityId: string, feedback: "like" | "dislike" | null): void;
-  requestConfirm(title: string, message: string): Promise<boolean>;
+  requestConfirm(toolName: string, reason: string, args?: unknown): Promise<boolean>;
   dispose(): void;
   hydrateHistory(content: string): void;
   onDeltas(listener: (deltas: ConversationDelta[]) => void): () => void;
@@ -63,10 +64,36 @@ export interface RegistryOptions {
   profile?: DeliveryProfileName;
   loadExtensions?: boolean;
   createToolPermission?: (hosted: HostedSession) => ToolPermissionCheck;
+  /** Pi 原生会话根目录，缺省 `~/.pi/agent/sessions`。测试可注入。 */
+  nativeSessionsRoot?: string;
 }
 
 function encodeKey(identity: string): string {
   return Buffer.from(identity).toString("base64url");
+}
+
+function nativeSessionsRoot(override?: string): string {
+  return override ?? join(homedir(), ".pi", "agent", "sessions");
+}
+
+function nativeSessionDir(cwd: string, root: string): string {
+  const resolved = resolve(cwd);
+  const safePath = `--${resolved.replace(/^[\\/]/u, "").replace(/[\\/:]/gu, "-")}--`;
+  return join(root, safePath);
+}
+
+function fileStem(file: string): string {
+  return file.replace(/\.jsonl$/u, "");
+}
+
+function piSessionFileName(sessionId: string, at = new Date()): string {
+  return `${at.toISOString().replace(/[:.]/g, "-")}_${sessionId}.jsonl`;
+}
+
+function permissionAllowed(response: PiExtensionUiResponse): boolean {
+  if ("cancelled" in response) return false;
+  if ("confirmed" in response) return response.confirmed;
+  return response.value !== "deny" && response.value !== "no" && response.value !== "";
 }
 
 export class HostSessionRegistry {
@@ -90,35 +117,33 @@ export class HostSessionRegistry {
     if (input.sessionId) {
       const existing = this.sessions.get(input.sessionId);
       if (existing) return existing;
+      const stored = await this.find(input.sessionId);
+      if (stored) {
+        return this.openFile({
+          sessionId: stored.sessionId,
+          identity: stored.identity,
+          workspacePath: stored.workspacePath,
+          sessionFile: stored.sessionFile,
+          parentSessionId: input.parentSessionId,
+          viaRegistry: input.viaRegistry,
+        });
+      }
     }
     const identity = workspaceKey(input.workspaceIdentity, input.workspacePath);
     const sessionId = input.sessionId ?? randomUUID();
-    const dir = join(this.options.storageRoot, "pi-host-sessions", encodeKey(identity));
+    const dir = nativeSessionDir(
+      input.workspacePath,
+      nativeSessionsRoot(this.options.nativeSessionsRoot),
+    );
     await mkdir(dir, { recursive: true });
-    const sessionFile = join(dir, `${sessionId}.jsonl`);
-    await writeFile(sessionFile, "", { flag: "a" });
-    const pi = await this.options.createSession({
-      sessionId,
-      cwd: input.workspacePath,
-      sessionFile,
-      parentSessionId: input.parentSessionId,
-      loadExtensions: this.options.loadExtensions ?? true,
-      checkPermission: async (request) => {
-        const check = this.toolChecks.get(sessionId);
-        if (!check) return "allow";
-        return check(request);
-      },
-    });
-    const hosted = this.wrap(pi, {
+    return this.openFile({
       sessionId,
       identity,
       workspacePath: input.workspacePath,
-      sessionFile,
+      sessionFile: join(dir, piSessionFileName(sessionId)),
       parentSessionId: input.parentSessionId,
-      viaRegistry: input.viaRegistry ?? Boolean(input.parentSessionId),
-      workId: input.parentSessionId ? sessionId : undefined,
+      viaRegistry: input.viaRegistry,
     });
-    return this.register(hosted);
   }
 
   async spawn(parentId: string): Promise<HostedSession> {
@@ -136,29 +161,20 @@ export class HostSessionRegistry {
     const parent = this.sessions.get(parentId);
     if (!parent) throw new Error(`pi-host parent not found: ${parentId}`);
     const sessionId = randomUUID();
-    const dir = join(this.options.storageRoot, "pi-host-sessions", encodeKey(parent.identity));
+    const dir = nativeSessionDir(
+      parent.workspacePath,
+      nativeSessionsRoot(this.options.nativeSessionsRoot),
+    );
     await mkdir(dir, { recursive: true });
-    const sessionFile = join(dir, `${sessionId}.jsonl`);
-    await copyFile(parent.sessionFile, sessionFile);
-    const pi = await this.options.createSession({
-      sessionId,
-      cwd: parent.workspacePath,
-      sessionFile,
-      loadExtensions: this.options.loadExtensions ?? true,
-      checkPermission: async (request) => {
-        const check = this.toolChecks.get(sessionId);
-        if (!check) return "allow";
-        return check(request);
-      },
-    });
-    const hosted = this.wrap(pi, {
+    const sessionFile = join(dir, piSessionFileName(sessionId));
+    await copyFile(parent.sessionFile, sessionFile).catch(() => undefined);
+    const hosted = await this.openFile({
       sessionId,
       identity: parent.identity,
       workspacePath: parent.workspacePath,
       sessionFile,
       viaRegistry: true,
     });
-    await this.register(hosted);
     await hosted.navigateTree(entryId);
     return hosted;
   }
@@ -180,35 +196,101 @@ export class HostSessionRegistry {
   }
 
   async list(identity: string): Promise<PiStoredSummary[]> {
-    const dir = join(this.options.storageRoot, "pi-host-sessions", encodeKey(identity));
-    try {
-      const files = await readdir(dir);
-      const summaries: PiStoredSummary[] = [];
-      for (const file of files) {
-        if (!file.endsWith(".jsonl")) continue;
-        const sessionFile = join(dir, file);
-        const content = await readFile(sessionFile, "utf8").catch(() => "");
-        const summary = readPiJsonl(content).summary;
-        if (!summary) continue;
-        summaries.push({
-          sessionId: file.replace(/\.jsonl$/u, ""),
-          sessionFile,
-          title: summary.title,
-          createdAt: summary.createdAt,
-          lastActivityAt: summary.lastActivityAt,
-          ...(summary.lastAssistantPreview
-            ? { lastAssistantPreview: summary.lastAssistantPreview }
-            : {}),
-        });
-      }
-      return summaries;
-    } catch {
-      return [];
-    }
+    const hosted = await this.listDir(
+      join(this.options.storageRoot, "pi-host-sessions", encodeKey(identity)),
+      "file",
+    );
+    const native = await this.listDir(
+      nativeSessionDir(identity, nativeSessionsRoot(this.options.nativeSessionsRoot)),
+      "header",
+    );
+    const byId = new Map<string, PiStoredSummary>();
+    for (const item of [...hosted, ...native]) byId.set(item.sessionId, item);
+    return [...byId.values()];
   }
 
   async find(sessionId: string): Promise<PiStoredSession | null> {
-    const root = join(this.options.storageRoot, "pi-host-sessions");
+    const hostedRoot = join(this.options.storageRoot, "pi-host-sessions");
+    const hosted = await this.findInRoot(hostedRoot, sessionId, {
+      decodeDir: true,
+      match: "file",
+    });
+    if (hosted) return hosted;
+    return this.findInRoot(nativeSessionsRoot(this.options.nativeSessionsRoot), sessionId, {
+      decodeDir: false,
+      match: "header",
+    });
+  }
+
+  private async openFile(input: {
+    sessionId: string;
+    identity: string;
+    workspacePath: string;
+    sessionFile: string;
+    parentSessionId?: string;
+    viaRegistry?: boolean;
+  }): Promise<HostedSession> {
+    const live = this.sessions.get(input.sessionId);
+    if (live) return live;
+    const pi = await this.options.createSession({
+      sessionId: input.sessionId,
+      cwd: input.workspacePath,
+      sessionFile: input.sessionFile,
+      parentSessionId: input.parentSessionId,
+      loadExtensions: this.options.loadExtensions ?? true,
+      checkPermission: async (request) => {
+        const check = this.toolChecks.get(input.sessionId);
+        if (!check) return "allow";
+        return check(request);
+      },
+    });
+    const hosted = this.wrap(pi, {
+      sessionId: input.sessionId,
+      identity: input.identity,
+      workspacePath: input.workspacePath,
+      sessionFile: pi.sessionFile ?? input.sessionFile,
+      parentSessionId: input.parentSessionId,
+      viaRegistry: input.viaRegistry ?? Boolean(input.parentSessionId),
+      workId: input.parentSessionId ? input.sessionId : undefined,
+    });
+    return this.register(hosted);
+  }
+
+  private async listDir(dir: string, idFrom: "file" | "header"): Promise<PiStoredSummary[]> {
+    let files: string[] = [];
+    try {
+      files = await readdir(dir);
+    } catch {
+      return [];
+    }
+    const summaries: PiStoredSummary[] = [];
+    for (const file of files) {
+      if (!file.endsWith(".jsonl")) continue;
+      const sessionFile = join(dir, file);
+      const content = await readFile(sessionFile, "utf8").catch(() => "");
+      const summary = readPiJsonl(content).summary;
+      if (!summary) continue;
+      const sessionId =
+        idFrom === "header" && summary.sessionId ? summary.sessionId : fileStem(file);
+      summaries.push({
+        sessionId,
+        sessionFile,
+        title: summary.title,
+        createdAt: summary.createdAt,
+        lastActivityAt: summary.lastActivityAt,
+        ...(summary.lastAssistantPreview
+          ? { lastAssistantPreview: summary.lastAssistantPreview }
+          : {}),
+      });
+    }
+    return summaries;
+  }
+
+  private async findInRoot(
+    root: string,
+    sessionId: string,
+    options: { decodeDir: boolean; match: "file" | "header" },
+  ): Promise<PiStoredSession | null> {
     let dirs: string[] = [];
     try {
       dirs = await readdir(root);
@@ -216,25 +298,58 @@ export class HostSessionRegistry {
       return null;
     }
     for (const dir of dirs) {
-      const sessionFile = join(root, dir, `${sessionId}.jsonl`);
-      const content = await readFile(sessionFile, "utf8").catch(() => "");
-      if (!content) continue;
-      const summary = readPiJsonl(content).summary;
-      if (!summary) continue;
-      let identity = dir;
+      const folder = join(root, dir);
+      if (options.match === "file") {
+        const sessionFile = join(folder, `${sessionId}.jsonl`);
+        const hit = await this.readStored(sessionFile, sessionId, dir, options.decodeDir);
+        if (hit) return hit;
+        continue;
+      }
+      let files: string[] = [];
+      try {
+        files = await readdir(folder);
+      } catch {
+        continue;
+      }
+      for (const file of files) {
+        if (!file.endsWith(".jsonl")) continue;
+        const sessionFile = join(folder, file);
+        const hit = await this.readStored(sessionFile, sessionId, dir, options.decodeDir);
+        if (hit) return hit;
+      }
+    }
+    return null;
+  }
+
+  private async readStored(
+    sessionFile: string,
+    sessionId: string,
+    dir: string,
+    decodeDir: boolean,
+  ): Promise<PiStoredSession | null> {
+    const content = await readFile(sessionFile, "utf8").catch(() => "");
+    if (!content) return null;
+    const summary = readPiJsonl(content).summary;
+    if (!summary) return null;
+    const headerId = summary.sessionId;
+    const stem = fileStem(sessionFile.split(/[\\/]/u).pop() ?? "");
+    if (stem !== sessionId && headerId !== sessionId) return null;
+    let identity = dir;
+    if (decodeDir) {
       try {
         identity = Buffer.from(dir, "base64url").toString("utf8") || dir;
       } catch {
         identity = dir;
       }
-      return {
-        sessionId,
-        sessionFile,
-        identity,
-        workspacePath: summary.cwd ?? identity,
-      };
+    } else {
+      identity = summary.cwd ?? dir;
     }
-    return null;
+    return {
+      sessionId,
+      sessionFile,
+      identity,
+      workspacePath: summary.cwd ?? identity,
+    };
   }
 
   private async register(hosted: HostedSession): Promise<HostedSession> {
@@ -275,6 +390,7 @@ export class HostSessionRegistry {
     const deltaListeners = new Set<(deltas: ConversationDelta[]) => void>();
     const notifyListeners = new Set<(message: string, notifyType: "info" | "warning" | "error") => void>();
     const pendingDeltas: ConversationDelta[] = [];
+    const sessionAllowed = new Set<string>();
     const emit = (deltas: ConversationDelta[]) => {
       if (deltas.length === 0) return;
       if (deltaListeners.size === 0) {
@@ -355,20 +471,24 @@ export class HostSessionRegistry {
       setFeedback: (entityId, feedback) => {
         emit(projector.setFeedback(entityId, feedback));
       },
-      requestConfirm: async (title, message) => {
+      requestConfirm: async (toolName, reason, args) => {
+        if (sessionAllowed.has(toolName)) return true;
         const id = `perm:${randomUUID()}`;
         const waiting = ui.wait(id);
-        const next = ui.handle({
-          type: "extension_ui_request",
+        const next = ui.askPermission({
           id,
-          method: "confirm",
-          title,
-          message,
+          toolName,
+          summary: reason,
+          detail: args,
         });
         emit(projector.replaceInteractions(next.pending));
         const response = await waiting;
         emit(projector.replaceInteractions(ui.snapshot().pending));
-        return "confirmed" in response && response.confirmed;
+        const allowed = permissionAllowed(response);
+        if (allowed && "value" in response && response.value === "allowAlways") {
+          sessionAllowed.add(toolName);
+        }
+        return allowed;
       },
       dispose: () => {
         unsubscribe();

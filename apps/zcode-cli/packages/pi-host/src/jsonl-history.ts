@@ -6,6 +6,7 @@ export type PiJsonlSummary = {
   lastActivityAt: number;
   cwd?: string;
   lastAssistantPreview?: string;
+  sessionId?: string;
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -94,6 +95,7 @@ export function readPiJsonl(content: string): {
   let lastActivityAt: number | undefined;
   let cwd: string | undefined;
   let namedTitle: string | undefined;
+  let sessionId: string | undefined;
   let firstUser = "";
   let lastAssistant = "";
   const events: PiHostEvent[] = [];
@@ -119,16 +121,50 @@ export function readPiJsonl(content: string): {
     }
     if (type === "session") {
       if (typeof entry.cwd === "string" && entry.cwd) cwd = entry.cwd;
+      if (typeof entry.id === "string" && entry.id) sessionId = entry.id;
       continue;
     }
     if (type === "session_info" && typeof entry.name === "string" && entry.name.trim()) {
       namedTitle = clip(entry.name, 60);
       continue;
     }
+    if (type === "custom_message" && entry.display !== false) {
+      const text = messageText(entry.content);
+      if (!text.trim()) continue;
+      beginTurn();
+      const id = typeof entry.id === "string" ? entry.id : undefined;
+      events.push({ type: "message_start", message: { role: "assistant", id } });
+      events.push({ type: "message_end", message: { role: "assistant", content: text, id } });
+      continue;
+    }
     if (type !== "message") continue;
     const message = asRecord(entry.message);
     if (!message) continue;
     const role = message.role;
+    if (role === "bashExecution") {
+      const id = typeof entry.id === "string" ? entry.id : "";
+      if (!id) continue;
+      beginTurn();
+      const command = typeof message.command === "string" ? message.command : "";
+      const output = typeof message.output === "string" ? message.output : "";
+      const failed =
+        message.cancelled === true ||
+        (typeof message.exitCode === "number" && message.exitCode !== 0);
+      events.push({
+        type: "tool_execution_start",
+        toolCallId: id,
+        toolName: "bash",
+        args: { command },
+      });
+      events.push({
+        type: "tool_execution_end",
+        toolCallId: id,
+        toolName: "bash",
+        result: { content: [{ type: "text", text: output }] },
+        isError: failed,
+      });
+      continue;
+    }
     if (isUserRole(role)) {
       const text = messageText(message.content);
       if (!firstUser && text.trim()) firstUser = text;
@@ -183,6 +219,7 @@ export function readPiJsonl(content: string): {
       createdAt: createdAt ?? now,
       lastActivityAt: lastActivityAt ?? createdAt ?? now,
       ...(cwd ? { cwd } : {}),
+      ...(sessionId ? { sessionId } : {}),
       ...(lastAssistant ? { lastAssistantPreview: clip(lastAssistant, 120) } : {}),
     },
     events,

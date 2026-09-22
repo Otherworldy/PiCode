@@ -25,6 +25,7 @@ test("summarize uses first user text and last assistant preview", () => {
   const { summary } = readPiJsonl(sample);
   assert.ok(summary);
   assert.equal(summary.title, "just say pong");
+  assert.equal(summary.sessionId, "s1");
   assert.equal(summary.cwd, "C:\\work");
   assert.equal(summary.lastAssistantPreview, "empty dir");
   assert.equal(summary.createdAt, Date.parse("2026-01-02T03:04:05.000Z"));
@@ -42,4 +43,32 @@ test("replay hydrates user, assistant, tools into projector", () => {
   const tool = projector.getSnapshot().rows.window.find((row) => row.kind === "toolCall");
   assert.equal(tool && tool.kind === "toolCall" ? tool.status : undefined, "success");
   assert.equal(projector.getSnapshot().control.phase === "running", false);
+});
+
+test("replay keeps later assistant text after tools and plugin messages", () => {
+  const content = [
+    '{"type":"session","id":"s1","timestamp":"2026-01-02T03:04:05.000Z","cwd":"C:\\work"}',
+    '{"type":"message","id":"u1","timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"user","content":[{"type":"text","text":"export done?"}]}}',
+    '{"type":"message","id":"a1","timestamp":"2026-01-02T03:04:07.000Z","message":{"role":"assistant","content":[{"type":"text","text":"still exporting"}]}}',
+    '{"type":"custom_message","id":"p1","customType":"background-bash-task","display":true,"content":"background task done","timestamp":"2026-01-02T03:04:08.000Z"}',
+    '{"type":"message","id":"a2","timestamp":"2026-01-02T03:04:09.000Z","message":{"role":"assistant","content":[{"type":"text","text":"export finished"},{"type":"toolCall","id":"c1","name":"bash","arguments":{"command":"wsl -l"}}]}}',
+    '{"type":"message","id":"t1","timestamp":"2026-01-02T03:04:10.000Z","message":{"role":"toolResult","toolCallId":"c1","toolName":"bash","content":[{"type":"text","text":"ok"}],"isError":false}}',
+    '{"type":"message","id":"a3","timestamp":"2026-01-02T03:04:11.000Z","message":{"role":"assistant","content":[{"type":"text","text":"vhdx removed"}]}}',
+    '{"type":"message","id":"b1","timestamp":"2026-01-02T03:04:12.000Z","message":{"role":"bashExecution","command":"docker ps","output":"none","exitCode":0}}',
+  ].join("\n");
+  const projector = new PiToV4Projector("s1", "e1", { profile: "continuous" });
+  for (const event of readPiJsonl(content).events) projector.apply(event);
+  const texts = projector
+    .getSnapshot()
+    .rows.window.filter((row) => row.kind === "assistantText")
+    .map((row) => (row.kind === "assistantText" ? row.text : ""));
+  assert.deepEqual(texts, [
+    "still exporting",
+    "background task done",
+    "export finished",
+    "vhdx removed",
+  ]);
+  const tools = projector.getSnapshot().rows.window.filter((row) => row.kind === "toolCall");
+  assert.equal(tools.length, 2);
+  assert.equal(tools.every((row) => row.kind === "toolCall" && row.status === "success"), true);
 });

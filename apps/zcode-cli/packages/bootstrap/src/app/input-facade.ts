@@ -1,4 +1,4 @@
-import type { AgentRuntime, TurnAttachment, TurnResult } from "@zcode/core";
+import type { AgentRuntime, TurnAttachment } from "@zcode/core";
 import {
   SessionEventType,
   traceContextToLogContext,
@@ -94,50 +94,6 @@ export function createInputFacade(deps: CreateInputFacadeDeps): InputFacade {
       skip,
     });
     return await materializeInputHistoryEntry(entry, deps.artifactStore);
-  };
-
-  const runPromptTurn = async (
-    promptInput: ReturnType<typeof normalizePromptInput>,
-    options?: SubmitPromptOptions,
-  ): Promise<TurnResult> => {
-    const storedAttachments = await externalizePromptAttachments(promptInput.attachments, {
-      artifactStore: deps.artifactStore,
-      sessionId: deps.sessionId,
-      traceContext: options?.traceContext ?? deps.traceContext,
-    });
-    await recordAcceptedInputHistory(
-      promptInput.text,
-      "prompt",
-      options?.traceContext ?? deps.traceContext,
-      storedAttachments,
-    );
-    const resolvedCommandPrompt = await deps.customCommandPromptResolver?.(promptInput.text, {
-      abortSignal: options?.abortSignal,
-      traceContext: options?.traceContext ?? deps.traceContext,
-    });
-    const runtimePromptText = resolvedCommandPrompt ?? promptInput.text;
-    const turnAttribution = options?.automationId
-      ? { automationId: options.automationId }
-      : options?.offPeakTaskId
-        ? {
-            offPeakTaskId: options.offPeakTaskId,
-            ...(options.offPeakRunType ? { offPeakRunType: options.offPeakRunType } : {}),
-          }
-        : {};
-    return await deps.runtime.executeTurn(runtimePromptText, storedAttachments, {
-      abortSignal: options?.abortSignal,
-      browserAmbientContext: options?.browserAmbientContext,
-      continueActiveTargetAfterTurn: true,
-      ...(resolvedCommandPrompt !== undefined ? { displayInput: promptInput.text } : {}),
-      inputId: options?.inputId,
-      ...turnAttribution,
-      intent: options?.intent,
-      sharedContextRefs: options?.sharedContextRefs,
-      queryId: options?.queryId,
-      toolDisallowlist: options?.toolDisallowlist,
-      traceContext: options?.traceContext ?? deps.traceContext,
-      modelExecution: options?.modelExecution,
-    });
   };
 
   const prepareRuntimePrompt = async (
@@ -366,14 +322,14 @@ export function createInputFacade(deps: CreateInputFacadeDeps): InputFacade {
         traceContext: options?.traceContext ?? deps.traceContext,
       });
     },
-    submitPrompt: async (prompt, options) => {
-      const promptInput = normalizePromptInput(prompt);
+    submitPrompt: async (_prompt, options) => {
       const unsubscribe = options?.onEvent
         ? deps.runtime.subscribeEvents({ onSessionEvent: options.onEvent })
         : undefined;
       try {
         await preparePromptBoundary(options);
-        return await runPromptTurn(promptInput, options);
+        // 主路径是 Pi Host session.prompt。createZCodeApp.submitPrompt 不能再进 AgentRuntime 循环。
+        throw new Error("executeTurn is disabled; use Pi Host session.prompt");
       } finally {
         unsubscribe?.();
       }

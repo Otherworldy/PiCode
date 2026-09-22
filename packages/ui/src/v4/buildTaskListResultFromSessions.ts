@@ -74,8 +74,8 @@ function mergeTaskIndexRowWithSession(
 }
 
 /**
- * 以 tasks-index 行为左表做字段级 join。summary 缺失时保留原 task 引用；session-only 冷摘要
- * 不会进入持久列表，新建短窗口由既有 optimistic/live overlay 负责。
+ * tasks-index 提供 pin/archive 行与字段覆盖；sessions-index 是 Pi jsonl 行集合。
+ * 只在 tasks-index 的会话会丢掉 Host 冷摘要，所以 session-only 行要并进去。
  */
 export function mergeTaskIndexRowsWithSessions(params: {
   taskIndexItems: ZCodeTaskMeta[];
@@ -84,10 +84,18 @@ export function mergeTaskIndexRowsWithSessions(params: {
   const sessionByEntityKey = new Map(
     params.sessions.map((session) => [buildTaskEntityKey(session), session]),
   );
-  return params.taskIndexItems.map((task) => {
+  const merged = params.taskIndexItems.map((task) => {
     const session = sessionByEntityKey.get(buildTaskEntityKey(task));
     return session ? mergeTaskIndexRowWithSession(task, session) : task;
   });
+  const seen = new Set(merged.map((task) => buildTaskEntityKey(task)));
+  for (const session of params.sessions) {
+    const key = buildTaskEntityKey(session);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(session);
+  }
+  return merged;
 }
 
 /** unreadAt join：map 已加载时以 tasks-index 为准，未加载时不动原 meta，避免首帧闪烁。 */
