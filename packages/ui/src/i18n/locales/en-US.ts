@@ -2336,6 +2336,8 @@ const enUS: Record<string, string> = {
   "settings.mcp.form.name": "Name",
   "settings.mcp.form.type": "Type",
   "settings.mcp.form.timeoutMs": "Timeout MS",
+  "settings.mcp.form.directTools": "Register directly as Pi tools",
+  "settings.mcp.form.directToolsHint": "Off: the model calls this server through the mcp proxy. On: each of its tools is registered in the session.",
   "settings.mcp.form.protocolVersion": "Protocol version",
   "settings.mcp.form.protocolVersion.auto": "Auto (recommended)",
   "settings.mcp.form.protocolVersion.legacy": "Legacy compatibility",
@@ -2396,6 +2398,11 @@ const enUS: Record<string, string> = {
   "settings.plugins.toggle.workspaceDisabled":
     "Disabled {plugin} in this workspace (overriding User default)",
   "settings.plugins.toggle.failed": "Couldn't update {plugin}. Try again.",
+  "settings.plugins.pi.title": "Pi plugins",
+  "settings.plugins.pi.hint": "From Pi settings.json. A switch applies on the next session.",
+  "settings.plugins.pi.loading": "Reading Pi plugins…",
+  "settings.plugins.pi.empty": "No Pi plugins in this scope.",
+  "settings.plugins.pi.failed": "Couldn't update Pi plugins. Try again.",
   "settings.modelProviderDescription":
     "Pi providers and models from ~/.pi/agent/models.json and auth.json.",
   "settings.modelProvider.pi.source":

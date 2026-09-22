@@ -11,8 +11,10 @@ const FAMILY_NAMES: Record<string, string> = {
 
 const SUBAGENT_NAMES = new Set(["agent", "task", "subagent", "pi-subagent"]);
 
-export function mapPiToolName(piName: string, viaRegistry = false): string {
-  const key = piName.trim();
+export function mapPiToolName(piName: string | undefined, viaRegistry = false): string {
+  // Pi 的 toolcall_start 经常还没有名字。trim 崩了会把整个 agent 进程打掉。
+  const key = (piName ?? "").trim();
+  if (!key) return "Tool";
   const mapped = FAMILY_NAMES[key.toLowerCase()];
   if (mapped) return mapped;
   if (viaRegistry && SUBAGENT_NAMES.has(key.toLowerCase())) return "Agent";

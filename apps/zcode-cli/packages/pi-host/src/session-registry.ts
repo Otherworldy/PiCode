@@ -9,6 +9,11 @@ import { ExtensionUiHost } from "./extension-ui-host.js";
 import { HostQueue } from "./host-queue.js";
 import { workspaceKey } from "./identity.js";
 import { readPiJsonl } from "./jsonl-history.js";
+import {
+  listPiSubagentChildren,
+  piSubagentRevision,
+  type PiSubagentChild,
+} from "./pi-subagent-index.js";
 import { mapThought } from "./model-delegate.js";
 import { PiToV4Projector } from "./projector.js";
 import type { ToolPermissionCheck } from "./permission-gate.js";
@@ -317,6 +322,36 @@ export class HostSessionRegistry {
         const hit = await this.readStored(sessionFile, sessionId, dir, options.decodeDir);
         if (hit) return hit;
       }
+      if (options.match === "header") {
+        const nested = await this.findNestedJsonl(folder, sessionId, dir, 3);
+        if (nested) return nested;
+      }
+    }
+    return null;
+  }
+
+  private async findNestedJsonl(
+    folder: string,
+    sessionId: string,
+    dir: string,
+    depth: number,
+  ): Promise<PiStoredSession | null> {
+    if (depth < 0) return null;
+    let entries: string[] = [];
+    try {
+      entries = await readdir(folder);
+    } catch {
+      return null;
+    }
+    for (const entry of entries) {
+      const full = join(folder, entry);
+      if (entry.endsWith(".jsonl")) {
+        const hit = await this.readStored(full, sessionId, dir, false);
+        if (hit) return hit;
+        continue;
+      }
+      const nested = await this.findNestedJsonl(full, sessionId, dir, depth - 1);
+      if (nested) return nested;
     }
     return null;
   }
@@ -411,6 +446,48 @@ export class HostSessionRegistry {
         if (effect.kind === "title") emit(projector.setTitle(effect.title, "generated"));
       }
     };
+    let subagentKey = "";
+    let subagentTimer: ReturnType<typeof setTimeout> | undefined;
+    const publishSubagents = async () => {
+      if (!meta.sessionFile) return;
+      const children = await listPiSubagentChildren({
+        parentSessionFile: meta.sessionFile,
+        parentSessionId: meta.sessionId,
+      }).catch(() => [] as PiSubagentChild[]);
+      const running = children.filter(
+        (child) => child.status === "running" || child.status === "waiting" || child.status === "blocked",
+      );
+      const next = {
+        revision: piSubagentRevision(children),
+        childSessionIds: children.map((child) => child.childSessionId),
+        running: running.map((child) => ({
+          childSessionId: child.childSessionId,
+          subagentType: child.subagentType,
+          title: child.title,
+          status: child.status as "running" | "waiting" | "blocked",
+          ...(child.summary ? { summary: child.summary } : {}),
+          ...(child.startedAt ? { startedAt: child.startedAt } : {}),
+        })),
+        endedTotal: children.length - running.length,
+      };
+      const key = JSON.stringify(next);
+      if (key === subagentKey) return;
+      subagentKey = key;
+      emit(projector.replaceSubagents(next));
+    };
+    const scheduleSubagents = () => {
+      if (subagentTimer) clearTimeout(subagentTimer);
+      subagentTimer = setTimeout(() => {
+        subagentTimer = undefined;
+        void publishSubagents();
+      }, 400);
+    };
+    let subagentPoll: ReturnType<typeof setInterval> | undefined;
+    const stopSubagentPoll = () => {
+      if (!subagentPoll) return;
+      clearInterval(subagentPoll);
+      subagentPoll = undefined;
+    };
     const unsubscribe = pi.subscribe((event: PiHostEvent) => {
       try {
         if (event.type === "extension_ui_request") {
@@ -418,7 +495,16 @@ export class HostSessionRegistry {
           return;
         }
         emit(projector.apply(event));
+        scheduleSubagents();
+        // zcode_subagent 在工具里跑完才返回，这段时间父会话没有新事件，目录不会刷新。
+        if (event.type === "agent_start" && !subagentPoll) {
+          subagentPoll = setInterval(() => {
+            void publishSubagents();
+          }, 1000);
+        }
         if (event.type === "agent_settled" || (event.type === "agent_end" && !event.willRetry)) {
+          stopSubagentPoll();
+          void publishSubagents();
           void bridge.drainNext().then((drained) => {
             if (drained) emit(projector.replaceQueue(queue.snapshot()));
           });
@@ -491,6 +577,8 @@ export class HostSessionRegistry {
         return allowed;
       },
       dispose: () => {
+        if (subagentTimer) clearTimeout(subagentTimer);
+        stopSubagentPoll();
         unsubscribe();
         pi.dispose();
       },
@@ -498,6 +586,7 @@ export class HostSessionRegistry {
         const parsed = readPiJsonl(content);
         for (const event of parsed.events) emit(projector.apply(event));
         if (parsed.summary?.title) emit(projector.setTitle(parsed.summary.title, "generated"));
+        void publishSubagents();
       },
       onDeltas: (listener) => {
         deltaListeners.add(listener);

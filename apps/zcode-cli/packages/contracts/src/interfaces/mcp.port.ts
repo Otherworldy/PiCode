@@ -15,6 +15,8 @@ export interface McpServerRuntimeSource {
 
 export interface McpServerConfigBase {
   enabled?: boolean;
+  /** true：该 server 的工具逐个注册成 Pi 工具。缺省只走 mcp 代理。 */
+  directTools?: boolean;
   isolation?: McpServerIsolation;
   protocolVersion?: McpProtocolVersion;
   /** 仅限宿主生成，公共配置 schema 会拒绝该字段。 */

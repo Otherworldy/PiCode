@@ -48,6 +48,8 @@ const mcpServerBaseSchema = {
   protocolVersion: z.enum(["auto", "legacy", "2026-07-28"]).optional(),
   enabled: z.boolean().optional(),
   timeoutMs: positiveNumberSchema.optional(),
+  // true 才把该 server 的工具逐个注册成 Pi 工具。缺省走 mcp 代理，避免把全部 schema 塞进上下文。
+  directTools: z.boolean().optional(),
 };
 
 const mcpOAuthSchema = z.union([
@@ -357,8 +359,9 @@ function normalizeMcpServerConfigInput(value: unknown): unknown {
   delete server.timeout;
   delete server.startup_timeout_sec;
 
-  if (server.type === "remote") {
-    // 外部 Agent 配置常把 HTTP MCP 标记为 remote；ZCode 运行态协议类型是 http。
+  if (server.type === "remote" || server.type === "streamableHttp") {
+    // 外部配置和设置页把 Streamable HTTP 写成 remote / streamableHttp。
+    // 运行态协议类型是 http，传输用的就是 StreamableHTTPClientTransport。
     server.type = "http";
   } else if (typeof server.type !== "string") {
     // app 管理层把 command 形态视为默认 stdio；CLI 也需要同样推断，

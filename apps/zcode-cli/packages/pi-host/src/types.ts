@@ -9,7 +9,7 @@ export type PiAssistantDelta =
   | { type: "thinking_start"; contentIndex: number }
   | { type: "thinking_delta"; contentIndex: number; delta: string }
   | { type: "thinking_end"; contentIndex: number; content?: string }
-  | { type: "toolcall_start"; contentIndex: number; id: string; toolName: string }
+  | { type: "toolcall_start"; contentIndex: number; id: string; toolName?: string }
   | { type: "toolcall_delta"; contentIndex: number; delta: string }
   | { type: "toolcall_end"; contentIndex: number; toolCall?: { id: string; name: string; arguments?: unknown } };
 

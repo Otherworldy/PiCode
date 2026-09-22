@@ -1364,7 +1364,13 @@ function SubagentStatusSection({
       separated={separated}
       title={title}
       trailing={(isOpen) =>
-        subagents.length === 0 ? null : isOpen ? (
+        subagents.length === 0 ? (
+          endedSubagentCount > 0 ? (
+            <span className="shrink-0">
+              {intl.formatMessage({ id: "chat.statusPanel.endedAgents" })} {endedSubagentCount}
+            </span>
+          ) : null
+        ) : isOpen ? (
           <span>{formatRunningSubagentCount(intl.formatMessage, subagents.length)}</span>
         ) : (
           <>
@@ -1558,11 +1564,14 @@ function getCompletedPlanItem(plan: ConversationStatusPanelModel["plan"]) {
 }
 
 function StatusSummaryRow({
+  endedSubagentCount,
   endedWorkflowRunCount,
   gitWorktreeChangeSummary,
   model,
   onVariantChange,
 }: {
+  /** 已结束子代理计数；宿主给 0 表示目录入口不可渲染。 */
+  endedSubagentCount: number;
   /** 已结束 run 的目录计数；宿主给 0 表示目录入口不可渲染（缺会话或缺回调）。 */
   endedWorkflowRunCount: number;
   gitWorktreeChangeSummary?: { added: number; removed: number } | null;
@@ -1682,6 +1691,13 @@ function StatusSummaryRow({
       <span className="shrink-0 text-[var(--color-foreground-subtle)]">
         {endedWorkflowRunCount}
       </span>
+    </StatusSummaryMetric>
+  ) : endedSubagentCount > 0 ? (
+    <StatusSummaryMetric icon={<BotIcon className="size-4 text-[var(--color-foreground-subtle)]" />}>
+      <span className="min-w-0 truncate">
+        {intl.formatMessage({ id: "chat.statusPanel.agents" })}
+      </span>
+      <span className="shrink-0 text-[var(--color-foreground-subtle)]">{endedSubagentCount}</span>
     </StatusSummaryMetric>
   ) : null;
 
@@ -1853,9 +1869,8 @@ function ConversationStatusPanelImpl({
 
   // `model.hasContent` 只认**活的**内容（模型手上的投影都是活状态），所以「只剩历史」的
   // 会话会连整个胶囊一起消失——而那正是重启后打开一条旧对话的样子，run 目录的入口于是又没了。
-  // 已结束的 run 因此单独开这道门。（Agents 的已结束行有同一个洞：`endedSubagentCount` 也
-  // 没进 `hasContent`。那是既有行为，不在本轮一起翻。）
-  if (!model.hasContent && !canRenderEndedWorkflows) {
+  // 已结束的子代理同样不能靠 hasContent 留住面板：zcode_subagent 跑完后只剩目录计数。
+  if (!model.hasContent && !canRenderEndedWorkflows && !canRenderEndedAgents) {
     return null;
   }
 
@@ -2073,6 +2088,7 @@ function ConversationStatusPanelImpl({
             // 与页脚同一道门（canRenderEndedWorkflows）：缺会话或缺回调时目录打不开，
             // 胶囊也就不该报一个点了没反应的数。
             endedWorkflowRunCount={canRenderEndedWorkflows ? endedWorkflowRunCount : 0}
+            endedSubagentCount={canRenderEndedAgents ? endedSubagentCount : 0}
             gitWorktreeChangeSummary={gitWorktreeChangeSummary}
             onVariantChange={onVariantChange}
           />

@@ -1086,11 +1086,10 @@ export function createConversationV4Gateway(
       //   （workspaceKey = identity，sessions-index topic / 隔离语义不变）。
       // shared parser 统一兼容 WSL legacy 与显式 user identity；非远程格式继续按
       // 本地 workspacePath 处理。
-      void mcpServers;
       void offPeakToolEnabled;
       void dynamicWorkflowEnabled;
       const workspace = resolveWorkspaceRefFromId(workspaceId);
-      const record = await createPiSessionRecord(context, { workspace });
+      const record = await createPiSessionRecord(context, { workspace, mcpServers });
       context.sessions.set(record.app.sessionId, record);
       return { sessionId: record.app.sessionId };
     },

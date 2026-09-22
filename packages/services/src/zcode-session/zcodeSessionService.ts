@@ -16,6 +16,7 @@ import type {
   ZCodeSessionReadParams,
   ZCodeSessionReadWorkspacePresentationParams,
   ZCodeSessionMutatePiModelsParams,
+  ZCodeSessionMutatePiPluginsParams,
   ZCodeSessionResumeParams,
   ZCodeSessionSetModeParams,
   ZCodeSessionSetModelParams,
@@ -221,6 +222,10 @@ export function createZCodeSessionService({
 
     mutatePiModels(params: ZCodeSessionMutatePiModelsParams) {
       return agentService.mutatePiModels(params);
+    },
+
+    mutatePiPlugins(params: ZCodeSessionMutatePiPluginsParams) {
+      return agentService.mutatePiPlugins(params);
     },
 
     async createSession(params: ZCodeSessionCreateParams) {

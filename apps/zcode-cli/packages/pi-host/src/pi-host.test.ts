@@ -24,6 +24,26 @@ test("maps builtin pi tool names", () => {
   assert.equal(mapPiToolName("weird_ext"), "weird_ext");
   assert.equal(mapPiToolName("agent", true), "Agent");
   assert.equal(mapPiToolName("agent", false), "agent");
+  assert.equal(mapPiToolName(undefined), "Tool");
+});
+
+test("toolcall_start without a name does not throw", () => {
+  const projector = new PiToV4Projector("s1", "e1", { profile: "continuous" });
+  projector.apply({ type: "agent_start" });
+  projector.apply({
+    type: "message_update",
+    assistantMessageEvent: { type: "toolcall_start", contentIndex: 0, id: "c1" },
+  });
+  projector.apply({
+    type: "message_update",
+    assistantMessageEvent: {
+      type: "toolcall_end",
+      contentIndex: 0,
+      toolCall: { id: "c1", name: "bash", arguments: { command: "echo hi" } },
+    },
+  });
+  const tool = projector.getSnapshot().rows.window.find((row) => row.kind === "toolCall");
+  assert.equal(tool && tool.kind === "toolCall" ? tool.toolName : "", "Bash");
 });
 
 test("projects text, tools, abort, compact", () => {

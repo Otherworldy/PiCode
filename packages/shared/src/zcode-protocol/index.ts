@@ -2086,6 +2086,32 @@ export const zcodePiModelsMutateResultSchema = z
   })
   .strict();
 export type ZCodePiModelsMutateResult = z.infer<typeof zcodePiModelsMutateResultSchema>;
+export const zcodePiPluginsParamsSchema = z
+  .object({
+    workspace: zcodeWorkspaceRefSchema.optional(),
+    action: z.enum(["list", "setEnabled"]),
+    id: z.string().min(1).optional(),
+    enabled: z.boolean().optional(),
+  })
+  .strict();
+export type ZCodePiPluginsParams = z.infer<typeof zcodePiPluginsParamsSchema>;
+export const zcodePiPluginsResultSchema = z
+  .object({
+    plugins: z.array(
+      z
+        .object({
+          id: z.string(),
+          kind: z.enum(["package", "extension"]),
+          name: z.string(),
+          detail: z.string(),
+          scope: z.enum(["user", "project"]),
+          enabled: z.boolean(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+export type ZCodePiPluginsResult = z.infer<typeof zcodePiPluginsResultSchema>;
 const workspaceHookSha256DigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 export const zcodeWorkspaceHookTrustGrantParamsSchema = z
   .object({
@@ -3678,6 +3704,7 @@ export const zcodeProtocolMethods = {
   sessionSetMode: "session/setMode",
   workspaceReadPresentation: "workspace/readPresentation",
   piModelsMutate: "pi/models",
+  piPlugins: "pi/plugins",
   workspaceHookTrustGrant: "workspace/hooks/trustGrant",
   // 进程级 Account Provider Config 与 workspace 运行目录分离。
   providerUpdateAccountConfig: "provider/updateAccountConfig",

@@ -10,6 +10,8 @@ import { summarizePiJsonl, type HostedSession, type HostSessionRegistry } from "
 import type { ZCodeWorkspaceRef } from "@zcode/shared";
 import { projectIdFromDirectory } from "../app/paths.js";
 import { createPiHostedApp } from "../app/pi-hosted-app.js";
+import type { ZCodeProtocolMcpServer } from "@zcode/shared";
+import { connectZCodeMcp } from "./pi-capabilities.js";
 import type {
   ZCodeProtocolAgentServerContext,
   ZCodeProtocolSessionRecord,
@@ -78,10 +80,15 @@ export async function createPiSessionRecord(
     workspace: ZCodeWorkspaceRef;
     sessionId?: string;
     parentSessionId?: string;
+    mcpServers?: ZCodeProtocolMcpServer[];
   },
 ): Promise<ZCodeProtocolSessionRecord> {
   const registry = context.piHost;
   if (!registry) throw new Error("pi-host registry missing");
+  await connectZCodeMcp(context, {
+    workspacePath: params.workspace.workspacePath,
+    mcpServers: params.mcpServers,
+  });
   const hosted = await registry.create({
     workspaceIdentity: params.workspace.workspaceIdentity,
     workspacePath: params.workspace.workspacePath,

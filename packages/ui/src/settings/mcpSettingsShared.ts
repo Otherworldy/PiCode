@@ -19,6 +19,7 @@ export interface FormState {
   timeoutMs: string;
   oauth?: string;
   protocolVersion: string;
+  directTools: boolean;
 }
 
 export const EMPTY_FORM: FormState = {
@@ -34,6 +35,7 @@ export const EMPTY_FORM: FormState = {
   timeoutMs: "",
   oauth: "",
   protocolVersion: "",
+  directTools: false,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -67,6 +69,7 @@ export function serverToForm(server: ZCodeMcpServer): FormState {
     // 非法枚举值归一为未设置（等价 auto），与 shared DTO 的 isMcpProtocolVersion
     // 静默丢弃行为对齐；否则 config 里的手滑值会让协议版本下拉显示空白。
     protocolVersion: isMcpProtocolVersion(cfg.protocolVersion) ? cfg.protocolVersion : "",
+    directTools: cfg.directTools === true,
   };
 }
 
@@ -91,6 +94,7 @@ export function formToConfig(form: FormState): McpServerConfig {
       ...(form.protocolVersion
         ? { protocolVersion: form.protocolVersion as McpServerConfig["protocolVersion"] }
         : {}),
+      ...(form.directTools ? { directTools: true } : {}),
     };
   }
 
@@ -121,6 +125,7 @@ export function formToConfig(form: FormState): McpServerConfig {
     ...(form.protocolVersion
       ? { protocolVersion: form.protocolVersion as McpServerConfig["protocolVersion"] }
       : {}),
+    ...(form.directTools ? { directTools: true } : {}),
   };
 }
 
@@ -207,6 +212,7 @@ export function jsonDraftToForm(jsonText: string, fallback: FormState): FormStat
     protocolVersion: isMcpProtocolVersion(normalizedConfig.protocolVersion)
       ? normalizedConfig.protocolVersion
       : "",
+    directTools: normalizedConfig.directTools === true,
   };
 }
 

@@ -177,6 +177,18 @@ export function resolveSubmittedExecutionState(
     planEnabled: state.planEnabled,
   };
 }
+
+/**
+ * 完全访问只写在本次 Submission 上。权限闸读的是 Host 会话 mode，
+ * 不在这里落地的话，工具仍按创建会话时的 build 弹窗。
+ */
+export async function applySubmittedMode(
+  record: V4SessionRecordView,
+  mode: SubmissionMode,
+): Promise<void> {
+  if (record.app.getMode() === mode) return;
+  await record.app.setMode(mode);
+}
 /**
  * sendText：只做协议/held/model/附件校验，start/queue 交给同一 session 的 Core admission。
  * held（choice）时仍按 heldQueueDisposition 裁决。
@@ -193,6 +205,7 @@ async function sendText(
   }
   const attachments = await mapAttachmentRefsToTurnAttachments(record.app, payload.attachments);
   const submittedExecutionState = resolveSubmittedExecutionState(record, payload);
+  await applySubmittedMode(record, submittedExecutionState.mode);
   const submissionIntent = (options: Parameters<typeof inputIntentMetadata>[1]) =>
     inputIntentMetadata(envelope, { ...options, ...submittedExecutionState });
   const routingMode = host.getInputRoutingMode?.(envelope.sessionId ?? "") ?? null;

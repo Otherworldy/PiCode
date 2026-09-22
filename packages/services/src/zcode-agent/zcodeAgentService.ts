@@ -95,6 +95,7 @@ import {
   zcodeUserInputRequestParamsSchema,
   zcodeWorkspacePresentationSchema,
   zcodePiModelsMutateResultSchema,
+  zcodePiPluginsResultSchema,
   zcodeWorkspaceCancelGenerateTextResultSchema,
   zcodeWorkspaceGenerateTextResultSchema,
   zcodeWorkspaceHookTrustGrantResultSchema,
@@ -160,6 +161,7 @@ import type {
   ZCodeAgentListSessionSubagentsParams,
   ZCodeAgentReadWorkspacePresentationParams,
   ZCodeAgentMutatePiModelsParams,
+  ZCodeAgentMutatePiPluginsParams,
   ZCodeAgentReadSessionEventsParams,
   ZCodeAgentReadSessionMessagesParams,
   ZCodeAgentReadSessionParams,
@@ -3793,6 +3795,20 @@ export function createZCodeAgentService(
         });
         throw error;
       }
+    },
+
+    async mutatePiPlugins(params: ZCodeAgentMutatePiPluginsParams) {
+      const client = await getReadOnlyClient(params);
+      return client.request(
+        zcodeProtocolMethods.piPlugins,
+        {
+          workspace: buildWorkspaceRef(params),
+          action: params.action,
+          ...(params.id ? { id: params.id } : {}),
+          ...(params.enabled === undefined ? {} : { enabled: params.enabled }),
+        },
+        zcodePiPluginsResultSchema,
+      );
     },
 
     async mutatePiModels(params: ZCodeAgentMutatePiModelsParams) {

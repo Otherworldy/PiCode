@@ -15,6 +15,11 @@ export {
 } from "./session-registry.js";
 export { readPiJsonl, replayPiJsonl, summarizePiJsonl } from "./jsonl-history.js";
 export {
+  listPiSubagentChildren,
+  piSubagentRevision,
+  type PiSubagentChild,
+} from "./pi-subagent-index.js";
+export {
   createDelegateModel,
   createDelegateProvider,
   mapThought,
@@ -23,6 +28,8 @@ export {
   type ZCodeModelStreamPort,
 } from "./model-delegate.js";
 export { createSdkSessionFactory, listPiCatalog, mutatePiCatalog } from "./session-factory.js";
+export { listPiPlugins, setPiPluginEnabled, type PiPluginView } from "./pi-plugins.js";
+export type { PiCapabilityPorts, ZcodeMcpTool, ZcodeSubagentProfile } from "./host-capabilities.js";
 export type { PiDiscoveredModel, PiModelConfigView, PiProviderDraft } from "./model-config-file.js";
 export { gateTool, type ToolPermissionCheck } from "./permission-gate.js";
 export type {

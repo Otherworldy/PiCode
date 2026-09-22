@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { McpSource, ZCodeMcpServer } from "@zcode/shared";
 import { Button } from "@/components/ui/button.js";
+import { Switch } from "@/components/ui/switch.js";
 import { Input } from "@/components/ui/input.js";
 import {
   Select,
@@ -369,6 +370,22 @@ export function McpServerForm({
               />
             </div>
           )}
+
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
+            <div className="min-w-0">
+              <div className="text-ui-base text-foreground">
+                {intl.formatMessage({ id: "settings.mcp.form.directTools" })}
+              </div>
+              <div className="text-ui-sm text-foreground-subtle">
+                {intl.formatMessage({ id: "settings.mcp.form.directToolsHint" })}
+              </div>
+            </div>
+            <Switch
+              checked={form.directTools}
+              data-testid="mcp-direct-tools"
+              onCheckedChange={(checked) => update({ directTools: checked })}
+            />
+          </div>
 
           <div>
             <button

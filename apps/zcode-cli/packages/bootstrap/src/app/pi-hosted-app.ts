@@ -108,7 +108,9 @@ export function createPiHostedApp(
       await options.persistSession?.(typeof title === "string" ? title : "");
     },
     setExecutionState: async (input?: { mode?: string; planEnabled?: boolean }) => {
-      if (input?.mode) hosted.projector.setConfig({ mode: input.mode });
+      if (!input?.mode) return;
+      hosted.projector.setConfig({ mode: input.mode });
+      hosted.ui.autoConfirm = input.mode === "yolo";
     },
     getProjection: async () => ({
       id: sessionId,

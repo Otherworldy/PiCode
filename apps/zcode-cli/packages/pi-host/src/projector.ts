@@ -134,6 +134,10 @@ export class PiToV4Projector {
     return this.applyState({ config: { ...this.snapshot.config, ...patch } });
   }
 
+  replaceSubagents(subagents: ConversationSnapshot["subagents"]): ConversationDelta[] {
+    return this.applyState({ subagents });
+  }
+
   setTitle(title: string, titleSource: ConversationSnapshot["meta"]["titleSource"] = "custom"): ConversationDelta[] {
     return this.applyState({ meta: { title, titleSource } });
   }
@@ -303,7 +307,9 @@ export class PiToV4Projector {
       return [{ op: "row.upserted", row: { ...row, state: "complete" } }];
     }
     if (delta.type === "toolcall_start") {
+      if (!delta.id) return [];
       this.toolArgs.set(delta.id, "");
+      if (!delta.toolName) return [];
       return this.ensureToolRow(delta.id, delta.toolName, "inputStreaming", "");
     }
     if (delta.type === "toolcall_delta") {

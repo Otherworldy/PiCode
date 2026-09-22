@@ -16,6 +16,7 @@ import { applyRequestedSessionConfig } from "./model-config.js";
 import {
   hasPromptInput,
   V4InputAdmissionRejectedError,
+  applySubmittedMode,
   resolveSubmittedExecutionState,
 } from "./session-flow.js";
 
@@ -86,11 +87,13 @@ async function createSession(
         record.app,
         payload.firstInput.attachments,
       );
+      const submitted = resolveSubmittedExecutionState(record, payload.firstInput);
+      await applySubmittedMode(record, submitted.mode);
       const intent = inputIntentMetadata(envelope, {
         text: payload.firstInput.text,
         requestedDelivery: "startNow",
         attachmentRefs: payload.firstInput.attachments,
-        ...resolveSubmittedExecutionState(record, payload.firstInput),
+        ...submitted,
       });
       const started = await startPromptTurn(host, record, {
         content: payload.firstInput.text,

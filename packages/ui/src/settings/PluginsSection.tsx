@@ -32,6 +32,7 @@ import {
 import { getPathLeaf } from "@/lib/path.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { McpSettingsSection } from "@/settings/McpSettingsSection.js";
+import { PiPluginsSection } from "@/settings/PiPluginsSection.js";
 import { SkillsSection } from "@/settings/SkillsSection.js";
 import { CommandsSection } from "@/settings/CommandsSection.js";
 import { SettingsSearchInput } from "@/settings/SettingsSearchInput.js";
@@ -1283,6 +1284,14 @@ export function PluginsSection({
                 : "mt-6 data-[state=inactive]:hidden"
             }
           >
+            {target ? (
+              <PiPluginsSection
+                workspacePath={target.workspacePath}
+                workspaceIdentity={target.workspaceIdentity}
+                scope={selectedScope.kind === "user" ? "user" : "project"}
+                searchQuery={searchQueries.plugins}
+              />
+            ) : null}
             <PluginList
               target={target}
               configScope={selectedScope.kind === "user" ? "user" : "workspace"}

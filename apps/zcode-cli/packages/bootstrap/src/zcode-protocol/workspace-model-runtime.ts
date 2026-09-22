@@ -1,9 +1,10 @@
 /* eslint-disable max-lines -- workspace 模型协议与兼容请求处理仍集中在本文件。 */
 import { createInMemorySessionEventStore } from "@zcode/adapters/storage";
 import type { ModelSelection } from "@zcode/contracts";
-import { listPiCatalog, mutatePiCatalog } from "@zcode/pi-host";
+import { listPiCatalog, listPiPlugins, mutatePiCatalog, setPiPluginEnabled } from "@zcode/pi-host";
 import {
   zcodePiModelsMutateParamsSchema,
+  zcodePiPluginsParamsSchema,
   zcodeProviderTestModelConnectivityParamsSchema,
   zcodeWorkspaceReadPresentationParamsSchema,
   type ZCodeWorkspaceRef,
@@ -54,6 +55,18 @@ export async function mutatePiModels(rawParams: unknown) {
     ...(params.defaultProvider ? { defaultProvider: params.defaultProvider } : {}),
     ...(params.defaultModel ? { defaultModel: params.defaultModel } : {}),
   });
+}
+
+export async function mutatePiPlugins(rawParams: unknown) {
+  const params = parseParams(zcodePiPluginsParamsSchema, rawParams);
+  const cwd = params.workspace?.workspacePath || process.cwd();
+  if (params.action === "setEnabled") {
+    if (!params.id || params.enabled === undefined) {
+      throw new Error("Pi plugin toggle requires id and enabled");
+    }
+    await setPiPluginEnabled(cwd, params.id, params.enabled);
+  }
+  return { plugins: await listPiPlugins(cwd) };
 }
 
 export async function testProviderModelConnectivity(

@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- ZCode Protocol 的 session/workspace 方法共享同一个 server context 与 snapshot helpers，迁移期先集中维护。 */
+import { listPiSubagentChildren, piSubagentRevision, type PiSubagentChild } from "@zcode/pi-host";
 import { observeSessionDebug } from "./session-debug.js";
 import {
   TASK_LIST_SESSION_TYPES,
@@ -1669,12 +1670,63 @@ export async function listSessions(context: ZCodeProtocolAgentServerContext, raw
   return { sessions };
 }
 
+function pagePiSubagentChildren(
+  children: readonly PiSubagentChild[],
+  cursor: string | undefined,
+  limit: number,
+) {
+  const running = children.filter(
+    (child) => child.status === "running" || child.status === "waiting" || child.status === "blocked",
+  );
+  const ended = children.filter((child) => !running.includes(child));
+  const offset = cursor && /^\d+$/u.test(cursor) ? Number(cursor) : 0;
+  const items = ended.slice(offset, offset + limit);
+  const next = offset + limit < ended.length ? String(offset + limit) : undefined;
+  return {
+    revision: piSubagentRevision(children),
+    childSessionIds: children.map((child) => child.childSessionId),
+    running: running.map((child) => ({
+      childSessionId: child.childSessionId,
+      subagentType: child.subagentType,
+      title: child.title,
+      status: child.status as "running" | "waiting" | "blocked",
+      ...(child.summary ? { summary: child.summary } : {}),
+      ...(child.startedAt ? { startedAt: child.startedAt } : {}),
+    })),
+    ended: {
+      total: ended.length,
+      items: items.map((child) => ({
+        childSessionId: child.childSessionId,
+        subagentType: child.subagentType,
+        title: child.title,
+        status: (child.status === "failed" || child.status === "cancelled" || child.status === "lost"
+          ? child.status
+          : "success") as "success" | "failed" | "cancelled" | "lost",
+        ...(child.summary ? { summary: child.summary } : {}),
+        ...(child.startedAt ? { startedAt: child.startedAt } : {}),
+        ...(child.endedAt ? { endedAt: child.endedAt } : {}),
+      })),
+      ...(next ? { nextCursor: next } : {}),
+    },
+  };
+}
+
 export async function listSessionSubagents(
   context: ZCodeProtocolAgentServerContext,
   rawParams: unknown,
   persistedMessages?: MessageWithParts[],
 ) {
   const params = parseParams(zcodeSessionSubagentsParamsSchema, rawParams ?? {});
+  if (context.piHost) {
+    const stored = await context.piHost.find(params.sessionId);
+    const children = stored
+      ? await listPiSubagentChildren({
+          parentSessionFile: stored.sessionFile,
+          parentSessionId: params.sessionId,
+        })
+      : [];
+    return pagePiSubagentChildren(children, params.endedCursor, params.endedLimit);
+  }
   const store = context.deps.sessionStore;
   const liveParent = context.sessions.get(params.sessionId);
   if (!store) {

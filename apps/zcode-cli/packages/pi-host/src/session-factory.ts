@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
   createAgentSession,
+  type CreateAgentSessionOptions,
   createCodingTools,
   createFindTool,
   createGrepTool,
@@ -15,6 +16,11 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
+import {
+  createCapabilityTools,
+  runZcodeSubagent,
+  type PiCapabilityPorts,
+} from "./host-capabilities.js";
 import { gateTool, type ToolPermissionCheck } from "./permission-gate.js";
 import {
   createDelegateProvider,
@@ -36,11 +42,6 @@ import {
   type PiModelConfigView,
   type PiProviderDraft,
 } from "./model-config-file.js";
-
-const TOOL_NAMES =
-  process.platform === "win32"
-    ? ["read", "powershell", "edit", "write", "grep", "find", "ls"]
-    : ["read", "bash", "edit", "write", "grep", "find", "ls"];
 
 function asPiEvent(event: unknown): PiHostEvent | null {
   if (!event || typeof event !== "object" || !("type" in event)) return null;
@@ -194,6 +195,7 @@ export function createSdkSessionFactory(options: {
   stream?: ZCodeModelStreamPort["stream"];
   defaultSelection?: { providerId: string; modelId: string; thought?: string };
   agentDir?: string;
+  capabilities?: PiCapabilityPorts;
 } = {}): CreatePiSession {
   const isolated = Boolean(options.delegate || options.stream);
   const selections = new Map<string, { providerId: string; modelId: string; thought?: string }>();
@@ -239,18 +241,51 @@ export function createSdkSessionFactory(options: {
     });
     await resourceLoader.reload();
     const customTools = wrapCodingTools(input.cwd, input.checkPermission);
+    let live:
+      | {
+          model?: CreateAgentSessionOptions["model"];
+          thinkingLevel?: CreateAgentSessionOptions["thinkingLevel"];
+          sessionFile?: string;
+        }
+      | undefined;
+    const capabilityTools = options.capabilities
+      ? await createCapabilityTools({
+          cwd: input.cwd,
+          ports: options.capabilities,
+          check: input.checkPermission,
+          reservedNames: customTools.map((tool) => tool.name),
+          runSubagent: (profile, task, signal) =>
+            runZcodeSubagent({
+              cwd: input.cwd,
+              // Pi 落盘文件名带自己的时间戳，和注册表预先拼的路径不是同一个。
+              // 子会话必须写在真实父文件旁边，目录页才扫得到。
+              parentSessionFile: live?.sessionFile || input.sessionFile,
+              profile,
+              task,
+              signal,
+              modelRuntime,
+              model: live?.model,
+              thinkingLevel: live?.thinkingLevel,
+              agentDir,
+              codingTools: customTools,
+            }),
+        })
+      : [];
     const created = await createAgentSession({
       cwd: input.cwd,
       agentDir,
       ...(isolated && delegate ? { model: delegate.model, thinkingLevel: "off" as const } : {}),
       modelRuntime,
-      tools: customTools.map((tool) => tool.name).filter((name) => TOOL_NAMES.includes(name)),
-      customTools: customTools as never,
+      customTools: [...customTools, ...capabilityTools] as never,
+      // noTools=builtin 关掉 Pi 同名工具。不传白名单，以免把 extension 工具全关掉。
+      // 插件自带的 subagent 与 ZCode 代理定义冲突，主会话禁用它。
       noTools: "builtin",
+      ...(options.capabilities ? { excludeTools: ["subagent"] } : {}),
       resourceLoader,
       sessionManager: openOrCreateSession(input),
       settingsManager,
     });
+    live = created.session;
     const session = created.session;
     let lastTurn: Promise<void> = Promise.resolve();
     const currentModel = session.model

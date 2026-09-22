@@ -65,6 +65,8 @@ import type {
   ZCodeWorkspaceHookTrustGrantResult,
   ZCodePiModelsMutateParams,
   ZCodePiModelsMutateResult,
+  ZCodePiPluginsParams,
+  ZCodePiPluginsResult,
 } from "@zcode/shared";
 import type {
   ClientHello,
@@ -247,6 +249,7 @@ export interface ZCodeAgentReadSessionEventsParams extends ZCodeAgentSessionTarg
 
 export type ZCodeAgentReadWorkspacePresentationParams = ZCodeAgentWorkspaceTarget;
 export type ZCodeAgentMutatePiModelsParams = ZCodeAgentWorkspaceTarget & ZCodePiModelsMutateParams;
+export type ZCodeAgentMutatePiPluginsParams = ZCodeAgentWorkspaceTarget & ZCodePiPluginsParams;
 
 export interface ZCodeAgentGrantWorkspaceHookTrustParams extends ZCodeAgentWorkspaceTarget {
   bundleDigest: string;
@@ -601,6 +604,7 @@ export interface IZCodeAgentService {
     params: ZCodeAgentReadWorkspacePresentationParams,
   ): Promise<ZCodeWorkspacePresentation>;
   mutatePiModels(params: ZCodeAgentMutatePiModelsParams): Promise<ZCodePiModelsMutateResult>;
+  mutatePiPlugins(params: ZCodeAgentMutatePiPluginsParams): Promise<ZCodePiPluginsResult>;
   /** 无 task/session 的 Settings 预信任；Agent 会重新发现并校验 canonical snapshot。 */
   grantWorkspaceHookTrust(
     params: ZCodeAgentGrantWorkspaceHookTrustParams,

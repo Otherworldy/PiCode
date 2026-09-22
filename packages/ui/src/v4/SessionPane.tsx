@@ -3881,10 +3881,14 @@ export function SessionPane({
     }
   }, [runningWorkflowCount]);
   useEffect(() => {
-    if (runningAgentCount === 0) {
+    // 只有已结束的子代理时 running 计数是 0。以前这里会把分区强制收起，
+    // 目录入口只剩一个没有数字的「智能体」标题。
+    if (runningAgentCount === 0 && (subagents.endedTotal ?? 0) === 0) {
       setAgentSectionOpen(false);
+      return;
     }
-  }, [runningAgentCount]);
+    setAgentSectionOpen(true);
+  }, [runningAgentCount, subagents.endedTotal]);
   // composer 徽标直达：唯一在跑的是一条可开
   // 详情页的 workflow run 时，徽标点击直接开它的 side tab，胶囊不动。判定吃胶囊的同一份模型；
   // 宿主没给 onOpenWorkflowRun（面板行同样不可点）时不直达。

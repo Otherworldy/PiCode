@@ -51,6 +51,7 @@ import { listChildProcesses } from "./process-child-processes.js";
 import { ProtocolRuntimeResources } from "./runtime-resources.js";
 import {
   mutatePiModels,
+  mutatePiPlugins,
   readWorkspacePresentation,
   testProviderModelConnectivity,
 } from "./workspace-model-runtime.js";
@@ -123,6 +124,7 @@ import {
   HostSessionRegistry,
   mapPiToolName,
 } from "@zcode/pi-host";
+import { createPiCapabilityPorts } from "./pi-capabilities.js";
 import { createInMemorySessionEventStore } from "@zcode/contracts";
 
 export type { ZCodeProtocolAgentDependencies, ZCodeProtocolSessionRecord };
@@ -273,7 +275,9 @@ export class ZCodeProtocolAgentServer {
       ),
       piHost: new HostSessionRegistry({
         storageRoot: join(homedir(), ".zcode"),
-        createSession: createSdkSessionFactory(),
+        createSession: createSdkSessionFactory({
+          capabilities: createPiCapabilityPorts(() => this.context),
+        }),
         loadExtensions: true,
         createToolPermission: (hosted) => {
           const service = new PermissionService();
@@ -640,6 +644,8 @@ export class ZCodeProtocolAgentServer {
         return await readWorkspacePresentation(this.context, request.params);
       case zcodeProtocolMethods.piModelsMutate:
         return await mutatePiModels(request.params);
+      case zcodeProtocolMethods.piPlugins:
+        return await mutatePiPlugins(request.params);
       case zcodeProtocolMethods.workspaceHookTrustGrant: {
         const grantResult = await grantWorkspaceHookTrustForProtocol(request.params, {
           appVersion: this.context.deps.version,
