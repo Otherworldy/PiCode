@@ -93,6 +93,23 @@ export class PiToV4Projector {
     return actions.length === 0 ? removed : [...removed, ...this.commit(actions)];
   }
 
+  /** 用 jsonl 事件换掉当前行。编辑失败时把画面恢复回来，避免停在空白。 */
+  reload(events: PiHostEvent[]): ConversationDelta[] {
+    this.nextRowId = 1;
+    this.turnId = "";
+    this.productTurnId = "";
+    this.streamingTextRowId = null;
+    this.streamingReasoningRowId = null;
+    this.assistantMessageId = undefined;
+    this.toolRowId.clear();
+    this.toolArgs.clear();
+    this.aborted = false;
+    const cleared = this.commit([{ op: "row.removed", fromRowId: 1 }]);
+    const rest: ConversationDelta[] = [];
+    for (const event of events) rest.push(...this.apply(event));
+    return [...cleared, ...rest];
+  }
+
   setFeedback(
     entityId: string,
     feedback: "like" | "dislike" | null,
@@ -288,7 +305,21 @@ export class PiToV4Projector {
       origin: "realUser",
     };
     if (messageId) row.entityId = messageId;
-    return [{ op: "row.appended", row }];
+    const deltas: ConversationDelta[] = [{ op: "row.appended", row }];
+    const title = text.trim();
+    if (title && (this.snapshot.meta.titleSource === "default" || !this.snapshot.meta.title)) {
+      const compact = title.replace(/\s+/gu, " ");
+      deltas.push({
+        op: "state.updated",
+        patch: {
+          meta: {
+            title: compact.length > 60 ? `${compact.slice(0, 59)}…` : compact,
+            titleSource: "generated",
+          },
+        },
+      });
+    }
+    return deltas;
   }
 
   private stream(delta: PiAssistantDelta): ConversationDelta[] {

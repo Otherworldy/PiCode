@@ -1,11 +1,101 @@
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { createConfig, resolvePath } from "@zcode/adapters/config";
 import { normalizeAgentProfiles, toMcpToolName } from "@zcode/core";
-import type { McpServerConfig, McpToolCallResult } from "@zcode/contracts";
+import {
+  createTraceId,
+  type McpServerConfig,
+  type McpToolCallResult,
+  type SessionId,
+} from "@zcode/contracts";
 import type { PiCapabilityPorts } from "@zcode/pi-host";
 import type { ZCodeProtocolMcpServer } from "@zcode/shared";
+import { resolveHostBrowserCapability } from "../app/built-in-node-repl.js";
+import { getCliStorageRoot, getPluginStorageRoot } from "../app/paths.js";
+import {
+  createNodeReplBrowserBroker,
+  injectNodeReplBrowserBroker,
+  type NodeReplBrowserBroker,
+} from "../app/node-repl-browser-broker.js";
 import { loadZCodeAgentProfiles } from "../subagents.js";
 import { protocolMcpServersToRuntimeMcpConfig } from "./protocol-mcp-config.js";
 import type { ZCodeProtocolAgentServerContext } from "./server-types.js";
+
+const HOST_BROWSER_SERVER = "node_repl";
+let hostBrowserBroker: NodeReplBrowserBroker | undefined;
+let hostBrowserServer: McpServerConfig | undefined;
+let hostBrowserSkillPath: string | undefined;
+let hostBrowserStorageRoot: string | undefined;
+
+function pluginStorageRoot(context: ZCodeProtocolAgentServerContext, cwd: string): string {
+  const configResult = createConfig({
+    env: context.deps.env,
+    workingDirectory: cwd,
+  });
+  return getPluginStorageRoot(getCliStorageRoot(resolvePath(configResult.config.storage.dir)));
+}
+
+export function readBrowserHostEnabled(env: NodeJS.ProcessEnv | undefined): boolean {
+  const home =
+    env?.ZCODE_DESKTOP_HOME_DIR?.trim() ||
+    env?.HOME?.trim() ||
+    env?.USERPROFILE?.trim() ||
+    homedir();
+  try {
+    const raw = JSON.parse(readFileSync(join(home, ".zcode", "v2", "setting.json"), "utf8")) as {
+      browserHostEnabled?: unknown;
+    };
+    return raw.browserHostEnabled !== false;
+  } catch {
+    return true;
+  }
+}
+
+function ensureHostBrowser(
+  context: ZCodeProtocolAgentServerContext,
+  cwd: string,
+): { server: McpServerConfig; skillPath: string } | undefined {
+  if (!readBrowserHostEnabled(context.deps.env)) return undefined;
+  const port = context.browserControlPort;
+  const logger = context.logger;
+  if (!port || !logger) return undefined;
+  const storageRoot = pluginStorageRoot(context, cwd);
+  if (hostBrowserServer && hostBrowserSkillPath && hostBrowserStorageRoot === storageRoot) {
+    return { server: hostBrowserServer, skillPath: hostBrowserSkillPath };
+  }
+  const resolved = resolveHostBrowserCapability({
+    logger,
+    storageRoot,
+    workingDirectory: cwd,
+  });
+  if (!resolved) {
+    logger.warn?.("host browser capability unavailable", { storageRoot });
+    return undefined;
+  }
+  hostBrowserBroker ??= createNodeReplBrowserBroker({
+    browserControlPort: port,
+    logger,
+    platform: context.deps.platform,
+  });
+  hostBrowserServer = injectNodeReplBrowserBroker(
+    { [HOST_BROWSER_SERVER]: resolved.server },
+    hostBrowserBroker,
+  )[HOST_BROWSER_SERVER];
+  hostBrowserSkillPath = resolved.skillPath;
+  hostBrowserStorageRoot = storageRoot;
+  return hostBrowserServer
+    ? { server: hostBrowserServer, skillPath: hostBrowserSkillPath }
+    : undefined;
+}
+
+export function hostBrowserSkillPaths(
+  context: ZCodeProtocolAgentServerContext,
+  cwd: string,
+): string[] {
+  const host = ensureHostBrowser(context, cwd);
+  return host ? [host.skillPath] : [];
+}
 
 function enabledServers(
   servers: Record<string, McpServerConfig>,
@@ -23,6 +113,30 @@ function formatMcpToolList(tools: Array<{ toolName: string; description?: string
   );
   if (tools.length > shown.length) lines.push(`…${tools.length - shown.length} more. Narrow search.`);
   return lines.join("\n");
+}
+
+function mcpToolRequest(input: {
+  serverName: string;
+  toolName: string;
+  arguments?: Record<string, unknown>;
+  cwd?: string;
+  sessionId?: string;
+}) {
+  return {
+    serverName: input.serverName,
+    toolName: input.toolName,
+    arguments: input.arguments,
+    runtimeScope: "main" as const,
+    ...(input.cwd ? { workspacePath: input.cwd } : {}),
+    ...(input.sessionId
+      ? {
+          trace: {
+            traceId: createTraceId(),
+            sessionId: input.sessionId as SessionId,
+          },
+        }
+      : {}),
+  };
 }
 
 function mcpResultText(result: McpToolCallResult): string {
@@ -46,7 +160,12 @@ function readMcpServers(
   });
   const fromFile = configResult.config.mcp?.servers ?? {};
   const fromPayload = protocolMcpServersToRuntimeMcpConfig(mcpServers)?.servers ?? {};
-  return enabledServers({ ...fromFile, ...fromPayload });
+  const host = ensureHostBrowser(context, workspacePath);
+  return enabledServers({
+    ...fromFile,
+    ...fromPayload,
+    ...(host ? { [HOST_BROWSER_SERVER]: host.server } : {}),
+  });
 }
 
 export async function connectZCodeMcp(
@@ -56,6 +175,7 @@ export async function connectZCodeMcp(
   const mcpPort = context.deps.mcpPort;
   if (!mcpPort) return;
   const servers = readMcpServers(context, input.workspacePath, input.mcpServers);
+  if (hostBrowserBroker) await hostBrowserBroker.ready.catch(() => undefined);
   for (const [name, server] of Object.entries(servers)) {
     if (server.directTools !== true) continue;
     try {
@@ -158,12 +278,13 @@ export function createPiCapabilityPorts(
             };
           }
           const result = await mcpPort.callTool(
-            {
+            mcpToolRequest({
               serverName,
               toolName: match.toolName,
               arguments: input.args,
-              runtimeScope: "main",
-            },
+              cwd: input.cwd,
+              sessionId: input.sessionId,
+            }),
             { signal: input.signal },
           );
           return { text: mcpResultText(result), isError: result.isError === true };
@@ -203,12 +324,12 @@ export function createPiCapabilityPorts(
       if (!mcpPort) return { text: "MCP is not available", isError: true };
       try {
         const result = await mcpPort.callTool(
-          {
+          mcpToolRequest({
             serverName: input.serverName,
             toolName: input.toolName,
             arguments: input.arguments,
-            runtimeScope: "main",
-          },
+            sessionId: input.sessionId,
+          }),
           { signal: input.signal },
         );
         return { text: mcpResultText(result), isError: result.isError === true };

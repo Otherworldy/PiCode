@@ -15,6 +15,7 @@ import {
   isProviderProvisioningAccountCredentialKey,
   type ProviderProvisioningTrigger,
 } from "@zcode/shared";
+import { sshWorkspaceSpawnEnv } from "@zcode/shared/node";
 
 export {
   materializeZCodeBuiltinProviderConfig,
@@ -2237,6 +2238,7 @@ export function createLocalServices(options: {
           zcodeBuiltinFilePath: await providerConfigRuntime.resolveZCodeBuiltinActiveFilePath(),
           personalFilePath: join(resolveAppConfigDir(), PERSONAL_PROVIDER_CONFIG_FILE_NAME),
         }),
+        ...sshWorkspaceSpawnEnv(context.workspaceIdentity),
       };
     },
     ...(isDesktopAttachedRemote

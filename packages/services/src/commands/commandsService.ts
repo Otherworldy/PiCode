@@ -52,8 +52,8 @@ const CODEX_PLUGIN_MANIFEST_PATH = join(".codex-plugin", "plugin.json");
 const ZCODE_COMMAND_DESCRIPTOR: CommandAgentSourceDescriptor = {
   agentSource: "zcodeAgent",
   directorySource: "zcode",
-  userDirectorySegments: [".zcode", "commands"],
-  workspaceDirectorySegments: [".zcode", "commands"],
+  userDirectorySegments: [".pi", "agent", "prompts"],
+  workspaceDirectorySegments: [".pi", "prompts"],
   fileExtension: ".md",
   format: "markdown",
   namespaceSeparator: "/",
@@ -66,12 +66,6 @@ const COMMAND_AGENT_SOURCE_DESCRIPTORS: Record<CommandAgentSource, CommandAgentS
 
 const COMMAND_DIRECTORY_SOURCE_DESCRIPTORS: readonly CommandAgentSourceDescriptor[] = [
   ZCODE_COMMAND_DESCRIPTOR,
-  {
-    ...ZCODE_COMMAND_DESCRIPTOR,
-    directorySource: "agents",
-    userDirectorySegments: [".agents", "commands"],
-    workspaceDirectorySegments: [".agents", "commands"],
-  },
 ];
 
 function getCommandSourceDescriptor(
@@ -779,19 +773,12 @@ function buildPluginCommandId(params: {
 }
 
 async function discoverPluginCommands(
-  enabledOverrides: ReadonlyMap<string, boolean>,
+  _enabledOverrides: ReadonlyMap<string, boolean>,
 ): Promise<PluginCommand[]> {
-  const rootDescriptors = await resolvePluginCommandRootDescriptors();
-  const commands: PluginCommand[] = [];
-  const seenFilePaths = new Set<string>();
-  for (const descriptor of rootDescriptors) {
-    await discoverPluginCommandsRecursive(descriptor.rootPath, descriptor.rootPath, commands, {
-      descriptor,
-      enabledOverrides,
-      seenFilePaths,
-    });
-  }
-  return commands.sort((left, right) => left.name.localeCompare(right.name));
+  // ZCode 插件命令不进 Pi 会话。
+  void resolvePluginCommandRootDescriptors;
+  void discoverPluginCommandsRecursive;
+  return [];
 }
 
 // ============================================================================

@@ -3,6 +3,7 @@ import {
   createTraceId,
   type Logger,
   type LoggerFactory,
+  type BrowserControlPort,
   type McpPort,
   type SessionEventStorePort,
   type SessionId,
@@ -146,6 +147,7 @@ export interface ZCodeProtocolAgentServerContext {
   // 构造顺序问题（gateway 闭包持有 context）用可选字段收口，server 构造完立即赋值。
   v4Gateway?: ConversationV4Gateway;
   piHost?: HostSessionRegistry;
+  browserControlPort?: BrowserControlPort;
   // v4 前向命令 resolveInteraction 与反向请求（permission/AskUserQuestion）的汇合点。
   // broker 注册 deferred、v4 命令面投递应答（同一实例经 binder 注入 V4CommandCoreHost）。
   v4Interactions: V4InteractionRegistry;

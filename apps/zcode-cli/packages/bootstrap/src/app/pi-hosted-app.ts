@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import type { HostedSession } from "@zcode/pi-host";
 import { RewindStrategy, type CollaborationMode, type ModelSelection, type SessionId, type TurnId } from "@zcode/contracts";
 import type { ZCodeApp, PromptInput, SendInputResult } from "./types.js";
@@ -136,6 +137,10 @@ export function createPiHostedApp(
     sessionId,
     piHosted: hosted,
     runtime,
+    restoreRewoundConversation: async () => {
+      const content = await readFile(hosted.sessionFile, "utf8").catch(() => "");
+      hosted.reloadHistory(content);
+    },
     getMode: () =>
       (hosted.projector.getSnapshot().config.mode as CollaborationMode) || ("build" as CollaborationMode),
     listModels: () => {
@@ -164,8 +169,13 @@ export function createPiHostedApp(
       hosted.projector.setConfig({ mode });
       return { mode, previousMode, traceId: "pi-host" };
     },
-    getModel: () => hosted.projector.getSnapshot().config.model,
+    getModel: () => {
+      const config = hosted.projector.getSnapshot().config;
+      // 旧 snapshot 只接受 provider/model。只给裸 id 会在 rewind 之后抛错，画面停在截断态。
+      return config.provider && config.model ? `${config.provider}/${config.model}` : config.model;
+    },
     getThoughtLevel: () => hosted.projector.getSnapshot().config.thought,
+    getDefaultThoughtLevel: () => undefined,
     getLocale: () => "en" as const,
     getTheme: () => "system" as const,
     async sendInput(input: PromptInput, options?: { queueDelivery?: "guide"; inputId?: string }) {

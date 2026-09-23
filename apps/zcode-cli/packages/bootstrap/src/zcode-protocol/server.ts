@@ -1,6 +1,5 @@
 import { querySessionDebug } from "./session-debug.js";
 import {
-  zcodePluginsCancelOperationParamsSchema,
   zcodeProtocolMethods,
   zcodeWorkspaceCancelGenerateTextParamsSchema,
   zcodeWorkspaceHookTrustGrantParamsSchema,
@@ -55,26 +54,6 @@ import {
   readWorkspacePresentation,
   testProviderModelConnectivity,
 } from "./workspace-model-runtime.js";
-import {
-  addPluginMarketplace,
-  configurePlugin,
-  describePlugin,
-  getPluginsOverview,
-  installPlugin,
-  listPlugins,
-  removePluginMarketplace,
-  resetPluginConfig,
-  restoreBuiltinPlugin,
-  setPluginEnabled,
-  uninstallPlugin,
-  updatePlugin,
-  updatePluginMarketplace,
-  validatePlugin,
-} from "./plugins.js";
-import {
-  getPluginReferenceCatalog,
-  resolveSuggestedPluginReference,
-} from "./plugin-reference-catalog.js";
 import { getSkillReferenceCatalog } from "./skill-reference-catalog.js";
 import {
   deleteSavedWorkflowOp,
@@ -124,7 +103,7 @@ import {
   HostSessionRegistry,
   mapPiToolName,
 } from "@zcode/pi-host";
-import { createPiCapabilityPorts } from "./pi-capabilities.js";
+import { createPiCapabilityPorts, hostBrowserSkillPaths } from "./pi-capabilities.js";
 import { createInMemorySessionEventStore } from "@zcode/contracts";
 
 export type { ZCodeProtocolAgentDependencies, ZCodeProtocolSessionRecord };
@@ -178,14 +157,6 @@ function collectResidencySessionIds(params: unknown): string[] {
   return [...sessionIds];
 }
 
-function getPluginOperationId(params: unknown): string | undefined {
-  if (!params || typeof params !== "object") return undefined;
-  const operationId = (params as { operationId?: unknown }).operationId;
-  return typeof operationId === "string" && operationId.trim().length > 0
-    ? operationId.trim()
-    : undefined;
-}
-
 function getOperationId(params: unknown): string | undefined {
   if (!params || typeof params !== "object") return undefined;
   const operationId = (params as { operationId?: unknown }).operationId;
@@ -229,7 +200,6 @@ export class ZCodeProtocolAgentServer {
   private readonly context: ZCodeProtocolAgentServerContext;
   private readonly logger;
   private readonly pendingClientRequests = new Map<string, PendingClientRequest<unknown>>();
-  private readonly pluginOperationControllers = new Map<string, AbortController>();
   private readonly workspaceGenerateTextControllers = new Map<string, AbortController>();
   /**
    * subscribe initial frame 按 JSON-RPC request id 隔离。connection 必须先 take，
@@ -277,6 +247,7 @@ export class ZCodeProtocolAgentServer {
         storageRoot: join(homedir(), ".zcode"),
         createSession: createSdkSessionFactory({
           capabilities: createPiCapabilityPorts(() => this.context),
+          skillPaths: (cwd) => hostBrowserSkillPaths(this.context, cwd),
         }),
         loadExtensions: true,
         createToolPermission: (hosted) => {
@@ -304,6 +275,7 @@ export class ZCodeProtocolAgentServer {
     // v4 通道：gateway 闭包持有 context 做帧出口与命令副作用，构造完立即挂回。
     this.context.v4Gateway = createConversationV4Gateway(this.context);
     this.browserControlPort = createProtocolBrowserControlBroker(this.context);
+    this.context.browserControlPort = this.browserControlPort;
     const sessionResidentTargetCount =
       deps.sessionResidentPoolOptions?.targetCount ?? deps.sessionResidentTargetCount;
     const sessionResidentHighWaterCount =
@@ -400,7 +372,6 @@ export class ZCodeProtocolAgentServer {
     this.disconnectClient(error);
     this.messageSink = undefined;
     this.clearPostResponseMessages();
-    for (const controller of this.pluginOperationControllers.values()) controller.abort(error);
     for (const controller of this.workspaceGenerateTextControllers.values())
       controller.abort(error);
     for (const record of this.context.sessions.values()) {
@@ -685,12 +656,6 @@ export class ZCodeProtocolAgentServer {
         return await testProviderModelConnectivity(this.context, request.params);
       case zcodeProtocolMethods.mcpList:
         return await listMcpServers(this.context, request.params);
-      case zcodeProtocolMethods.pluginsList:
-        return await listPlugins(this.context, request.params);
-      case zcodeProtocolMethods.pluginsReferenceCatalogWithCategory:
-        return await getPluginReferenceCatalog(this.context, request.params, true);
-      case zcodeProtocolMethods.pluginsReferenceCatalog:
-        return await getPluginReferenceCatalog(this.context, request.params);
       case zcodeProtocolMethods.skillsReferenceCatalog:
         return await getSkillReferenceCatalog(this.context, request.params);
       case zcodeProtocolMethods.workflowsList:
@@ -705,50 +670,10 @@ export class ZCodeProtocolAgentServer {
         return await listSavedWorkflowRunsOp(this.context, request.params);
       case zcodeProtocolMethods.workflowsMove:
         return await moveSavedWorkflowOp(this.context, request.params);
-      case zcodeProtocolMethods.pluginsResolveSuggestedReference:
-        return await this.withPluginOperationSignal(request, (signal) =>
-          resolveSuggestedPluginReference(this.context, request.params, signal),
-        );
-      case zcodeProtocolMethods.pluginsSetEnabled:
-        return await this.withPluginOperationSignal(request, (signal) =>
-          setPluginEnabled(this.context, request.params, signal),
-        );
-      case zcodeProtocolMethods.pluginsOverview:
-        return await getPluginsOverview(this.context, request.params);
       case zcodeProtocolMethods.processChildProcesses:
         return listChildProcesses(this.context.deps.mcpTelemetry?.listProcesses() ?? []);
       case zcodeProtocolMethods.runtimeCapabilities:
         return { independentPlanState: true };
-      case zcodeProtocolMethods.pluginsMarketplaceAdd:
-        return await this.withPluginOperationSignal(request, (signal) =>
-          addPluginMarketplace(this.context, request.params, signal),
-        );
-      case zcodeProtocolMethods.pluginsMarketplaceRemove:
-        return await removePluginMarketplace(this.context, request.params);
-      case zcodeProtocolMethods.pluginsMarketplaceUpdate:
-        return await this.withPluginOperationSignal(request, (signal) =>
-          updatePluginMarketplace(this.context, request.params, signal),
-        );
-      case zcodeProtocolMethods.pluginsInstall:
-        return await this.withPluginOperationSignal(request, (signal) =>
-          installPlugin(this.context, request.params, signal),
-        );
-      case zcodeProtocolMethods.pluginsCancelOperation:
-        return this.cancelPluginOperation(request.params);
-      case zcodeProtocolMethods.pluginsUninstall:
-        return await uninstallPlugin(this.context, request.params);
-      case zcodeProtocolMethods.pluginsUpdate:
-        return await updatePlugin(this.context, request.params);
-      case zcodeProtocolMethods.pluginsRestoreBuiltin:
-        return await restoreBuiltinPlugin(this.context, request.params);
-      case zcodeProtocolMethods.pluginsConfigure:
-        return await configurePlugin(this.context, request.params);
-      case zcodeProtocolMethods.pluginsResetConfig:
-        return await resetPluginConfig(this.context, request.params);
-      case zcodeProtocolMethods.pluginsValidate:
-        return await validatePlugin(this.context, request.params);
-      case zcodeProtocolMethods.pluginsDescribe:
-        return await describePlugin(this.context, request.params);
       case zcodeProtocolMethods.usageStats:
         return await getUsageStats(this.context, request.params);
       case zcodeProtocolMethods.sessionDebug:
@@ -765,34 +690,6 @@ export class ZCodeProtocolAgentServer {
       throw new ProtocolRequestError(-32603, "v4 gateway is not initialized");
     }
     return this.context.v4Gateway;
-  }
-
-  private async withPluginOperationSignal<T>(
-    request: ZCodeProtocolRequest,
-    run: (signal?: AbortSignal) => Promise<T>,
-  ): Promise<T> {
-    const operationId = getPluginOperationId(request.params);
-    if (!operationId) return await run();
-
-    const controller = new AbortController();
-    this.pluginOperationControllers.set(operationId, controller);
-    try {
-      return await run(controller.signal);
-    } finally {
-      if (this.pluginOperationControllers.get(operationId) === controller) {
-        this.pluginOperationControllers.delete(operationId);
-      }
-    }
-  }
-
-  private cancelPluginOperation(rawParams: unknown) {
-    const params = parseParams(zcodePluginsCancelOperationParamsSchema, rawParams);
-    const controller = this.pluginOperationControllers.get(params.operationId);
-    if (!controller) return { operationId: params.operationId, cancelled: false };
-    // 插件同步的可取消能力必须保留在 V4 server；仅按 operationId 中止对应链路。
-    controller.abort();
-    this.pluginOperationControllers.delete(params.operationId);
-    return { operationId: params.operationId, cancelled: true };
   }
 
   private async withWorkspaceGenerateTextSignal<T>(

@@ -71,7 +71,7 @@ interface SkillsServiceOptions {
 
 /** ZCode Agent 工作区级技能目录。 */
 function getWorkspaceZcodeSkillRoot(workspacePath: string): string {
-  return join(workspacePath, ".zcode", "skills");
+  return join(workspacePath, ".pi", "skills");
 }
 
 /** 兼容目录: workspace 级 `.agents/skills`, 仅在同层 `.zcode/skills` 没读到技能时 fallback。 */
@@ -81,7 +81,7 @@ function getWorkspaceAgentsSkillRoot(workspacePath: string): string {
 
 /** ZCode Agent 用户级技能目录。 */
 function getUserZcodeSkillRoot(): string {
-  return join(resolveUserHomeDir(), ".zcode", "skills");
+  return join(resolveUserHomeDir(), ".pi", "agent", "skills");
 }
 
 /** 兼容目录: 用户级 `~/.agents/skills`。 */
@@ -152,12 +152,9 @@ async function resolveAncestorWorkspaceRoots(workspacePath: string): Promise<str
       current = dirname(current);
     }
   }
-  const roots: string[] = [];
+  const roots = [getWorkspaceZcodeSkillRoot(workspacePath)];
   for (const dir of baseDirectories) {
-    // Agent runtime 会合并扫描两个 workspace skill 根。UI 之前把 `.agents`
-    // 当成 `.zcode` 的 fallback，导致同层 `.zcode` 只要有一个技能，`/`、`$` 和设置页
-    // 就会整根漏掉 `.agents` 技能，形成“模型可执行但 UI 无法引用”的发现语义分裂。
-    roots.push(getWorkspaceZcodeSkillRoot(dir));
+    // Pi 还会读沿 worktree 向上的 `.agents/skills`。`.pi/skills` 只取当前工作区。
     roots.push(getWorkspaceAgentsSkillRoot(dir));
   }
   return roots;
@@ -862,7 +859,8 @@ async function discoverSkills(params: {
       rootPath: getUserAgentsSkillRoot(),
     });
   }
-  roots.push(...(await resolvePluginSkillRootDescriptors()));
+  // ZCode 插件技能不进 Pi 会话，设置页不再列。
+  void resolvePluginSkillRootDescriptors;
 
   const diagnostics: SkillDiagnostic[] = [];
   const skills: SkillSummary[] = [];

@@ -2852,6 +2852,10 @@ export class ConversationV4Gateway {
       if (state.sessionId !== sessionId) continue;
       this.scheduleFlush(routeKey, state, publisher);
     }
+    // 流式 token 不刷侧栏。行新增和状态变化才入列，否则新建会话永远不出现。
+    if (deltas.some((delta) => delta.op !== "row.delta")) {
+      this.publishCurrentSummaryToIndex(sessionId);
+    }
   }
 
   private ensurePublisher(sessionId: string): ConversationTopicPublisher {

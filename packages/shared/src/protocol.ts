@@ -264,6 +264,8 @@ export interface AppSettings {
    * 只影响内置浏览器出口，不影响 ZCode 自身对后端与模型 API 的请求。默认关闭，重启后生效。
    */
   embeddedBrowserAllowInsecureCertificates?: boolean;
+  /** 内置浏览器工具。缺省开启。只影响之后新建的会话。 */
+  browserHostEnabled?: boolean;
   /** 人类用户主动打开 Browser tab 时的一次性显示偏好；Agent Browser Use 不读写。 */
   embeddedBrowserViewportPreference?: EmbeddedBrowserViewportPreference;
   /**

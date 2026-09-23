@@ -292,6 +292,8 @@ export interface ZCodeApp {
   readonly sessionId: SessionId;
   readonly traceId: string;
   readonly runtime: AgentRuntime;
+  /** 编辑截断后重发失败时，用 jsonl 把画面行恢复回来。Pi host 才有。 */
+  restoreRewoundConversation?(): Promise<void>;
   respondWorkspaceHookReview(
     input: RespondWorkspaceHookReviewInput,
   ): Promise<WorkspaceHookReviewCommandResult>;

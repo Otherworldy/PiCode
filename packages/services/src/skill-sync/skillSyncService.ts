@@ -131,7 +131,7 @@ function resolveUserHomeDir(): string {
 }
 
 function getUserZcodeSkillRoot(): string {
-  return join(resolveUserHomeDir(), ".zcode", "skills");
+  return join(resolveUserHomeDir(), ".pi", "agent", "skills");
 }
 
 function getUserAgentsSkillRoot(): string {

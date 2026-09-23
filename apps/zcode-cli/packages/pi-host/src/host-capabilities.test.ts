@@ -18,6 +18,7 @@ test("capability tools call ZCode subagents and MCP", async () => {
   const calls: string[] = [];
   const tools = await createCapabilityTools({
     cwd: "D:/work",
+    sessionId: "sess_browser",
     reservedNames: ["read"],
     ports: {
       listSubagents: async () => [
@@ -39,7 +40,9 @@ test("capability tools call ZCode subagents and MCP", async () => {
         },
       ],
       callMcpTool: async (input) => {
-        calls.push(`${input.serverName}/${input.toolName}:${JSON.stringify(input.arguments)}`);
+        calls.push(
+          `${input.serverName}/${input.toolName}:${input.sessionId}:${JSON.stringify(input.arguments)}`,
+        );
         return { text: "hit" };
       },
       useMcp: async (input) => {
@@ -65,5 +68,5 @@ test("capability tools call ZCode subagents and MCP", async () => {
   assert.equal(mcpResult.content[0]?.text, "hit");
   assert.ok(calls.includes("Explore:find it"));
   assert.ok(calls.includes("proxy:list"));
-  assert.ok(calls.some((call) => call.startsWith("docs/search:")));
+  assert.ok(calls.some((call) => call.startsWith("docs/search:sess_browser:")));
 });

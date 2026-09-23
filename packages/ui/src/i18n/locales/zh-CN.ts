@@ -1295,6 +1295,8 @@ const zhCN: Record<string, string> = {
   "ssh.assetInstallMode.remote-download": "远端服务器下载",
   "ssh.assetInstallModeDescription":
     "远端服务器下载可减少上传等待，但服务器需要能访问 ZCode CDN，并具备下载、解压和校验工具。",
+  "ssh.localRuntime":
+    "使用本机模型和系统 ssh。不会把运行时下载或上传到 ZCode CDN。",
   "ssh.password": "密码",
   "ssh.passwordPlaceholder": "输入 SSH 密码",
   "ssh.privateKey": "私钥",
@@ -1971,7 +1973,7 @@ const zhCN: Record<string, string> = {
   "settings.browser.title": "浏览器控制",
   "settings.browser.control.title": "开启内置浏览器控制",
   "settings.browser.control.description":
-    "启用 Browser Use 官方插件，让新会话可以通过内置浏览器访问和操作网页。",
+    "开启后，新会话会带上内置浏览器工具。已打开的会话不会变。",
   "settings.browser.control.enabledToast": "已开启内置浏览器控制",
   "settings.browser.control.disabledToast": "已关闭内置浏览器控制",
   "settings.browser.security.section": "安全",

@@ -14,6 +14,12 @@
  * 3. 后续远端 connect / scoped attachment 都由同一 Host 处理
  */
 import { createHostDatabaseStartup } from "./hostDatabaseStartup.js";
+import { createSshFileService } from "./sshWorkspaceFileService.js";
+import {
+  forgetSshWorkspaceTarget,
+  rememberSshWorkspaceTarget,
+  sshSpecFromConnectTarget,
+} from "@zcode/shared/node";
 import { randomUUID } from "node:crypto";
 import {
   MessagePortProtocol,
@@ -32,6 +38,7 @@ import { materializeBrowserRecordingArtifact } from "./browserRecordingArtifactM
 import {
   ServiceCollection,
   IFileService,
+  ISystemService,
   IClientConfigService,
   IMediaPreviewService,
   IOffPeakTaskService,
@@ -120,7 +127,10 @@ import {
 } from "./remoteMediaPreviewProxy.js";
 import { createHostRemoteWorkspaceProxyState } from "./hostRemoteWorkspaceProxyState.js";
 import { createRemoteWorkspaceServiceCollection } from "./remoteWorkspaceServiceCollection.js";
-import { getRemoteProviderProvisioningExecutor } from "./remoteProviderProvisioningService.js";
+import {
+  getRemoteProviderProvisioningExecutor,
+  registerRemoteProviderProvisioningExecutor,
+} from "./remoteProviderProvisioningService.js";
 import { createRemotePromptAttachmentTransferService } from "./promptAttachmentTransferService.js";
 import { shouldReportHostConsoleError, stringifyHostLogArg } from "./hostLog.js";
 import { flushHostE2ECoverage } from "./e2eCoverage.js";
@@ -1617,10 +1627,13 @@ async function createWindowRemoteConnectionHandle(params: {
   signal: AbortSignal;
 }): Promise<WindowRemoteConnectionHandle<ServiceCollection, HostRemoteConnectionCapabilities>> {
   if (!activeServices) throw new Error("Local Host services are not initialized.");
-  const clientConfigService = activeServices.get(IClientConfigService);
   if (params.signal.aborted) {
     throw new Error("远程连接已取消");
   }
+  if (params.target.kind === "ssh") {
+    return createSshLocalConnectionHandle(params.target);
+  }
+  const clientConfigService = activeServices.get(IClientConfigService);
   const closeListeners = new Set<(event: WindowRemoteConnectionCloseEvent) => void>();
   const notifyClose = (event: WindowRemoteConnectionCloseEvent) => {
     for (const listener of closeListeners) {
@@ -1633,8 +1646,6 @@ async function createWindowRemoteConnectionHandle(params: {
     { fetch: requireActiveHostApiNetworkTransport().fetch },
     await resolveDesktopRemoteRuntimeNetwork(params.target),
     (exitCode) => notifyClose({ exitCode, signal: null }),
-    params.target.kind === "ssh" ? "caller-serialized" : "remote",
-    params.target.kind === "ssh" ? params.signal : undefined,
   );
 
   if (params.signal.aborted) {
@@ -2538,6 +2549,12 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
     const workspacePath = msg.workspacePath ?? "/";
     const workspaceIdentity =
       msg.workspaceIdentity ?? buildRemoteWorkspaceIdentity(workspacePath, msg.target);
+    if (msg.target.kind === "ssh") {
+      rememberSshWorkspaceTarget(
+        workspaceIdentity,
+        sshSpecFromConnectTarget(msg.target, workspacePath),
+      );
+    }
     logger.info(
       `connecting window-scoped remote source, requestId=${msg.requestId}, target=${formatRemoteTargetForLog(msg.target)}`,
     );
@@ -2643,6 +2660,12 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
         msg.remoteSessionId,
         current.generation,
       );
+      if (current.target.kind === "ssh") {
+        rememberSshWorkspaceTarget(
+          msg.workspaceIdentity,
+          sshSpecFromConnectTarget(current.target, msg.workspacePath),
+        );
+      }
     }
     void workspaceReady.catch((error) => {
       logger.warn(
@@ -2666,6 +2689,9 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
 
   if (msg.type === HostMessageTypes.DisposeRemoteWorkspaceSession) {
     const disposedSession = windowRemoteConnectionRegistry.getSession(msg.remoteSessionId);
+    if (disposedSession?.workspaceIdentity && disposedSession.target.kind === "ssh") {
+      forgetSshWorkspaceTarget(disposedSession.workspaceIdentity);
+    }
     windowHostAttachmentRegistry.detachRemoteSessionAttachments(msg.remoteSessionId);
     void windowRemoteConnectionRegistry
       .disposeSession(msg.remoteSessionId)
@@ -2901,6 +2927,50 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
     await databaseStartup.coordinator.start();
   }
 });
+
+function createSshLocalConnectionHandle(target: Extract<RemoteTarget, { kind: "ssh" }>): WindowRemoteConnectionHandle<
+  ServiceCollection,
+  HostRemoteConnectionCapabilities
+> {
+  if (!activeServices) throw new Error("Local Host services are not initialized.");
+  // SSH 不再部署远端 zcode-server，因此也不会访问 ZCode CDN。
+  // 模型和 agent 继续用本机服务；只有文件服务改走系统 ssh。
+  const services = activeServices.fork();
+  services.register(IFileService, createSshFileService(sshSpecFromConnectTarget(target, "/")));
+  const localSystem = activeServices.get(ISystemService);
+  services.register(ISystemService, {
+    info: async () => ({ ...(await localSystem.info()), homedir: "/home" }),
+    listIntegratedTerminalShells: () => localSystem.listIntegratedTerminalShells(),
+    probeIntranet: (request) => localSystem.probeIntranet(request),
+  });
+  // 模型留在本机。旧的首次同步会把本机 Provider 推到远端 server，SSH 已经没有那台 server，
+  // 失败会直接拦住建连。
+  registerRemoteProviderProvisioningExecutor(services, {
+    async syncLocalToRemote() {
+      return {
+        syncId: randomUUID(),
+        status: "already-applied",
+        personalProviderCount: 0,
+        credentialCount: 0,
+        rolledBack: false,
+      };
+    },
+  });
+  const closeListeners = new Set<(event: WindowRemoteConnectionCloseEvent) => void>();
+  let disposed = false;
+  return {
+    services,
+    onDidClose(listener) {
+      closeListeners.add(listener);
+      return { dispose: () => closeListeners.delete(listener) };
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      closeListeners.clear();
+    },
+  };
+}
 
 async function setupRemoteConnection(
   target: RemoteTarget,

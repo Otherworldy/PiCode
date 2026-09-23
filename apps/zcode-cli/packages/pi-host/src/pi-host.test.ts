@@ -27,6 +27,25 @@ test("maps builtin pi tool names", () => {
   assert.equal(mapPiToolName(undefined), "Tool");
 });
 
+test("first user message names the session and reload replaces rows", () => {
+  const projector = new PiToV4Projector("s1", "e1");
+  projector.apply({ type: "agent_start" });
+  projector.apply({
+    type: "message_start",
+    message: { role: "user", content: "文件夹下有什么", id: "u1" },
+  });
+  assert.equal(projector.getSnapshot().meta.title, "文件夹下有什么");
+  projector.reload([
+    { type: "agent_start" },
+    { type: "message_start", message: { role: "user", content: "kept", id: "u2" } },
+  ]);
+  const texts = projector
+    .getSnapshot()
+    .rows.window.filter((row) => row.kind === "userInput")
+    .map((row) => (row.kind === "userInput" ? row.text : ""));
+  assert.deepEqual(texts, ["kept"]);
+});
+
 test("toolcall_start without a name does not throw", () => {
   const projector = new PiToV4Projector("s1", "e1", { profile: "continuous" });
   projector.apply({ type: "agent_start" });
@@ -371,5 +390,48 @@ test("list and resume native Pi jsonl by header id", async () => {
   assert.equal(found?.sessionFile, sessionFile);
   const opened = await registry.create({ workspacePath: cwd, sessionId: "01native" });
   assert.equal(opened.sessionFile, sessionFile);
+  await rm(root, { recursive: true, force: true });
+});
+
+test("ssh sessions stay under the remote identity and still list the old drive-letter dir", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const nativeRoot = join(root, "pi-sessions");
+  const identity = "remote:ssh:example:22:root:/root/proxy-sticky";
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: nativeRoot,
+    createSession: async (input) => new FakePiSession(input.sessionId, input.sessionFile),
+  });
+  const created = await registry.create({
+    workspaceIdentity: identity,
+    workspacePath: "/root/proxy-sticky",
+    sessionId: "sess_ssh",
+  });
+  assert.match(created.sessionFile, /remote-ssh-example-22-root--root-proxy-sticky/);
+  await writeFile(
+    created.sessionFile,
+    [
+      '{"type":"session","id":"sess_ssh","timestamp":"2026-01-02T03:04:05.000Z","cwd":"/root/proxy-sticky"}',
+      '{"type":"message","id":"u1","timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"user","content":[{"type":"text","text":"remote hi"}]}}',
+    ].join("\n"),
+  );
+  const resolved = resolve("/root/proxy-sticky");
+  const legacyDir = join(
+    nativeRoot,
+    `--${resolved.replace(/^[\\/]/u, "").replace(/[\\/:]/gu, "-")}--`,
+  );
+  await mkdir(legacyDir, { recursive: true });
+  await writeFile(
+    join(legacyDir, "2026-01-02T03-04-05_sess_old.jsonl"),
+    [
+      `{"type":"session","id":"sess_old","timestamp":"2026-01-02T03:04:05.000Z","cwd":${JSON.stringify(resolved)}}`,
+      '{"type":"message","id":"u1","timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"user","content":[{"type":"text","text":"old remote"}]}}',
+    ].join("\n"),
+  );
+  const listed = await registry.list(identity);
+  assert.deepEqual(
+    listed.map((item) => item.sessionId).sort(),
+    ["sess_old", "sess_ssh"],
+  );
   await rm(root, { recursive: true, force: true });
 });

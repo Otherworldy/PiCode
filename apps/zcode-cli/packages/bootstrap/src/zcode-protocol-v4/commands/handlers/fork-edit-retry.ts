@@ -203,18 +203,27 @@ async function editUserQuery(
       };
     }
   }
-  if (!conversationRewindCommitted) {
-    await submitConversationRewind(host, record, editTarget.transcriptMessageId);
+  let rewound = conversationRewindCommitted;
+  try {
+    if (!rewound) {
+      // 截断发生在这次调用内部。抛错时赋值还没执行，必须先记上，失败才能画回原对话。
+      rewound = true;
+      await submitConversationRewind(host, record, editTarget.transcriptMessageId);
+    }
+    await startCanonicalIntent(
+      host,
+      record,
+      envelope,
+      editTarget,
+      payload.newText,
+      attachmentRefs,
+      attachments,
+    );
+  } catch (error) {
+    // rewind 之后的 snapshot/重发失败都会把旧行留在截断态。jsonl 还在就画回去。
+    if (rewound) await record.app.restoreRewoundConversation?.();
+    throw error;
   }
-  await startCanonicalIntent(
-    host,
-    record,
-    envelope,
-    editTarget,
-    payload.newText,
-    attachmentRefs,
-    attachments,
-  );
   // 生产 renderer 不落日志，过去只能从通用 rewind + send 猜测发生过编辑，
   // 无法与 retry 稳定区分。命令副作用完成后由 Agent server 写低频 info 审计索引。
   host.logger?.info?.("v4 editUserQuery completed", {
@@ -259,16 +268,21 @@ async function retryTurn(
   }
   const attachmentRefs = stableAttachmentRefs(resolution.editTarget);
   const attachments = await mapAttachmentRefsToTurnAttachments(record.app, attachmentRefs);
-  await submitConversationRewind(host, record, resolution.messageId);
-  await startCanonicalIntent(
-    host,
-    record,
-    envelope,
-    resolution.editTarget,
-    resolution.editTarget.intent.text,
-    attachmentRefs,
-    attachments,
-  );
+  try {
+    await submitConversationRewind(host, record, resolution.messageId);
+    await startCanonicalIntent(
+      host,
+      record,
+      envelope,
+      resolution.editTarget,
+      resolution.editTarget.intent.text,
+      attachmentRefs,
+      attachments,
+    );
+  } catch (error) {
+    await record.app.restoreRewoundConversation?.();
+    throw error;
+  }
   return undefined;
 }
 

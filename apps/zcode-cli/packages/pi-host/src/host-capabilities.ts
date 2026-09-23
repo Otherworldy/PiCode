@@ -31,6 +31,7 @@ export interface PiMcpRequest {
   describe?: string;
   tool?: string;
   args?: Record<string, unknown>;
+  sessionId?: string;
   signal?: AbortSignal;
 }
 
@@ -42,6 +43,7 @@ export interface PiCapabilityPorts {
     serverName: string;
     toolName: string;
     arguments?: Record<string, unknown>;
+    sessionId?: string;
     signal?: AbortSignal;
   }): Promise<{ text: string; isError?: boolean }>;
   /** 代理：列服务器不连接；搜索、描述、调用才连接指定服务器。 */
@@ -183,6 +185,7 @@ export async function createCapabilityTools(input: {
   ports: PiCapabilityPorts;
   check?: ToolPermissionCheck;
   reservedNames: readonly string[];
+  sessionId?: string;
   runSubagent: (profile: ZcodeSubagentProfile, task: string, signal?: AbortSignal) => Promise<string>;
 }) {
   const reserved = new Set(input.reservedNames);
@@ -261,6 +264,7 @@ export async function createCapabilityTools(input: {
         ...(typeof params.describe === "string" ? { describe: params.describe } : {}),
         ...(typeof params.tool === "string" ? { tool: params.tool } : {}),
         ...(params.args && typeof params.args === "object" ? { args: params.args } : {}),
+        sessionId: input.sessionId,
         signal,
       });
       const text = result.text.trim() || (result.isError ? "MCP request failed" : "(empty)");
@@ -287,6 +291,7 @@ export async function createCapabilityTools(input: {
             serverName: mcpTool.serverName,
             toolName: mcpTool.toolName,
             arguments: params,
+            sessionId: input.sessionId,
             signal,
           });
           const text = result.text.trim() || (result.isError ? "MCP tool failed" : "(empty)");

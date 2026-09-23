@@ -695,6 +695,7 @@ export function SettingsPage({
   const [httpProxyCaCertPath, setHttpProxyCaCertPath] = useState("");
   const [embeddedBrowserAllowInsecureCertificates, setEmbeddedBrowserAllowInsecureCertificates] =
     useState(false);
+  const [browserHostEnabled, setBrowserHostEnabled] = useState(true);
   const [taskAutoArchiveEnabled, setTaskAutoArchiveEnabled] = useState(false);
   const [taskAutoArchiveOlderThanDays, setTaskAutoArchiveOlderThanDays] = useState(7);
   const [closeToTrayOnWindows, setCloseToTrayOnWindows] = useState(true);
@@ -780,6 +781,7 @@ export function SettingsPage({
         setEmbeddedBrowserAllowInsecureCertificates(
           settings.embeddedBrowserAllowInsecureCertificates ?? false,
         );
+        setBrowserHostEnabled(settings.browserHostEnabled !== false);
         setTaskAutoArchiveEnabled(settings.taskAutoArchiveEnabled ?? false);
         setTaskAutoArchiveOlderThanDays(settings.taskAutoArchiveOlderThanDays ?? 7);
         setCloseToTrayOnWindows(settings.closeToTrayOnWindows ?? true);
@@ -1109,6 +1111,29 @@ export function SettingsPage({
       toast(
         intl.formatMessage({
           id: "settings.desktopChromiumHardwareAccelerationSavedHint",
+        }),
+      );
+    },
+    [services.settingService, intl],
+  );
+  const handleBrowserHostEnabledChange = useCallback(
+    async (enabled: boolean) => {
+      await runSettingsActionAsync({
+        featureId: "settings.browser",
+        action: "toggle_browser_host",
+        trigger: "switch",
+        operation: () => services.settingService.update({ browserHostEnabled: enabled }),
+        completed: {
+          resultSource: "setting_service",
+          stateAfter: enabled ? "enabled" : "disabled",
+        },
+      });
+      setBrowserHostEnabled(enabled);
+      toast(
+        intl.formatMessage({
+          id: enabled
+            ? "settings.browser.control.enabledToast"
+            : "settings.browser.control.disabledToast",
         }),
       );
     },
@@ -1893,6 +1918,8 @@ export function SettingsPage({
                             onEmbeddedBrowserAllowInsecureCertificatesChange={
                               handleEmbeddedBrowserAllowInsecureCertificatesChange
                             }
+                            browserHostEnabled={browserHostEnabled}
+                            onBrowserHostEnabledChange={handleBrowserHostEnabledChange}
                           />
                         ) : activeSection === "computerUse" ? (
                           <ComputerUseSection

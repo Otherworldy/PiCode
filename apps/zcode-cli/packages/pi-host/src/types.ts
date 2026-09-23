@@ -106,6 +106,9 @@ export interface PiSessionPort {
   abort(): Promise<void>;
   compact(): Promise<void>;
   navigateTree?(targetId: string): Promise<unknown>;
+  hasEntry?(id: string): boolean;
+  /** 画面行 id 不是树节点时，用用户原文找回 Pi entry。 */
+  matchUserEntry?(text: string): string | undefined;
   setModel?(provider: string, modelId: string, thought?: string): Promise<void>;
   setThinkingLevel?(level: PiThinkingLevel): void;
   setSteeringMode?(mode: "all" | "one-at-a-time"): void;

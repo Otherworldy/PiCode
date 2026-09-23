@@ -1,9 +1,13 @@
-import type { McpServerConfig, PluginLoadOutcome } from "@zcode/contracts";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { ZCODE_OFFICIAL_PLUGIN_MARKETPLACE, type Logger, type McpServerConfig, type PluginLoadOutcome } from "@zcode/contracts";
+import { resolveOfficialPluginRoots } from "./bundled-plugins.js";
 import { createBundledMcpRuntimeConfig } from "./official-plugin-runtime.js";
 import {
   OFFICIAL_BROWSER_USE_PLUGIN_ID,
   OFFICIAL_CUA_PLUGIN_ID,
   OFFICIAL_NODE_REPL_HOST_PLUGIN_ID,
+  OFFICIAL_PLUGIN_DEFINITIONS,
 } from "./official-plugin-definitions.js";
 
 const BUILT_IN_NODE_REPL_SERVER_NAME = "node_repl";
@@ -48,5 +52,50 @@ export function resolveBuiltInNodeReplMcpServers(input: {
       isolation: "workspace",
       protocolVersion: "2026-07-28",
     },
+  };
+}
+
+function seededRoot(storageRoot: string, name: string): string | undefined {
+  const definition = OFFICIAL_PLUGIN_DEFINITIONS.find((item) => item.name === name);
+  if (!definition) return undefined;
+  const root = join(
+    storageRoot,
+    "cache",
+    ZCODE_OFFICIAL_PLUGIN_MARKETPLACE,
+    definition.name,
+    definition.version,
+  );
+  return existsSync(join(root, ".zcode-plugin", "plugin.json")) ? root : undefined;
+}
+
+/** 浏览器是宿主能力。不看插件启用开关，只要打包产物在就连 node_repl。 */
+export function resolveHostBrowserCapability(input: {
+  logger?: Logger;
+  storageRoot: string;
+  workingDirectory: string;
+}): { server: McpServerConfig; skillPath: string } | undefined {
+  // 成功的 seed 不会出现在返回值里，调用只为了把当前版本写入 cache。
+  resolveOfficialPluginRoots({
+    logger: input.logger,
+    storageRoot: input.storageRoot,
+  });
+  const browserRoot = seededRoot(input.storageRoot, "browser-use");
+  const hostRoot = seededRoot(input.storageRoot, "node-repl-host");
+  if (!browserRoot || !hostRoot) return undefined;
+  const nodeRepl = createBundledMcpRuntimeConfig({
+    cwd: input.workingDirectory,
+    env: { ZCODE_PLUGIN_ROOT: browserRoot },
+    rootPath: hostRoot,
+    timeoutMs: 600_000,
+  });
+  if (!nodeRepl) return undefined;
+  return {
+    server: {
+      ...nodeRepl,
+      directTools: true,
+      isolation: "workspace",
+      protocolVersion: "2026-07-28",
+    },
+    skillPath: join(browserRoot, "skills", "control-browser", "SKILL.md"),
   };
 }

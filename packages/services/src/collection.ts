@@ -26,6 +26,15 @@ export class ServiceCollection {
     return this._services.get(descriptor.channelName) as T | undefined;
   }
 
+  /** 浅拷贝注册表。调用方可以替换个别服务，不能释放仍被原表持有的实例。 */
+  fork(): ServiceCollection {
+    const copy = new ServiceCollection();
+    for (const [channelName, instance] of this._services) {
+      copy._services.set(channelName, instance);
+    }
+    return copy;
+  }
+
   /** 将所有已注册的服务自动暴露为 channel */
   exposeOnChannelServer(
     server: IChannelServer,

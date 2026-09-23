@@ -4,6 +4,18 @@
  * This subpath must not be imported by renderer/browser bundles.
  */
 export { acquireFileLock } from "./node/atomicFileLock.js";
+export {
+  forgetSshWorkspaceTarget,
+  parseFindEntries,
+  quotePosixArg,
+  rememberSshWorkspaceTarget,
+  remotePosixPath,
+  runSsh,
+  sshDestinationArgs,
+  sshSpecFromConnectTarget,
+  sshWorkspaceSpawnEnv,
+  type SshRemoteSpec,
+} from "./node/sshRemote.js";
 export { scanOfficialPluginCacheRoots } from "./node/officialPluginCache.js";
 export {
   migrateUserSubagentMarkdown,

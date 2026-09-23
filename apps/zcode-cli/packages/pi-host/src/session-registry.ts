@@ -37,6 +37,7 @@ export interface HostedSession {
   abort(): Promise<void>;
   compact(): Promise<void>;
   navigateTree(targetId: string): Promise<void>;
+  reloadHistory(content: string): void;
   setModel(provider: string, modelId: string, thought?: string): Promise<void>;
   setThinkingLevel(level: string): void;
   setFeedback(entityId: string, feedback: "like" | "dislike" | null): void;
@@ -82,8 +83,10 @@ function nativeSessionsRoot(override?: string): string {
 }
 
 function nativeSessionDir(cwd: string, root: string): string {
-  const resolved = resolve(cwd);
-  const safePath = `--${resolved.replace(/^[\\/]/u, "").replace(/[\\/:]/gu, "-")}--`;
+  // remote identity 以 remote: 开头。path.resolve 会把它变成当前盘下的相对路径，
+  // 和真正的远端 cwd（又会被解析成 C:\root\...）不是同一个目录，侧栏就找不到会话。
+  const encoded = cwd.startsWith("remote:") ? cwd : resolve(cwd);
+  const safePath = `--${encoded.replace(/^[\\/]/u, "").replace(/[\\/:]/gu, "-")}--`;
   return join(root, safePath);
 }
 
@@ -136,10 +139,7 @@ export class HostSessionRegistry {
     }
     const identity = workspaceKey(input.workspaceIdentity, input.workspacePath);
     const sessionId = input.sessionId ?? randomUUID();
-    const dir = nativeSessionDir(
-      input.workspacePath,
-      nativeSessionsRoot(this.options.nativeSessionsRoot),
-    );
+    const dir = nativeSessionDir(identity, nativeSessionsRoot(this.options.nativeSessionsRoot));
     await mkdir(dir, { recursive: true });
     return this.openFile({
       sessionId,
@@ -167,7 +167,7 @@ export class HostSessionRegistry {
     if (!parent) throw new Error(`pi-host parent not found: ${parentId}`);
     const sessionId = randomUUID();
     const dir = nativeSessionDir(
-      parent.workspacePath,
+      parent.identity,
       nativeSessionsRoot(this.options.nativeSessionsRoot),
     );
     await mkdir(dir, { recursive: true });
@@ -205,12 +205,18 @@ export class HostSessionRegistry {
       join(this.options.storageRoot, "pi-host-sessions", encodeKey(identity)),
       "file",
     );
-    const native = await this.listDir(
-      nativeSessionDir(identity, nativeSessionsRoot(this.options.nativeSessionsRoot)),
-      "header",
-    );
+    const sessionsRoot = nativeSessionsRoot(this.options.nativeSessionsRoot);
+    const native = await this.listDir(nativeSessionDir(identity, sessionsRoot), "header");
+    // 旧文件写在 path.resolve(远端路径) 下，Windows 上是 C:\root\...。新文件按 identity 存。
+    const legacyRemotePath = identity.startsWith("remote:")
+      ? identity.slice(identity.indexOf(":/") + 1)
+      : "";
+    const legacy =
+      legacyRemotePath.startsWith("/") && legacyRemotePath !== "/"
+        ? await this.listDir(nativeSessionDir(legacyRemotePath, sessionsRoot), "header")
+        : [];
     const byId = new Map<string, PiStoredSummary>();
-    for (const item of [...hosted, ...native]) byId.set(item.sessionId, item);
+    for (const item of [...hosted, ...native, ...legacy]) byId.set(item.sessionId, item);
     return [...byId.values()];
   }
 
@@ -551,7 +557,16 @@ export class HostSessionRegistry {
         pi.setThinkingLevel?.(mapThought(level));
       },
       navigateTree: async (targetId) => {
-        await pi.navigateTree?.(targetId);
+        let entryId = targetId;
+        // 冷恢复的行 id 是 Pi entry。实时行 id 是 row:N，得用原文对上树节点。
+        if (pi.hasEntry && !pi.hasEntry(targetId)) {
+          const row = projector.getSnapshot().rows.window.find((item) => item.entityId === targetId);
+          const text = row && "text" in row && typeof row.text === "string" ? row.text : "";
+          entryId = (text && pi.matchUserEntry?.(text)) || "";
+          if (!entryId) throw new Error(`Entry ${targetId} not found`);
+        }
+        if (pi.isStreaming) await pi.abort();
+        await pi.navigateTree?.(entryId);
         emit(projector.truncateFrom(targetId));
       },
       setFeedback: (entityId, feedback) => {
@@ -587,6 +602,11 @@ export class HostSessionRegistry {
         for (const event of parsed.events) emit(projector.apply(event));
         if (parsed.summary?.title) emit(projector.setTitle(parsed.summary.title, "generated"));
         void publishSubagents();
+      },
+      reloadHistory: (content) => {
+        const parsed = readPiJsonl(content);
+        emit(projector.reload(parsed.events));
+        if (parsed.summary?.title) emit(projector.setTitle(parsed.summary.title, "generated"));
       },
       onDeltas: (listener) => {
         deltaListeners.add(listener);

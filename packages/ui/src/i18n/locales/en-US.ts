@@ -1384,6 +1384,8 @@ const enUS: Record<string, string> = {
   "ssh.assetInstallMode.remote-download": "Download on remote server",
   "ssh.assetInstallModeDescription":
     "Remote server download reduces upload waiting, but the server must reach the ZCode CDN and have download, extract, and checksum tools.",
+  "ssh.localRuntime":
+    "Uses the local models and the system ssh client. Nothing is downloaded from or uploaded to the ZCode CDN.",
   "ssh.password": "Password",
   "ssh.passwordPlaceholder": "Enter your SSH password",
   "ssh.privateKey": "Private key",
@@ -2089,7 +2091,7 @@ const enUS: Record<string, string> = {
   "settings.browser.title": "Browser Use",
   "settings.browser.control.title": "Enable built-in browser control",
   "settings.browser.control.description":
-    "Enable the official Browser Use plugin so new sessions can access and control web pages in the built-in browser.",
+    "When on, new sessions include the built-in browser tool. Open sessions stay as they are.",
   "settings.browser.control.enabledToast": "Built-in browser control enabled",
   "settings.browser.control.disabledToast": "Built-in browser control disabled",
   "settings.browser.security.section": "Security",

@@ -14,11 +14,13 @@ export function PiPluginsSection({
   workspaceIdentity,
   scope,
   searchQuery,
+  onVisibleCountChange,
 }: {
   workspacePath: string;
   workspaceIdentity?: string;
   scope: "user" | "project";
   searchQuery: string;
+  onVisibleCountChange?: (count: number) => void;
 }) {
   const { intl } = useZCodeIntl();
   const session = useZCodeSessionService(workspacePath, null, workspaceIdentity);
@@ -52,6 +54,9 @@ export function PiPluginsSection({
     if (!needle) return true;
     return `${plugin.name} ${plugin.detail}`.toLowerCase().includes(needle);
   });
+  useEffect(() => {
+    onVisibleCountChange?.(visible.length);
+  }, [onVisibleCountChange, visible.length]);
 
   return (
     <div className="mb-6">

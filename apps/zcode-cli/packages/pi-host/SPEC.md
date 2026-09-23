@@ -34,7 +34,9 @@ ZCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代理
 
 ## 失败语义
 
-- Pi 拒 prompt（preflight false）：ACK 失败，不造假 turn。
+- Pi 拒 prompt（preflight false）：ACK 失败，不造假 turn。rewind 之后、重发完成之前的任何失败，都用 jsonl 把原对话行画回去。
+- `getModel()` 返回 `provider/model`。旧 snapshot 把裸模型 id 当成非法选择，会在截断之后把编辑打失败。
+- 新建会话的 Pi 投影增量写入 sessions-index。只跳过纯文本流式 delta。第一条用户消息同时成为侧栏标题。
 - 流中途失败：turn `failed`，已写出的 row 保留。
 - abort：turn `completedInterrupted`，运行中工具 `cancelled`。
 - `custom()` 无 adapter：降级 widget 文本，不卡循环。
@@ -94,9 +96,13 @@ ZCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代理
 
 ## Pi 插件开关
 
-设置「插件」页顶部另列 Pi 已配置的包和自动发现的扩展文件。状态所有者是 Pi `settings.json`：用户级 `~/.pi/agent/settings.json`，工作区级 `<cwd>/.pi/settings.json`。`pi/plugins` 的 `list` 读这两处；`setEnabled` 写回后 `flush`。包的关是 `packages[].autoload: false`（保留已有过滤）；扩展文件的关是追加或拿掉精确的 `-<相对路径>`。已打开的会话不热更新，下一次创建会话才按新开关加载。不写 ZCode 插件启用表。
+设置「插件」页只列 Pi 已配置的包和自动发现的扩展文件。状态所有者是 Pi `settings.json`：用户级 `~/.pi/agent/settings.json`，工作区级 `<cwd>/.pi/settings.json`。`pi/plugins` 的 `list` 读这两处；`setEnabled` 写回后 `flush`。包的关是 `packages[].autoload: false`（保留已有过滤）；扩展文件的关是追加或拿掉精确的 `-<相对路径>`。已打开的会话不热更新，下一次创建会话才按新开关加载。不写 ZCode 插件启用表，也不再把 ZCode 插件市场当能力源。`plugins/*` 协议方法已删除，设置页不再列、安装或开关 ZCode 插件。
 
-ZCode 内置浏览器插件（`browser-use@zcode-plugins-official`）走 Electron `interaction/browserExecute`，不是 Pi 扩展。不能放进 Pi 扩展目录就被加载。
+技能设置读写 Pi 会加载的目录：用户 `~/.pi/agent/skills`，工作区 `<cwd>/.pi/skills`，仍列出 Pi 同样会读的 `.agents/skills`。命令设置读写 Pi 提示词目录：用户 `~/.pi/agent/prompts`，工作区 `<cwd>/.pi/prompts`。钩子不进入 Pi 会话，设置页不再单独列出。
+
+内置浏览器是宿主能力，不是可安装插件。会话创建时直接连上打包好的 `node_repl`，并把 `control-browser` 技能交给 Pi。工具名仍是 `mcp__node_repl__js`。direct 调用带上当前会话 id，browser broker 才能回到 `BrowserControlPort`，再调 Electron `interaction/browserExecute`。不写进用户 MCP 配置。开关在 `~/.zcode/v2/setting.json` 的 `browserHostEnabled`，缺省开启，只影响之后新建的会话。子会话不带这个工具。
+
+SSH 工作区不部署远端 zcode-server，也不从 ZCode CDN 下载或上传运行时。状态所有者仍是本机 Pi：模型读本机 `~/.pi/agent`，会话 jsonl 写在本机。窗口 Host 只记住该 workspace identity 对应的 SSH 目标（别名优先，否则 `user@host` 加端口），并在拉起本机 agent 时放进 `ZCODE_SSH_REMOTE`。这个进程里的 read / write / edit / bash / ls / grep / find 经系统 `ssh` 作用在远端路径上。Pi 在 Windows 上会把远端路径 resolve 成盘符路径；会话提示改回远端 posix 路径，命令里的盘符前缀在执行前换回去。bash 的 timeout 按秒计。会话 jsonl 按 workspace identity 分目录，侧栏才能列出来；目录选择的默认路径是远端 `/home`。密码和私钥不进环境变量；认证失败就失败，不回退到远端安装。WSL 和 Docker 仍走原来的远端 server。
 
 编辑供应商是双面板：左侧发现/勾选模型，右侧为每个已选模型写 Pi 原生字段。状态所有者仍是 `models.json`，不另建一套绑定表。
 

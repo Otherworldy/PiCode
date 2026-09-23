@@ -28,6 +28,7 @@ import {
   type DelegateProvider,
   type ZCodeModelStreamPort,
 } from "./model-delegate.js";
+import { readProcessSshRemoteSpec, sshCodingToolOptions, sshSearchText } from "./ssh-remote.js";
 import type { CreatePiSession, PiHostEvent, PiSessionPort } from "./types.js";
 import {
   deleteProvider,
@@ -49,12 +50,17 @@ function asPiEvent(event: unknown): PiHostEvent | null {
 }
 
 function wrapCodingTools(cwd: string, check: ToolPermissionCheck | undefined) {
+  const ssh = readProcessSshRemoteSpec(cwd);
   const raw = [
-    ...createCodingTools(cwd),
-    ...(process.platform === "win32" ? [createPowerShellTool(cwd)] : []),
-    createGrepTool(cwd),
-    createFindTool(cwd),
-    createLsTool(cwd),
+    ...createCodingTools(cwd, ssh ? sshCodingToolOptions(ssh) : undefined),
+    ...(ssh
+      ? []
+      : [
+          ...(process.platform === "win32" ? [createPowerShellTool(cwd)] : []),
+          createGrepTool(cwd),
+          createFindTool(cwd),
+          createLsTool(cwd),
+        ]),
   ];
   const seen = new Set<string>();
   return raw
@@ -72,6 +78,14 @@ function wrapCodingTools(cwd: string, check: ToolPermissionCheck | undefined) {
         onUpdate?: never,
       ) => {
         await gateTool(check, tool.name, params);
+        if (ssh && (tool.name === "grep" || tool.name === "find")) {
+          return sshSearchText(
+            tool.name,
+            params as { pattern?: string; path?: string; glob?: string; limit?: number },
+            ssh,
+            signal,
+          );
+        }
         return tool.execute(toolCallId, params, signal, onUpdate);
       },
     }));
@@ -196,6 +210,7 @@ export function createSdkSessionFactory(options: {
   defaultSelection?: { providerId: string; modelId: string; thought?: string };
   agentDir?: string;
   capabilities?: PiCapabilityPorts;
+  skillPaths?: (cwd: string) => string[];
 } = {}): CreatePiSession {
   const isolated = Boolean(options.delegate || options.stream);
   const selections = new Map<string, { providerId: string; modelId: string; thought?: string }>();
@@ -234,10 +249,19 @@ export function createSdkSessionFactory(options: {
     const settingsManager = isolated
       ? SettingsManager.inMemory({ retry: { enabled: false } })
       : SettingsManager.create(input.cwd, agentDir);
+    const ssh = readProcessSshRemoteSpec(input.cwd);
     const resourceLoader = new DefaultResourceLoader({
       cwd: input.cwd,
       agentDir,
       settingsManager,
+      additionalSkillPaths: options.skillPaths?.(input.cwd) ?? [],
+      ...(ssh
+        ? {
+            appendSystemPrompt: [
+              `This session is an SSH workspace on a remote POSIX host. The working directory is ${ssh.remotePath}. Use POSIX paths and a POSIX shell. Do not use cmd, PowerShell, or Windows drive paths.`,
+            ],
+          }
+        : {}),
     });
     await resourceLoader.reload();
     const customTools = wrapCodingTools(input.cwd, input.checkPermission);
@@ -254,6 +278,7 @@ export function createSdkSessionFactory(options: {
           ports: options.capabilities,
           check: input.checkPermission,
           reservedNames: customTools.map((tool) => tool.name),
+          sessionId: input.sessionId,
           runSubagent: (profile, task, signal) =>
             runZcodeSubagent({
               cwd: input.cwd,
@@ -287,6 +312,13 @@ export function createSdkSessionFactory(options: {
     });
     live = created.session;
     const session = created.session;
+    if (ssh) {
+      // createAgentSession 会 path.resolve。Windows 上 /root/app 变成 C:\root\app，
+      // 系统提示和会话头都跟着错。建完再改回远端路径，并重建提示。
+      (session.sessionManager as unknown as { cwd: string }).cwd = ssh.remotePath;
+      (session as unknown as { _cwd: string })._cwd = ssh.remotePath;
+      session.setActiveToolsByName(session.getActiveToolNames());
+    }
     let lastTurn: Promise<void> = Promise.resolve();
     const currentModel = session.model
       ? { providerId: session.model.provider, modelId: session.model.id }
@@ -331,6 +363,30 @@ export function createSdkSessionFactory(options: {
         await session.compact();
       },
       navigateTree: (targetId) => session.navigateTree(targetId),
+      hasEntry: (id) => session.sessionManager.getEntry(id) != null,
+      matchUserEntry: (text) => {
+        const wanted = text.trim();
+        if (!wanted) return undefined;
+        const entries = session.sessionManager.getEntries();
+        for (let index = entries.length - 1; index >= 0; index -= 1) {
+          const entry = entries[index];
+          if (!entry || entry.type !== "message" || entry.message.role !== "user") continue;
+          const content = entry.message.content;
+          const value = Array.isArray(content)
+            ? content
+                .map((part) =>
+                  part && typeof part === "object" && "text" in part && typeof part.text === "string"
+                    ? part.text
+                    : "",
+                )
+                .join("")
+            : typeof content === "string"
+              ? content
+              : "";
+          if (value.trim() === wanted) return entry.id;
+        }
+        return undefined;
+      },
       setModel: async (provider, modelId, thought) => {
         if (isolated) {
           const next = { providerId: provider, modelId, thought };

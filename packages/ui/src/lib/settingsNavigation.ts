@@ -44,6 +44,8 @@ const HIDDEN_SETTINGS_SECTIONS = new Set<SettingsSectionId>([
   "workspaceFileSearch",
   "computerUse",
   "usage",
+  // Pi 会话不跑 ZCode hooks。
+  "hooks",
 ]);
 
 interface SettingsSectionIntentEventDetail {
