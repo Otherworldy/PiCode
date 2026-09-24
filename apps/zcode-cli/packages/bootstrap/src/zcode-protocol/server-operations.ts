@@ -3265,7 +3265,6 @@ async function requestSessionRuntimePreferences(
       // 兼容旧 Host 或无 Host 的纯 CLI 创建路径；Memory 服从产品默认关闭，
       // 增强搜索维持原有默认开启，其他协议/传输错误仍阻止 runtime 创建。
       return {
-        askUserQuestionAutoResolutionEnabled: true,
         memoryEnabled: false,
         modelContextBudgetStrategy: DEFAULT_ZCODE_MODEL_CONTEXT_BUDGET_STRATEGY,
         nativeSearchEnhancementsEnabled: true,
@@ -3296,10 +3295,6 @@ async function resolveSessionStartupPreferences(
     sessionId,
     "runtime-materialization",
     trace,
-  );
-  // 必须在 session runtime 可发出第一次提问前应用；关闭路径会等待已有 snooze 持久化完成。
-  await context.v4Interactions.initializeAskUserQuestionAutoResolutionEnabled(
-    runtimePreferences.askUserQuestionAutoResolutionEnabled,
   );
   return {
     memoryEnabled: runtimePreferences.memoryEnabled,

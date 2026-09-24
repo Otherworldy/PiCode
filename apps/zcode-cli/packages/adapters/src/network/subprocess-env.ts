@@ -39,6 +39,18 @@ const CA_TARGET_KEYS = CA_SOURCE_KEYS;
 const EXPLICIT_CA_SOURCE_KEYS = [ZCODE_AGENT_CA_CERT_ENV_KEY] as const;
 const EXPLICIT_NO_PROXY_SOURCE_KEYS = [ZCODE_NO_PROXY_ENV_KEY] as const;
 
+/** 只把设置页注入的 ZCODE_HTTP_PROXY / ZCODE_NO_PROXY 写回标准变量，不碰 tool passthrough。 */
+export function publishConfiguredProxyEnv(env: Record<string, string | undefined>): void {
+  const target = env as Record<string, string>;
+  applyProxyEnv(
+    target,
+    env,
+    { httpProxy: env[ZCODE_HTTP_PROXY_ENV_KEY] },
+    process.platform,
+  );
+  applyNoProxyEnv(target, env, { noProxy: env[ZCODE_NO_PROXY_ENV_KEY] }, process.platform);
+}
+
 export function applyNetworkEgressEnv(
   env: Record<string, string>,
   options: NetworkEgressEnvOptions,

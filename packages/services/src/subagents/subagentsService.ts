@@ -128,7 +128,7 @@ function createBuiltInAgents(
       modelSelection: exploreOverride,
       modelSelectionOverride: exploreOverride,
       systemPrompt: "",
-      tools: ["Bash", "Glob", "Grep", "Read", "WebFetch", "WebSearch", "TodoWrite"],
+      tools: ["Bash", "Glob", "Grep", "Read", "WebFetch", "WebSearch"],
       path: "built-in:Explore",
       scope: "built-in",
       source: "built-in",

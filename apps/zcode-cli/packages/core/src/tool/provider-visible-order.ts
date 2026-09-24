@@ -1,6 +1,5 @@
 const SORTED_PROVIDER_TOOL_NAMES = new Set([
   "Agent",
-  "AskUserQuestion",
   "Bash",
   "CronCreate",
   "CronDelete",
@@ -24,8 +23,6 @@ const SORTED_PROVIDER_TOOL_NAMES = new Set([
   "TaskOutput",
   "TaskStop",
   "TaskUpdate",
-  "TodoRead",
-  "TodoWrite",
   "WebFetch",
   "WebSearch",
   "Workflow",

@@ -2,11 +2,13 @@ import http from "node:http";
 import https from "node:https";
 import { Readable } from "node:stream";
 import { ProxyAgent } from "proxy-agent";
+import { ZCODE_HTTP_PROXY_ENV_KEY, ZCODE_NO_PROXY_ENV_KEY } from "@zcode/shared";
 import {
   loadTlsCaCertificates,
   resolveProxyUrlForRequest,
   resolveTlsCaCertFile,
 } from "./http-config.js";
+import { publishConfiguredProxyEnv } from "./subprocess-env.js";
 
 type NetworkFetch = typeof globalThis.fetch;
 
@@ -24,6 +26,26 @@ interface NormalizedFetchRequest {
   method: string;
   signal?: AbortSignal | null;
   url: URL;
+}
+
+const PROCESS_PROXY_FETCH = Symbol.for("zcode.processProxyFetch");
+
+/** Pi 的模型请求用 global fetch，bash 继承 process.env。两者都要看到设置页代理。 */
+export function installProcessProxyFetch(
+  env: Record<string, string | undefined> = process.env,
+): void {
+  publishConfiguredProxyEnv(env);
+  const httpProxy = env[ZCODE_HTTP_PROXY_ENV_KEY]?.trim();
+  if (!httpProxy || env !== process.env) return;
+  const current = globalThis.fetch as NetworkFetch & { [PROCESS_PROXY_FETCH]?: true };
+  if (current[PROCESS_PROXY_FETCH]) return;
+  const proxied = createNetworkProxyFetch({
+    env,
+    httpProxy,
+    noProxy: env[ZCODE_NO_PROXY_ENV_KEY],
+  }) as NetworkFetch & { [PROCESS_PROXY_FETCH]?: true };
+  proxied[PROCESS_PROXY_FETCH] = true;
+  globalThis.fetch = proxied;
 }
 
 export function createNetworkProxyFetch(options: NetworkProxyFetchOptions): NetworkFetch {

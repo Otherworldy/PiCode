@@ -139,8 +139,6 @@
     <script type="module">
       const startupLogoShell = document.querySelector(".startup-logo-shell");
       const startupLoading = document.getElementById("loading");
-      const isUpdateStatusWindow =
-        new URLSearchParams(window.location.search).get("windowKind") === "update-status";
       const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       let finished = false;
       let animationDone = false;
@@ -165,26 +163,16 @@
         tryFinishStartupAnimation();
       };
 
-      if (isUpdateStatusWindow) {
-        // 更新状态窗口本身就是一个轻量弹窗，复用主入口 HTML 时不应再显示启动壳。
-        // 否则透明独立窗口里的启动 logo 会短暂或持续盖在更新按钮上，看起来像弹窗 UI 异常。
-        finished = true;
-        document.body.classList.add("zcode-startup-ready");
-        startupLoading?.remove();
-      } else {
-        window.addEventListener("zcode-react-startup-ready", markReactReady, { once: true });
-      }
+      window.addEventListener("zcode-react-startup-ready", markReactReady, { once: true });
 
-      if (isUpdateStatusWindow || reduceMotion || !startupLogoShell) {
+      if (reduceMotion || !startupLogoShell) {
         markAnimationDone();
       } else {
         startupLogoShell.addEventListener("animationend", markAnimationDone, { once: true });
         window.setTimeout(markAnimationDone, 1000);
       }
 
-      if (!isUpdateStatusWindow) {
-        window.setTimeout(markReactReady, 3000);
-      }
+      window.setTimeout(markReactReady, 3000);
     </script>
     <script type="module" src="./src/main.tsx"></script>
   </body>

@@ -2,7 +2,6 @@ import { beginLocalTurnPreparation } from "@zcode/contracts";
 import {
   CompactPhase,
   CompactReason,
-  createMessageId,
   traceContextToLogContext,
   TurnMachineImpl,
 } from "../deps.js";
@@ -10,16 +9,11 @@ import {
   buildRuntimeModeReminderBody,
   buildPlanModeExitReminderBody,
   buildRuntimeOutputStyleReminderBody,
-  buildTodoReminderBody,
   buildRuntimeProviderRequestMessages,
   createCompactRapidRefillError,
   throwIfTurnAborted,
-  shouldBuildTodoReminder,
 } from "../helpers/index.js";
-import {
-  systemReminderAttachmentEntry,
-  todoReminderRuntimeMetadata,
-} from "../../agent/message-history.js";
+import { systemReminderAttachmentEntry } from "../../agent/message-history.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { runModelBackedTurnStep } from "./turn-model-step.js";
 import {
@@ -134,25 +128,6 @@ export async function runRegularTurnLoop(
       commitTurnRequestEntries(this, state.turnRequestState, [
         systemReminderAttachmentEntry("runtime_mode", runtimeModeReminderBody),
       ]);
-    }
-    if (
-      !outputTokenRecoveryActive &&
-      tools.some((tool) => tool.name === "TodoWrite") &&
-      shouldBuildTodoReminder(state.turnRequestState.entries)
-    ) {
-      const currentTodos = await this.readSessionTodosForContext(state.turnTraceContext);
-      const reminderBody = buildTodoReminderBody(currentTodos);
-      commitTurnRequestEntries(this, state.turnRequestState, [
-        systemReminderAttachmentEntry("todo_reminder", reminderBody),
-      ]);
-      await this.persistSyntheticUserNoticeForSession({
-        messageID: createMessageId(),
-        metadata: { runtimeMessage: todoReminderRuntimeMetadata() },
-        sessionId: this.sessionId,
-        source: "todo_reminder",
-        text: reminderBody,
-        traceContext: state.turnTraceContext,
-      });
     }
     const outputStyleReminderBody =
       state.modelStepCount === 0

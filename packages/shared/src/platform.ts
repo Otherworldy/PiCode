@@ -26,17 +26,6 @@ import type {
   PrepareCuaHelperPermissionDragResult,
 } from "./cuaAccessibilitySettings.js";
 import type { BrowserViewportSize } from "./browser-use/command-metadata.js";
-import type {
-  PostUpdateReleaseNotesPayload,
-  UpdateCheckResultPayload,
-  UpdateStatePayload,
-} from "./update.js";
-export type {
-  PostUpdateReleaseNotesPayload,
-  UpdateCheckResultPayload,
-  UpdateStatePayload,
-} from "./update.js";
-
 export interface TaskNotificationPayload {
   taskId: string;
   status: "completed" | "failed" | "permission_request" | "elicitation_request" | "feedback_update";
@@ -477,7 +466,6 @@ export const DesktopCommandIds = {
   ZoomOut: "zoomOut",
   ShowAbout: "showAbout",
   OpenChangelog: "openChangelog",
-  CheckForUpdates: "checkForUpdates",
   RelaunchApp: "relaunchApp",
   OpenFeedback: "openFeedback",
   OpenCommunity: "openCommunity",
@@ -878,38 +866,6 @@ export interface IPlatformService {
   /** 清理内置浏览器持久化分区；cache 模式保留认证数据，all 模式清理全部站点数据。 */
   clearEmbeddedBrowserData?(mode: "cache" | "all"): Promise<EmbeddedBrowserDataClearResult>;
 
-  /** 注册新版本已下载完毕的回调，参数为新版本号，返回 disposer */
-  onUpdateReady(callback: (version: string) => void): () => void;
-
-  /** 注册"手动检查更新"结果的回调（用于 toast 反馈），返回 disposer */
-  onUpdateCheckResult(callback: (payload: UpdateCheckResultPayload) => void): () => void;
-
-  /** 注册自动更新持续状态变化的回调，返回 disposer */
-  onUpdateStateChanged?(callback: (payload: UpdateStatePayload) => void): () => void;
-
-  /** 主动读取当前自动更新状态，用于菜单打开时补偿异步事件丢失 */
-  getUpdateState?(): Promise<UpdateStatePayload>;
-
-  /** 用户在更新弹窗中确认开始下载当前已发现版本 */
-  downloadUpdate(): Promise<void>;
-
-  /** 用户在更新弹窗中取消当前下载中的更新 */
-  cancelUpdateDownload(): Promise<void>;
-
-  /** 打开桌面端独立更新窗口；非桌面端可不实现并回退到内嵌弹窗 */
-  openUpdateStatusWindow?(): Promise<void>;
-
-  /** 读取桌面端自动更新偏好；非桌面端可返回默认值 */
-  getAutoUpdatePreferences?(): Promise<{
-    autoDownloadAndInstallUpdates: boolean;
-  }>;
-
-  /** 写入“以后自动下载并安装更新”偏好；非桌面端可 no-op */
-  setAutoDownloadAndInstallUpdates?(enabled: boolean): Promise<void>;
-
-  /** 用户跳过当前已发现版本；main 进程负责按当前通道持久化 */
-  skipUpdateVersion(version: string): Promise<void>;
-
   /** 查询桌面端当前正在运行的会话数量；非桌面端可返回 0 */
   getDesktopSessionActivity?(): Promise<{
     runningAgentSessionCount: number;
@@ -929,15 +885,6 @@ export interface IPlatformService {
 
   /** 宿主系统语言；桌面端由 main 进程读取，Web 端可回退到 navigator.language。 */
   getSystemLocale?(): Promise<Locale>;
-
-  /** 注册更新完成后的版本说明，返回 disposer */
-  onPostUpdateReleaseNotes(callback: (payload: PostUpdateReleaseNotesPayload) => void): () => void;
-
-  /** 标记当前版本说明已读，允许 main 进程清理持久化状态 */
-  acknowledgePostUpdateReleaseNotes(version: string): Promise<void>;
-
-  /** 用户确认重启安装更新 */
-  quitAndInstallUpdate(): Promise<void>;
 
   /** 获取系统中已安装的编辑器/终端列表（含图标） */
   getInstalledEditors(): Promise<EditorInfo[]>;

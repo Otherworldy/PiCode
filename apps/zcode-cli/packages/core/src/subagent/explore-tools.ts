@@ -8,7 +8,6 @@ export const EXPLORE_AGENT_ALLOWED_TOOLS = [
   "Read",
   "WebFetch",
   "WebSearch",
-  "TodoWrite",
 ] as const;
 
 export type ExploreAgentAllowedTool = (typeof EXPLORE_AGENT_ALLOWED_TOOLS)[number];
@@ -18,7 +17,6 @@ export const EXPLORE_AGENT_EMBEDDED_SEARCH_ALLOWED_TOOLS = [
   "Read",
   "WebFetch",
   "WebSearch",
-  "TodoWrite",
 ] as const;
 
 const EXPLORE_AGENT_DESCRIPTION_TOOL_PRIORITY = [
@@ -28,7 +26,6 @@ const EXPLORE_AGENT_DESCRIPTION_TOOL_PRIORITY = [
   "Bash",
   "WebFetch",
   "WebSearch",
-  "TodoWrite",
 ] as const satisfies readonly ExploreAgentAllowedTool[];
 const EXPLORE_AGENT_DESCRIPTION_TOOL_PRIORITY_SET = new Set<ExploreAgentAllowedTool>(
   EXPLORE_AGENT_DESCRIPTION_TOOL_PRIORITY,

@@ -61,7 +61,7 @@ export interface WindowBootstrapOptions {
   initialWorkspacePath?: string;
   initialWorkspacePurpose?: WorkspacePurpose;
   unavailableWorkspacePath?: string;
-  windowKind?: "main" | "update-status";
+  windowKind?: "main";
   locale?: string;
 }
 

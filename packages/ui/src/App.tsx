@@ -360,15 +360,12 @@ export function App({
     desktopWindowChromeState,
     macWindowControlsLeftPaddingPx,
     windowsWindowControlsRightPaddingPx,
-    updateReadyVersion,
-    updateState,
     sidebarContainerRef,
   } = useAppChromeState({
     isDesktop,
     isMacDesktop,
     isWindowsDesktop,
     platform,
-    workspaceAbsPath,
   });
   const tabs = useTabStore((s) => s.tabs);
   const addTab = useTabStore((s) => s.addTab);
@@ -1167,8 +1164,6 @@ export function App({
         desktopWindowChromeState={desktopWindowChromeState}
         macWindowControlsLeftPaddingPx={macWindowControlsLeftPaddingPx}
         windowsWindowControlsRightPaddingPx={windowsWindowControlsRightPaddingPx}
-        updateReadyVersion={updateReadyVersion}
-        updateState={updateState}
         sidebarContainerRef={sidebarContainerRef}
         toggleSidebarShortcutLabel={toggleSidebarShortcutLabel}
         newTaskShortcutLabel={newTaskShortcutLabel}

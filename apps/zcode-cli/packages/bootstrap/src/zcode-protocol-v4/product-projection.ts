@@ -3125,28 +3125,6 @@ export class ProductProjection {
     toolCallId: string,
     interactionId: string,
   ): PendingInteraction {
-    if (isAskUserQuestionToolName(payload.toolName)) {
-      // AskUserQuestion 的 permission_requested 只是 runtime 等待态；
-      // v4 UI 需要结构化 questions 才能回填 answers，而不是 Allow/Deny 权限弹窗。
-      return {
-        interactionId,
-        kind: "userInput",
-        anchorRowId: this.toolRowIdByCallId.get(toolCallId) ?? null,
-        createdAt: this.ms(event),
-        payload: {
-          kind: "userInput",
-          prompt: payload.reason,
-          freeText: true,
-          toolCallId,
-          toolName: payload.toolName,
-          traceId: event.traceId,
-          input: payload.input,
-          schema: { toolName: payload.toolName },
-          questions: readAskUserQuestionPayloadQuestions(payload.input),
-          ...(payload.origin ? { origin: payload.origin } : {}),
-        },
-      };
-    }
     if (isExitPlanModeToolName(payload.toolName)) {
       // ExitPlanMode 复用 userInput/elicitation 通道承载计划审批反馈；
       // 普通 permission payload 无法表达 approve/custom feedback 的业务语义。
@@ -5370,17 +5348,6 @@ export class ProductProjection {
   }
 }
 
-function isAskUserQuestionToolName(value: string | undefined): boolean {
-  return value === "AskUserQuestion";
-}
-
-/**
- * 把 core 的 tool display 收窄成 v4 协议能承载的那几种 kind。
- *
- * 这份白名单原先在每个投影点各写一份内联判断，引入
- * create_workflow display 时漏改了其中一份，实时投影把图整个丢掉、而 hydration 路径没过滤，
- * 于是桌面端只有重载之后才看得到。收成一个谓词后，所有投影点共用同一份名单。
- */
 function toProtocolToolCallDisplay(
   display: ToolResultDisplayPayload | undefined,
 ): ToolCallDisplay | undefined {
@@ -5432,67 +5399,3 @@ function createExitPlanModeApprovalQuestion(reason: string): UserInputQuestionPa
   };
 }
 
-function readAskUserQuestionPayloadQuestions(input: unknown): UserInputQuestionPayload[] {
-  const rawQuestions = readRawAskUserQuestions(input);
-  return rawQuestions
-    .map(normalizeAskUserQuestionPayloadQuestion)
-    .filter((question): question is UserInputQuestionPayload => question !== null);
-}
-
-function readRawAskUserQuestions(input: unknown): unknown[] {
-  if (!isPlainRecord(input)) {
-    return [];
-  }
-  if (Array.isArray(input.questions)) {
-    return input.questions;
-  }
-  return typeof input.question === "string" && Array.isArray(input.options) ? [input] : [];
-}
-
-function normalizeAskUserQuestionPayloadQuestion(value: unknown): UserInputQuestionPayload | null {
-  if (!isPlainRecord(value)) {
-    return null;
-  }
-  const question = nonEmptyString(value.question);
-  const header = nonEmptyString(value.header) ?? question;
-  const rawOptions = Array.isArray(value.options) ? value.options : [];
-  const options = rawOptions
-    .map(normalizeAskUserQuestionPayloadOption)
-    .filter((option): option is UserInputQuestionPayload["options"][number] => option !== null);
-  if (!question || !header || options.length === 0) {
-    return null;
-  }
-  return {
-    question,
-    header,
-    options,
-    ...(value.multiSelect === true ? { multiSelect: true } : {}),
-  };
-}
-
-function normalizeAskUserQuestionPayloadOption(
-  value: unknown,
-): UserInputQuestionPayload["options"][number] | null {
-  if (!isPlainRecord(value)) {
-    return null;
-  }
-  const label = nonEmptyString(value.label) ?? nonEmptyString(value.value);
-  const optionValue = nonEmptyString(value.value) ?? label;
-  if (!label || !optionValue) {
-    return null;
-  }
-  return {
-    value: optionValue,
-    label,
-    ...(typeof value.description === "string" ? { description: value.description } : {}),
-    ...(typeof value.preview === "string" ? { preview: value.preview } : {}),
-  };
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function nonEmptyString(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}

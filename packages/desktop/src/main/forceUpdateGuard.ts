@@ -7,8 +7,6 @@ import {
   type ForceUpdateRequirement,
   type Locale,
 } from "@zcode/shared";
-import { requestForceAutoUpdate, type ForceAutoUpdateState } from "./autoUpdater.js";
-import { showForceUpdatePrompt } from "./forceUpdatePrompt.js";
 
 const ZCODE_CLIENT_CONFIG_API_PATH = "/api/v1/client/configs";
 const FORCE_UPDATE_CONFIG_REQUEST_TIMEOUT_MS = 10_000;
@@ -18,7 +16,6 @@ export interface ForceUpdateDialogText {
   title: string;
   message: string;
   detail: string;
-  autoUpdateButton: string;
   manualUpdateButton: string;
   quitButton: string;
 }
@@ -38,9 +35,6 @@ interface ForceUpdateGuardOptions {
   logger: ForceUpdateGuardLogger;
   endpointOrigin?: string;
   fetchRemoteConfig?: () => Promise<unknown>;
-  requestAutoUpdate?: (
-    onStateChange?: (state: ForceAutoUpdateState) => void,
-  ) => (() => void) | void;
   onBlocked?: (requirement: ForceUpdateRequirement) => void;
 }
 
@@ -198,7 +192,6 @@ function formatForceUpdateDialogText(
       title: "需要升级 ZCode",
       message: "当前版本无法继续使用",
       detail: `当前版本：v${requirement.currentVersion}\n最低可用版本：v${requirement.minimalVersion}`,
-      autoUpdateButton: "自动升级",
       manualUpdateButton: "手动升级",
       quitButton: "退出",
     };
@@ -208,7 +201,6 @@ function formatForceUpdateDialogText(
     title: "Update ZCode",
     message: "The current version can no longer be used",
     detail: `Current version: v${requirement.currentVersion}\nMinimum supported version: v${requirement.minimalVersion}`,
-    autoUpdateButton: "Auto update",
     manualUpdateButton: "Manual update",
     quitButton: "Quit",
   };
@@ -227,28 +219,24 @@ export async function maybeBlockStartupForForceUpdate(
 
   options.logger.warn("[force-update] 远端配置要求强制升级，阻止创建主窗口", requirement);
   options.onBlocked?.(requirement);
-  const { app, shell } = await import("electron");
-  const action = await showForceUpdatePrompt(
-    formatForceUpdateDialogText(requirement, options.locale),
-    options.locale,
-    options.logger,
-    {
-      startAutoUpdate: (onStateChange) =>
-        options.requestAutoUpdate?.(onStateChange) ??
-        requestForceAutoUpdate(onStateChange, "force-update", requirement.minimalVersion),
-    },
-  );
-  if (action === "auto") {
-    return { blocked: true, requirement };
-  }
-
-  if (action === "manual") {
+  const { app, dialog, shell } = await import("electron");
+  const text = formatForceUpdateDialogText(requirement, options.locale);
+  const result = await dialog.showMessageBox({
+    type: "warning",
+    title: text.title,
+    message: text.message,
+    detail: text.detail,
+    buttons: [text.manualUpdateButton, text.quitButton],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+  });
+  if (result.response === 0) {
     const url = resolveForceUpdateDownloadUrl(options.locale, options.endpointOrigin);
     options.logger.info(`[force-update] 用户选择手动升级：${url}`);
     await shell.openExternal(url);
   }
 
-  // 强制升级命中后不能进入主界面；非自动升级路径处理完弹窗后退出，避免露出旧客户端功能。
   app.quit();
   return { blocked: true, requirement };
 }

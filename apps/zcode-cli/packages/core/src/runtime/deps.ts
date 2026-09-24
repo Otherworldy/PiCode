@@ -83,7 +83,6 @@ export {
   formatLocalIsoDate,
   runWithContextAsync,
   runWithModelInvocationContext,
-  formatTodoStateForModel,
   formatGoalStateForModel,
   formatGoalContinuationPrompt,
   failOpenGoalCompletionVerification,

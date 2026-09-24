@@ -6,7 +6,6 @@ import {
   AppErrorBoundary,
   Root,
   GlobalDatabaseStartupLoading,
-  UpdateStatusWindowRoot,
   ZCodeIntlProvider,
   registerBaseWorkspaceServices,
   registerRemoteWorkspaceSession,
@@ -131,7 +130,6 @@ const supportsSettings = readBooleanFlag("supportsSettings", true);
 const initialWorkspaceAbsPath = readStringFlag("initialWorkspacePath");
 const initialWorkspacePurpose = readStringFlag("initialWorkspacePurpose");
 const unavailableWorkspacePath = readStringFlag("unavailableWorkspacePath");
-const windowKind = readStringFlag("windowKind");
 const initialLocaleFlag = readStringFlag("locale");
 const initialLocale: Locale =
   initialLocaleFlag === "zh-CN" || initialLocaleFlag === "en-US"
@@ -158,8 +156,7 @@ initializeDesktopUserActionTrace({
 // 导致多次 createRoot 在同一 DOM 节点上挂载。用 flag 防止重复初始化。
 let appInitialized = false;
 const databaseStartupAdmission = new DatabaseStartupAdmission();
-const appRoot =
-  windowKind === "update-status" ? null : createRoot(document.getElementById("root")!);
+const appRoot = createRoot(document.getElementById("root")!);
 const sendStartupControl = (control: DatabaseStartupControl) =>
   window.postMessage({ type: InternalChannels.DatabaseStartupControl, control }, "*");
 function renderDatabaseStartup(): void {
@@ -191,10 +188,7 @@ function enterAppIfPrepared(): void {
   const port = databaseStartupAdmission.takeReadyPort();
   if (port) initializeBusinessRoot(port);
 }
-const firstStartupStateTimer =
-  windowKind === "update-status"
-    ? undefined
-    : setTimeout(() => {
+const firstStartupStateTimer = setTimeout(() => {
         if (databaseStartupAdmission.state) return;
         const now = Date.now();
         databaseStartupAdmission.state = {
@@ -352,20 +346,5 @@ function initializeBusinessRoot(port: MessagePort): void {
 }
 
 window.addEventListener("message", handleServicePortMessage);
-if (windowKind !== "update-status") {
-  renderDatabaseStartup();
-  sendStartupControl({ action: "snapshot" });
-}
-
-if (windowKind === "update-status") {
-  createRoot(document.getElementById("root")!).render(
-    <AppErrorBoundary isDesktop isMacDesktop={isMacDesktop} isWindowsDesktop={isWindowsDesktop}>
-      <StartupReadyNotifier />
-      <UpdateStatusWindowRoot
-        platform={desktopPlatform}
-        initialLocale={initialLocale}
-        onRequestClose={() => window.close()}
-      />
-    </AppErrorBoundary>,
-  );
-}
+renderDatabaseStartup();
+sendStartupControl({ action: "snapshot" });

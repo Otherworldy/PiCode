@@ -211,6 +211,8 @@ export function createSdkSessionFactory(options: {
   agentDir?: string;
   capabilities?: PiCapabilityPorts;
   skillPaths?: (cwd: string) => string[];
+  /** 测试注入。生产路径仍用 Pi 的 ModelRuntime。 */
+  modelRuntime?: ModelRuntime;
 } = {}): CreatePiSession {
   const isolated = Boolean(options.delegate || options.stream);
   const selections = new Map<string, { providerId: string; modelId: string; thought?: string }>();
@@ -236,6 +238,7 @@ export function createSdkSessionFactory(options: {
   const delegate = isolated ? (options.delegate ?? createDelegateProvider({ stream })) : undefined;
   let runtimePromise: Promise<ModelRuntime> | undefined;
   const runtime = () => {
+    if (options.modelRuntime) return Promise.resolve(options.modelRuntime);
     runtimePromise ??=
       isolated && delegate ? createIsolatedRuntime(delegate) : getProductionModelRuntime();
     return runtimePromise;

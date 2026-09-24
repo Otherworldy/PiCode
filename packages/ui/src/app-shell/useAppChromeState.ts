@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { DesktopWindowChromeState, IPlatformService, UpdateStatePayload } from "@zcode/shared";
+import type { DesktopWindowChromeState, IPlatformService } from "@zcode/shared";
 import { logger } from "@/logger.js";
-import { toast } from "@/components/ui/toast.js";
-import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 
 const MACOS_WINDOW_CONTROLS_DEFAULT_LEFT_PADDING_PX = 96;
 const WINDOWS_WINDOW_CONTROLS_DEFAULT_RIGHT_PADDING_PX = 136;
@@ -39,24 +37,16 @@ function resolveInitialWindowControlsPaddingPx({
   return { leftPaddingPx, rightPaddingPx };
 }
 
-function resolveLegacyReadyVersionFromState(payload: UpdateStatePayload) {
-  // 旧的 UpdateReady 事件只会告诉 renderer “某版本 ready”，不会告诉它后续
-  // 进入 staging error 等不可安装状态。新状态流一旦不是 update-downloaded，就必须清掉旧 ready。
-  return payload.kind === "update-downloaded" ? payload.version : null;
-}
-
 export function useAppChromeState({
   isDesktop,
   isMacDesktop,
   isWindowsDesktop,
   platform,
-  workspaceAbsPath,
 }: {
   isDesktop?: boolean;
   isMacDesktop?: boolean;
   isWindowsDesktop?: boolean;
   platform: IPlatformService;
-  workspaceAbsPath: string;
 }) {
   const initialWindowControlsPadding = resolveInitialWindowControlsPaddingPx({
     isDesktop,
@@ -73,12 +63,7 @@ export function useAppChromeState({
   const [windowsWindowControlsRightPaddingPx, setWindowsWindowControlsRightPaddingPx] = useState(
     () => initialWindowControlsPadding.rightPaddingPx,
   );
-  const [updateReadyVersion, setUpdateReadyVersion] = useState<string | null>(null);
-  const [updateState, setUpdateState] = useState<UpdateStatePayload | null>(null);
   const sidebarContainerRef = useRef<HTMLElement | null>(null);
-  const hasShownUpdateToastRef = useRef(false);
-  const updateStateEventRevisionRef = useRef(0);
-  const { intl } = useZCodeIntl();
 
   useEffect(() => {
     if (!isDesktop || !isMacDesktop) {
@@ -170,75 +155,11 @@ export function useAppChromeState({
     });
   }, [isDesktop, isMacDesktop, isWindowsDesktop, platform]);
 
-  useEffect(() => {
-    if (!platform.onUpdateReady) {
-      return;
-    }
-
-    // 更新就绪状态之前散落在按钮组件内部，各处只能各自重复订阅平台事件。
-    // 这样 WorkspaceHeader 无法知道"当前是否有更新"，也容易让多个入口各自维护一份分叉状态。
-    // 这里把 version 提升到 App 统一管理，再按需往 Header / Overlay 分发。
-    return platform.onUpdateReady((version) => {
-      logger.info("[App] 收到可安装更新", {
-        workspaceAbsPath,
-        version,
-      });
-      setUpdateReadyVersion(version);
-
-      // Windows 桌面端收到更新时显示轻提示，不阻塞主界面
-      if (isWindowsDesktop && !hasShownUpdateToastRef.current) {
-        hasShownUpdateToastRef.current = true;
-        toast(intl.formatMessage({ id: "update.toast.ready" }, { version }), {
-          durationMs: 4000,
-          position: "bottom-left",
-          variant: "update",
-        });
-      }
-    });
-  }, [platform, workspaceAbsPath, isWindowsDesktop, intl]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (platform.getUpdateState) {
-      const requestRevision = updateStateEventRevisionRef.current;
-      void platform.getUpdateState().then(
-        (payload) => {
-          if (!cancelled && updateStateEventRevisionRef.current === requestRevision) {
-            setUpdateState(payload);
-            setUpdateReadyVersion(resolveLegacyReadyVersionFromState(payload));
-          }
-        },
-        (error) => {
-          logger.warn("[App] 同步自动更新状态失败", { error });
-        },
-      );
-    }
-
-    if (!platform.onUpdateStateChanged) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const dispose = platform.onUpdateStateChanged((payload) => {
-      updateStateEventRevisionRef.current += 1;
-      setUpdateState(payload);
-      setUpdateReadyVersion(resolveLegacyReadyVersionFromState(payload));
-    });
-    return () => {
-      cancelled = true;
-      dispose();
-    };
-  }, [platform]);
-
   return {
     isMacFullscreen,
     desktopWindowChromeState,
     macWindowControlsLeftPaddingPx,
     windowsWindowControlsRightPaddingPx,
-    updateReadyVersion,
-    updateState,
     sidebarContainerRef,
   };
 }

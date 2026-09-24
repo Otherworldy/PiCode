@@ -47,7 +47,6 @@
     "@zcode/shared": "workspace:*",
     "@zcode/ui": "workspace:*",
     "@zcode/zcode-cua": "workspace:*",
-    "electron-updater": "^6.8.3",
     "module-details-from-path": "^1.0.4",
     "node-forge": "^1.4.0",
     "node-pty": "^1.0.0",

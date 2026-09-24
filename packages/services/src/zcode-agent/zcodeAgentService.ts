@@ -86,7 +86,6 @@ import {
   zcodeWorkspaceCancelGenerateTextResultSchema,
   zcodeWorkspaceGenerateTextResultSchema,
   zcodeWorkspaceHookTrustGrantResultSchema,
-  zcodeWorkspaceUpdateInteractionPreferencesResultSchema,
   zcodeWorkspaceUpdateModelIoPreferencesResultSchema,
   zcodeProviderUpdateAccountConfigResultSchema,
   type ZCodeSessionStateSnapshot,
@@ -1448,17 +1447,6 @@ export function createZCodeAgentService(
         // 前一次失败不能打乱之后开关提交的顺序；当前快照仍需继续尝试。
       })
       .then(async () => {
-        await params.client.request(
-          zcodeProtocolMethods.workspaceUpdateInteractionPreferences,
-          {
-            workspace: buildWorkspaceRef(params.workspace),
-            preferences: {
-              askUserQuestionAutoResolutionEnabled:
-                params.preferences.askUserQuestionAutoResolutionEnabled,
-            },
-          },
-          zcodeWorkspaceUpdateInteractionPreferencesResultSchema,
-        );
         try {
           await params.client.request(
             zcodeProtocolMethods.workspaceUpdateModelIoPreferences,
@@ -2118,7 +2106,6 @@ export function createZCodeAgentService(
                   // 同一 RPC 承载 runtime 创建与首次执行两个时机；必须继续传递
                   // 已校验的 scope，避免首次执行为了 Shell 再次等待远端 client config。
                   (await resolveSessionRuntimePreferences?.(parsed.data.scope)) ?? {
-                    askUserQuestionAutoResolutionEnabled: true,
                     nativeSearchEnhancementsEnabled: true,
                     memoryEnabled: false,
                   },

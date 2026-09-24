@@ -142,17 +142,9 @@ export function useSettings() {
       await settingService.update(patch);
       platform.syncAppSettings?.(patch);
       await refresh();
-      if (
-        typeof patch.askUserQuestionAutoResolutionEnabled === "boolean" ||
-        typeof patch.modelIoFullRetentionEnabled === "boolean"
-      ) {
+      if (typeof patch.modelIoFullRetentionEnabled === "boolean") {
         const preferences = {
-          askUserQuestionAutoResolutionEnabled:
-            patch.askUserQuestionAutoResolutionEnabled ??
-            settingsStore.snapshot.settings?.askUserQuestionAutoResolutionEnabled !== false,
-          modelIoFullRetentionEnabled:
-            patch.modelIoFullRetentionEnabled ??
-            settingsStore.snapshot.settings?.modelIoFullRetentionEnabled === true,
+          modelIoFullRetentionEnabled: patch.modelIoFullRetentionEnabled,
         };
         const syncResults = await Promise.allSettled([
           zcodeAgentService.syncAppRuntimePreferences(preferences),

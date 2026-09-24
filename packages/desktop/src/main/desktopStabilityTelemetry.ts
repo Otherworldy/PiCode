@@ -39,7 +39,7 @@ const AGENT_CRASH_POSIX_ABSOLUTE_PATH_PATTERN =
   /\/(?:[^/\s"'`()[\]{}<>:]+\/)*[^/\s"'`()[\]{}<>:]+/g;
 const AGENT_CRASH_KNOWN_PATH_PLACEHOLDER_PATTERN = /<(?:workspace|home)>[^\s"'`()[\]{}<>]*/g;
 
-type StabilityLifecycleScene = "cold_start" | "runtime" | "app_quit" | "update_install";
+type StabilityLifecycleScene = "cold_start" | "runtime" | "app_quit";
 
 type StabilityWindowScene = "main" | "process_monitor" | "other";
 
@@ -579,7 +579,7 @@ export function reportAgentProcessExitToArms(
     });
     return;
   }
-  if (lifecycleScene === "app_quit" || lifecycleScene === "update_install") {
+  if (lifecycleScene === "app_quit") {
     // Bug 根因：Host 清理与 IPC 回传是异步的，perf_app_exit 之后仍可能晚到一个缺失
     // termination intent 的 Agent exit。应用退出是 main 持有的更高层事实，不能计入 runtime crash。
     logger.debug?.("[stability] late Agent exit suppressed during app shutdown", {
@@ -948,21 +948,13 @@ export function registerStabilityMainWindow(win: BrowserWindow): void {
   });
 }
 
-export function notifyStabilityLifecycle(scene: StabilityLifecycleScene): void {
-  lifecycleScene = scene;
-}
-
-export function getStabilityLifecycleScene(): StabilityLifecycleScene {
-  return lifecycleScene;
-}
-
 export function notifyStabilityAppExit(
   scene: StabilityLifecycleScene,
   logger: StabilityLogger,
   options?: { exitCode?: number; exitKind?: string },
 ): void {
   // Bug 根因：旧实现上报 perf_app_exit 后立即恢复 runtime；Agent/Host 的异步退出事件
-  // 因而丢失 app_quit/update_install 边界并被误计为 crash。退出流程一旦开始就不可逆，
+  // 因而丢失 app_quit 边界并被误计为 crash。退出流程一旦开始就不可逆，
   // lifecycle 必须保持到主进程终止。
   lifecycleScene = scene;
   reportStabilityCustom("perf_app_exit", {

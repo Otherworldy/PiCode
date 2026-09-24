@@ -93,7 +93,6 @@ const TOOL_OPTIONS = [
   "Write",
   "WebFetch",
   "WebSearch",
-  "TodoWrite",
 ] as const;
 const TOOL_OPTION_SET = new Set<string>(TOOL_OPTIONS);
 const RISKY_TOOLS = new Set<string>(["Bash", "Edit", "Write"]);

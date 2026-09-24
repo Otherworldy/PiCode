@@ -40,7 +40,7 @@ export function createEnterPlanModeProviderDescription(options: {
    - Example: "Fix the bug in checkout" - need to investigate root cause
 
 7. **User Preferences Matter**: The implementation could reasonably go multiple ways
-   - If you would use AskUserQuestion to clarify the approach, use EnterPlanMode instead
+   - Use EnterPlanMode and present the options in the plan
    - Plan mode lets you explore first, then present options with context
 
 ## When NOT to Use This Tool
@@ -58,8 +58,7 @@ In plan mode, you'll:
 2. Understand existing patterns and architecture
 3. Design an implementation approach
 4. Present your plan to the user for approval
-5. Use AskUserQuestion if you need to clarify approaches
-6. Exit plan mode with ExitPlanMode when ready to implement
+5. Exit plan mode with ExitPlanMode when ready to implement
 
 ## Examples
 
@@ -114,15 +113,15 @@ IMPORTANT: Only use this tool when the task requires planning the implementation
 
 ## Before Using This Tool
 Ensure your plan is complete and unambiguous:
-- If you have unresolved questions about requirements or approach, use AskUserQuestion before finalizing your plan
+- If a choice is still open, write the assumption into the plan instead of stopping to ask
 - Once your plan is finalized, use THIS tool to request approval
 
-**Important:** Do NOT use AskUserQuestion to ask "Is this plan okay?" or "Should I proceed?" - that's exactly what THIS tool does. ExitPlanMode inherently requests user approval of your plan.
+**Important:** Do NOT ask "Is this plan okay?" or "Should I proceed?" in chat - that's exactly what THIS tool does. ExitPlanMode inherently requests user approval of your plan.
 
 ## Examples
 
 1. Initial task: "Search for and understand the implementation of vim mode in the codebase" - Do not use the exit plan mode tool because you are not planning the implementation steps of a task.
 2. Initial task: "Help me implement yank mode for vim" - Use the exit plan mode tool after you have finished planning the implementation steps of the task.
-3. Initial task: "Add a new feature to handle user authentication" - If unsure about auth method (OAuth, JWT, etc.), use AskUserQuestion first, then use exit plan mode tool after clarifying the approach.
+3. Initial task: "Add a new feature to handle user authentication" - If unsure about auth method (OAuth, JWT, etc.), state the chosen assumption in the plan, then use the exit plan mode tool.
 `,
 ] as const;

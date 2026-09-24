@@ -17,7 +17,13 @@ export const resolveBuildExternal = () => ["playwright-core", "koffi"];
  * CLI CJS banner wraps the bundle in `else { ... }` so `--licenses` never evaluates Agent.
  * esbuild then emits `import.meta` as `{}`, and Pi's `fileURLToPath(import.meta.url)` crashes.
  * Rewrite those ESM URLs to the CJS filename before bundling.
+ *
+ * Do not emit the identifier `module`. Pi's extension loader has `const module`
+ * in the same function, so `module.filename` is in the temporal dead zone and
+ * every extension fails to load. The banner stashes the real filename first.
  */
+const bundleFilename = "globalThis.__zcodeBundleFilename";
+
 function createCjsImportMetaUrlPlugin() {
   const filter =
     /[/\\]node_modules[/\\](?:@earendil-works[/\\][^/\\]+|jiti)[/\\].*\.(cjs|mjs|js)$/;
@@ -29,16 +35,16 @@ function createCjsImportMetaUrlPlugin() {
         if (!text.includes("import.meta")) return;
         return {
           contents: text
-            .replaceAll("fileURLToPath(import.meta.url)", "module.filename")
+            .replaceAll("fileURLToPath(import.meta.url)", bundleFilename)
             .replaceAll(
               "import.meta.url",
-              'process.getBuiltinModule("url").pathToFileURL(module.filename).href',
+              `process.getBuiltinModule("url").pathToFileURL(${bundleFilename}).href`,
             )
             .replaceAll(
               "import.meta.dirname",
-              'process.getBuiltinModule("path").dirname(module.filename)',
+              `process.getBuiltinModule("path").dirname(${bundleFilename})`,
             )
-            .replaceAll("import.meta.filename", "module.filename"),
+            .replaceAll("import.meta.filename", bundleFilename),
           loader: "js",
         };
       });
@@ -258,7 +264,8 @@ export const buildCli = async ({
   await build({
     banner: {
       // SEA 与普通 CLI 共用入口；声明必须在 Agent 初始化和原生资源解压前可独立读取。
-      js: `#!/usr/bin/env node\n"use strict";\nif (process.argv.length === 3 && process.argv[2] === "--licenses") { const sea = require("node:sea"); const nodeNotice = sea.isSea() ? "\\n\\n## Bundled Node.js runtime\\n\\n" + sea.getAsset("zcode-node-license", "utf8") : ""; process.stdout.write(${JSON.stringify(notices.toString("utf8"))} + nodeNotice, () => process.exit(0)); } else {`,
+      // PI_BUNDLED_NODE 让 Pi 用内嵌模块表加载 extension。__zcodeBundleFilename 避开 loader 里的 `const module` 死区。
+      js: `#!/usr/bin/env node\n"use strict";\nif (process.argv.length === 3 && process.argv[2] === "--licenses") { const sea = require("node:sea"); const nodeNotice = sea.isSea() ? "\\n\\n## Bundled Node.js runtime\\n\\n" + sea.getAsset("zcode-node-license", "utf8") : ""; process.stdout.write(${JSON.stringify(notices.toString("utf8"))} + nodeNotice, () => process.exit(0)); } else {globalThis.PI_BUNDLED_NODE=true;globalThis.__zcodeBundleFilename=__filename;`,
     },
     footer: { js: "}" },
     bundle: true,

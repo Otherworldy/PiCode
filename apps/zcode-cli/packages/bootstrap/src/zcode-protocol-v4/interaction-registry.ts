@@ -93,7 +93,7 @@ export class V4InteractionRegistry {
   private readonly hiddenGraceMs: number;
   private readonly autoResolutionMs: number;
   private readonly now: () => number;
-  private askUserQuestionAutoResolutionEnabled = true;
+  private askUserQuestionAutoResolutionEnabled = false;
   private interactionPreferenceCommandApplied = false;
 
   constructor(options: V4InteractionRegistryOptions = {}) {

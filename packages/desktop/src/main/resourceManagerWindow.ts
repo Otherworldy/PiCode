@@ -128,7 +128,7 @@ export function listRegisteredHostAgentProcessIds(): number[] {
 /**
  * 主应用窗口（createWindow 创建的承载 workspace 的窗口）的 webContents id。
  * 唯一数据源：资源遥测据此把主窗口 renderer 归 `renderer_main`，
- * 资源管理器 / about / update-status 等辅助窗口归 `chromium_other`。
+ * 资源管理器 / about 等辅助窗口归 `chromium_other`。
  */
 const mainApplicationWindowWebContentsIds = new Set<number>();
 

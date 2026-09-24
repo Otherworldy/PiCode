@@ -66,6 +66,16 @@ export function installCliProcessErrorBoundary(
   };
   const onUnhandledRejection = (reason: unknown): void => {
     monitoredException = undefined;
+    // Pi 插件后台刷新可能在 session 替换后打到已失效的 ctx。这是插件生命周期错误，
+    // 不能把整个 app-server 退出，否则桌面 agent 在加载 extension 时直接起不来。
+    if (isStaleExtensionContext(reason)) {
+      try {
+        stderr.write("[zcode] ignored stale extension context rejection\n");
+      } catch {
+        // 诊断输出失败不再升级成进程退出。
+      }
+      return;
+    }
     reportFatal("unhandledRejection", "unhandledRejection", reason);
   };
 
@@ -79,6 +89,11 @@ export function installCliProcessErrorBoundary(
     target.off("unhandledRejection", onUnhandledRejection);
     monitoredException = undefined;
   };
+}
+
+function isStaleExtensionContext(reason: unknown): boolean {
+  const message = reason instanceof Error ? reason.message : String(reason);
+  return message.includes("This extension ctx is stale after session replacement or reload");
 }
 
 function writeProcessErrorDiagnostic(

@@ -10,9 +10,8 @@ import type {
   CollaborationMode,
   OutputStylePromptConfig,
   SyntheticUserMessageSource,
-  TodoItem,
 } from "../deps.js";
-import { ASK_USER_QUESTION_TOOL_NAME, EXIT_PLAN_MODE_TOOL_NAME } from "@zcode/contracts";
+import { EXIT_PLAN_MODE_TOOL_NAME } from "@zcode/contracts";
 import { EXPLORE_AGENT_TYPE } from "../../subagent/explore.js";
 
 const RUNTIME_MODE_REMINDER_CONFIG = Object.freeze({
@@ -52,15 +51,13 @@ Goal: Design an implementation approach.
 Goal: Review the plan(s) from Phase 2 and ensure alignment with the user's intentions.
 1. Read the critical files to deepen your understanding
 2. Ensure that the plans align with the user's original request
-3. Use ${ASK_USER_QUESTION_TOOL_NAME} to clarify any remaining questions with the user
+3. If a decision is still open, state the assumption in the plan instead of stopping to ask.
 
 ### Phase 4: Call ${EXIT_PLAN_MODE_TOOL_NAME}
-At the very end of your turn, once you have asked the user questions and are happy with your final plan - you should always call ${EXIT_PLAN_MODE_TOOL_NAME} to indicate to the user that you are done planning.
-This is critical - your turn should only end with either using the ${ASK_USER_QUESTION_TOOL_NAME} tool OR calling ${EXIT_PLAN_MODE_TOOL_NAME}. Do not stop unless it's for these 2 reasons
+At the very end of your turn, once you are happy with your final plan, call ${EXIT_PLAN_MODE_TOOL_NAME} to indicate that planning is done.
+This is critical - end the planning turn by calling ${EXIT_PLAN_MODE_TOOL_NAME}.
 
-**Important:** Use ${ASK_USER_QUESTION_TOOL_NAME} ONLY to clarify requirements or choose between approaches. Use ${EXIT_PLAN_MODE_TOOL_NAME} to request plan approval. Do NOT ask about plan approval in any other way - no text questions, no AskUserQuestion. Phrases like "Is this plan okay?", "Should I proceed?", "How does this plan look?", "Any changes before we start?", or similar MUST use ${EXIT_PLAN_MODE_TOOL_NAME}.
-
-NOTE: At any point in time through this workflow you should feel free to ask the user questions or clarifications using the ${ASK_USER_QUESTION_TOOL_NAME} tool. Don't make large assumptions about user intent. The goal is to present a well researched plan to the user, and tie any loose ends before implementation begins.`;
+**Important:** Use ${EXIT_PLAN_MODE_TOOL_NAME} to request plan approval. Do NOT ask about plan approval in any other way. Phrases like "Is this plan okay?", "Should I proceed?", "How does this plan look?", "Any changes before we start?", or similar MUST use ${EXIT_PLAN_MODE_TOOL_NAME}.`;
 }
 
 const PLAN_MODE_FULL_REMINDER = [
@@ -69,7 +66,7 @@ const PLAN_MODE_FULL_REMINDER = [
 ];
 
 const PLAN_MODE_SPARSE_REMINDER = [
-  `Plan mode still active (see full instructions earlier in conversation). Read-only. Follow 4-phase workflow. End turns with ${ASK_USER_QUESTION_TOOL_NAME} (for clarifications) or ${EXIT_PLAN_MODE_TOOL_NAME} (for plan approval). Never ask about plan approval via text or AskUserQuestion.`,
+  `Plan mode still active (see full instructions earlier in conversation). Read-only. Follow 4-phase workflow. End the planning turn with ${EXIT_PLAN_MODE_TOOL_NAME}. Never ask about plan approval via text.`,
 ];
 
 const PLAN_MODE_EXIT_REMINDER = [
@@ -77,16 +74,6 @@ const PLAN_MODE_EXIT_REMINDER = [
   "",
   `You have exited plan mode. You can now make edits, run tools, and take actions.`,
 ];
-
-const TODO_REMINDER_CONFIG = Object.freeze({
-  TURNS_SINCE_WRITE: 10,
-  TURNS_BETWEEN_REMINDERS: 10,
-});
-
-interface TodoReminderTurnCounts {
-  turnsSinceLastTodoWrite: number;
-  turnsSinceLastReminder: number;
-}
 
 export function buildDateChangeReminderBody(_previousDate: string, currentDate: string): string {
   return `The date has changed. Today's date is now ${currentDate}. DO NOT mention this to the user explicitly because they are already aware.`;
@@ -121,62 +108,6 @@ export function runtimeMetadataForSyntheticUserMessageSource(
     return systemReminderRuntimeMetadata("target_continuation");
   }
   return systemReminderRuntimeMetadata("rewind_notice");
-}
-
-function getTodoReminderTurnCounts(
-  entries: readonly RuntimeMessageEntry[],
-): TodoReminderTurnCounts {
-  let assistantTurnsAfterCurrentEntry = 0;
-  let turnsSinceLastTodoWrite: number | undefined;
-  let turnsSinceLastReminder: number | undefined;
-
-  for (let index = entries.length - 1; index >= 0; index--) {
-    const entry = entries[index]!;
-    if (turnsSinceLastReminder === undefined && entry.metadata?.source === "todo_reminder") {
-      turnsSinceLastReminder = assistantTurnsAfterCurrentEntry;
-    }
-    if (turnsSinceLastTodoWrite !== undefined && turnsSinceLastReminder !== undefined) {
-      break;
-    }
-
-    if (isRuntimeAttachmentEntry(entry)) continue;
-    if (entry.message.role !== "assistant") continue;
-
-    if (
-      turnsSinceLastTodoWrite === undefined &&
-      entry.message.toolCalls?.some((toolCall) => toolCall.name === "TodoWrite")
-    ) {
-      turnsSinceLastTodoWrite = assistantTurnsAfterCurrentEntry;
-    }
-    assistantTurnsAfterCurrentEntry++;
-    if (turnsSinceLastTodoWrite !== undefined && turnsSinceLastReminder !== undefined) {
-      break;
-    }
-  }
-
-  return {
-    turnsSinceLastReminder: turnsSinceLastReminder ?? assistantTurnsAfterCurrentEntry,
-    turnsSinceLastTodoWrite: turnsSinceLastTodoWrite ?? assistantTurnsAfterCurrentEntry,
-  };
-}
-
-export function shouldBuildTodoReminder(entries: readonly RuntimeMessageEntry[]): boolean {
-  const counts = getTodoReminderTurnCounts(entries);
-  return (
-    counts.turnsSinceLastTodoWrite >= TODO_REMINDER_CONFIG.TURNS_SINCE_WRITE &&
-    counts.turnsSinceLastReminder >= TODO_REMINDER_CONFIG.TURNS_BETWEEN_REMINDERS
-  );
-}
-
-export function buildTodoReminderBody(todos: readonly TodoItem[]): string {
-  const lines = [
-    "The TodoWrite tool hasn't been used recently. If you're working on tasks that would benefit from tracking progress, consider using the TodoWrite tool to track progress. Also consider cleaning up the todo list if has become stale and no longer matches what you are working on. Only use it if it's relevant to the current work. This is just a gentle reminder - ignore if not applicable.",
-  ];
-  if (todos.length > 0) {
-    const currentTodos = `[${formatTodoListForReminder(todos).join("\n")}]`;
-    lines.push("", "Here are the existing contents of your todo list:", "", currentTodos);
-  }
-  return lines.join("\n");
 }
 
 export function buildRuntimeModeReminderBody(
@@ -216,10 +147,6 @@ export function buildRuntimeOutputStyleReminderBody(
   }
 
   return `${outputStyle.name} output style is active. Remember to follow the specific guidelines for this style.`;
-}
-
-function formatTodoListForReminder(todos: readonly TodoItem[]): string[] {
-  return todos.map((todo, index) => `${index + 1}. [${todo.status}] ${todo.content}`);
 }
 
 function getRuntimeModeReminderTurnCount(entries: readonly RuntimeMessageEntry[]): {

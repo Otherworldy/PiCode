@@ -48,7 +48,7 @@ const RESOLVE_WORKFLOW_QUESTION_DESCRIPTION = [
   "",
   "- Takes question_id — the ID from the escalation notification (it looks like `dwfq-...`). If that notification was lost, GetWorkflowRun lists the questions a run still owes an answer to.",
   "- The run keeps running the whole time: only the subagent that asked is parked on its call, while every other subagent and the script's control flow keep going. Your answer becomes that call's result verbatim and the subagent continues from there.",
-  "- Answer directly and actionably. If you are not sure, look at the run first with GetWorkflowRun, or ask the user with AskUserQuestion, then come back and answer — nothing answers on your behalf, and the subagent waits indefinitely.",
+  "- Answer directly and actionably. If you are not sure, look at the run first with GetWorkflowRun, or decide from the run, then come back and answer — nothing answers on your behalf, and the subagent waits indefinitely.",
   "- If the question reveals the SCRIPT is structurally broken (a broken gate, wrong control flow), a sentence cannot fix that: cancel the run and continue with a revised script via CreateWorkflow's `resume_from`.",
 ].join("\n");
 

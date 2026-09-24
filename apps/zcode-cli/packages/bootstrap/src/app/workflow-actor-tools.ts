@@ -13,7 +13,6 @@
 // 只读靠提示）。
 
 import {
-  ASK_USER_QUESTION_TOOL_NAME,
   ENTER_PLAN_MODE_TOOL_NAME,
   EXIT_PLAN_MODE_TOOL_NAME,
   READ_SESSION_CONTEXT_TOOL_NAME,
@@ -31,7 +30,6 @@ interface WorkflowActorToolPolicy {
  * 其余（Bash / Edit / Write / 搜索 / web）照常保留——actor 就是要干活的。
  */
 const ACTOR_DISALLOWED_TOOLS: readonly string[] = [
-  ASK_USER_QUESTION_TOOL_NAME,
   ENTER_PLAN_MODE_TOOL_NAME,
   EXIT_PLAN_MODE_TOOL_NAME,
   "CreateWorkflow",

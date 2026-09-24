@@ -19,6 +19,11 @@ async function main(): Promise<void> {
   // 真实 zcode CLI 进程里仍可能有少量路径直接读取 process.env。
   // 入口先清洗用户 shell 注入的 NODE_ENV、代理和证书变量；网络变量只封存给后续 Bash/tool 子进程恢复。
   applyCliRuntimeEnvSanitization(process.env);
+  if (process.env.ZCODE_HTTP_PROXY?.trim()) {
+    // Pi fetch 不读 HTTP_PROXY；清掉用户 shell 代理后再把设置页的值接回去。
+    const { installProcessProxyFetch } = await import("@zcode/adapters/network");
+    installProcessProxyFetch(process.env);
+  }
   const isProtocol = isProtocolServerInvocation(argv);
   if (isProtocol) installProtocolStderrBoundary(process.stderr);
   const lifecycle =

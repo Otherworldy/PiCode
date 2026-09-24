@@ -262,8 +262,6 @@ export function createRemoteWorkspaceServiceCollection(params: {
           resolution = {
             status: "resolved",
             preferences: {
-              askUserQuestionAutoResolutionEnabled:
-                settings.askUserQuestionAutoResolutionEnabled !== false,
               nativeSearchEnhancementsEnabled: settings.nativeSearchEnhancementsEnabled !== false,
               memoryEnabled: settings.memoryEnabled === true,
               modelContextBudgetStrategy,

@@ -237,7 +237,6 @@ export function formatGoalCompletionVerificationPrompt(
     "",
     "Use the conversation context before this verification request as the evidence source.",
     "Pass only if the conversation and current known state show that every explicit requirement, named file, command, test, gate, and deliverable in the objective is complete.",
-    "Before passing, inspect any todo list, TodoRead result, or TodoWrite result in the conversation context. If any todo is still pending or in_progress, return passed false and make nextAction the smallest useful action to complete the unfinished todo before other work.",
     "Fail if any requirement is missing, incomplete, weakly verified, or only represented by a plan, todo/checklist update, planning phase completion, elapsed effort, or plausible final answer.",
     "When failing, put the next smallest useful action in nextAction. This nextAction will become the next iteration title in the app UI.",
     "When passing, nextAction may be an empty string.",
