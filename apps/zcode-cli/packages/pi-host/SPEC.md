@@ -108,7 +108,7 @@ SDK 来源是 `AppSettings.piSdkSource`。缺省 `builtin`，用打进 `zcode.cj
 
 设置「插件」页只列 Pi 已配置的包和自动发现的扩展文件。状态所有者是 Pi `settings.json`：用户级 `~/.pi/agent/settings.json`，工作区级 `<cwd>/.pi/settings.json`。`pi/plugins` 的 `list` 读这两处；`setEnabled` 写回后 `flush`。包的关是 `packages[].autoload: false`（保留已有过滤）；扩展文件的关是追加或拿掉精确的 `-<相对路径>`。已打开的会话不热更新，下一次创建会话才按新开关加载。不写 ZCode 插件启用表，也不再把 ZCode 插件市场当能力源。`plugins/*` 协议方法已删除，设置页不再列、安装或开关 ZCode 插件。
 
-技能设置读写 Pi 会加载的目录：用户 `~/.pi/agent/skills`，工作区 `<cwd>/.pi/skills`，仍列出 Pi 同样会读的 `.agents/skills`。命令设置读写 Pi 提示词目录：用户 `~/.pi/agent/prompts`，工作区 `<cwd>/.pi/prompts`。钩子不进入 Pi 会话，设置页不再单独列出。
+技能设置读写 Pi 会加载的目录：用户 `~/.pi/agent/skills`，工作区 `<cwd>/.pi/skills`，仍列出 Pi 同样会读的 `.agents/skills`。斜杠菜单不另扫一套：已打开的会话用 Pi 已经加载的技能（含用户目录、沿 git 根的 `.agents/skills`、已启用的包技能）；没有会话时走 Pi 的包解析，不加载扩展。命令设置读写 Pi 提示词目录：用户 `~/.pi/agent/prompts`，工作区 `<cwd>/.pi/prompts`。钩子不进入 Pi 会话，设置页不再单独列出。
 
 内置浏览器是宿主能力，不是可安装插件。会话创建时直接连上打包好的 `node_repl`，并把 `control-browser` 技能交给 Pi。工具名仍是 `mcp__node_repl__js`。direct 调用带上当前会话 id，browser broker 才能回到 `BrowserControlPort`，再调 Electron `interaction/browserExecute`。不写进用户 MCP 配置。开关在 `~/.zcode/v2/setting.json` 的 `browserHostEnabled`，缺省开启，只影响之后新建的会话。子会话不带这个工具。
 

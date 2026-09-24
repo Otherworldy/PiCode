@@ -17,7 +17,13 @@ import {
 import { mapThought } from "./model-delegate.js";
 import { PiToV4Projector } from "./projector.js";
 import type { ToolPermissionCheck } from "./permission-gate.js";
-import type { CreatePiSession, PiExtensionUiResponse, PiHostEvent, PiSessionPort } from "./types.js";
+import type {
+  CreatePiSession,
+  PiExtensionUiResponse,
+  PiHostEvent,
+  PiSessionPort,
+  PiSkillView,
+} from "./types.js";
 
 export interface HostedSession {
   readonly sessionId: string;
@@ -32,6 +38,7 @@ export interface HostedSession {
   readonly bridge: CommandBridge;
   readonly viaRegistry: boolean;
   listModels(): Array<{ providerId: string; modelId: string }>;
+  listSkills(): PiSkillView[];
   prompt(text: string): Promise<boolean>;
   waitTurn(): Promise<void>;
   abort(): Promise<void>;
@@ -590,6 +597,7 @@ export class HostSessionRegistry {
       bridge,
       viaRegistry: meta.viaRegistry,
       listModels: () => pi.listModels?.() ?? (pi.currentModel ? [pi.currentModel] : []),
+      listSkills: () => pi.listSkills?.() ?? [],
       prompt: (text) => pi.prompt(text),
       waitTurn: () => pi.waitTurn?.() ?? Promise.resolve(),
       abort: async () => {

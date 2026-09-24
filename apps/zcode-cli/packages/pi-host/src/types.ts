@@ -93,12 +93,23 @@ export type PiExtensionUiResponse =
   | { id: string; confirmed: boolean }
   | { id: string; value: string };
 
+export interface PiSkillView {
+  name: string;
+  description: string;
+  path: string;
+  scope: "user" | "project" | "temporary";
+  origin: "package" | "top-level";
+  packageName?: string;
+}
+
 export interface PiSessionPort {
   readonly sessionId: string;
   readonly sessionFile?: string;
   readonly isStreaming: boolean;
   readonly currentModel?: { providerId: string; modelId: string };
   listModels?(): Array<{ providerId: string; modelId: string; name?: string }>;
+  /** 这个会话里 Pi 已经加载的技能，含用户目录、项目目录和包技能。 */
+  listSkills?(): PiSkillView[];
   prompt(text: string): Promise<boolean>;
   waitTurn?(): Promise<void>;
   steer(text: string): Promise<void>;

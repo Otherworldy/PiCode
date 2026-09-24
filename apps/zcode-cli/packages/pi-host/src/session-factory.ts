@@ -2,6 +2,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CreateAgentSessionOptions, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
+import { toPiSkillView } from "./pi-skills.js";
 import { branchPiSessionFile, openOrCreateSession } from "./session-files.js";
 import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
 import {
@@ -309,6 +310,7 @@ export function createSdkSessionFactory(options: {
           modelId: model.id,
           name: model.name,
         })),
+      listSkills: () => session.resourceLoader.getSkills().skills.map(toPiSkillView),
       get isStreaming() {
         return session.isStreaming;
       },

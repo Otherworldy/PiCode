@@ -6,7 +6,7 @@ import {
   type ZCodeSkillsReferenceCatalogResult,
 } from "@zcode/shared";
 import type { SkillLoadOutcome, SkillMetadata } from "@zcode/contracts";
-import { listZCodeSkills } from "../skills.js";
+import { listPiSkills, type PiSkillView } from "@zcode/pi-host";
 import {
   parseParams,
   requireSession,
@@ -20,19 +20,37 @@ export async function getSkillReferenceCatalog(
   const params = parseParams(zcodeSkillsReferenceCatalogParamsSchema, rawParams);
   if (params.sessionId) {
     const record = requireSession(context, params.sessionId);
-    const outcome = await record.app.getSkillCatalog();
-    return toResult("session", outcome);
+    const loaded = (
+      record.app as { piHosted?: { listSkills?: () => PiSkillView[] } }
+    ).piHosted?.listSkills?.();
+    if (loaded) return toResult("session", piSkillsToOutcome(loaded));
+    if (typeof record.app.getSkillCatalog === "function") {
+      return toResult("session", await record.app.getSkillCatalog());
+    }
+    return toResult("session", piSkillsToOutcome(await listPiSkills(record.workspace.workspacePath)));
   }
 
-  // 旧 UI cache 只在 workspace 首次挂载时扫描，用户从文件系统手动新增
-  // Skill 后，新建对话仍停在旧快照。草稿请求在 Agent 侧复用 CLI 正式发现配置，
-  // 每次新打开引用面板都读取当前 workspace catalog。
-  const outcome = await listZCodeSkills({
-    env: context.deps.env,
-    logger: context.logger,
-    workingDirectory: params.workspace.workspacePath,
-  });
-  return toResult("workspace", outcome);
+  // 草稿没有活会话。按 Pi 的包解析再扫用户目录、工作区 .pi/skills 和 .agents/skills。
+  return toResult("workspace", piSkillsToOutcome(await listPiSkills(params.workspace.workspacePath)));
+}
+
+function piSkillsToOutcome(skills: PiSkillView[]): SkillLoadOutcome {
+  return {
+    diagnostics: [],
+    totalDiscovered: skills.length,
+    skills: skills.map((skill) => ({
+      name: skill.name,
+      description: skill.description,
+      path: skill.path,
+      directory: skill.path,
+      rootPath: skill.path,
+      scope: skill.scope === "project" ? "project" : "user",
+      source: skill.origin === "package" ? "plugin" : "zcode",
+      safeToAutoLoad: true,
+      frontmatterKeys: [],
+      ...(skill.packageName ? { pluginName: skill.packageName } : {}),
+    })),
+  };
 }
 
 function toResult(

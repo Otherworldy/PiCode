@@ -31,6 +31,7 @@ export {
 } from "./model-delegate.js";
 export { createSdkSessionFactory, listPiCatalog, mutatePiCatalog } from "./session-factory.js";
 export { ensurePiSdk, getPiSdkStatus } from "./pi-sdk.js";
+export { listPiSkills } from "./pi-skills.js";
 export { listPiPlugins, setPiPluginEnabled, type PiPluginView } from "./pi-plugins.js";
 export type { PiCapabilityPorts, ZcodeMcpTool, ZcodeSubagentProfile } from "./host-capabilities.js";
 export type { PiDiscoveredModel, PiModelConfigView, PiProviderDraft } from "./model-config-file.js";
@@ -41,4 +42,5 @@ export type {
   PiSessionPort,
   PiExtensionUiEvent,
   PiExtensionUiResponse,
+  PiSkillView,
 } from "./types.js";
