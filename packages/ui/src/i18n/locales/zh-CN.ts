@@ -1402,6 +1402,7 @@ const zhCN: Record<string, string> = {
   "taskList.archiveLocal": "归档本地任务",
   "taskList.archiveRemote": "归档远端任务",
   "taskList.archiveFailed": "归档任务失败",
+  "taskList.deleteFailed": "删除会话失败",
   "taskList.unarchive": "取消归档任务",
   "taskList.renamePlaceholder": "任务名称",
   "taskList.renameFailed": "重命名任务失败",

@@ -50,7 +50,23 @@ async function resolveInteraction(
   const hosted =
     envelope.sessionId === null
       ? undefined
-      : (host.getRecord(envelope.sessionId)?.app as { piHosted?: { ui: { respond: (r: { id: string; confirmed?: boolean; value?: string; cancelled?: boolean }) => boolean } } } | undefined)?.piHosted;
+      : (
+          host.getRecord(envelope.sessionId)?.app as
+            | {
+                piHosted?: {
+                  ui: {
+                    respond: (r: {
+                      id: string;
+                      confirmed?: boolean;
+                      value?: string;
+                      cancelled?: boolean;
+                    }) => boolean;
+                  };
+                  publishUi?: () => void;
+                };
+              }
+            | undefined
+        )?.piHosted;
   if (hosted) {
     const answer = payload.answer;
     if (answer.action === "cancel" || answer.optionId === "no" || answer.optionId === "deny") {
@@ -72,6 +88,7 @@ async function resolveInteraction(
         value: answer.freeText ?? answer.optionId ?? "",
       });
     }
+    hosted.publishUi?.();
   }
   const delivered =
     payload.answer.optionId === PERMISSION_FULL_ACCESS_OPTION_ID

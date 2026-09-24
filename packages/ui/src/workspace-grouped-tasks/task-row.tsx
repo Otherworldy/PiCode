@@ -23,6 +23,7 @@ import {
 import { getTaskChangeSummary } from "@/lib/taskChangeSummary.js";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
 import { buildTaskFeedbackDescription } from "@/lib/taskFeedbackDraft.js";
+import { useDeleteSessionAction } from "@/lib/deleteSessionTask.js";
 import { useTaskListItemContextActions } from "@/useTaskListItemContextActions.js";
 import { useFeedbackStore } from "@/feedback/feedbackStore.js";
 import { getTaskListAttention, getTaskListRowActivity } from "@/v4/taskListRowActivity.js";
@@ -85,6 +86,7 @@ function GroupedTaskRowComponent({
   tooltipsDisabled?: boolean;
 }) {
   const { intl } = useZCodeIntl();
+  const deleteSession = useDeleteSessionAction(task, remoteSessionId);
   const workspaceActionsDisabled = useOptionalTabStore((state) =>
     isWorkspaceReadOnly(state, task.workspacePath, task.workspaceIdentity),
   );
@@ -513,6 +515,7 @@ function GroupedTaskRowComponent({
           onMoveTaskToTop={onMoveTaskToTop}
           onStartRenameTask={onStartRenameTask}
           onArchiveTask={onArchiveTask}
+          onDeleteTask={() => deleteSession()}
           onMarkTaskAsUnread={onMarkTaskAsUnread}
           onOpenTaskPathInFileManager={() => void handleOpenTaskPathInFileManager()}
           onCopyText={(label, text) => void handleCopyText(label, text)}

@@ -1112,6 +1112,11 @@ export function createConversationV4Gateway(
       const child = await context.piHost.fork(sessionId, options.target.boundaryMessageId);
       const childRecord = await bindHostedSession(context, child, record.workspace);
       context.sessions.set(childRecord.app.sessionId, childRecord);
+      // 分叉文件已有消息，bind 会标成 immediate。session_input 外键要求 session 行先在，
+      // 否则第一条发送直接 FOREIGN KEY constraint failed。
+      await childRecord.app.runtime.ensureSessionPersistedForExternalActivity(
+        child.projector.getSnapshot().meta.title,
+      );
       return { forkedSessionId: child.sessionId };
     },
     forkConversationBeforeInput: async (sessionId, { editTarget, envelope, admission }) => {
@@ -1508,6 +1513,15 @@ export function createConversationV4Gateway(
       const record = await resolveConversationBackingRecord(context, sessionId);
       if (!record) {
         throw new Error(`fault.fileChanges.sessionNotFound: ${sessionId}`);
+      }
+      const describe = (
+        record.app.runtime as {
+          describeTurnFileChanges?: (turnId: string) => V4ConversationFileChangesResult | null;
+        }
+      ).describeTurnFileChanges;
+      if (describe && targetTurnId) {
+        const described = describe(String(targetTurnId));
+        if (described) return described;
       }
       return readConversationFileChanges(record, sessionId, messageIds, targetTurnId);
     },

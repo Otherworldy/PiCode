@@ -1,5 +1,10 @@
 /* eslint-disable max-lines -- ZCode Protocol 的 session/workspace 方法共享同一个 server context 与 snapshot helpers，迁移期先集中维护。 */
-import { listPiSubagentChildren, piSubagentRevision, type PiSubagentChild } from "@zcode/pi-host";
+import {
+  listPiSubagentChildren,
+  piSubagentRevision,
+  workspaceKey,
+  type PiSubagentChild,
+} from "@zcode/pi-host";
 import { observeSessionDebug } from "./session-debug.js";
 import {
   TASK_LIST_SESSION_TYPES,
@@ -49,6 +54,7 @@ import {
   zcodeSessionCancelBackgroundTaskParamsSchema,
   zcodeSessionCompactParamsSchema,
   zcodeSessionCloseParamsSchema,
+  zcodeSessionDeleteParamsSchema,
   zcodeSessionCreateParamsSchema,
   zcodeSessionEventsParamsSchema,
   zcodeSessionForkParamsSchema,
@@ -2755,6 +2761,25 @@ export async function setMode(context: ZCodeProtocolAgentServerContext, rawParam
   assertExpectedRevision(record, params.expectedRevision);
   await record.app.setMode(params.mode);
   return await afterStateMutation(context, record, "mode_changed");
+}
+
+export async function deleteStoredSession(
+  context: ZCodeProtocolAgentServerContext,
+  rawParams: unknown,
+) {
+  const params = parseParams(zcodeSessionDeleteParamsSchema, rawParams);
+  const record = context.sessions.get(params.sessionId);
+  record?.unsubscribe?.();
+  const identity = workspaceKey(params.workspaceIdentity, params.workspacePath);
+  const deletedFile = (await context.piHost?.delete(params.sessionId, identity)) ?? false;
+  if (record) {
+    context.v4Gateway?.disposeSession(params.sessionId);
+    context.sessions.delete(params.sessionId);
+    await record.eventStore.deleteSession(params.sessionId as SessionId).catch(() => undefined);
+  } else {
+    context.v4Gateway?.removeIndexedSession(identity, params.sessionId);
+  }
+  return { deleted: deletedFile || Boolean(record) };
 }
 
 export async function closeSession(context: ZCodeProtocolAgentServerContext, rawParams: unknown) {

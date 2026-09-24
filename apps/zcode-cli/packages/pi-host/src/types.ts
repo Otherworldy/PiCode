@@ -106,6 +106,8 @@ export interface PiSessionPort {
   abort(): Promise<void>;
   compact(): Promise<void>;
   navigateTree?(targetId: string): Promise<unknown>;
+  /** Pi `createBranchedSession`：新文件只含到该节点的路径。 */
+  branchFrom?(entryId: string): { sessionId: string; sessionFile: string };
   hasEntry?(id: string): boolean;
   /** 画面行 id 不是树节点时，用用户原文找回 Pi entry。 */
   matchUserEntry?(text: string): string | undefined;

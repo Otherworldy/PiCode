@@ -97,7 +97,7 @@ Desktop `continuous` 与手机 `replayable` 同一投影所有者、两套 flush
 
 保留：`createSession`、`createSelectionSideSession`、`sendText`、`stop`、`compact`、`forkAssistant`、`editUserQuery`、`retryTurn`、队列五件套、`setFollowupMode`、`switchModelConfig`、`resolveInteraction`、`snoozeInteractionAutoResolution`、`cancelBackgroundWork`、`renameSession`、`deleteSession`、`setAssistantFeedback`。
 
-删除（协议 + UI 同期）：`sendGoalCommand`、`pauseGoal`、`resumeGoal`、工作流三件套、workspace hook 审核、ZCode 协作模式机、默认的 `applyFileRewind`（除非 checkpoint 插件登记后再加回 action）。
+删除（协议 + UI 同期）：`sendGoalCommand`、`pauseGoal`、`resumeGoal`、工作流三件套、workspace hook 审核、ZCode 协作模式机。`applyFileRewind` 保留：用该轮 Pi `edit` 的 oldText/newText 退文件，不截断聊天。
 
 ### 步骤 1 — Pi Host 骨架与空会话
 

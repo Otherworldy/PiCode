@@ -85,14 +85,43 @@ function toolCallsOf(content: unknown): Array<{ id: string; name: string; args?:
   return calls;
 }
 
+function activeEntries(entries: Record<string, unknown>[]): Record<string, unknown>[] {
+  const byId = new Map<string, Record<string, unknown>>();
+  for (const entry of entries) {
+    if (typeof entry.id === "string" && entry.type !== "session") byId.set(entry.id, entry);
+  }
+  let leafId: string | undefined;
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry && typeof entry.id === "string" && entry.type !== "session") {
+      leafId = entry.id;
+      break;
+    }
+  }
+  if (!leafId) return entries;
+  const linked = entries.some((entry) => typeof entry.parentId === "string" && entry.parentId);
+  if (!linked) return entries;
+  const keep = new Set<string>();
+  let current = byId.get(leafId);
+  while (current && typeof current.id === "string" && !keep.has(current.id)) {
+    keep.add(current.id);
+    const parentId = current.parentId;
+    current = typeof parentId === "string" ? byId.get(parentId) : undefined;
+  }
+  return entries.filter(
+    (entry) => entry.type === "session" || (typeof entry.id === "string" && keep.has(entry.id)),
+  );
+}
+
 export function readPiJsonl(content: string): {
   summary: PiJsonlSummary | null;
   events: PiHostEvent[];
 } {
-  const entries = linesOf(content);
+  const entries = activeEntries(linesOf(content));
   const now = Date.now();
-  let createdAt: number | undefined;
-  let lastActivityAt: number | undefined;
+  let firstAt = 0;
+  let headerAt = 0;
+  let lastMessageAt = 0;
   let cwd: string | undefined;
   let namedTitle: string | undefined;
   let sessionId: string | undefined;
@@ -115,11 +144,10 @@ export function readPiJsonl(content: string): {
   for (const entry of entries) {
     const type = entry.type;
     const timestamp = timeMs(entry.timestamp, 0);
-    if (timestamp > 0) {
-      createdAt ??= timestamp;
-      lastActivityAt = timestamp;
-    }
+    if (timestamp > 0 && !firstAt) firstAt = timestamp;
     if (type === "session") {
+      // 分叉文件的消息时间是原会话的。创建时间用 header，不能被旧消息盖回去。
+      if (timestamp > 0) headerAt = timestamp;
       if (typeof entry.cwd === "string" && entry.cwd) cwd = entry.cwd;
       if (typeof entry.id === "string" && entry.id) sessionId = entry.id;
       continue;
@@ -164,6 +192,9 @@ export function readPiJsonl(content: string): {
         isError: failed,
       });
       continue;
+    }
+    if (isUserRole(role) || isAssistantRole(role)) {
+      if (timestamp > 0) lastMessageAt = Math.max(lastMessageAt, timestamp);
     }
     if (isUserRole(role)) {
       const text = messageText(message.content);
@@ -213,11 +244,13 @@ export function readPiJsonl(content: string): {
 
   if (!firstUser && !namedTitle) return { summary: null, events: [] };
   const title = namedTitle ?? clip(firstUser, 60);
+  const createdAt = headerAt || firstAt || now;
   return {
     summary: {
       title,
-      createdAt: createdAt ?? now,
-      lastActivityAt: lastActivityAt ?? createdAt ?? now,
+      createdAt,
+      // 打开会话时写入的 label/custom 不能把原会话抬成「刚刚」，否则新分叉会排到它下面。
+      lastActivityAt: Math.max(headerAt, lastMessageAt) || createdAt,
       ...(cwd ? { cwd } : {}),
       ...(sessionId ? { sessionId } : {}),
       ...(lastAssistant ? { lastAssistantPreview: clip(lastAssistant, 120) } : {}),

@@ -26,6 +26,7 @@ import type {
 import {
   cancelBackgroundTask,
   closeSession,
+  deleteStoredSession,
   compactSession,
   createSession,
   forkSession,
@@ -255,6 +256,7 @@ export class ZCodeProtocolAgentServer {
             const mapped = mapPiToolName(toolName);
             const mode =
               (hosted.projector.getSnapshot().config.mode as CollaborationMode) || "build";
+            if (mode === "yolo") return "allow";
             const result = service.checkPermission({
               toolName: mapped,
               input: args,
@@ -610,6 +612,8 @@ export class ZCodeProtocolAgentServer {
         return await setMode(this.context, request.params);
       case zcodeProtocolMethods.sessionClose:
         return await closeSession(this.context, request.params);
+      case zcodeProtocolMethods.sessionDelete:
+        return await deleteStoredSession(this.context, request.params);
       case zcodeProtocolMethods.workspaceReadPresentation:
         return await readWorkspacePresentation(this.context, request.params);
       case zcodeProtocolMethods.piModelsMutate:

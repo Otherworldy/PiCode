@@ -1,6 +1,8 @@
 export { workspaceKey } from "./identity.js";
 export { EMPTY_PLUGIN_VIEW_REGISTRY, PluginViewRegistry } from "./plugin-adapters/registry.js";
 export { mapPiToolName, toolResultText, editDisplay, bashDisplay } from "./presentation.js";
+export { planTurnFileRewind, summarizeTurnFileChanges } from "./file-rewind.js";
+export { readProcessSshRemoteSpec, sshReadText, sshRemoveFile, sshWriteText } from "./ssh-remote.js";
 export { createEmptySnapshot } from "./snapshot.js";
 export { PiToV4Projector } from "./projector.js";
 export { HostQueue } from "./host-queue.js";

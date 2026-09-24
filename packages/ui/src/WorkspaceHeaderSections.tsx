@@ -14,6 +14,7 @@ import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
 import { Cloud, Ellipsis, Folder, GitBranch, LoaderIcon } from "lucide-react";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
+import { useDeleteSessionAction } from "@/lib/deleteSessionTask.js";
 import { useGlobalTaskList } from "@/hooks/useGlobalTaskList.js";
 import { useBaseWorkspaceServices, useWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { useTaskListItemContextActions } from "@/useTaskListItemContextActions.js";
@@ -154,6 +155,15 @@ export function WorkspaceHeaderTitleSection({
     activeTaskId && pinnedTasks.some((task) => task.taskId === activeTaskId),
   );
   const resolvedTaskActionTaskId = activeTaskMeta?.taskId ?? activeTaskId;
+  const deleteSession = useDeleteSessionAction(
+    {
+      taskId: resolvedTaskActionTaskId ?? "",
+      workspacePath: workspaceAbsPath,
+      workspaceIdentity,
+      title: activeTaskMeta?.title ?? activeTaskTitle ?? "",
+    },
+    remoteSessionId,
+  );
   // 新建任务在第一次写入数据库前没有稳定 taskId。
   // 之前 Header 更多菜单虽然点击后会被回调里的空 id guard 拦住，但 UI 仍显示为可点，
   // 用户会感知成“菜单无响应”；这里只禁用依赖已落库 task 的动作，保留 workspace 级入口。
@@ -635,6 +645,7 @@ export function WorkspaceHeaderTitleSection({
                 onArchiveTask={() => {
                   void handleArchiveTask();
                 }}
+                onDeleteTask={deleteSession}
                 onMarkTaskAsUnread={() => {
                   if (!resolvedTaskActionTaskId) {
                     return;

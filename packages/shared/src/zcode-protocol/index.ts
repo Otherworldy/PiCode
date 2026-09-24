@@ -1992,6 +1992,20 @@ export const zcodeSessionCloseResultSchema = z
   })
   .strict();
 export type ZCodeSessionCloseResult = z.infer<typeof zcodeSessionCloseResultSchema>;
+export const zcodeSessionDeleteParamsSchema = z
+  .object({
+    sessionId: nonEmptyString,
+    workspacePath: nonEmptyString,
+    workspaceIdentity: z.string().optional(),
+  })
+  .strict();
+export type ZCodeSessionDeleteParams = z.infer<typeof zcodeSessionDeleteParamsSchema>;
+export const zcodeSessionDeleteResultSchema = z
+  .object({
+    deleted: z.boolean(),
+  })
+  .strict();
+export type ZCodeSessionDeleteResult = z.infer<typeof zcodeSessionDeleteResultSchema>;
 export const zcodeWorkspaceReadPresentationParamsSchema = z
   .object({ workspace: zcodeWorkspaceRefSchema })
   .strict();
@@ -3693,6 +3707,7 @@ export const zcodeProtocolMethods = {
   sessionCompact: "session/compact",
   sessionGoal: "session/goal",
   sessionClose: "session/close",
+  sessionDelete: "session/delete",
   // setModel 仍被 zcodeSessionService 的 desktop 旧链路消费；replayable
   // switchModelConfig 已直接由目标 Environment Registry 解析 Selection。
   sessionSetModel: "session/setModel",

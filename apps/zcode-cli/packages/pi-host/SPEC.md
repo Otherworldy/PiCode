@@ -49,11 +49,13 @@ ZCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代理
 
 ## V4 命令
 
-保留：`createSession`、`createSelectionSideSession`、`sendText`、`stop`、`compact`、`forkAssistant`、`editUserQuery`、`retryTurn`、队列五件套、`setFollowupMode`、`switchModelConfig`、`resolveInteraction`、`snoozeInteractionAutoResolution`、`cancelBackgroundWork`、`renameSession`、`deleteSession`、`setAssistantFeedback`。
+保留：`createSession`、`createSelectionSideSession`、`sendText`、`stop`、`compact`、`forkAssistant`、`editUserQuery`、`retryTurn`、队列五件套、`setFollowupMode`、`switchModelConfig`、`resolveInteraction`、`snoozeInteractionAutoResolution`、`cancelBackgroundWork`、`renameSession`、`deleteSession`、`setAssistantFeedback`、`applyFileRewind`。
 
-删除（协议 + UI）：`sendGoalCommand`、`pauseGoal`、`resumeGoal`、`resumeWorkflowRun`、`startSavedWorkflow`、`amendWorkflowRunSettings`、workspace hook 审核三件套、`switchCollaborationMode`、`applyFileRewind`、`discardSharedContext`。
+删除（协议 + UI）：`sendGoalCommand`、`pauseGoal`、`resumeGoal`、`resumeWorkflowRun`、`startSavedWorkflow`、`amendWorkflowRunSettings`、workspace hook 审核三件套、`switchCollaborationMode`、`discardSharedContext`。
 
-`switchCollaborationMode` 不恢复为 ZCode 协作模式机。危险工具仍走 ZCode `PermissionService`（Pi 无权限面）：allow 放行、deny 拒绝、ask 投影 `kind: permission` 给壳 PermissionDialog（Allow once / Allow for session / Block）。session allow 由 HostedSession 记忆。`mode=yolo` 只作为 PermissionService 的模式输入。插件 `confirm/select` 仍走底栏 userInput，不用 viewport overlay。
+`applyFileRewind` 只退这一轮的文件，不截断聊天。真相是这一轮成功的 Pi 工具参数，不是旧 checkpoint。`edit` 要当前文件仍能唯一匹配 `newText` 才写回 `oldText`。`write` 要当前内容仍等于写入内容才删除该文件；覆盖掉的旧内容找不回来。对不上就整批不写。`bash` 只记为忽略，不阻止文件摘要上的撤销；编辑消息并选了回滚文件时，有忽略项仍拒绝。成功后把该轮 `fileChanges.state` 改成 `reverted`。SSH 工作区走和工具同一条远端读写。
+
+`switchCollaborationMode` 不恢复为 ZCode 协作模式机。危险工具仍走 ZCode `PermissionService`（Pi 无权限面）：allow 放行、deny 拒绝、ask 投影 `kind: permission` 给壳 PermissionDialog（Allow once / Allow for session / Block）。session allow 由 HostedSession 记忆。`mode=yolo` 直接放行全部工具，不再弹权限窗。插件 `confirm` 视为同意；`select` 取第一项，`input` / `editor` 用占位或预填，都不进底栏。其它模式的 `confirm/select` 仍走底栏 userInput，不用 viewport overlay。
 
 ## 死面
 
@@ -88,7 +90,7 @@ ZCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代理
 
 ## 持久化与旧会话
 
-对话树真相是 Pi jsonl，与 Pi TUI 共用 `~/.pi/agent/sessions/<encoded-cwd>/`（文件名 `timestamp_<id>.jsonl`，header id 为 sessionId）。新建/fork 写这里，不预建空文件（Pi 在首条 assistant 落盘）。仍枚举旧 `~/.zcode/pi-host-sessions/<identity>/` 以免丢本 Host 已写过的会话。sessions-index 只列出有过用户消息（或 `session_info.name`）的文件。壳项目列表以这份摘要为行集合，tasks-index 只提供 pin/archive/unread。打开或冷订阅时 Registry 用同一份 jsonl 重放到 `PiToV4Projector`。不打开、不导入旧 ZCode event log。
+对话树真相是 Pi jsonl，与 Pi TUI 共用 `~/.pi/agent/sessions/<encoded-cwd>/`（文件名 `timestamp_<id>.jsonl`，header id 为 sessionId）。新建/fork 写这里，不预建空文件（Pi 在首条 assistant 落盘）。仍枚举旧 `~/.zcode/pi-host-sessions/<identity>/` 以免丢本 Host 已写过的会话；文件名是 `timestamp_<id>.jsonl` 时列表 id 用 header，不用整段文件名。列表时间用会话 header 和最后一条用户/助手消息；分叉抄来的旧消息、以及打开时写入的 label，都不能改这个时间。sessions-index 只列出有过用户消息（或 `session_info.name`）的文件。删除会话时关掉活着的 runtime，并删掉该 id 在本机目录和旧 hosted 目录里的 jsonl；列表行随后消失，不留可恢复的副本。壳项目列表以这份摘要为行集合，tasks-index 只提供 pin/archive/unread。重开只画当前叶子到根的那条分支，文件里被改掉的旧消息不再出现。分叉不再只限最后一条：任意已完成轮的助手回复都可以分叉，新会话走 Pi `createBranchedSession`，文件里只保留到该节点的路径。打开或冷订阅时 Registry 用同一份 jsonl 重放到 `PiToV4Projector`。不打开、不导入旧 ZCode event log。
 
 ## Model
 

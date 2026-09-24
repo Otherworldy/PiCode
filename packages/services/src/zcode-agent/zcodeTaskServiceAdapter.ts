@@ -2815,16 +2815,24 @@ export function createZCodeTaskServiceAdapter(
     },
 
     async deleteTask(params): Promise<void> {
+      await options.zcodeAgentService.deleteSession({
+        sessionId: params.taskId,
+        workspacePath: params.workspacePath,
+        ...(params.workspaceIdentity ? { workspaceIdentity: params.workspaceIdentity } : {}),
+      });
       setOverlay(params, { deleted: true });
       const meta = await updateIndexedTaskState(params, { deleted: true });
-      // task_meta_changed 只会重拉普通 membership，不能表达持久删除语义；
-      // sessions-index 后续仍会返回 CLI 中保留的 session，必须用 task_deleted 让 UI
-      // 立即移除缓存并换代 deleted tombstone join，避免重启或 live upsert 后复活。
+      // 会话文件已经删掉。task_deleted 仍要换代 tombstone，否则只存在于 tasks-index 的行会留在列表里。
       // 同时携带 meta，让桌面/远控的重复订阅能按同一事件去重 membership bump。
       emitWorkspaceTaskListChanged(params, meta, "task_deleted");
     },
 
     async deleteArchivedTask(params): Promise<boolean> {
+      await options.zcodeAgentService.deleteSession({
+        sessionId: params.taskId,
+        workspacePath: params.workspacePath,
+        ...(params.workspaceIdentity ? { workspaceIdentity: params.workspaceIdentity } : {}),
+      });
       const meta = await taskIndexRepo.deleteArchivedTask(params);
       if (!meta) return false;
       // 先持久化成功再写 overlay；否则失败项会被内存 deleted 标记提前隐藏。

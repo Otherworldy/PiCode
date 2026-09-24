@@ -25,6 +25,7 @@ import {
 import { getTaskListAttention, getTaskListRowActivity } from "@/v4/taskListRowActivity.js";
 import { TaskListItemContextMenu } from "@/TaskListItemContextMenu.js";
 import { TaskInteractionBadge } from "@/TaskInteractionBadge.js";
+import { useDeleteSessionAction } from "@/lib/deleteSessionTask.js";
 import { useTaskListItemContextActions } from "@/useTaskListItemContextActions.js";
 import { useFeedbackStore } from "@/feedback/feedbackStore.js";
 import { useModelTrajectoryStore } from "@/store/modelTrajectoryStore.js";
@@ -815,6 +816,7 @@ export function TaskListItemContextMenuContent({
   const workspaceActionsDisabledReason = workspaceActionsDisabled
     ? (disabledReason ?? intl.formatMessage({ id: "workspaceSidebar.unavailableLocalDirectory" }))
     : undefined;
+  const deleteSession = useDeleteSessionAction(task, remoteSessionId);
   // 收尾：「在分屏打开」仅桌面 shell（context 由 WorkspaceShellLayout 提供；
   // 手机远控/无 Provider 环境默认 false → 菜单项整体不渲染）。
   const splitPaneEntry = useV4SplitPaneEntry();
@@ -909,6 +911,7 @@ export function TaskListItemContextMenuContent({
       onArchiveTask={() => {
         onArchiveTask(task.taskId);
       }}
+      onDeleteTask={deleteSession}
       onMarkTaskAsUnread={() => {
         onMarkTaskAsUnread(task.taskId);
       }}

@@ -138,7 +138,13 @@ export class CommandInbox {
 
       // 固定锁序：key gate → per-session admission gate。session gate 持有到 settle，
       // 因而同 session 不同 commandId 以 CLI 实际执行 admission 的顺序串行。
-      const releaseSession = await this.sessionGates.acquire(bucketKey);
+      // 交互应答必须能插进正在等待这次点击的命令，否则 edit/rewind 的确认框永远点不掉。
+      const bypassSessionGate =
+        envelope.type === "resolveInteraction" ||
+        envelope.type === "snoozeInteractionAutoResolution";
+      const releaseSession = bypassSessionGate
+        ? () => undefined
+        : await this.sessionGates.acquire(bucketKey);
       try {
         // 等待 session gate 期间，上一条命令可能增量写入了本 key 的持久化事实。
         const afterWaitPinned = this.inFlight.get(bucketKey)?.get(envelope.commandId);

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -241,6 +241,30 @@ test("extension ui request/response and empty custom registry", async () => {
   assert.equal(custom.widgets[0]?.lines[0], "(unsupported plugin view)");
 });
 
+test("full access answers extension questions without a dialog", async () => {
+  const ui = new ExtensionUiHost();
+  ui.autoConfirm = true;
+  const selectWait = ui.wait("q1");
+  const select = ui.handle({
+    type: "extension_ui_request",
+    id: "q1",
+    method: "select",
+    title: "Pick",
+    options: ["A", "B"],
+  });
+  assert.equal(select.pending.length, 0);
+  assert.deepEqual(await selectWait, { id: "q1", value: "A" });
+  const inputWait = ui.wait("q2");
+  ui.handle({
+    type: "extension_ui_request",
+    id: "q2",
+    method: "input",
+    title: "Name",
+    placeholder: "1",
+  });
+  assert.deepEqual(await inputWait, { id: "q2", value: "1" });
+});
+
 test("tool permission ask projects PermissionDialog payload", async () => {
   const ui = new ExtensionUiHost();
   const waiting = ui.wait("perm:1");
@@ -291,11 +315,39 @@ test("navigateTree truncates and fork copies jsonl", async () => {
     type: "message_update",
     assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "yo" },
   });
+  parent.projector.apply({ type: "agent_end" });
+  parent.projector.apply({ type: "agent_start" });
+  parent.projector.apply({
+    type: "message_start",
+    message: { role: "user", id: "u2", content: "later" },
+  });
+  parent.projector.apply({
+    type: "message_start",
+    message: { role: "assistant", id: "a2" },
+  });
+  parent.projector.apply({
+    type: "message_update",
+    assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "again" },
+  });
   parent.projector.apply({ type: "agent_settled" });
-  const assistant = parent.projector.getSnapshot().rows.window.find((row) => row.kind === "assistantText");
-  assert.equal(assistant && assistant.kind === "assistantText" ? assistant.actions?.canFork : false, true);
+  const assistants = parent.projector
+    .getSnapshot()
+    .rows.window.filter((row) => row.kind === "assistantText");
+  assert.equal(assistants.length, 2);
+  assert.equal(
+    assistants.every((row) => row.kind === "assistantText" && row.actions?.canFork === true),
+    true,
+  );
+  assert.equal(
+    assistants[0] && assistants[0].kind === "assistantText"
+      ? assistants[0].actions?.canRetry === true
+      : true,
+    false,
+  );
+  const assistant = assistants[1];
+  assert.equal(assistant && assistant.kind === "assistantText" ? assistant.actions?.canRetry : false, true);
   parent.projector.setFeedback(assistant?.entityId ?? "", "like");
-  const liked = parent.projector.getSnapshot().rows.window.find((row) => row.kind === "assistantText");
+  const liked = parent.projector.getSnapshot().rows.window.find((row) => row.entityId === assistant?.entityId);
   assert.equal(liked && liked.kind === "assistantText" ? liked.feedback : undefined, "like");
   const child = await registry.fork(parent.sessionId, "a1");
   assert.ok(child.sessionId !== parent.sessionId);
@@ -340,6 +392,13 @@ test("list skips empty jsonl and hydrateHistory rebuilds rows", async () => {
   const dir = join(root, "pi-host-sessions", Buffer.from(root).toString("base64url"));
   await mkdir(dir, { recursive: true });
   await writeFile(
+    join(dir, "2026-01-02T03-04-05_01fork.jsonl"),
+    [
+      '{"type":"session","id":"01fork","timestamp":"2026-01-02T03:04:05.000Z","cwd":"/work"}',
+      '{"type":"message","id":"u1","timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"user","content":[{"type":"text","text":"forked"}]}}',
+    ].join("\n"),
+  );
+  await writeFile(
     join(dir, "sess_chat.jsonl"),
     [
       '{"type":"session","timestamp":"2026-01-02T03:04:05.000Z","cwd":"C:\\work"}',
@@ -349,8 +408,8 @@ test("list skips empty jsonl and hydrateHistory rebuilds rows", async () => {
   );
   const listed = await registry.list(root);
   assert.equal(listed.some((item) => item.sessionId === empty.sessionId), false);
-  assert.equal(listed.length, 1);
-  assert.equal(listed[0]?.title, "hello pi");
+  assert.equal(listed.map((item) => item.sessionId).join(","), "01fork,sess_chat");
+  assert.equal(listed.find((item) => item.sessionId === "sess_chat")?.title, "hello pi");
   const found = await registry.find("sess_chat");
   assert.equal(found?.sessionId, "sess_chat");
   const opened = await registry.create({ workspacePath: root, sessionId: "sess_chat" });
@@ -433,5 +492,38 @@ test("ssh sessions stay under the remote identity and still list the old drive-l
     listed.map((item) => item.sessionId).sort(),
     ["sess_old", "sess_ssh"],
   );
+  await rm(root, { recursive: true, force: true });
+});
+
+test("delete removes a cold fork file and a live session file", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async (input) => new FakePiSession(input.sessionId, input.sessionFile),
+  });
+  const dir = join(root, "pi-host-sessions", Buffer.from(root).toString("base64url"));
+  await mkdir(dir, { recursive: true });
+  const forkFile = join(dir, "2026-01-02T03-04-05_01fork.jsonl");
+  await writeFile(
+    forkFile,
+    [
+      '{"type":"session","id":"01fork","timestamp":"2026-01-02T03:04:05.000Z","cwd":"/work"}',
+      '{"type":"message","id":"u1","timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"user","content":[{"type":"text","text":"forked"}]}}',
+    ].join("\n"),
+  );
+  const live = await registry.create({ workspacePath: root, sessionId: "sess_live" });
+  await writeFile(
+    live.sessionFile,
+    [
+      '{"type":"session","id":"sess_live","timestamp":"2026-01-02T03:04:05.000Z","cwd":"/work"}',
+      '{"type":"message","id":"u1","timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"user","content":[{"type":"text","text":"live"}]}}',
+    ].join("\n"),
+  );
+  assert.equal(await registry.delete("01fork", root), true);
+  assert.equal(await registry.delete("sess_live", root), true);
+  await assert.rejects(access(forkFile));
+  await assert.rejects(access(live.sessionFile));
+  assert.equal(registry.get("sess_live"), undefined);
   await rm(root, { recursive: true, force: true });
 });

@@ -66,6 +66,7 @@ import {
   zcodeToolExecResourceSchema,
   zcodeProcessResourceSampleSchema,
   zcodeSessionCloseResultSchema,
+  zcodeSessionDeleteResultSchema,
   zcodeSessionCompactResultSchema,
   zcodeSessionEventsResultSchema,
   zcodeSessionGoalResultSchema,
@@ -4430,6 +4431,20 @@ export function createZCodeAgentService(
       );
       // 兼容尚未返回 closed 字段、但已成功执行普通 close 的 Agent。
       return result.closed ?? true;
+    },
+
+    async deleteSession(params: ZCodeAgentSessionTarget): Promise<boolean> {
+      const client = await getClient(params);
+      const result = await client.request(
+        zcodeProtocolMethods.sessionDelete,
+        {
+          sessionId: params.sessionId,
+          workspacePath: params.workspacePath,
+          ...(params.workspaceIdentity ? { workspaceIdentity: params.workspaceIdentity } : {}),
+        },
+        zcodeSessionDeleteResultSchema,
+      );
+      return result.deleted;
     },
 
     async setModel(params: ZCodeAgentSetModelParams) {

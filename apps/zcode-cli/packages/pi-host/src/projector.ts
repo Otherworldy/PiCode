@@ -10,6 +10,7 @@ import {
   type StatePatch,
   type ToolCallRow,
 } from "@zcode/shared/zcode-protocol-v4";
+import { summarizeTurnFileChanges } from "./file-rewind.js";
 import { bashDisplay, editDisplay, mapPiToolName, toolResultText } from "./presentation.js";
 import { createEmptySnapshot, emptyAvailability } from "./snapshot.js";
 import type { PiAssistantDelta, PiHostEvent } from "./types.js";
@@ -108,6 +109,22 @@ export class PiToV4Projector {
     const rest: ConversationDelta[] = [];
     for (const event of events) rest.push(...this.apply(event));
     return [...cleared, ...rest];
+  }
+
+  markTurnFilesReverted(turnId: string): ConversationDelta[] {
+    const header = this.snapshot.rows.window.find(
+      (item) => item.kind === "turnHeader" && item.turnId === turnId,
+    );
+    if (!header || header.kind !== "turnHeader" || !header.fileChanges) return [];
+    const actions = { ...header.actions };
+    delete actions.canRewindFiles;
+    const next: Extract<ConversationRow, { kind: "turnHeader" }> = {
+      ...header,
+      fileChanges: { ...header.fileChanges, state: "reverted" },
+      ...(Object.keys(actions).length > 0 ? { actions } : {}),
+    };
+    if (Object.keys(actions).length === 0) delete next.actions;
+    return this.commit([{ op: "row.upserted", row: next }]);
   }
 
   setFeedback(
@@ -420,9 +437,8 @@ export class PiToV4Projector {
   }
 
   private toolStart(event: Extract<PiHostEvent, { type: "tool_execution_start" }>): ConversationDelta[] {
-    const inputText =
-      this.toolArgs.get(event.toolCallId) ??
-      (event.args === undefined ? "" : JSON.stringify(event.args));
+    if (event.args !== undefined) this.toolArgs.set(event.toolCallId, JSON.stringify(event.args));
+    const inputText = this.toolArgs.get(event.toolCallId) ?? "";
     return this.ensureToolRow(event.toolCallId, event.toolName, "running", inputText, true);
   }
 
@@ -454,7 +470,10 @@ export class PiToV4Projector {
 
   private toolEnd(event: Extract<PiHostEvent, { type: "tool_execution_end" }>): ConversationDelta[] {
     const rowId = this.toolRowId.get(event.toolCallId);
-    const inputText = this.toolArgs.get(event.toolCallId) ?? "";
+    const existing = this.snapshot.rows.window.find((item) => item.rowId === rowId);
+    const inputText =
+      this.toolArgs.get(event.toolCallId) ||
+      (existing && existing.kind === "toolCall" ? existing.inputText : "");
     if (rowId == null) {
       return this.ensureToolRow(
         event.toolCallId,
@@ -614,20 +633,70 @@ export class PiToV4Projector {
     );
     const latestUser = users.at(-1);
     const latestAssistant = assistants.at(-1);
+    const forkRowByTurn = new Map<string, number>();
+    for (const row of assistants) forkRowByTurn.set(row.turnId, row.rowId);
+    const blocked = running || this.snapshot.pendingInteractions.length > 0;
     const deltas: ConversationDelta[] = [];
     for (const row of this.snapshot.rows.window) {
+      if (row.kind === "turnHeader") {
+        const next = this.turnHeaderWithFileChanges(row, blocked);
+        if (next) deltas.push({ op: "row.upserted", row: next });
+        continue;
+      }
       if (row.kind !== "userInput" && row.kind !== "assistantText") continue;
+      const forkable =
+        !running &&
+        row.kind === "assistantText" &&
+        forkRowByTurn.get(row.turnId) === row.rowId;
       const nextActions =
         !running && row.kind === "userInput" && row.rowId === latestUser?.rowId
           ? { canEdit: true as const, editDisposition: "rewind" as const }
-          : !running && row.kind === "assistantText" && row.rowId === latestAssistant?.rowId
+          : forkable && row.rowId === latestAssistant?.rowId
             ? { canRetry: true as const, canFork: true as const }
-            : undefined;
+            : forkable
+              ? { canFork: true as const }
+              : undefined;
       if (JSON.stringify(row.actions) === JSON.stringify(nextActions)) continue;
       const next = { ...row, actions: nextActions };
       if (!nextActions) delete next.actions;
       deltas.push({ op: "row.upserted", row: next });
     }
     return deltas;
+  }
+
+  private turnHeaderWithFileChanges(
+    row: Extract<ConversationRow, { kind: "turnHeader" }>,
+    blocked: boolean,
+  ): ConversationRow | null {
+    const summary = summarizeTurnFileChanges(this.snapshot.rows.window, row.turnId);
+    const fileChanges = summary
+      ? {
+          additions: summary.additions,
+          deletions: summary.deletions,
+          files: summary.files,
+          state: row.fileChanges?.state === "reverted" ? ("reverted" as const) : ("active" as const),
+        }
+      : undefined;
+    const actions = { ...row.actions };
+    if (fileChanges?.state === "active" && row.state !== "running" && !blocked) {
+      actions.canRewindFiles = true;
+    } else {
+      delete actions.canRewindFiles;
+    }
+    const nextActions = Object.keys(actions).length > 0 ? actions : undefined;
+    if (
+      JSON.stringify(row.fileChanges) === JSON.stringify(fileChanges) &&
+      JSON.stringify(row.actions) === JSON.stringify(nextActions)
+    ) {
+      return null;
+    }
+    const next: Extract<ConversationRow, { kind: "turnHeader" }> = {
+      ...row,
+      ...(nextActions ? { actions: nextActions } : {}),
+    };
+    if (!nextActions) delete next.actions;
+    if (fileChanges) next.fileChanges = fileChanges;
+    else delete next.fileChanges;
+    return next;
   }
 }

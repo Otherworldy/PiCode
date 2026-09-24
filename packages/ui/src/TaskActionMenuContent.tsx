@@ -6,6 +6,7 @@ interface TaskActionMenuItemProps {
   disabled?: boolean;
   onSelect?: () => void;
   title?: string;
+  variant?: "default" | "destructive";
 }
 
 interface TaskActionMenuSeparatorProps {
@@ -29,6 +30,7 @@ export function TaskActionMenuContent({
   onTogglePinTask,
   onStartRenameTask,
   onArchiveTask,
+  onDeleteTask,
   onMarkTaskAsUnread,
   onOpenInSplitPane,
   openInSplitPaneDisabled = false,
@@ -62,6 +64,7 @@ export function TaskActionMenuContent({
   onTogglePinTask: () => void;
   onStartRenameTask: () => void;
   onArchiveTask: () => void;
+  onDeleteTask?: () => void;
   onMarkTaskAsUnread: () => void;
   /** 「在分屏打开」（仅桌面 shell 传入；手机远控不显示该入口）。 */
   onOpenInSplitPane?: () => void;
@@ -112,6 +115,20 @@ export function TaskActionMenuContent({
       >
         {intl.formatMessage({ id: "taskList.archive" })}
       </Item>
+      {onDeleteTask ? (
+        <Item
+          disabled={taskTargetActionsDisabled}
+          title={disabledReason}
+          variant="destructive"
+          onSelect={() => {
+            if (!taskTargetActionsDisabled) {
+              onDeleteTask();
+            }
+          }}
+        >
+          {intl.formatMessage({ id: "taskList.delete" })}
+        </Item>
+      ) : null}
       <Item
         disabled={taskTargetActionsDisabled}
         title={disabledReason}

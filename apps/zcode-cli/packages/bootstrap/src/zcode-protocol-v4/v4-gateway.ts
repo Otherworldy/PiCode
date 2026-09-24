@@ -2674,6 +2674,14 @@ export class ConversationV4Gateway {
     });
   }
 
+  /** 冷会话没有 record，删除时按 workspace 直接从列表拿掉。 */
+  removeIndexedSession(workspaceId: string, sessionId: string): void {
+    const indexPublisher = this.indexPublishers.get(workspaceId);
+    if (indexPublisher?.removeSession(sessionId)) {
+      this.flushIndex(workspaceId);
+    }
+  }
+
   /**
    * Resident 容量去激活：与 disposeSession 相同的内存运行态清理，但**不**从 sessions-index
    * 移除会话（不发 session.removed）——去激活是纯内存优化，侧边栏列表项必须原样

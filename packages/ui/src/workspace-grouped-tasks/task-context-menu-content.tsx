@@ -22,6 +22,7 @@ export function GroupedTaskContextMenuContent({
   onMoveTaskToTop,
   onStartRenameTask,
   onArchiveTask,
+  onDeleteTask,
   onMarkTaskAsUnread,
   onOpenTaskPathInFileManager,
   onCopyText,
@@ -41,6 +42,7 @@ export function GroupedTaskContextMenuContent({
   onMoveTaskToTop: (task: ZCodeTaskMeta) => void;
   onStartRenameTask: (task: ZCodeTaskMeta) => void;
   onArchiveTask: (task: ZCodeTaskMeta) => void;
+  onDeleteTask?: (task: ZCodeTaskMeta) => void;
   onMarkTaskAsUnread: (task: ZCodeTaskMeta) => void;
   onOpenTaskPathInFileManager: () => void;
   onCopyText: (label: string, text: string | null) => void;
@@ -117,6 +119,18 @@ export function GroupedTaskContextMenuContent({
       >
         {intl.formatMessage({ id: "taskList.archive" })}
       </ContextMenuItem>
+      {onDeleteTask ? (
+        <ContextMenuItem
+          variant="destructive"
+          disabled={Boolean(disabledReason)}
+          title={disabledReason}
+          onSelect={() => {
+            if (!disabledReason) onDeleteTask(task);
+          }}
+        >
+          {intl.formatMessage({ id: "taskList.delete" })}
+        </ContextMenuItem>
+      ) : null}
       <ContextMenuItem
         disabled={Boolean(disabledReason)}
         title={disabledReason}

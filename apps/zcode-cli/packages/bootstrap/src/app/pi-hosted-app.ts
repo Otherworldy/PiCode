@@ -1,11 +1,68 @@
-import { readFile } from "node:fs/promises";
-import type { HostedSession } from "@zcode/pi-host";
+import { readFile, rm, writeFile } from "node:fs/promises";
+import { isAbsolute, resolve } from "node:path";
+import { planTurnFileRewind, readProcessSshRemoteSpec, sshReadText, sshRemoveFile, sshWriteText, summarizeTurnFileChanges, type HostedSession } from "@zcode/pi-host";
+import { remotePosixPath } from "@zcode/shared/node";
 import { RewindStrategy, type CollaborationMode, type ModelSelection, type SessionId, type TurnId } from "@zcode/contracts";
 import type { ZCodeApp, PromptInput, SendInputResult } from "./types.js";
 import { parseProviderQualifiedModelSelection } from "./provider-registry-selection.js";
 
 function textOf(input: PromptInput): string {
   return typeof input === "string" ? input : input.text;
+}
+
+const emptyRewind = {
+  preview: { canApply: false, ignoredFiles: [], safeFiles: [], unsafeFiles: [] },
+  restores: [] as Array<{ path: string; content: string }>,
+  deletes: [] as string[],
+};
+
+async function rewindTurnFiles(hosted: HostedSession, turnId: TurnId | undefined) {
+  if (!turnId) return emptyRewind;
+  return planTurnFileRewind(
+    hosted.projector.getSnapshot().rows.window,
+    String(turnId),
+    (path) => readTurnFile(hosted, path),
+  );
+}
+
+function absoluteTurnPath(hosted: HostedSession, filePath: string): string {
+  return isAbsolute(filePath) ? filePath : resolve(hosted.workspacePath, filePath);
+}
+
+async function readTurnFile(hosted: HostedSession, filePath: string) {
+  const spec = readProcessSshRemoteSpec(hosted.workspacePath);
+  try {
+    if (spec) {
+      const remote = remotePosixPath(absoluteTurnPath(hosted, filePath), spec.remotePath);
+      return { content: await sshReadText(spec, remote) };
+    }
+    return { content: await readFile(absoluteTurnPath(hosted, filePath), "utf8") };
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+    const message = error instanceof Error ? error.message : String(error);
+    if (code === "ENOENT" || /no such file/i.test(message)) return { missing: true as const };
+    return { error: message };
+  }
+}
+
+async function writeTurnFile(hosted: HostedSession, filePath: string, content: string) {
+  const spec = readProcessSshRemoteSpec(hosted.workspacePath);
+  if (spec) {
+    const remote = remotePosixPath(absoluteTurnPath(hosted, filePath), spec.remotePath);
+    await sshWriteText(spec, remote, content);
+    return;
+  }
+  await writeFile(absoluteTurnPath(hosted, filePath), content, "utf8");
+}
+
+async function removeTurnFile(hosted: HostedSession, filePath: string) {
+  const spec = readProcessSshRemoteSpec(hosted.workspacePath);
+  if (spec) {
+    const remote = remotePosixPath(absoluteTurnPath(hosted, filePath), spec.remotePath);
+    await sshRemoveFile(spec, remote);
+    return;
+  }
+  await rm(absoluteTurnPath(hosted, filePath), { force: true });
 }
 
 export function createPiHostedApp(
@@ -94,12 +151,74 @@ export function createPiHostedApp(
         targetMessageId: input.targetMessageId,
       };
     },
-    previewWorkspaceFileRewind: async () => ({
-      canApply: false,
-      ignoredFiles: [],
-      safeFiles: [],
-      unsafeFiles: [],
-    }),
+    describeTurnFileChanges: (turnId: string) => {
+      const summary = summarizeTurnFileChanges(hosted.projector.getSnapshot().rows.window, turnId);
+      if (!summary) return null;
+      const header = hosted.projector
+        .getSnapshot()
+        .rows.window.find((row) => row.kind === "turnHeader" && row.turnId === turnId);
+      return {
+        ...summary,
+        ...(header && header.kind === "turnHeader" && header.fileChanges?.state
+          ? { state: header.fileChanges.state }
+          : {}),
+      };
+    },
+    previewWorkspaceFileRewind: async (options?: { targetTurnId?: TurnId }) =>
+      (await rewindTurnFiles(hosted, options?.targetTurnId)).preview,
+    applyWorkspaceFileRewind: async (options?: {
+      targetTurnId?: TurnId;
+      commitAfterApply?: () => Promise<void>;
+    }) => {
+      const turnId = options?.targetTurnId ? String(options.targetTurnId) : "";
+      const plan = await rewindTurnFiles(hosted, options?.targetTurnId);
+      if (!plan.preview.canApply) {
+        return {
+          applied: false,
+          preview: plan.preview,
+          response: "File rewind was not applied because at least one file is unsafe.",
+        };
+      }
+      const journal: Array<{ path: string; content: string | null; deleted: boolean }> = [];
+      try {
+        for (const file of plan.restores) {
+          const current = await readTurnFile(hosted, file.path);
+          const previous = "content" in current && typeof current.content === "string" ? current.content : null;
+          journal.push({ path: file.path, content: previous, deleted: false });
+          await writeTurnFile(hosted, file.path, file.content);
+        }
+        for (const path of plan.deletes) {
+          const current = await readTurnFile(hosted, path);
+          const previous = "content" in current && typeof current.content === "string" ? current.content : null;
+          journal.push({ path, content: previous, deleted: true });
+          await removeTurnFile(hosted, path);
+        }
+        await options?.commitAfterApply?.();
+        if (turnId) hosted.markTurnFilesReverted(turnId);
+      } catch (error) {
+        try {
+          for (const entry of [...journal].reverse()) {
+            if (entry.deleted) {
+              if (entry.content !== null) await writeTurnFile(hosted, entry.path, entry.content);
+              continue;
+            }
+            if (entry.content === null) continue;
+            await writeTurnFile(hosted, entry.path, entry.content);
+          }
+        } catch (compensationError) {
+          throw new AggregateError(
+            [error, compensationError],
+            "Workspace file rewind failed and compensation was incomplete",
+          );
+        }
+        return {
+          applied: false,
+          preview: { ...plan.preview, canApply: false },
+          response: error instanceof Error ? error.message : String(error),
+        };
+      }
+      return { applied: true, preview: plan.preview, response: "" };
+    },
     hasResidencyBlockingWork: () =>
       hosted.projector.getSnapshot().control.phase === "running" ||
       hosted.queue.snapshot().items.length > 0,
@@ -158,7 +277,17 @@ export function createPiHostedApp(
         ref: { providerId: model.providerId, modelId: model.modelId },
         label: model.modelId,
         providerLabel: model.providerId,
-        properties: { inputFormat: "text" as const, outputFormat: "text" as const },
+        // inputFormat 必须是对象。字符串会让 readSession 校验失败，分叉后的侧栏行写不进去。
+        properties: {
+          inputFormat: {
+            supportsText: true,
+            supportsImage: false,
+            supportsVideo: false,
+            supportsAudio: false,
+            supportsPdf: false,
+          },
+          outputFormat: { supportsText: true },
+        },
       }));
     },
     listThoughtLevels: () => ["off", "low", "medium", "high"],

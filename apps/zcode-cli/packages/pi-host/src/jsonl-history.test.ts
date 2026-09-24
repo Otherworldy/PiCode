@@ -32,6 +32,37 @@ test("summarize uses first user text and last assistant preview", () => {
   assert.equal(summary.lastActivityAt, Date.parse("2026-01-02T03:05:03.000Z"));
 });
 
+test("fork keeps the new header time and ignores older copied messages", () => {
+  const content = [
+    '{"type":"session","id":"child","timestamp":"2026-09-24T05:13:57.799Z","cwd":"/work"}',
+    '{"type":"message","id":"u1","parentId":null,"timestamp":"2026-09-24T03:21:15.267Z","message":{"role":"user","content":[{"type":"text","text":"ping2"}]}}',
+    '{"type":"message","id":"a1","parentId":"u1","timestamp":"2026-09-24T03:21:17.568Z","message":{"role":"assistant","content":[{"type":"text","text":"pong2"}]}}',
+    '{"type":"custom","id":"c1","parentId":"a1","timestamp":"2026-09-24T05:13:47.239Z"}',
+    '{"type":"message","id":"u2","parentId":"a1","timestamp":"2026-09-24T05:14:02.184Z","message":{"role":"user","content":[{"type":"text","text":"ping3"}]}}',
+  ].join("\n");
+  const { summary } = readPiJsonl(content);
+  assert.equal(summary?.createdAt, Date.parse("2026-09-24T05:13:57.799Z"));
+  assert.equal(summary?.lastActivityAt, Date.parse("2026-09-24T05:14:02.184Z"));
+});
+
+test("replay follows the active leaf and drops the edited-away branch", () => {
+  const content = [
+    '{"type":"session","id":"s1","timestamp":"2026-01-02T03:04:05.000Z","cwd":"C:\\work"}',
+    '{"type":"message","id":"sys","parentId":null,"timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"system","content":"ctx"}}',
+    '{"type":"message","id":"u1","parentId":"sys","timestamp":"2026-01-02T03:04:07.000Z","message":{"role":"user","content":[{"type":"text","text":"ping"}]}}',
+    '{"type":"message","id":"a1","parentId":"u1","timestamp":"2026-01-02T03:04:08.000Z","message":{"role":"assistant","content":[{"type":"text","text":"pong"}]}}',
+    '{"type":"message","id":"u2","parentId":"sys","timestamp":"2026-01-02T03:04:09.000Z","message":{"role":"user","content":[{"type":"text","text":"ping2"}]}}',
+    '{"type":"message","id":"a2","parentId":"u2","timestamp":"2026-01-02T03:04:10.000Z","message":{"role":"assistant","content":[{"type":"text","text":"pong2"}]}}',
+  ].join("\n");
+  const projector = new PiToV4Projector("s1", "e1", { profile: "continuous" });
+  for (const event of readPiJsonl(content).events) projector.apply(event);
+  const texts = projector
+    .getSnapshot()
+    .rows.window.filter((row) => row.kind === "userInput" || row.kind === "assistantText")
+    .map((row) => ("text" in row ? row.text : ""));
+  assert.deepEqual(texts, ["ping2", "pong2"]);
+});
+
 test("replay hydrates user, assistant, tools into projector", () => {
   const { events } = readPiJsonl(sample);
   const projector = new PiToV4Projector("s1", "e1", { profile: "continuous" });

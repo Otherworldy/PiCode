@@ -1495,6 +1495,7 @@ const enUS: Record<string, string> = {
   "taskList.archiveLocal": "Archive local task",
   "taskList.archiveRemote": "Archive remote task",
   "taskList.archiveFailed": "Could not archive task",
+  "taskList.deleteFailed": "Could not delete session",
   "taskList.unarchive": "Unarchive task",
   "taskList.renamePlaceholder": "Task name",
   "taskList.renameFailed": "Could not rename task",

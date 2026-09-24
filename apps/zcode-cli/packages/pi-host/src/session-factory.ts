@@ -189,6 +189,17 @@ function sessionFileHasContent(path: string): boolean {
   }
 }
 
+export function branchPiSessionFile(
+  sessionFile: string,
+  entryId: string,
+): { sessionId: string; sessionFile: string } {
+  const manager = SessionManager.open(sessionFile, dirname(sessionFile));
+  if (manager.getEntry(entryId) == null) throw new Error(`Entry ${entryId} not found`);
+  const branched = manager.createBranchedSession(entryId);
+  if (!branched) throw new Error(`Entry ${entryId} not found`);
+  return { sessionId: manager.getSessionId(), sessionFile: branched };
+}
+
 function openOrCreateSession(input: {
   sessionId: string;
   cwd: string;
@@ -366,6 +377,11 @@ export function createSdkSessionFactory(options: {
         await session.compact();
       },
       navigateTree: (targetId) => session.navigateTree(targetId),
+      branchFrom: (entryId) => {
+        const file = session.sessionFile;
+        if (!file) throw new Error("session file missing");
+        return branchPiSessionFile(file, entryId);
+      },
       hasEntry: (id) => session.sessionManager.getEntry(id) != null,
       matchUserEntry: (text) => {
         const wanted = text.trim();

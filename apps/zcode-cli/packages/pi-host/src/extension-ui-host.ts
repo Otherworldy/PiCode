@@ -118,6 +118,10 @@ export class ExtensionUiHost {
       case "select":
       case "input":
       case "editor":
+        if (this.autoConfirm) {
+          this.deliver({ id: event.id, value: autoValue(event) });
+          break;
+        }
         this.pending = [...this.pending, this.toInput(event)];
         break;
       default:
@@ -201,4 +205,10 @@ export class ExtensionUiHost {
       },
     };
   }
+}
+
+function autoValue(event: PiExtensionUiEvent): string {
+  if (event.method === "select") return event.options?.[0] ?? "";
+  if (event.method === "editor") return event.prefill ?? "";
+  return event.placeholder ?? "";
 }

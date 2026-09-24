@@ -70,6 +70,22 @@ async function writeRemoteFile(spec: SshRemoteSpec, path: string, content: strin
   }
 }
 
+export async function sshReadText(spec: SshRemoteSpec, remotePath: string): Promise<string> {
+  return (await sshStdout(spec, `cat -- ${quotePosixArg(remotePath)}`)).toString("utf8");
+}
+
+export async function sshWriteText(
+  spec: SshRemoteSpec,
+  remotePath: string,
+  content: string,
+): Promise<void> {
+  await writeRemoteFile(spec, remotePath, content);
+}
+
+export async function sshRemoveFile(spec: SshRemoteSpec, remotePath: string): Promise<void> {
+  await sshOk(spec, `rm -f -- ${quotePosixArg(remotePath)}`);
+}
+
 export function sshCodingToolOptions(spec: SshRemoteSpec) {
   const pathOf = (resolved: string) => remotePosixPath(resolved, spec.remotePath);
   return {

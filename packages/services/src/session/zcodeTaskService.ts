@@ -628,14 +628,14 @@ export interface IZCodeTaskService {
     bumpRuntimeEpoch?: boolean;
   }): Promise<void>;
 
-  /** 将已持久化 task 标记为列表不可见；CLI session 内容继续保留 */
+  /** 删除 Pi 会话文件，并把 task 标成列表不可见。 */
   deleteTask(params: {
     taskId: string;
     workspacePath: string;
     workspaceIdentity?: string;
   }): Promise<void>;
 
-  /** 仅删除写入时仍归档的任务；已恢复、已删除或不存在时返回 false，不清理 CLI 会话。 */
+  /** 仅删除写入时仍归档的任务；已恢复、已删除或不存在时返回 false。会先删 Pi 会话文件。 */
   deleteArchivedTask(params: {
     taskId: string;
     workspacePath: string;

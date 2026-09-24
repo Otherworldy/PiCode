@@ -49,29 +49,35 @@ export async function bindHostedSession(
       });
     },
   });
-  const unsubscribeDeltas = hosted.onDeltas((deltas) => {
-    context.v4Gateway?.ingestPiDeltas(sessionId, deltas);
-  });
   const summary = summarizePiJsonl(await readFile(hosted.sessionFile, "utf8").catch(() => ""));
-  return {
+  const record: ZCodeProtocolSessionRecord = {
     app,
     memoryEnabled: false,
     nativeSearchEnhancementsEnabled: false,
     modelContextBudgetStrategy: "legacy",
     createdAt: summary?.createdAt ?? Date.now(),
     eventStore: context.deps.createSessionEventStore?.(sessionId) ?? createInMemorySessionEventStore(),
+    ...(hosted.parentSessionId
+      ? { parentSessionId: hosted.parentSessionId as SessionId }
+      : {}),
     protocolEventSequences: new Map(),
     protocolToolInputTransmissions: new Map(),
     stateRevision: 0,
     traceContext: createRootTraceContext({ sessionId }),
-    unsubscribe: () => {
-      unsubscribeDeltas();
-      hosted.dispose();
-    },
     updatedAt: summary?.lastActivityAt ?? Date.now(),
     workspace,
     persistence: summary ? "immediate" : "deferred",
   };
+  // 历史 delta 在订阅时一次性吐出。必须先入注册表，sessions-index 才能按 workspace 挂上侧栏。
+  context.sessions.set(sessionId, record);
+  const unsubscribeDeltas = hosted.onDeltas((deltas) => {
+    context.v4Gateway?.ingestPiDeltas(sessionId, deltas);
+  });
+  record.unsubscribe = () => {
+    unsubscribeDeltas();
+    hosted.dispose();
+  };
+  return record;
 }
 
 export async function createPiSessionRecord(

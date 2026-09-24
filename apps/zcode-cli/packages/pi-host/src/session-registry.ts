@@ -37,11 +37,14 @@ export interface HostedSession {
   abort(): Promise<void>;
   compact(): Promise<void>;
   navigateTree(targetId: string): Promise<void>;
+  branchFrom?(entryId: string): { sessionId: string; sessionFile: string };
   reloadHistory(content: string): void;
   setModel(provider: string, modelId: string, thought?: string): Promise<void>;
   setThinkingLevel(level: string): void;
   setFeedback(entityId: string, feedback: "like" | "dislike" | null): void;
+  markTurnFilesReverted(turnId: string): void;
   requestConfirm(toolName: string, reason: string, args?: unknown): Promise<boolean>;
+  publishUi(): void;
   dispose(): void;
   hydrateHistory(content: string): void;
   onDeltas(listener: (deltas: ConversationDelta[]) => void): () => void;
@@ -165,6 +168,17 @@ export class HostSessionRegistry {
   async fork(parentId: string, entryId: string): Promise<HostedSession> {
     const parent = this.sessions.get(parentId);
     if (!parent) throw new Error(`pi-host parent not found: ${parentId}`);
+    if (parent.branchFrom) {
+      const branched = parent.branchFrom(entryId);
+      return this.openFile({
+        sessionId: branched.sessionId,
+        identity: parent.identity,
+        workspacePath: parent.workspacePath,
+        sessionFile: branched.sessionFile,
+        parentSessionId: parentId,
+        viaRegistry: true,
+      });
+    }
     const sessionId = randomUUID();
     const dir = nativeSessionDir(
       parent.identity,
@@ -191,13 +205,45 @@ export class HostSessionRegistry {
     return true;
   }
 
-  async delete(sessionId: string): Promise<void> {
+  async delete(sessionId: string, identity?: string): Promise<boolean> {
+    const files = new Set<string>();
     const hosted = this.sessions.get(sessionId);
-    if (!hosted) return;
-    hosted.dispose();
-    this.sessions.delete(sessionId);
-    this.toolChecks.delete(sessionId);
-    await rm(hosted.sessionFile, { force: true });
+    if (hosted) {
+      files.add(hosted.sessionFile);
+      await hosted.abort().catch(() => undefined);
+      hosted.dispose();
+      this.sessions.delete(sessionId);
+      this.toolChecks.delete(sessionId);
+      this.children.delete(sessionId);
+      for (const ids of this.children.values()) ids.delete(sessionId);
+    }
+    if (identity) {
+      const sessionsRoot = nativeSessionsRoot(this.options.nativeSessionsRoot);
+      const dirs: Array<{ dir: string; idFrom: "file" | "header" }> = [
+        {
+          dir: join(this.options.storageRoot, "pi-host-sessions", encodeKey(identity)),
+          idFrom: "file",
+        },
+        { dir: nativeSessionDir(identity, sessionsRoot), idFrom: "header" },
+      ];
+      const legacyRemotePath = identity.startsWith("remote:")
+        ? identity.slice(identity.indexOf(":/") + 1)
+        : "";
+      if (legacyRemotePath.startsWith("/") && legacyRemotePath !== "/") {
+        dirs.push({ dir: nativeSessionDir(legacyRemotePath, sessionsRoot), idFrom: "header" });
+      }
+      for (const { dir, idFrom } of dirs) {
+        for (const item of await this.listDir(dir, idFrom)) {
+          if (item.sessionId === sessionId) files.add(item.sessionFile);
+        }
+      }
+    } else if (!hosted) {
+      const stored = await this.find(sessionId);
+      if (stored) files.add(stored.sessionFile);
+    }
+    if (files.size === 0) return false;
+    await Promise.all([...files].map((file) => rm(file, { force: true })));
+    return true;
   }
 
   async list(identity: string): Promise<PiStoredSummary[]> {
@@ -281,8 +327,11 @@ export class HostSessionRegistry {
       const content = await readFile(sessionFile, "utf8").catch(() => "");
       const summary = readPiJsonl(content).summary;
       if (!summary) continue;
+      const stem = fileStem(file);
+      const headerId = summary.sessionId;
+      // Pi 分叉文件名是 timestamp_id。用整段文件名当会话 id 会和活会话的 header id 不是同一行。
       const sessionId =
-        idFrom === "header" && summary.sessionId ? summary.sessionId : fileStem(file);
+        headerId && (idFrom === "header" || stem.endsWith(`_${headerId}`)) ? headerId : stem;
       summaries.push({
         sessionId,
         sessionFile,
@@ -556,6 +605,7 @@ export class HostSessionRegistry {
         projector.setConfig({ thought: level });
         pi.setThinkingLevel?.(mapThought(level));
       },
+      branchFrom: pi.branchFrom,
       navigateTree: async (targetId) => {
         let entryId = targetId;
         // 冷恢复的行 id 是 Pi entry。实时行 id 是 row:N，得用原文对上树节点。
@@ -571,6 +621,15 @@ export class HostSessionRegistry {
       },
       setFeedback: (entityId, feedback) => {
         emit(projector.setFeedback(entityId, feedback));
+      },
+      markTurnFilesReverted: (turnId) => {
+        emit(projector.markTurnFilesReverted(turnId));
+      },
+      publishUi: () => {
+        const snap = ui.snapshot();
+        emit(projector.replaceInteractions(snap.pending));
+        emit(projector.replaceWidgets(snap.widgets));
+        emit(projector.replaceStatuses(snap.statuses));
       },
       requestConfirm: async (toolName, reason, args) => {
         if (sessionAllowed.has(toolName)) return true;
