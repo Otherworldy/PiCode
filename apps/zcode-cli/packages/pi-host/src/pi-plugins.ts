@@ -1,10 +1,10 @@
 import { relative } from "node:path";
-import {
+import type {
   DefaultPackageManager,
-  getAgentDir,
+  PackageSource,
   SettingsManager,
-  type PackageSource,
 } from "@earendil-works/pi-coding-agent";
+import { ensurePiSdk, piCoding } from "./pi-sdk.js";
 
 export type PiPluginKind = "package" | "extension";
 export type PiPluginScope = "user" | "project";
@@ -46,9 +46,12 @@ function patternsOf(settings: SettingsManager, scope: PiPluginScope): string[] {
   return file.extensions ?? [];
 }
 
-export async function listPiPlugins(cwd: string, agentDir = getAgentDir()): Promise<PiPluginView[]> {
-  const settings = SettingsManager.create(cwd, agentDir);
-  const packages = new DefaultPackageManager({ cwd, agentDir, settingsManager: settings });
+export async function listPiPlugins(cwd: string, agentDir?: string): Promise<PiPluginView[]> {
+  await ensurePiSdk();
+  const { DefaultPackageManager: PackageManager, SettingsManager, getAgentDir } = piCoding();
+  const dir = agentDir ?? getAgentDir();
+  const settings = SettingsManager.create(cwd, dir);
+  const packages = new PackageManager({ cwd, agentDir: dir, settingsManager: settings });
   const rows: PiPluginView[] = [];
   for (const pkg of packages.listConfiguredPackages()) {
     const listed = packagesOf(settings, pkg.scope).find((item) => sourceOf(item) === pkg.source);
@@ -95,9 +98,11 @@ export async function setPiPluginEnabled(
   cwd: string,
   id: string,
   enabled: boolean,
-  agentDir = getAgentDir(),
+  agentDir?: string,
 ): Promise<void> {
-  const settings = SettingsManager.create(cwd, agentDir);
+  await ensurePiSdk();
+  const { SettingsManager, getAgentDir } = piCoding();
+  const settings = SettingsManager.create(cwd, agentDir ?? getAgentDir());
   const [kind, scope, ...rest] = id.split(":");
   const key = rest.join(":");
   if ((scope !== "user" && scope !== "project") || !key) {

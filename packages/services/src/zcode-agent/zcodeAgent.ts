@@ -67,6 +67,7 @@ import type {
   ZCodePiModelsMutateResult,
   ZCodePiPluginsParams,
   ZCodePiPluginsResult,
+  ZCodePiSdkStatus,
 } from "@zcode/shared";
 import type {
   ClientHello,
@@ -707,6 +708,8 @@ export interface IZCodeAgentService {
   ): Promise<boolean>;
   /** 关掉活会话并删除 Pi jsonl。文件已经不在时返回 false，不抛错。 */
   deleteSession(params: ZCodeAgentSessionTarget): Promise<boolean>;
+  /** 当前 agent 进程实际加载的 Pi。还没有 agent 时返回 undefined。 */
+  readPiSdkStatus(): Promise<ZCodePiSdkStatus | undefined>;
   setModel(params: ZCodeAgentSetModelParams): Promise<ZCodeSessionStateSnapshot>;
   setThoughtLevel(params: ZCodeAgentSetThoughtLevelParams): Promise<ZCodeSessionStateSnapshot>;
   setMode(params: ZCodeAgentSetModeParams): Promise<ZCodeSessionStateSnapshot>;

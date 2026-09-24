@@ -1,12 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import {
-  createAgentSession,
-  DefaultResourceLoader,
-  SessionManager,
-  SettingsManager,
-  type CreateAgentSessionOptions,
-} from "@earendil-works/pi-coding-agent";
+import type { CreateAgentSessionOptions } from "@earendil-works/pi-coding-agent";
+import { ensurePiSdk, piCoding } from "./pi-sdk.js";
 import { gateTool, type ToolPermissionCheck } from "./permission-gate.js";
 
 export interface ZcodeSubagentProfile {
@@ -134,7 +129,9 @@ export async function runZcodeSubagent(input: {
   agentDir: string;
   codingTools: readonly CodingTool[];
 }): Promise<string> {
+  await ensurePiSdk();
   if (input.signal?.aborted) return "subagent cancelled";
+  const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } = piCoding();
   const allowed = new Set(piToolNamesForAgent(input.profile.tools, input.codingTools.map((tool) => tool.name)));
   const childDir = join(
     dirname(input.parentSessionFile),

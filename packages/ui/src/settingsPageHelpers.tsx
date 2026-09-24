@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button.js";
 import { SettingsBadge, SettingsGroupCard, SettingsRow } from "@/settings/SettingsPageParts.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useOptionalServices } from "@/hooks/useServices.js";
+import { PiSdkSourceSetting } from "@/settings/PiSdkSourceSetting.js";
 import { ProactiveSuggestionsSetting } from "@/settings/ProactiveSuggestionsSetting.js";
 import { normalizeInterfaceMode, type InterfaceMode } from "@/lib/interfaceMode.js";
 import {
@@ -216,6 +217,12 @@ export function GeneralSectionContent({
           }
         />
       </SettingsGroupCard>
+
+      {isDesktop ? (
+        <SettingsGroupCard>
+          <PiSdkSourceSetting />
+        </SettingsGroupCard>
+      ) : null}
 
       <SettingsGroupCard>
         <SettingsRow

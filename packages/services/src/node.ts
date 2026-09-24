@@ -2217,6 +2217,7 @@ export function createLocalServices(options: {
           httpProxy: agentNetwork.httpProxy,
           noProxy: agentNetwork.noProxy,
           caCertPath: settings.httpProxyCaCertPath,
+          piSdkSource: settings.piSdkSource,
         }),
         // 把 host 解析出的权威 origin（含 settings 覆盖）下发给 agent，否则 agent 侧只按
         // env 推导，test env + 自定义端点时两侧信任判定的输入分叉、官方 MCP 整体 fail closed。

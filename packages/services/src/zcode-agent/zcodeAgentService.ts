@@ -67,6 +67,7 @@ import {
   zcodeProcessResourceSampleSchema,
   zcodeSessionCloseResultSchema,
   zcodeSessionDeleteResultSchema,
+  zcodeRuntimeCapabilitiesSchema,
   zcodeSessionCompactResultSchema,
   zcodeSessionEventsResultSchema,
   zcodeSessionGoalResultSchema,
@@ -4445,6 +4446,17 @@ export function createZCodeAgentService(
         zcodeSessionDeleteResultSchema,
       );
       return result.deleted;
+    },
+
+    async readPiSdkStatus() {
+      const active = activeClientsByWorkspaceKey.values().next().value;
+      if (!active) return undefined;
+      const result = await active.client.request(
+        zcodeProtocolMethods.runtimeCapabilities,
+        {},
+        zcodeRuntimeCapabilitiesSchema,
+      );
+      return result.piSdk;
     },
 
     async setModel(params: ZCodeAgentSetModelParams) {

@@ -2,6 +2,7 @@ import {
   ZCODE_AGENT_CA_CERT_ENV_KEY,
   ZCODE_HTTP_PROXY_ENV_KEY,
   ZCODE_NO_PROXY_ENV_KEY,
+  ZCODE_PI_SDK_ENV_KEY,
   ZCODE_WORKSPACE_IDENTITY_ENV,
 } from "@zcode/shared";
 
@@ -70,12 +71,14 @@ export function buildAgentRuntimeEnv(input: {
   httpProxy: string | undefined;
   noProxy?: string | undefined;
   caCertPath?: string | undefined;
+  piSdkSource?: "builtin" | "global";
 }): Record<string, string> {
   const proxyEnv = buildAgentProxyEnv(input.httpProxy);
   return {
     ...proxyEnv,
     ...buildAgentNoProxyEnv(input.noProxy),
     ...buildAgentCaCertEnv(input.caCertPath),
+    ...(input.piSdkSource === "global" ? { [ZCODE_PI_SDK_ENV_KEY]: "global" } : {}),
   };
 }
 

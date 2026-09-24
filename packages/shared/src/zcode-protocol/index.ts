@@ -73,8 +73,17 @@ export const ZCODE_PROTOCOL_NAME = "ZCode Protocol" as const;
 export const ZCODE_PROTOCOL_VERSION = 1 as const;
 // V4 wire 与 legacy 主协议并存；禁止为了 V4 physical framing 改写 legacy 版本。
 export const ZCODE_PROTOCOL_V4_WIRE_VERSION = 3 as const;
+export const zcodePiSdkStatusSchema = z.object({
+  requested: z.enum(["builtin", "global"]),
+  active: z.enum(["builtin", "global"]),
+  builtinVersion: z.string(),
+  globalVersion: z.string().optional(),
+  reason: z.enum(["missing", "incompatible", "load-failed"]).optional(),
+});
+export type ZCodePiSdkStatus = z.infer<typeof zcodePiSdkStatusSchema>;
 export const zcodeRuntimeCapabilitiesSchema = z.object({
   independentPlanState: z.boolean().optional(),
+  piSdk: zcodePiSdkStatusSchema.optional(),
 });
 export const zcodeProtocolErrorCodes = {
   sessionUnavailable: -32004,

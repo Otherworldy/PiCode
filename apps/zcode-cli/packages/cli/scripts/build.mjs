@@ -1,7 +1,7 @@
 import { chmod, readFile, rm } from "node:fs/promises";
 import { readThirdPartyNotices, stageThirdPartyNotices } from "../../../../../scripts/third-party-notices.mjs";
 import { basename, dirname, relative, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { stageBuiltinProviderConfig } from "../../../../../scripts/builtin-provider-config.mjs";
 
@@ -251,6 +251,19 @@ export const buildCli = async ({
   }),
 } = {}) => {
   const cliVersion = await version;
+  // 这个包只导出 import 条件，CJS require.resolve 会报没有 exports main。
+  const piEntry = fileURLToPath(
+    import.meta.resolve(
+      "@earendil-works/pi-coding-agent",
+      pathToFileURL(resolve(cliDirectory, "../pi-host/package.json")).href,
+    ),
+  );
+  const piVersion = JSON.parse(
+    await readFile(resolve(dirname(piEntry), "../package.json"), "utf8"),
+  ).version;
+  if (typeof piVersion !== "string" || !piVersion) {
+    throw new Error("Bundled Pi package.json has no version");
+  }
   const outfile = resolve(cliDirectory, "dist/zcode.cjs");
   const sourcemapFile = `${outfile}.map`;
   const notices = await readThirdPartyNotices(resolve(rootDirectory, "../.."));
@@ -265,7 +278,7 @@ export const buildCli = async ({
     banner: {
       // SEA 与普通 CLI 共用入口；声明必须在 Agent 初始化和原生资源解压前可独立读取。
       // PI_BUNDLED_NODE 让 Pi 用内嵌模块表加载 extension。__zcodeBundleFilename 避开 loader 里的 `const module` 死区。
-      js: `#!/usr/bin/env node\n"use strict";\nif (process.argv.length === 3 && process.argv[2] === "--licenses") { const sea = require("node:sea"); const nodeNotice = sea.isSea() ? "\\n\\n## Bundled Node.js runtime\\n\\n" + sea.getAsset("zcode-node-license", "utf8") : ""; process.stdout.write(${JSON.stringify(notices.toString("utf8"))} + nodeNotice, () => process.exit(0)); } else {globalThis.PI_BUNDLED_NODE=true;globalThis.__zcodeBundleFilename=__filename;`,
+      js: `#!/usr/bin/env node\n"use strict";\nif (process.argv.length === 3 && process.argv[2] === "--licenses") { const sea = require("node:sea"); const nodeNotice = sea.isSea() ? "\\n\\n## Bundled Node.js runtime\\n\\n" + sea.getAsset("zcode-node-license", "utf8") : ""; process.stdout.write(${JSON.stringify(notices.toString("utf8"))} + nodeNotice, () => process.exit(0)); } else {globalThis.PI_BUNDLED_NODE=true;globalThis.__zcodeBundleFilename=__filename;globalThis.__zcodeBundledPiVersion=${JSON.stringify(piVersion)};`,
     },
     footer: { js: "}" },
     bundle: true,

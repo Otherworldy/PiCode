@@ -101,6 +101,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   createSdkSessionFactory,
+  ensurePiSdk,
+  getPiSdkStatus,
   HostSessionRegistry,
   mapPiToolName,
 } from "@zcode/pi-host";
@@ -675,8 +677,10 @@ export class ZCodeProtocolAgentServer {
         return await moveSavedWorkflowOp(this.context, request.params);
       case zcodeProtocolMethods.processChildProcesses:
         return listChildProcesses(this.context.deps.mcpTelemetry?.listProcesses() ?? []);
-      case zcodeProtocolMethods.runtimeCapabilities:
-        return { independentPlanState: true };
+      case zcodeProtocolMethods.runtimeCapabilities: {
+        await ensurePiSdk();
+        return { independentPlanState: true, piSdk: getPiSdkStatus() };
+      }
       case zcodeProtocolMethods.usageStats:
         return await getUsageStats(this.context, request.params);
       case zcodeProtocolMethods.sessionDebug:

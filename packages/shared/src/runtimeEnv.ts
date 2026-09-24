@@ -1,5 +1,7 @@
 export const ZCODE_RUNTIME_ENV_KEY = "ZCODE_RUNTIME_ENV";
 export const ZCODE_HTTP_PROXY_ENV_KEY = "ZCODE_HTTP_PROXY";
+/** Host 拉起 agent 时注入。`global` 才改用本机 npm 全局的 Pi；缺省是内置 SDK。 */
+export const ZCODE_PI_SDK_ENV_KEY = "ZCODE_PI_SDK";
 export const ZCODE_NO_PROXY_ENV_KEY = "ZCODE_NO_PROXY";
 /** Desktop Host 只向 desktop-attached remote server 传递一次的网络配置。 */
 export const ZCODE_REMOTE_RUNTIME_NETWORK_AUTHORITY_ENV_KEY =

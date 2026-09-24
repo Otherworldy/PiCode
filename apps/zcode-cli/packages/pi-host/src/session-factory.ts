@@ -1,20 +1,8 @@
-import { existsSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import {
-  createAgentSession,
-  type CreateAgentSessionOptions,
-  createCodingTools,
-  createFindTool,
-  createGrepTool,
-  createLsTool,
-  createPowerShellTool,
-  DefaultResourceLoader,
-  getAgentDir,
-  ModelRuntime,
-  SessionManager,
-  SettingsManager,
-} from "@earendil-works/pi-coding-agent";
+import { join } from "node:path";
+import type { CreateAgentSessionOptions, ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { ensurePiSdk, piCoding } from "./pi-sdk.js";
+import { branchPiSessionFile, openOrCreateSession } from "./session-files.js";
 import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
 import {
   createCapabilityTools,
@@ -52,14 +40,14 @@ function asPiEvent(event: unknown): PiHostEvent | null {
 function wrapCodingTools(cwd: string, check: ToolPermissionCheck | undefined) {
   const ssh = readProcessSshRemoteSpec(cwd);
   const raw = [
-    ...createCodingTools(cwd, ssh ? sshCodingToolOptions(ssh) : undefined),
+    ...piCoding().createCodingTools(cwd, ssh ? sshCodingToolOptions(ssh) : undefined),
     ...(ssh
       ? []
       : [
-          ...(process.platform === "win32" ? [createPowerShellTool(cwd)] : []),
-          createGrepTool(cwd),
-          createFindTool(cwd),
-          createLsTool(cwd),
+          ...(process.platform === "win32" ? [piCoding().createPowerShellTool(cwd)] : []),
+          piCoding().createGrepTool(cwd),
+          piCoding().createFindTool(cwd),
+          piCoding().createLsTool(cwd),
         ]),
   ];
   const seen = new Set<string>();
@@ -92,7 +80,7 @@ function wrapCodingTools(cwd: string, check: ToolPermissionCheck | undefined) {
 }
 
 async function createIsolatedRuntime(delegate: DelegateProvider): Promise<ModelRuntime> {
-  const runtime = await ModelRuntime.create({
+  const runtime = await piCoding().ModelRuntime.create({
     credentials: new InMemoryCredentialStore(),
     modelsPath: null,
     refreshOnCreate: false,
@@ -105,7 +93,7 @@ async function createIsolatedRuntime(delegate: DelegateProvider): Promise<ModelR
 let productionRuntime: Promise<ModelRuntime> | undefined;
 
 function getProductionModelRuntime(): Promise<ModelRuntime> {
-  productionRuntime ??= ModelRuntime.create();
+  productionRuntime ??= ensurePiSdk().then(() => piCoding().ModelRuntime.create());
   return productionRuntime;
 }
 
@@ -121,7 +109,7 @@ export async function listPiCatalog(): Promise<{
   defaultThought?: string;
 }> {
   const runtime = await getProductionModelRuntime();
-  const settings = SettingsManager.create(process.cwd(), getAgentDir());
+  const settings = piCoding().SettingsManager.create(process.cwd(), piCoding().getAgentDir());
   return {
     models: runtime.getAvailableSnapshot().map((model) => ({
       providerId: model.provider,
@@ -144,8 +132,9 @@ export async function mutatePiCatalog(input: {
   defaultProvider?: string;
   defaultModel?: string;
 }): Promise<PiModelConfigView & { discovered?: PiDiscoveredModel[] }> {
-  const agentDir = getAgentDir();
-  const settings = SettingsManager.create(process.cwd(), agentDir);
+  await ensurePiSdk();
+  const agentDir = piCoding().getAgentDir();
+  const settings = piCoding().SettingsManager.create(process.cwd(), agentDir);
   let file = await loadModelsJson(agentDir);
 
   if (input.action === "upsert" && input.provider) {
@@ -181,39 +170,7 @@ export async function mutatePiCatalog(input: {
   });
 }
 
-function sessionFileHasContent(path: string): boolean {
-  try {
-    return existsSync(path) && statSync(path).size > 0;
-  } catch {
-    return false;
-  }
-}
-
-export function branchPiSessionFile(
-  sessionFile: string,
-  entryId: string,
-): { sessionId: string; sessionFile: string } {
-  const manager = SessionManager.open(sessionFile, dirname(sessionFile));
-  if (manager.getEntry(entryId) == null) throw new Error(`Entry ${entryId} not found`);
-  const branched = manager.createBranchedSession(entryId);
-  if (!branched) throw new Error(`Entry ${entryId} not found`);
-  return { sessionId: manager.getSessionId(), sessionFile: branched };
-}
-
-function openOrCreateSession(input: {
-  sessionId: string;
-  cwd: string;
-  sessionFile: string;
-  parentSessionId?: string;
-}) {
-  if (sessionFileHasContent(input.sessionFile)) {
-    return SessionManager.open(input.sessionFile, undefined, input.cwd);
-  }
-  return SessionManager.create(input.cwd, dirname(input.sessionFile), {
-    id: input.sessionId,
-    parentSession: input.parentSessionId,
-  });
-}
+export { branchPiSessionFile };
 
 export function createSdkSessionFactory(options: {
   delegate?: DelegateProvider;
@@ -249,9 +206,12 @@ export function createSdkSessionFactory(options: {
   const delegate = isolated ? (options.delegate ?? createDelegateProvider({ stream })) : undefined;
   let runtimePromise: Promise<ModelRuntime> | undefined;
   const runtime = () => {
-    if (options.modelRuntime) return Promise.resolve(options.modelRuntime);
+    const injected = options.modelRuntime;
+    if (injected) return ensurePiSdk().then(() => injected);
     runtimePromise ??=
-      isolated && delegate ? createIsolatedRuntime(delegate) : getProductionModelRuntime();
+      ensurePiSdk().then(() =>
+        isolated && delegate ? createIsolatedRuntime(delegate) : getProductionModelRuntime(),
+      );
     return runtimePromise;
   };
 
@@ -259,12 +219,12 @@ export function createSdkSessionFactory(options: {
     const modelRuntime = await runtime();
     const agentDir =
       options.agentDir ??
-      (input.loadExtensions ? getAgentDir() : join(tmpdir(), "zcode-pi-no-ext"));
+      (input.loadExtensions ? piCoding().getAgentDir() : join(tmpdir(), "zcode-pi-no-ext"));
     const settingsManager = isolated
-      ? SettingsManager.inMemory({ retry: { enabled: false } })
-      : SettingsManager.create(input.cwd, agentDir);
+      ? piCoding().SettingsManager.inMemory({ retry: { enabled: false } })
+      : piCoding().SettingsManager.create(input.cwd, agentDir);
     const ssh = readProcessSshRemoteSpec(input.cwd);
-    const resourceLoader = new DefaultResourceLoader({
+    const resourceLoader = new (piCoding().DefaultResourceLoader)({
       cwd: input.cwd,
       agentDir,
       settingsManager,
@@ -310,7 +270,7 @@ export function createSdkSessionFactory(options: {
             }),
         })
       : [];
-    const created = await createAgentSession({
+    const created = await piCoding().createAgentSession({
       cwd: input.cwd,
       agentDir,
       ...(isolated && delegate ? { model: delegate.model, thinkingLevel: "off" as const } : {}),
