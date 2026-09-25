@@ -49,6 +49,22 @@ interface SelectionSideSlashCommandParseOptions {
 }
 
 const GOAL_COMMAND_RE = /^\/(?:goal|target)(?:\s|$)/i;
+const TERMINAL_ONLY_SLASH_EXEMPT = new Set(["compact", "plan"]);
+
+/** Pi 终端菜单里的命令。compact / plan 已有 GUI 行为，其余提交不能变成用户消息。 */
+export function isTerminalOnlySlashCommand(
+  content: string,
+  commands: readonly { name: string; source?: "builtin" | "custom" }[],
+): boolean {
+  const match = /^\/([^\s]+)/.exec(content.trim());
+  const name = match?.[1]?.toLowerCase();
+  if (!name || TERMINAL_ONLY_SLASH_EXEMPT.has(name)) return false;
+  return commands.some(
+    (command) =>
+      command.source === "builtin" &&
+      command.name.trim().replace(/^\/+/, "").toLowerCase() === name,
+  );
+}
 
 export function parseV4VisibleSlashCommand(
   content: string,

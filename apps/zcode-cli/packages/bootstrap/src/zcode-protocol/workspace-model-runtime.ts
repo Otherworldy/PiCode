@@ -10,7 +10,7 @@ import {
   type ZCodeWorkspaceRef,
 } from "@zcode/shared";
 import type { ZCodeApp, ZCodeAppOptions } from "../app/types.js";
-import { listProtocolSlashCommands } from "./slash-commands.js";
+import { listProtocolSlashCommands, livePiSlashCommands } from "./slash-commands.js";
 import {
   parseParams,
   type ZCodeProtocolAgentServerContext,
@@ -29,11 +29,11 @@ export async function readWorkspacePresentation(
     workspace: params.workspace,
     mode: "build" as const,
     slashCommands: await listProtocolSlashCommands({
-      // 灰度门是 Host 判定的 workspace 级事实，目录装配读进程缓存。
       dynamicWorkflowEnabled: context.appRuntimePreferences.dynamicWorkflowEnabled,
       env: context.deps.env,
       logger: context.logger,
       workingDirectory: params.workspace.workspacePath,
+      ...livePiSlashCommands(context.sessions.values(), params.workspace.workspacePath),
     }),
     ...(catalog?.models.length
       ? {

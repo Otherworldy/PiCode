@@ -381,6 +381,14 @@ export const timelineMarkerPayloadSchema = z.union([
     type: z.literal("retryNotice"),
     attempt: z.number(),
     reasonCode: z.string(),
+    failures: z
+      .array(
+        z.object({
+          attempt: z.number(),
+          message: z.string(),
+        }),
+      )
+      .optional(),
   }),
   // workspace 域动作在时间线上的回执。
   z.object({

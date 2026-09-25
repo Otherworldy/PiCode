@@ -4,7 +4,7 @@ import { getZCodeAgentModeSelectOptions, normalizeAvailableZCodeMode } from "@zc
 import type { ZCodeSessionSettingsState, ZCodeSlashCommand } from "@zcode/shared";
 import type { WorkspaceConfigState } from "@zcode/shared/zcode-protocol-v4";
 import { mapSessionSettings } from "./mapper.js";
-import { listProtocolSlashCommands } from "./slash-commands.js";
+import { listProtocolSlashCommands, piSlashCommandsFromApp } from "./slash-commands.js";
 import type { ZCodeProtocolAgentServerContext } from "./server-types.js";
 
 /** Session settings 只投影非模型的 workspace mode 与 slash commands。 */
@@ -49,11 +49,11 @@ export async function buildLiveWorkspaceConfigStateV4(
   if (!record) return null;
   const settings = await mapSessionSettings(record.app);
   const slashCommands = await listProtocolSlashCommands({
-    // 灰度门是 Host 判定的 workspace 级事实，目录装配读进程缓存。
     dynamicWorkflowEnabled: context.appRuntimePreferences.dynamicWorkflowEnabled,
     env: context.deps.env,
     logger: context.logger,
     workingDirectory: record.workspace.workspacePath,
+    piCommands: piSlashCommandsFromApp(record.app),
   });
   return toV4WorkspaceConfigState(settings, slashCommands);
 }

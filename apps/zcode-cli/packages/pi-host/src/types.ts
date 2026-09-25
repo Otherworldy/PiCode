@@ -21,9 +21,26 @@ export type PiToolResult = {
 export type PiHostEvent =
   | { type: "agent_start" }
   | { type: "agent_end"; willRetry?: boolean }
+  | {
+      type: "auto_retry_start";
+      attempt: number;
+      maxAttempts: number;
+      delayMs: number;
+      errorMessage: string;
+    }
+  | { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string }
   | { type: "agent_settled" }
   | { type: "message_start"; message: { role: string; content?: unknown; id?: string } }
-  | { type: "message_end"; message: { role: string; content?: unknown; id?: string; stopReason?: string } }
+  | {
+      type: "message_end";
+      message: {
+        role: string;
+        content?: unknown;
+        id?: string;
+        stopReason?: string;
+        errorMessage?: string;
+      };
+    }
   | { type: "message_update"; assistantMessageEvent: PiAssistantDelta }
   | {
       type: "tool_execution_start";
@@ -93,6 +110,13 @@ export type PiExtensionUiResponse =
   | { id: string; confirmed: boolean }
   | { id: string; value: string };
 
+export interface PiSlashCommandView {
+  name: string;
+  description: string;
+  inputHint: string;
+  source: "builtin" | "custom";
+}
+
 export interface PiSkillView {
   name: string;
   description: string;
@@ -110,6 +134,8 @@ export interface PiSessionPort {
   listModels?(): Array<{ providerId: string; modelId: string; name?: string }>;
   /** 这个会话里 Pi 已经加载的技能，含用户目录、项目目录和包技能。 */
   listSkills?(): PiSkillView[];
+  /** Pi 自动补全那份斜杠命令：内置、提示词、扩展命令、skill: 。 */
+  listSlashCommands?(): PiSlashCommandView[];
   prompt(text: string): Promise<boolean>;
   waitTurn?(): Promise<void>;
   steer(text: string): Promise<void>;
@@ -122,7 +148,7 @@ export interface PiSessionPort {
   hasEntry?(id: string): boolean;
   /** 画面行 id 不是树节点时，用用户原文找回 Pi entry。 */
   matchUserEntry?(text: string): string | undefined;
-  setModel?(provider: string, modelId: string, thought?: string): Promise<void>;
+  setModel?(provider: string, modelId: string, thought?: string): Promise<boolean | void>;
   setThinkingLevel?(level: PiThinkingLevel): void;
   setSteeringMode?(mode: "all" | "one-at-a-time"): void;
   setFollowUpMode?(mode: "all" | "one-at-a-time"): void;

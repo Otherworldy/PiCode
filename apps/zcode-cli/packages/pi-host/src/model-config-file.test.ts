@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  alignProviderModelApi,
   deleteProvider,
   toPiModelConfigView,
+  toRuntimeConfig,
   upsertProvider,
   type ModelsJsonFile,
 } from "./model-config-file.js";
@@ -18,6 +20,7 @@ test("upsert keeps extra model fields and masks api keys in the view", () => {
           {
             id: "glm-5.3-flash",
             name: "GLM",
+            api: "anthropic-messages",
             thinkingLevelMap: { high: "high" },
             compat: { thinkingFormat: "zai" },
           },
@@ -38,6 +41,7 @@ test("upsert keeps extra model fields and masks api keys in the view", () => {
   const glm = (next.providers?.lens?.models as Array<Record<string, unknown>> | undefined)?.[0];
   assert.ok(glm);
   assert.equal((glm.thinkingLevelMap as { high: string } | undefined)?.high, "high");
+  assert.equal(glm.api, "openai-responses");
   assert.equal(next.providers?.lens?.api, "openai-responses");
   assert.equal(next.providers?.lens?.apiKey, "secret-key");
   const view = toPiModelConfigView(next);
@@ -100,4 +104,22 @@ test("upsert writes per-model limits and keeps thinkingLevelMap values", () => {
   const view = toPiModelConfigView(next);
   assert.deepEqual(view.providers[0]?.models[0]?.thinkingLevels, ["low", "high"]);
   assert.equal(view.providers[0]?.models[0]?.contextWindow, 1048576);
+  assert.equal(glm.api, "openai-responses");
+});
+
+test("provider api replaces a stale per-model api", () => {
+  const file: ModelsJsonFile = {
+    providers: {
+      lens: {
+        api: "openai-responses",
+        models: [{ id: "glm-5.3-flash", api: "anthropic-messages" }],
+      },
+    },
+  };
+  const aligned = alignProviderModelApi(file);
+  const model = aligned.file.providers?.lens?.models?.[0] as { api?: string } | undefined;
+  assert.equal(aligned.changed, true);
+  assert.equal(model?.api, "openai-responses");
+  const runtime = toRuntimeConfig(file.providers?.lens ?? {});
+  assert.equal(runtime.models[0]?.api, "openai-responses");
 });

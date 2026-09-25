@@ -20,6 +20,7 @@ export class HostQueue {
     clientId: string;
     text: string;
     admitted: "queue" | "guide";
+    modelSelection?: QueueItem["modelSelection"];
   }): QueueItem {
     this.seq += 1;
     const queueItemId = input.sourceCommandId;
@@ -29,6 +30,7 @@ export class HostQueue {
       clientId: input.clientId,
       kind: "sendText",
       text: input.text,
+      ...(input.modelSelection ? { modelSelection: input.modelSelection } : {}),
       attachments: [],
       delivery: {
         requested: input.admitted,

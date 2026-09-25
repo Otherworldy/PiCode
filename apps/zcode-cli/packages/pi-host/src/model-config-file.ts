@@ -167,7 +167,8 @@ function toViewModel(model: Record<string, unknown>): PiModelView | undefined {
 
 function defaultModelRecord(
   draft: PiProviderModelDraft,
-  existing?: Record<string, unknown>,
+  existing: Record<string, unknown> | undefined,
+  api: string,
 ): Record<string, unknown> {
   const thinkingLevelMap = thinkingLevelMapFrom(draft.thinkingLevels, existing?.thinkingLevelMap);
   const reasoning =
@@ -178,6 +179,8 @@ function defaultModelRecord(
   return {
     ...(existing ?? { cost: { ...ZERO_COST } }),
     id: draft.id,
+    // 设置页只有渠道这一处格式。模型上残留的 api 会让 Pi 改走别的协议。
+    api,
     name: draft.name ?? (typeof existing?.name === "string" && existing.name ? existing.name : draft.id),
     reasoning,
     thinkingLevelMap,
@@ -207,7 +210,9 @@ export function upsertProvider(file: ModelsJsonFile, draft: PiProviderDraft): Mo
   previous.api = draft.api;
   if (draft.name?.trim()) previous.name = draft.name.trim();
   if (draft.apiKey) previous.apiKey = draft.apiKey;
-  previous.models = draft.models.map((model) => defaultModelRecord(model, byId.get(model.id)));
+  previous.models = draft.models.map((model) =>
+    defaultModelRecord(model, byId.get(model.id), draft.api),
+  );
   providers[draft.id] = previous;
   return { ...file, providers };
 }
@@ -237,6 +242,8 @@ export function toRuntimeConfig(raw: Record<string, unknown>): {
     contextWindow: number;
     maxTokens: number;
     cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
+    api?: string;
+    compat?: unknown;
   }>;
 } {
   const models = Array.isArray(raw.models) ? raw.models : [];
@@ -269,10 +276,51 @@ export function toRuntimeConfig(raw: Record<string, unknown>): {
                   cacheWrite: Number((model.cost as { cacheWrite?: unknown }).cacheWrite) || 0,
                 }
               : { ...ZERO_COST },
+          ...(typeof raw.api === "string" && raw.api
+            ? { api: raw.api }
+            : typeof model.api === "string"
+              ? { api: model.api }
+              : {}),
+          ...(model.compat && typeof model.compat === "object" ? { compat: model.compat } : {}),
         },
       ];
     }),
   };
+}
+
+/** 渠道 api 是请求格式。模型项上不同的 api 改成渠道的，Pi 才不会改走别的协议。 */
+export function alignProviderModelApi(file: ModelsJsonFile): { file: ModelsJsonFile; changed: boolean } {
+  let changed = false;
+  const providers: NonNullable<ModelsJsonFile["providers"]> = {};
+  for (const [id, raw] of Object.entries(file.providers ?? {})) {
+    const api = typeof raw.api === "string" ? raw.api : "";
+    const models = Array.isArray(raw.models) ? raw.models : undefined;
+    if (!api || !models) {
+      providers[id] = raw;
+      continue;
+    }
+    let modelsChanged = false;
+    const nextModels = models.map((entry) => {
+      if (!entry || typeof entry !== "object") return entry;
+      const model = entry as Record<string, unknown>;
+      if (model.api === api) return entry;
+      modelsChanged = true;
+      return { ...model, api };
+    });
+    if (!modelsChanged) {
+      providers[id] = raw;
+      continue;
+    }
+    changed = true;
+    providers[id] = { ...raw, models: nextModels };
+  }
+  return { file: changed ? { ...file, providers } : file, changed };
+}
+
+export async function alignStoredModelApi(agentDir: string): Promise<void> {
+  const file = await loadModelsJson(agentDir);
+  const aligned = alignProviderModelApi(file);
+  if (aligned.changed) await saveModelsJson(agentDir, aligned.file);
 }
 
 function optionalPositive(entry: Record<string, unknown>, keys: string[]): number | undefined {

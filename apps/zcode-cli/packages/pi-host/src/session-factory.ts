@@ -2,6 +2,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CreateAgentSessionOptions, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
+import { listSessionSlashCommands } from "./pi-slash-commands.js";
 import { toPiSkillView } from "./pi-skills.js";
 import { branchPiSessionFile, openOrCreateSession } from "./session-files.js";
 import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
@@ -20,6 +21,7 @@ import {
 import { readProcessSshRemoteSpec, sshCodingToolOptions, sshSearchText } from "./ssh-remote.js";
 import type { CreatePiSession, PiHostEvent, PiSessionPort } from "./types.js";
 import {
+  alignStoredModelApi,
   deleteProvider,
   discoverPiModels,
   loadModelsJson,
@@ -94,7 +96,12 @@ async function createIsolatedRuntime(delegate: DelegateProvider): Promise<ModelR
 let productionRuntime: Promise<ModelRuntime> | undefined;
 
 function getProductionModelRuntime(): Promise<ModelRuntime> {
-  productionRuntime ??= ensurePiSdk().then(() => piCoding().ModelRuntime.create());
+  productionRuntime ??=
+    ensurePiSdk().then(async () => {
+      const coding = piCoding();
+      await alignStoredModelApi(coding.getAgentDir());
+      return coding.ModelRuntime.create();
+    });
   return productionRuntime;
 }
 
@@ -311,6 +318,7 @@ export function createSdkSessionFactory(options: {
           name: model.name,
         })),
       listSkills: () => session.resourceLoader.getSkills().skills.map(toPiSkillView),
+      listSlashCommands: () => listSessionSlashCommands(session),
       get isStreaming() {
         return session.isStreaming;
       },
@@ -373,12 +381,13 @@ export function createSdkSessionFactory(options: {
           const next = { providerId: provider, modelId, thought };
           selections.set(session.sessionId, next);
           selections.set(input.sessionId, next);
-          return;
+          return true;
         }
         const model = modelRuntime.getModel(provider, modelId);
-        if (!model) return;
+        if (!model) return false;
         await session.setModel(model);
         if (thought) session.setThinkingLevel(mapThought(thought));
+        return true;
       },
       setThinkingLevel: (level) => {
         session.setThinkingLevel(level);

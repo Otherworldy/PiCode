@@ -29,6 +29,37 @@ function messageText(content: unknown): string {
     .join("");
 }
 
+function clipError(text: string | undefined): string | undefined {
+  const flat = text?.replace(/\s+/g, " ").trim();
+  if (!flat) return undefined;
+  return flat.length > 4000 ? `${flat.slice(0, 3999)}…` : flat;
+}
+
+function errorMessageOf(value: unknown, depth = 0): string | undefined {
+  if (!value || typeof value !== "object" || depth > 4) return undefined;
+  if ("message" in value && typeof value.message === "string" && value.message.trim()) {
+    return value.message.trim();
+  }
+  return "error" in value ? errorMessageOf(value.error, depth + 1) : undefined;
+}
+
+/** 横幅只留一句人话；原始 JSON 进 detail，避免整段网关响应铺在对话里。 */
+function presentModelError(raw: string): { message: string; detail?: string } {
+  const status = /^(\d{3})\b/.exec(raw)?.[1];
+  const jsonAt = raw.indexOf("{");
+  let summary = raw;
+  if (jsonAt >= 0) {
+    try {
+      const parsed = errorMessageOf(JSON.parse(raw.slice(jsonAt)));
+      if (parsed) summary = status ? `${status} ${parsed}` : parsed;
+    } catch {
+      summary = raw;
+    }
+  }
+  const message = summary.length > 240 ? `${summary.slice(0, 239)}…` : summary;
+  return message === raw ? { message } : { message, detail: raw };
+}
+
 export interface ProjectorOptions {
   profile?: DeliveryProfileName;
   viaRegistry?: boolean;
@@ -47,6 +78,8 @@ export class PiToV4Projector {
   private aborted = false;
   private seq = 0;
   private assistantMessageId?: string;
+  private pendingError?: string;
+  private retryFailures: { attempt: number; message: string }[] = [];
   readonly profile: DeliveryProfileName;
   private readonly viaRegistry: boolean;
   private readonly workId?: string;
@@ -102,6 +135,7 @@ export class PiToV4Projector {
     this.streamingTextRowId = null;
     this.streamingReasoningRowId = null;
     this.assistantMessageId = undefined;
+    this.pendingError = undefined;
     this.toolRowId.clear();
     this.toolArgs.clear();
     this.aborted = false;
@@ -209,11 +243,27 @@ export class PiToV4Projector {
       case "agent_start":
         return this.startTurn();
       case "agent_end":
-        return event.willRetry ? [] : this.settleTurn();
+        if (event.willRetry) {
+          this.pendingError = undefined;
+          return [];
+        }
+        return this.settleTurn();
+      case "auto_retry_start":
+        return this.noteRetry(event);
+      case "auto_retry_end":
+        if (!event.success || !this.snapshot.control.apiRetry) return [];
+        this.retryFailures = [];
+        return this.applyState({
+          control: { ...this.snapshot.control, apiRetry: null },
+        });
       case "agent_settled":
         return this.settleTurn();
       case "message_end":
-        return event.message.role === "assistant" ? this.flushAssistant(event.message.content) : [];
+        if (event.message.role !== "assistant") return [];
+        this.pendingError = clipError(
+          event.message.stopReason === "error" ? event.message.errorMessage : undefined,
+        );
+        return this.flushAssistant(event.message.content);
       case "message_start":
         if (event.message.role === "assistant") {
           // 同一轮里 Pi 会连续写多条 assistant（工具来回、插件 custom_message）。
@@ -270,7 +320,40 @@ export class PiToV4Projector {
     };
   }
 
+  private noteRetry(event: Extract<PiHostEvent, { type: "auto_retry_start" }>): ConversationDelta[] {
+    const presented = presentModelError(event.errorMessage);
+    this.retryFailures = [...this.retryFailures, { attempt: event.attempt, message: presented.message }].slice(-20);
+    return [
+      {
+        op: "state.updated",
+        patch: {
+          control: {
+            ...this.snapshot.control,
+            // 展示层把 maxAttempts 当成「含首次请求」。Pi 这里给的是重试上限。
+            apiRetry: {
+              attempt: event.attempt,
+              maxAttempts: event.maxAttempts + 1,
+              nextRetryAt: Date.now() + Math.max(0, event.delayMs),
+              reasonCode: presented.message,
+              failures: this.retryFailures,
+            },
+          },
+        },
+      },
+    ];
+  }
+
   private startTurn(): ConversationDelta[] {
+    // Pi 重试会再发 agent_start。上一轮还在跑时不能再开一条「工作中」。
+    if (this.snapshot.control.phase === "running" && this.turnId) {
+      this.aborted = false;
+      this.streamingTextRowId = null;
+      this.streamingReasoningRowId = null;
+      this.assistantMessageId = undefined;
+      return [];
+    }
+    this.pendingError = undefined;
+    this.retryFailures = [];
     this.aborted = false;
     this.turnId = `turn:${this.nextRowId}`;
     this.productTurnId = this.turnId;
@@ -578,7 +661,17 @@ export class PiToV4Projector {
   }
 
   private settleTurn(): ConversationDelta[] {
+    const errorText = this.pendingError;
+    this.pendingError = undefined;
+    const presented = errorText ? presentModelError(errorText) : undefined;
+    if (presented) {
+      const attempt = (this.retryFailures.at(-1)?.attempt ?? 0) + 1;
+      this.retryFailures = [...this.retryFailures, { attempt, message: presented.message }].slice(-20);
+    }
     const state = this.aborted ? "completedInterrupted" : "completedSuccess";
+    const failureLines = this.retryFailures.map((failure) => `${failure.attempt}. ${failure.message}`);
+    if (presented?.detail) failureLines.push(presented.detail);
+    const detail = failureLines.length > 1 || presented?.detail ? failureLines.join("\n") : undefined;
     const deltas: ConversationDelta[] = [];
     for (const row of this.snapshot.rows.window) {
       if (row.kind === "turnHeader" && row.turnId === this.turnId && row.state === "running") {
@@ -612,7 +705,18 @@ export class PiToV4Projector {
           stopState: "idle",
           stopTargetKind: "unknown",
           activeWorks: [],
-          lastError: null,
+          lastError: presented
+            ? {
+                code: "fault.model",
+                message: presented.message,
+                ...(detail ? { detail } : {}),
+                recoverable: true,
+                at: Date.now(),
+                source: "runtime" as const,
+              }
+            : this.snapshot.control.phase === "running"
+              ? null
+              : this.snapshot.control.lastError,
           apiRetry: null,
         },
         availability: emptyAvailability(false),

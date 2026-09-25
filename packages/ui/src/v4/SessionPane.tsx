@@ -221,6 +221,7 @@ import { resolveSendAckSettlement } from "@/v4/telemetry/conversationTelemetrySu
 import { useSessionSubscriptionErrorTelemetry } from "@/v4/telemetry/useSessionSubscriptionErrorTelemetry.js";
 import { useSessionOpenArmsTelemetry } from "@/v4/telemetry/useSessionOpenArmsTelemetry.js";
 import {
+  isTerminalOnlySlashCommand,
   parseV4VisibleSlashCommand,
   parseSelectionSideSlashCommand,
   v4QueuedCommandText,
@@ -2567,6 +2568,10 @@ export function SessionPane({
         // 命令只负责配置 shortcut；后续必须走普通 sendText，不能进入 goal/compact command 分支。
         slashCommand = null;
       }
+      if (!slashCommand && isTerminalOnlySlashCommand(text, slashCommands ?? [])) {
+        toast(intl.formatMessage({ id: "chat.slash.terminalOnly" }));
+        return "blocked" as const;
+      }
       // create/send ACK 期间用户可能切换任务或创建另一份 draft。
       // placement 必须绑定发送开始时的稳定 identity，不能在完成回调里读取当前 workspace 草稿。
       const groupedDraftTaskAtSend =
@@ -2907,6 +2912,7 @@ export function SessionPane({
       handleDraftSwitchMode,
       handleOpenSelectionSideConversationWithPrompt,
       intl,
+      slashCommands,
       lease,
       resolveInitialDraftConfig,
       createSubmissionFromComposer,

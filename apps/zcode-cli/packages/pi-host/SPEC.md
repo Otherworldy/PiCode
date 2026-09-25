@@ -38,6 +38,8 @@ ZCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代理
 - `getModel()` 返回 `provider/model`。旧 snapshot 把裸模型 id 当成非法选择，会在截断之后把编辑打失败。
 - 新建会话的 Pi 投影增量写入 sessions-index。只跳过纯文本流式 delta。第一条用户消息同时成为侧栏标题。
 - 流中途失败：turn `failed`，已写出的 row 保留。
+- 模型失败只把一句摘要写进回复和 `lastError.message`；原始 JSON 放 `lastError.detail`。
+- Pi `auto_retry_start` 写入 `control.apiRetry.failures`。最终失败只进输入框上方的原错误横幅，摘要一行，历次失败和原文在「展开详情」。不写成助手正文。成功后清掉重试状态。同一次失败的后续 `agent_settled` 不清掉这条错误。
 - abort：turn `completedInterrupted`，运行中工具 `cancelled`。
 - `custom()` 无 adapter：降级 widget 文本，不卡循环。
 - 插件抛错：`extension_error` → notify，会话继续。
@@ -100,15 +102,15 @@ SDK 来源是 `AppSettings.piSdkSource`。缺省 `builtin`，用打进 `zcode.cj
 
 设置页的 HTTP 代理和「不使用代理的地址」仍写 `AppSettings`，由 Host 在拉起 agent 时注入 `ZCODE_HTTP_PROXY` / `ZCODE_NO_PROXY`。CLI 仍会清掉进程里的标准 `HTTP_PROXY` / `NO_PROXY`，避免用户 shell 代理泄漏。清完之后只把这两个 ZCODE 值写回标准变量，并用已有的 `createNetworkProxyFetch` 换掉 `globalThis.fetch`。Pi 模型请求走这层 fetch；Pi bash 继承进程环境，curl/git 因此读到同一套规则。绕过规则与旧模型出口相同（主机、前缀点、端口、`*`）。没配代理则不换 fetch。改设置后下次启动 agent 生效。MCP 仍走原来的 `McpPort` 网络配置，不另开一条代理。
 
-**目录所有者：** Pi `ModelRuntime.getAvailableSnapshot()`。CLI 在 `workspace/readPresentation` 上行目录；Host `IModelSelectionService` 只投影这份目录，不再用 ZCode Provider Registry 当聊天/设置页候选。投影必须把 `getView(input.selection)` 写成 `effectiveSelection`，否则 Composer 触发器拿不到当前草稿模型。Composer 与设置「模型设置」共用该视图。`switchModelConfig` 走 `session.setModel`。
+**目录所有者：** Pi `ModelRuntime.getAvailableSnapshot()`。CLI 在 `workspace/readPresentation` 上行目录；Host `IModelSelectionService` 只投影这份目录，不再用 ZCode Provider Registry 当聊天/设置页候选。投影必须把 `getView(input.selection)` 写成 `effectiveSelection`，否则 Composer 触发器拿不到当前草稿模型。Composer 与设置「模型设置」共用该视图。`switchModelConfig` 走 `session.setModel`。输入框里换模型只属于这次提交；Pi `prompt` 或 steer 之前才写入会话。排队的提交等到出队再换，避免改掉正在跑的请求。
 
-设置页通过 `pi/models` 读写 `~/.pi/agent/models.json`（apiKey 只写不读）和 `settings.json` 默认模型；保存后 `registerProvider`/`unregisterProvider` 更新活着的 `ModelRuntime`。壳不另写 ZCode 供应商库。ZCode 账号登录、升级套餐、Coding Plan 使用统计不再作为产品面。
+设置页通过 `pi/models` 读写 `~/.pi/agent/models.json`（apiKey 只写不读）和 `settings.json` 默认模型；保存后 `registerProvider`/`unregisterProvider` 更新活着的 `ModelRuntime`。渠道的 `api` 是请求格式。模型项上另写的 `api` 在保存和进程启动时改成渠道的，避免设置是 responses、请求却走 anthropic。壳不另写 ZCode 供应商库。ZCode 账号登录、升级套餐、Coding Plan 使用统计不再作为产品面。
 
 ## Pi 插件开关
 
 设置「插件」页只列 Pi 已配置的包和自动发现的扩展文件。状态所有者是 Pi `settings.json`：用户级 `~/.pi/agent/settings.json`，工作区级 `<cwd>/.pi/settings.json`。`pi/plugins` 的 `list` 读这两处；`setEnabled` 写回后 `flush`。包的关是 `packages[].autoload: false`（保留已有过滤）；扩展文件的关是追加或拿掉精确的 `-<相对路径>`。已打开的会话不热更新，下一次创建会话才按新开关加载。不写 ZCode 插件启用表，也不再把 ZCode 插件市场当能力源。`plugins/*` 协议方法已删除，设置页不再列、安装或开关 ZCode 插件。
 
-技能设置读写 Pi 会加载的目录：用户 `~/.pi/agent/skills`，工作区 `<cwd>/.pi/skills`，仍列出 Pi 同样会读的 `.agents/skills`。斜杠菜单不另扫一套：已打开的会话用 Pi 已经加载的技能（含用户目录、沿 git 根的 `.agents/skills`、已启用的包技能）；没有会话时走 Pi 的包解析，不加载扩展。命令设置读写 Pi 提示词目录：用户 `~/.pi/agent/prompts`，工作区 `<cwd>/.pi/prompts`。钩子不进入 Pi 会话，设置页不再单独列出。
+技能设置读写 Pi 会加载的目录：用户 `~/.pi/agent/skills`，工作区 `<cwd>/.pi/skills`，仍列出 Pi 同样会读的 `.agents/skills`。斜杠菜单不另扫一套：已打开的会话用 Pi 已经加载的技能（含用户目录、沿 git 根的 `.agents/skills`、已启用的包技能）；没有会话时走 Pi 的包解析，不加载扩展。命令区跟 Pi 自动补全同一份：内置命令、`~/.pi/agent/prompts` 与 `<cwd>/.pi/prompts`、扩展注册的命令，以及 `enableSkillCommands` 打开时的 `skill:`。活会话用已经加载的那份；没有会话时不加载扩展。`/compact` 仍走现有压缩。其余 Pi 终端命令只显示，提交不会发给模型。`/plan` 和 `/side` 仍是 GUI 自己的。命令设置读写 Pi 提示词目录：用户 `~/.pi/agent/prompts`，工作区 `<cwd>/.pi/prompts`。钩子不进入 Pi 会话，设置页不再单独列出。
 
 内置浏览器是宿主能力，不是可安装插件。会话创建时直接连上打包好的 `node_repl`，并把 `control-browser` 技能交给 Pi。工具名仍是 `mcp__node_repl__js`。direct 调用带上当前会话 id，browser broker 才能回到 `BrowserControlPort`，再调 Electron `interaction/browserExecute`。不写进用户 MCP 配置。开关在 `~/.zcode/v2/setting.json` 的 `browserHostEnabled`，缺省开启，只影响之后新建的会话。子会话不带这个工具。
 

@@ -86,14 +86,25 @@ export function createPiHostedApp(
     input: PromptInput,
     delivery: "startNow" | "queue" | "guide",
     commandId = `cmd:${Date.now()}`,
+    modelSelection?: ModelSelection,
   ): Promise<SendInputResult> => {
     const streaming = hosted.projector.getSnapshot().control.phase === "running";
+    const thought = modelSelection?.options?.reasoningLevel;
     const result = await hosted.bridge.admitSend({
       text: textOf(input),
       clientId: "v4",
       commandId,
       delivery,
       streaming,
+      ...(modelSelection
+        ? {
+            modelSelection: {
+              providerId: modelSelection.providerId,
+              modelId: modelSelection.modelId,
+              ...(thought ? { thought } : {}),
+            },
+          }
+        : {}),
     });
     hosted.projector.replaceQueue(hosted.queue.snapshot());
     if (result.kind === "queued") {
@@ -307,10 +318,10 @@ export function createPiHostedApp(
     getDefaultThoughtLevel: () => undefined,
     getLocale: () => "en" as const,
     getTheme: () => "system" as const,
-    async sendInput(input: PromptInput, options?: { queueDelivery?: "guide"; inputId?: string }) {
+    async sendInput(input: PromptInput, options?: { queueDelivery?: "guide"; inputId?: string; intent?: { modelSelection?: ModelSelection } }) {
       const streaming = hosted.projector.getSnapshot().control.phase === "running";
       const delivery = options?.queueDelivery === "guide" ? "guide" : streaming ? "queue" : "startNow";
-      return send(input, delivery, options?.inputId);
+      return send(input, delivery, options?.inputId, options?.intent?.modelSelection);
     },
     async steerTurn(input: string, options?: { inputId?: string }) {
       return send(input, "guide", options?.inputId);

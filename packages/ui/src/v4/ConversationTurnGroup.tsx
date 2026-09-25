@@ -122,7 +122,7 @@ interface OffPeakTurnCard {
   task: OffPeakCreateTaskSummary;
 }
 
-const MIN_VISIBLE_API_RETRY_ATTEMPT = 3;
+const MIN_VISIBLE_API_RETRY_ATTEMPT = 1;
 
 function toRetryStatus(apiRetry: ApiRetryState): ZCodeApiRetryStatus {
   const attempt = Math.max(1, Math.floor(apiRetry.attempt));
@@ -147,13 +147,33 @@ function TurnChatLoadingSlot({
   eligible: boolean;
 }) {
   const { intl, locale } = useZCodeIntl();
+  const [failuresOpen, setFailuresOpen] = useState(false);
   const retryStatus = useMemo(() => (apiRetry ? toRetryStatus(apiRetry) : null), [apiRetry]);
-  // 前两次短暂恢复对用户等价于普通加载；保留 apiRetry 运行态，但只在
-  // 第三次重试开始后显示计数。必须在 retry/loading 分支前收敛，否则会留下空 slot，
-  // 而不是回退到 ChatLoading。
+  // 第一次重试就要告诉用户，否则长时间退避看起来仍是普通「工作中」。
   const visibleRetryStatus =
     retryStatus && retryStatus.attempt >= MIN_VISIBLE_API_RETRY_ATTEMPT ? retryStatus : null;
+  const failures = apiRetry?.failures ?? [];
   if (!visibleRetryStatus && !eligible) return null;
+  if (visibleRetryStatus && failures.length > 0) {
+    return (
+      <div data-zcode-chat-loading-slot="true" className="min-h-5 text-ui-base">
+        <button type="button" className="text-left" onClick={() => setFailuresOpen((open) => !open)}>
+          <ChatApiRetryStatus apiRetry={visibleRetryStatus} intl={intl} locale={locale} />
+        </button>
+        {failuresOpen ? (
+          <ul className="mt-1 space-y-1 pl-1 text-foreground-subtle">
+            {failures.map((failure) => (
+              <li key={failure.attempt}>
+                {intl.formatMessage({ id: "modelTrajectory.attempt" }, { attempt: failure.attempt })}
+                {" · "}
+                {failure.message}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    );
+  }
   return (
     <div data-zcode-chat-loading-slot="true" className="min-h-5">
       {visibleRetryStatus ? (

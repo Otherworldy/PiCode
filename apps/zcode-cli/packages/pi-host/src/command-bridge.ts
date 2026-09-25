@@ -3,12 +3,28 @@ import type { PiSessionPort } from "./types.js";
 
 export type SendDelivery = "startNow" | "queue" | "guide";
 
+function queuedSelection(selection: SubmissionModel | undefined) {
+  if (!selection?.providerId || !selection.modelId) return undefined;
+  return {
+    providerId: selection.providerId,
+    modelId: selection.modelId,
+    ...(selection.thought ? { options: { reasoningLevel: selection.thought } } : {}),
+  };
+}
+
+export interface SubmissionModel {
+  providerId: string;
+  modelId: string;
+  thought?: string;
+}
+
 export interface AdmitSendInput {
   text: string;
   clientId: string;
   commandId: string;
   delivery: SendDelivery;
   streaming: boolean;
+  modelSelection?: SubmissionModel;
 }
 
 export type AdmitSendResult =
@@ -21,10 +37,12 @@ export class CommandBridge {
   constructor(
     private readonly session: PiSessionPort,
     private readonly queue: HostQueue,
+    private readonly applyModel?: (selection: SubmissionModel) => Promise<void>,
   ) {}
 
   async admitSend(input: AdmitSendInput): Promise<AdmitSendResult> {
     if (input.streaming && input.delivery === "guide") {
+      await this.useModel(input.modelSelection);
       await this.session.steer(input.text);
       return { kind: "steer" };
     }
@@ -34,10 +52,12 @@ export class CommandBridge {
         clientId: input.clientId,
         text: input.text,
         admitted: "queue",
+        modelSelection: queuedSelection(input.modelSelection),
       });
       this.queue.enqueue(item);
       return { kind: "queued", queueItemId: item.queueItemId };
     }
+    await this.useModel(input.modelSelection);
     const accepted = await this.session.prompt(input.text);
     if (!accepted) throw new Error("pi prompt rejected");
     return { kind: "prompt" };
@@ -47,9 +67,24 @@ export class CommandBridge {
     if (!this.queue.autoDrain) return false;
     const item = this.queue.shift();
     if (!item) return false;
+    const selected = item.modelSelection;
+    await this.useModel(
+      selected
+        ? {
+            providerId: selected.providerId,
+            modelId: selected.modelId,
+            ...(selected.options?.reasoningLevel ? { thought: selected.options.reasoningLevel } : {}),
+          }
+        : undefined,
+    );
     const accepted = await this.session.prompt(item.text);
     if (!accepted) throw new Error("pi prompt rejected");
     return true;
+  }
+
+  private async useModel(selection: SubmissionModel | undefined): Promise<void> {
+    if (!selection?.providerId || !selection.modelId || !this.applyModel) return;
+    await this.applyModel(selection);
   }
 
   async stop(): Promise<void> {

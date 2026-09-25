@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { ConversationDelta, DeliveryProfileName } from "@zcode/shared/zcode-protocol-v4";
-import { CommandBridge } from "./command-bridge.js";
+import { CommandBridge, type SubmissionModel } from "./command-bridge.js";
 import { createHostExtensionUi } from "./extension-ui-bridge.js";
 import { ExtensionUiHost } from "./extension-ui-host.js";
 import { HostQueue } from "./host-queue.js";
@@ -23,6 +23,7 @@ import type {
   PiHostEvent,
   PiSessionPort,
   PiSkillView,
+  PiSlashCommandView,
 } from "./types.js";
 
 export interface HostedSession {
@@ -39,6 +40,7 @@ export interface HostedSession {
   readonly viaRegistry: boolean;
   listModels(): Array<{ providerId: string; modelId: string }>;
   listSkills(): PiSkillView[];
+  listSlashCommands(): PiSlashCommandView[];
   prompt(text: string): Promise<boolean>;
   waitTurn(): Promise<void>;
   abort(): Promise<void>;
@@ -483,7 +485,28 @@ export class HostSessionRegistry {
       viaRegistry: meta.viaRegistry,
       workId: meta.workId,
     });
-    const bridge = new CommandBridge(pi, queue);
+    const applyModel = async (selection: SubmissionModel) => {
+      const provider = selection.providerId.trim();
+      const modelId = selection.modelId.trim();
+      if (!provider || !modelId) return;
+      const config = projector.getSnapshot().config;
+      const thought = selection.thought?.trim();
+      if (config.provider === provider && config.model === modelId) {
+        if (thought && thought !== config.thought) {
+          projector.setConfig({ thought });
+          pi.setThinkingLevel?.(mapThought(thought));
+        }
+        return;
+      }
+      const applied = await pi.setModel?.(provider, modelId, thought);
+      if (applied === false) return;
+      projector.setConfig({
+        provider,
+        model: modelId,
+        ...(thought ? { thought } : {}),
+      });
+    };
+    const bridge = new CommandBridge(pi, queue, applyModel);
     const deltaListeners = new Set<(deltas: ConversationDelta[]) => void>();
     const notifyListeners = new Set<(message: string, notifyType: "info" | "warning" | "error") => void>();
     const pendingDeltas: ConversationDelta[] = [];
@@ -598,6 +621,7 @@ export class HostSessionRegistry {
       viaRegistry: meta.viaRegistry,
       listModels: () => pi.listModels?.() ?? (pi.currentModel ? [pi.currentModel] : []),
       listSkills: () => pi.listSkills?.() ?? [],
+      listSlashCommands: () => pi.listSlashCommands?.() ?? [],
       prompt: (text) => pi.prompt(text),
       waitTurn: () => pi.waitTurn?.() ?? Promise.resolve(),
       abort: async () => {
@@ -605,10 +629,7 @@ export class HostSessionRegistry {
         await pi.abort();
       },
       compact: () => pi.compact(),
-      setModel: async (provider, modelId, thought) => {
-        projector.setConfig({ provider, model: modelId, ...(thought ? { thought } : {}) });
-        await pi.setModel?.(provider, modelId, thought);
-      },
+      setModel: (provider, modelId, thought) => applyModel({ providerId: provider, modelId, thought }),
       setThinkingLevel: (level) => {
         projector.setConfig({ thought: level });
         pi.setThinkingLevel?.(mapThought(level));

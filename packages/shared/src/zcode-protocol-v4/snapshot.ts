@@ -122,6 +122,14 @@ export const apiRetryStateSchema = z.object({
   maxAttempts: z.number(),
   nextRetryAt: timestampSchema,
   reasonCode: z.string(),
+  failures: z
+    .array(
+      z.object({
+        attempt: z.number(),
+        message: z.string(),
+      }),
+    )
+    .optional(),
 });
 export type ApiRetryState = z.infer<typeof apiRetryStateSchema>;
 

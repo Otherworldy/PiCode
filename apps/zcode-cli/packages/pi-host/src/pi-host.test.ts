@@ -107,6 +107,81 @@ test("projects text, tools, abort, compact", () => {
   assert.equal(header && header.kind === "turnHeader" ? header.state : "", "completedInterrupted");
 });
 
+test("retry keeps one working turn and shows the final error", () => {
+  const projector = new PiToV4Projector("s1", "e1");
+  projector.apply({ type: "agent_start" });
+  projector.apply({
+    type: "message_start",
+    message: { role: "user", content: "hi", id: "u1" },
+  });
+  projector.apply({
+    type: "message_end",
+    message: { role: "assistant", stopReason: "error", errorMessage: "anthropic 404" },
+  });
+  projector.apply({ type: "agent_end", willRetry: true });
+  projector.apply({ type: "agent_start" });
+  const mid = projector.getSnapshot();
+  assert.equal(mid.rows.window.filter((row) => row.kind === "turnHeader").length, 1);
+  assert.equal(mid.control.phase, "running");
+  assert.equal(
+    mid.rows.window.some((row) => row.kind === "assistantText"),
+    false,
+  );
+  projector.apply({
+    type: "message_end",
+    message: { role: "assistant", stopReason: "error", errorMessage: "still anthropic" },
+  });
+  projector.apply({ type: "agent_end" });
+  const done = projector.getSnapshot();
+  assert.equal(done.rows.window.filter((row) => row.kind === "turnHeader").length, 1);
+  assert.equal(done.control.phase, "completedSuccess");
+  assert.equal(
+    done.rows.window.some((row) => row.kind === "assistantText"),
+    false,
+  );
+  assert.equal(done.control.lastError?.message, "still anthropic");
+  assert.equal(done.control.apiRetry, null);
+  projector.apply({ type: "agent_settled" });
+  assert.equal(projector.getSnapshot().control.lastError?.message, "still anthropic");
+});
+
+test("retry shows a count and the final error stays one sentence", () => {
+  const projector = new PiToV4Projector("s1", "e1");
+  projector.apply({ type: "agent_start" });
+  const raw =
+    '503 {"type":"error","error":{"type":"api_error","message":"Gateway routing failed","request_id":"abc"}}';
+  projector.apply({
+    type: "message_end",
+    message: { role: "assistant", stopReason: "error", errorMessage: raw },
+  });
+  projector.apply({ type: "agent_end", willRetry: true });
+  projector.apply({
+    type: "auto_retry_start",
+    attempt: 1,
+    maxAttempts: 3,
+    delayMs: 1000,
+    errorMessage: raw,
+  });
+  const mid = projector.getSnapshot();
+  assert.equal(mid.control.phase, "running");
+  assert.equal(mid.rows.window.filter((row) => row.kind === "turnHeader").length, 1);
+  assert.equal(mid.control.apiRetry?.attempt, 1);
+  assert.equal(mid.control.apiRetry?.maxAttempts, 4);
+  assert.equal(mid.control.apiRetry?.failures?.[0]?.message, "503 Gateway routing failed");
+  assert.equal(mid.rows.window.some((row) => row.kind === "assistantText"), false);
+  projector.apply({
+    type: "message_end",
+    message: { role: "assistant", stopReason: "error", errorMessage: raw },
+  });
+  projector.apply({ type: "agent_end" });
+  const done = projector.getSnapshot();
+  assert.equal(done.rows.window.some((row) => row.kind === "assistantText"), false);
+  assert.equal(done.control.lastError?.message, "503 Gateway routing failed");
+  assert.match(done.control.lastError?.detail ?? "", /1\. 503 Gateway routing failed/);
+  assert.match(done.control.lastError?.detail ?? "", /Gateway routing failed","request_id"/);
+  assert.equal(done.control.apiRetry, null);
+});
+
 test("message_end + agent_end flushes assistant text", () => {
   const projector = new PiToV4Projector("s1", "e1", { profile: "continuous" });
   projector.apply({ type: "agent_start" });
@@ -169,6 +244,38 @@ test("replayable streams tool progress not inputText", () => {
   );
   const tool = projector.getSnapshot().rows.window.find((row) => row.kind === "toolCall");
   assert.ok(tool && tool.kind === "toolCall" && tool.progress);
+});
+
+test("submission model is applied when the prompt starts, not while queued", async () => {
+  const session = new FakePiSession("s");
+  const queue = new HostQueue();
+  const applied: string[] = [];
+  const bridge = new CommandBridge(session, queue, async (selection) => {
+    applied.push(`${selection.providerId}/${selection.modelId}`);
+  });
+  await bridge.admitSend({
+    text: "now",
+    clientId: "c",
+    commandId: "1",
+    delivery: "startNow",
+    streaming: false,
+    modelSelection: { providerId: "lens", modelId: "next" },
+  });
+  assert.deepEqual(applied, ["lens/next"]);
+  session.isStreaming = true;
+  await bridge.admitSend({
+    text: "later",
+    clientId: "c",
+    commandId: "2",
+    delivery: "queue",
+    streaming: true,
+    modelSelection: { providerId: "lens", modelId: "queued", thought: "high" },
+  });
+  assert.deepEqual(applied, ["lens/next"]);
+  session.isStreaming = false;
+  assert.equal(await bridge.drainNext(), true);
+  assert.deepEqual(applied, ["lens/next", "lens/queued"]);
+  assert.deepEqual(session.prompts, ["now", "later"]);
 });
 
 test("inbox routes prompt/steer/queue without pi queue_update", async () => {

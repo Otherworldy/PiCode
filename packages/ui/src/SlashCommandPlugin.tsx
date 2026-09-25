@@ -27,6 +27,8 @@ import { useSkills } from "@/hooks/useSkills.js";
 import { buildSlashApplyMentionPayload } from "@/lib/slashApplyMentionPayload.js";
 import { filterSkillsForProvider } from "@/lib/skillSourceFilter.js";
 import { useZCodeIntl } from "./i18n/IntlProvider.js";
+import { useWorkspaceServicesResolution } from "@/hooks/useWorkspaceServices.js";
+import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
 import { useSlashCommands } from "./hooks/useSlashCommands.js";
 import { $createPromptMentionNode } from "./mentions/nodes/PromptMentionNode.js";
 import {
@@ -74,6 +76,36 @@ export function SlashCommandPlugin({
   // 远程 workspace 的 slashCommands 写在 workspaceIdentity 桶。
   // 这里只按 workspacePath 读取会落到 path 桶，表现为 ZCode Agent 已收到 available_commands_update 但 / 面板为空。
   const commands = useSlashCommands(workspacePath, workspaceIdentity);
+  const servicesResolution = useWorkspaceServicesResolution(workspacePath, undefined, workspaceIdentity);
+  useEffect(() => {
+    if (disabled || activeTrigger?.trigger !== "/" || !workspacePath || !servicesResolution.rpcReady) {
+      return;
+    }
+    let cancelled = false;
+    // 目录在打开面板时再读一次：扩展命令要等活会话加载完才存在。
+    void servicesResolution.services.zcodeAgentService
+      .readWorkspacePresentation({
+        workspacePath,
+        ...(workspaceIdentity ? { workspaceIdentity } : {}),
+      })
+      .then((presentation) => {
+        if (cancelled) return;
+        useZCodeSessionStore
+          .getState()
+          .setSlashCommands(workspacePath, presentation.slashCommands, workspaceIdentity);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeTrigger?.trigger,
+    disabled,
+    servicesResolution.rpcReady,
+    servicesResolution.services,
+    workspaceIdentity,
+    workspacePath,
+  ]);
   const {
     agents,
     loading: subagentsLoading,
