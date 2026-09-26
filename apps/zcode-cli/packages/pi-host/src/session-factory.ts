@@ -2,6 +2,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CreateAgentSessionOptions, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
+import { applyZcodePluginPlan, zcodePluginLoaderExtras } from "./pi-plugins.js";
 import { listSessionSlashCommands } from "./pi-slash-commands.js";
 import { toPiSkillView } from "./pi-skills.js";
 import { branchPiSessionFile, openOrCreateSession } from "./session-files.js";
@@ -19,7 +20,7 @@ import {
   type ZCodeModelStreamPort,
 } from "./model-delegate.js";
 import { readProcessSshRemoteSpec, sshCodingToolOptions, sshSearchText } from "./ssh-remote.js";
-import type { CreatePiSession, PiHostEvent, PiSessionPort } from "./types.js";
+import { asPiEvent, type CreatePiSession, type PiSessionPort } from "./types.js";
 import {
   alignStoredModelApi,
   deleteProvider,
@@ -34,11 +35,6 @@ import {
   type PiModelConfigView,
   type PiProviderDraft,
 } from "./model-config-file.js";
-
-function asPiEvent(event: unknown): PiHostEvent | null {
-  if (!event || typeof event !== "object" || !("type" in event)) return null;
-  return event as PiHostEvent;
-}
 
 function wrapCodingTools(cwd: string, check: ToolPermissionCheck | undefined) {
   const ssh = readProcessSshRemoteSpec(cwd);
@@ -232,11 +228,14 @@ export function createSdkSessionFactory(options: {
       ? piCoding().SettingsManager.inMemory({ retry: { enabled: false } })
       : piCoding().SettingsManager.create(input.cwd, agentDir);
     const ssh = readProcessSshRemoteSpec(input.cwd);
+    const pluginExtras = !isolated && input.loadExtensions
+      ? await zcodePluginLoaderExtras(input.cwd, agentDir, options.skillPaths?.(input.cwd) ?? [])
+      : undefined;
     const resourceLoader = new (piCoding().DefaultResourceLoader)({
       cwd: input.cwd,
       agentDir,
       settingsManager,
-      additionalSkillPaths: options.skillPaths?.(input.cwd) ?? [],
+      ...(pluginExtras?.loader ?? { additionalSkillPaths: options.skillPaths?.(input.cwd) ?? [] }),
       ...(ssh
         ? {
             appendSystemPrompt: [
@@ -246,6 +245,7 @@ export function createSdkSessionFactory(options: {
         : {}),
     });
     await resourceLoader.reload();
+    if (pluginExtras) applyZcodePluginPlan(resourceLoader, pluginExtras.plan);
     const customTools = wrapCodingTools(input.cwd, input.checkPermission);
     let live:
       | {
@@ -345,6 +345,11 @@ export function createSdkSessionFactory(options: {
       abort: () => session.abort(),
       compact: async () => {
         await session.compact();
+      },
+      contextUsage: () => {
+        const usage = session.getContextUsage();
+        if (!usage || usage.contextWindow <= 0) return null;
+        return { used: Math.max(0, usage.tokens ?? 0), max: usage.contextWindow };
       },
       navigateTree: (targetId) => session.navigateTree(targetId),
       branchFrom: (entryId) => {

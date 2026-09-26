@@ -156,6 +156,19 @@ export function readPiJsonl(content: string): {
       namedTitle = clip(entry.name, 60);
       continue;
     }
+    if (type === "compaction" && typeof entry.summary === "string" && entry.summary.trim()) {
+      endTurn();
+      events.push({ type: "compaction_start", reason: "manual" });
+      events.push({
+        type: "compaction_end",
+        reason: "manual",
+        result: {
+          summary: entry.summary,
+          ...(typeof entry.tokensBefore === "number" ? { tokensBefore: entry.tokensBefore } : {}),
+        },
+      });
+      continue;
+    }
     if (type === "custom_message" && entry.display !== false) {
       const text = messageText(entry.content);
       if (!text.trim()) continue;

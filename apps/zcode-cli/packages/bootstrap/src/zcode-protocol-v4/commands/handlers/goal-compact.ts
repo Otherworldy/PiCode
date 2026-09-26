@@ -46,12 +46,8 @@ export class V4GoalCompactRejectedError extends Error {
 const manualCompactControllers = new WeakSet<AbortController>();
 
 /**
- * compact：手动上下文压缩（v4 payload 为空对象，无 instructions 变体）。
- *
- * barrier 语义：
- * 1. running/goal verifier/goal continuation/tool work → typed compact intent 入 FIFO。
- * 2. held queue → 追加队尾，不绕过既有 future intent。
- * 3. running 或 queued compact 已存在 → compactOperationLock，禁止重复压缩。
+ * compact：手动上下文压缩。跟 Pi 一样立刻执行，不进输入队列。
+ * Pi `session.compact()` 会先中断当前操作。已有一次压缩在跑时拒绝重复启动。
  */
 async function compact(
   host: V4CommandCoreHost,
@@ -65,52 +61,19 @@ async function compact(
     (activeController ? manualCompactControllers.has(activeController) : false) ||
     host.hasQueueItemKind?.(record.app.sessionId, "compact")
   ) {
-    host.logger?.info?.("v4 compact already running or queued, rejected", {
+    host.logger?.info?.("v4 compact already running, rejected", {
       commandId: envelope.commandId,
       sessionId: record.app.sessionId,
       workspacePath: record.workspace.workspacePath,
     });
     throw new V4GoalCompactRejectedError(
       "compactOperationLock",
-      "Compact is already running or queued",
+      "Compact is already running",
     );
   }
   if (record.restoreWarning) {
     // 与 prompt-turn 相同的闸门：恢复失败的会话不能静默续写（含 compact turn）。
     throw new V4GoalCompactRejectedError("restoreWarning", record.restoreWarning.message);
-  }
-
-  const routingMode = host.getInputRoutingMode?.(record.app.sessionId) ?? null;
-  const busy = Boolean(record.activeAbortController) || Boolean(activeTurn);
-  if (busy || routingMode === "enqueue" || routingMode === "guide" || routingMode === "choice") {
-    const intent = inputIntentMetadata(envelope, {
-      requestedDelivery: "queue",
-      text: "/compact",
-    });
-    const queueOptions = {
-      commandKind: "compact" as const,
-      inputId: envelope.commandId,
-      intent,
-      queryId: envelope.commandId as NonNullable<SteerTurnOptions["queryId"]>,
-    };
-    if (await enqueueDeferredInputForBusyWork(record, "/compact", queueOptions)) {
-      return undefined;
-    }
-    const queued = await record.app.steerTurn("/compact", {
-      ...queueOptions,
-      delivery: "queue",
-    });
-    if (queued.kind === "rejected") {
-      throw new V4InputAdmissionRejectedError(
-        queued.reason === "input_too_large"
-          ? "proto.payloadTooLarge"
-          : queued.reason === "empty_input"
-            ? "proto.invalidPayload"
-            : "fault.command.inputRejected",
-        `compact input queue rejected: ${queued.reason}`,
-      );
-    }
-    return undefined;
   }
 
   await startManualCompact(host, record, envelope.commandId);

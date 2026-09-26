@@ -64,6 +64,14 @@ test("current question results work while Claude ACP text is no longer interpret
   }
 });
 
+test("pi ask_user_question text result is the selected answer", () => {
+  const output =
+    'User has answered your questions: "这次改界面还是改协议?"="改界面". You can now continue with the user\'s answers in mind.';
+  assert.deepEqual(readAskUserQuestionAnswers({ output }), {
+    "这次改界面还是改协议?": "改界面",
+  });
+});
+
 test("ZCode subagent identity wins over retired Codex nicknames", () => {
   const tool = {
     id: "tool-example",

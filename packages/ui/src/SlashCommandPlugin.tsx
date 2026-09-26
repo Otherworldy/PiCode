@@ -146,9 +146,21 @@ export function SlashCommandPlugin({
       ),
     [locale, provider, skills],
   );
+  const nativeCommandSuggestions = useMemo(
+    () => commandSuggestions.filter((item) => item.data?.source !== "plugin"),
+    [commandSuggestions],
+  );
+  const extensionCommandSuggestions = useMemo(
+    () => commandSuggestions.filter((item) => item.data?.source === "plugin"),
+    [commandSuggestions],
+  );
   const filteredCommandSuggestions = useMemo(
-    () => filterPromptInputSuggestions(commandSuggestions, activeTrigger?.query ?? null),
-    [commandSuggestions, activeTrigger?.query],
+    () => filterPromptInputSuggestions(nativeCommandSuggestions, activeTrigger?.query ?? null),
+    [nativeCommandSuggestions, activeTrigger?.query],
+  );
+  const filteredExtensionSuggestions = useMemo(
+    () => filterPromptInputSuggestions(extensionCommandSuggestions, activeTrigger?.query ?? null),
+    [extensionCommandSuggestions, activeTrigger?.query],
   );
   const filteredSubagentSuggestions = useMemo(
     () => filterPromptInputSuggestions(subagentSuggestions, activeTrigger?.query ?? null),
@@ -161,10 +173,16 @@ export function SlashCommandPlugin({
   const filteredSuggestions = useMemo(
     () => [
       ...filteredCommandSuggestions,
+      ...filteredExtensionSuggestions,
       ...filteredSkillSuggestions,
       ...filteredSubagentSuggestions,
     ],
-    [filteredCommandSuggestions, filteredSkillSuggestions, filteredSubagentSuggestions],
+    [
+      filteredCommandSuggestions,
+      filteredExtensionSuggestions,
+      filteredSkillSuggestions,
+      filteredSubagentSuggestions,
+    ],
   );
   const activeSignature = useMemo(
     () => getPromptInputTriggerSignature(activeTrigger),
@@ -463,8 +481,10 @@ export function SlashCommandPlugin({
 
   const panelSections = useSlashCommandMentionPanelSections(
     intl,
-    commands.length,
+    nativeCommandSuggestions.length,
     filteredCommandSuggestions,
+    extensionCommandSuggestions.length,
+    filteredExtensionSuggestions,
     filteredSkillSuggestions,
     skillsLoading,
     skillsError,

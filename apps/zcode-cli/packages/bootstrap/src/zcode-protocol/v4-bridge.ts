@@ -735,14 +735,14 @@ export function createConversationV4Gateway(
       // 这是执行前账本的“预计投递边界”；TurnSteerQueued 会用实际 delivery/回退原因
       // 幂等更新同一记录。startNow 不能伪装成 queue，否则重启 discarded 的诊断事实失真。
       const requestedDelivery =
-        input.requestedDelivery ??
-        (kind === "compact" && routingMode !== null && routingMode !== "startNow"
-          ? "queue"
-          : routingMode === "enqueue"
-            ? "queue"
-            : routingMode === "guide" && kind === "sendText"
-              ? "guide"
-              : "startNow");
+        kind === "compact"
+          ? "startNow"
+          : (input.requestedDelivery ??
+            (routingMode === "enqueue"
+              ? "queue"
+              : routingMode === "guide" && kind === "sendText"
+                ? "guide"
+                : "startNow"));
       const attachmentRefs = input.attachments;
       const fallbackReasonCode =
         input.fallbackReasonCode ??

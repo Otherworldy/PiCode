@@ -2,6 +2,7 @@
 import {
   listPiSubagentChildren,
   piSubagentRevision,
+  queryPiSessionUsage,
   workspaceKey,
   type PiSubagentChild,
 } from "@zcode/pi-host";
@@ -1822,7 +1823,7 @@ export async function listSessionSubagents(
 
 const APP_USAGE_RANGE_DAYS: Record<string, number> = { "7d": 7, "30d": 30 };
 
-export async function getUsageStats(context: ZCodeProtocolAgentServerContext, rawParams: unknown) {
+export async function getUsageStats(_context: ZCodeProtocolAgentServerContext, rawParams: unknown) {
   const params = parseParams(zcodeUsageStatsParamsSchema, rawParams ?? {});
   const timeZone = params.timeZone ?? "UTC";
   const until = Date.now();
@@ -1838,41 +1839,8 @@ export async function getUsageStats(context: ZCodeProtocolAgentServerContext, ra
     until,
   };
 
-  // SessionStorePort 与 UsageStorePort 是分离接口，但实际 store 同时实现两者；
-  // 沿用 core/usage-observability 的运行时收窄方式访问只读聚合方法。
-  const usageStore = context.deps.sessionStore as Partial<UsageStorePort> | undefined;
-  if (!usageStore?.queryAppUsage) {
-    // 无 usage store（不应发生）：返回空快照而非抛错，便于 UI 显示空态。
-    return buildAppUsageSnapshot(
-      {
-        totals: {
-          totalTokens: 0,
-          inputTokens: 0,
-          outputTokens: 0,
-          reasoningTokens: 0,
-          cacheCreationTokens: 0,
-          cacheReadTokens: 0,
-          modelRequestCount: 0,
-          modelErrorCount: 0,
-          avgTimeToFirstTokenMs: null,
-        },
-        turnTotals: {
-          totalSessions: 0,
-          totalTurns: 0,
-          avgTurnDurationMs: null,
-          longestSessionMs: 0,
-        },
-        toolTotals: { toolCallCount: 0, toolErrorCount: 0 },
-        models: [],
-        tools: [],
-        days: [],
-        dayModels: [],
-      },
-      buildOptions,
-    );
-  }
-
-  const result = await usageStore.queryAppUsage({ since, until, tzOffsetMs });
+  // 旧 usage 表不再有 Pi 会话。应用用量只读本机 jsonl，读失败时交给 UI 空态。
+  const result = await queryPiSessionUsage({ since, until, tzOffsetMs });
   return buildAppUsageSnapshot(result, buildOptions);
 }
 

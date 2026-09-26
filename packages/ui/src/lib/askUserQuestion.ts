@@ -116,6 +116,30 @@ function readAnswers(input: unknown): ZCodeUserQuestionAnswers | undefined {
   return isPlainRecord(answers) ? answers : undefined;
 }
 
+function piAskMeText(output: unknown): string | undefined {
+  if (typeof output === "string") return output;
+  if (!isPlainRecord(output)) return undefined;
+  if (typeof output.text === "string") return output.text;
+  if (!Array.isArray(output.content)) return undefined;
+  const parts = output.content.flatMap((item) =>
+    isPlainRecord(item) && typeof item.text === "string" ? [item.text] : [],
+  );
+  return parts.length > 0 ? parts.join("\n") : undefined;
+}
+
+// Pi ask_user_question 的结果是这句话，不是旧 AskUserQuestion 的 answers 对象。
+function parsePiAskMeAnswers(output: unknown): ZCodeUserQuestionAnswers | undefined {
+  const text = piAskMeText(output);
+  if (!text?.includes("User has answered your questions:")) return undefined;
+  const answers: ZCodeUserQuestionAnswers = {};
+  for (const match of text.matchAll(/"((?:\\.|[^"\\])*)"="((?:\\.|[^"\\])*)"/g)) {
+    const question = match[1]?.replaceAll('\\"', '"');
+    const answer = match[2]?.replaceAll('\\"', '"');
+    if (question && answer) answers[question] = answer;
+  }
+  return Object.keys(answers).length > 0 ? answers : undefined;
+}
+
 function parseJsonRecord(output: unknown): Record<string, unknown> | undefined {
   if (isPlainRecord(output)) {
     return output;
@@ -326,7 +350,14 @@ export function readAskUserQuestionAnswers(value: {
       return nestedRawContentAnswers;
     }
   }
-  return undefined;
+  return (
+    parsePiAskMeAnswers(value.output) ??
+    (isPlainRecord(value.raw)
+      ? (parsePiAskMeAnswers(value.raw.rawOutput) ??
+        parsePiAskMeAnswers(value.raw.output) ??
+        parsePiAskMeAnswers(value.raw.content))
+      : undefined)
+  );
 }
 
 export function getAskUserQuestionAnswerText(

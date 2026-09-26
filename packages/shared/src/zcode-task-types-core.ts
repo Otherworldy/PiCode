@@ -395,8 +395,8 @@ export interface ZCodeSlashCommand {
   name: string;
   description: string;
   inputHint?: string;
-  /** 命令来源；旧协议可能为空，客户端应按 builtin 兼容处理。 */
-  source?: "builtin" | "custom";
+  /** 命令来源；旧协议可能为空，客户端应按 builtin 兼容处理。extension 是 Pi 扩展注册的命令。 */
+  source?: "builtin" | "custom" | "extension";
 }
 export interface ZCodeTaskModeInfo {
   id: string;

@@ -63,6 +63,23 @@ test("replay follows the active leaf and drops the edited-away branch", () => {
   assert.deepEqual(texts, ["ping2", "pong2"]);
 });
 
+test("replay keeps a compaction summary", () => {
+  const content = [
+    '{"type":"session","id":"s1","timestamp":"2026-01-02T03:04:05.000Z","cwd":"/work"}',
+    '{"type":"message","id":"u1","parentId":null,"timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"user","content":[{"type":"text","text":"ping"}]}}',
+    '{"type":"compaction","id":"k1","parentId":"u1","timestamp":"2026-01-02T03:04:07.000Z","summary":"user said ping","tokensBefore":40}',
+  ].join("\n");
+  const projector = new PiToV4Projector("s1", "e1");
+  for (const event of readPiJsonl(content).events) projector.apply(event);
+  const marker = projector.getSnapshot().rows.window.find((row) => row.kind === "timelineMarker");
+  assert.equal(
+    marker && marker.kind === "timelineMarker" && marker.marker.type === "compact"
+      ? marker.marker.summary
+      : "",
+    "user said ping",
+  );
+});
+
 test("replay hydrates user, assistant, tools into projector", () => {
   const { events } = readPiJsonl(sample);
   const projector = new PiToV4Projector("s1", "e1", { profile: "continuous" });

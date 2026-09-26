@@ -239,6 +239,8 @@ export function ChatContextUsage({
   selectedProvider: _selectedProvider,
   intl,
   locale,
+  onSendCompressionCommand,
+  compressionDisabled,
 }: {
   codingPlanUsageRemaining?: ChatCodingPlanUsageRemainingConfig;
   startPlanBalance?: ChatStartPlanBalanceConfig;
@@ -298,7 +300,11 @@ export function ChatContextUsage({
       setContextOpen(false);
     }
   }, []);
-  const renderableTaskUsage = getRenderableTaskUsage(taskUsage);
+  const renderableTaskUsage =
+    getRenderableTaskUsage(taskUsage) ??
+    (taskUsage && Number.isFinite(taskUsage.size) && taskUsage.size > 0
+      ? { ...taskUsage, used: Math.max(0, taskUsage.used) }
+      : null);
   const codingPlanUsageRemainingWithClose = useMemo<
     ChatCodingPlanUsageRemainingConfig | undefined
   >(() => {
@@ -818,7 +824,8 @@ export function ChatContextUsage({
   if (
     (!renderableTaskUsage || !contextUsageLabel) &&
     !hasCodingPlanUsageRemaining &&
-    !hasStartPlanBalance
+    !hasStartPlanBalance &&
+    !onSendCompressionCommand
   ) {
     return null;
   }
@@ -882,6 +889,12 @@ export function ChatContextUsage({
         <span className="inline-flex shrink-0">
           <ContextTrigger
             aria-label={triggerLabel}
+            disabled={compressionDisabled}
+            title={intl.formatMessage({ id: "chat.contextUsage.compress" })}
+            onClick={() => {
+              if (compressionDisabled || !onSendCompressionCommand) return;
+              onSendCompressionCommand(getContextCompressionCommand(_selectedProvider));
+            }}
             className={cn(
               "text-foreground-subtle",
               opportunityTriggerTone === "available" && "text-success",

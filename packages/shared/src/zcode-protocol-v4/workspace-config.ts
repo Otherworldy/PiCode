@@ -42,7 +42,7 @@ export const workspaceSlashCommandSchema = z.object({
   name: z.string(),
   description: z.string(),
   inputHint: z.string().optional(),
-  source: z.enum(["builtin", "custom"]).optional(),
+  source: z.enum(["builtin", "custom", "extension"]).optional(),
 });
 export type WorkspaceSlashCommand = z.infer<typeof workspaceSlashCommandSchema>;
 

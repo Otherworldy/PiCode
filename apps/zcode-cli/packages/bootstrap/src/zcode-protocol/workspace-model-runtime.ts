@@ -1,7 +1,14 @@
 /* eslint-disable max-lines -- workspace 模型协议与兼容请求处理仍集中在本文件。 */
 import { createInMemorySessionEventStore } from "@zcode/adapters/storage";
 import type { ModelSelection } from "@zcode/contracts";
-import { listPiCatalog, listPiPlugins, mutatePiCatalog, setPiPluginEnabled } from "@zcode/pi-host";
+import {
+  listPiCatalog,
+  listPiPluginConfigs,
+  listPiPlugins,
+  mutatePiCatalog,
+  setPiPluginEnabled,
+  writePiPluginConfig,
+} from "@zcode/pi-host";
 import {
   zcodePiModelsMutateParamsSchema,
   zcodePiPluginsParamsSchema,
@@ -65,8 +72,11 @@ export async function mutatePiPlugins(rawParams: unknown) {
       throw new Error("Pi plugin toggle requires id and enabled");
     }
     await setPiPluginEnabled(cwd, params.id, params.enabled);
+  } else if (params.action === "writeConfig") {
+    if (!params.id || !params.values) throw new Error("Pi plugin config requires id and values");
+    await writePiPluginConfig(params.id, params.values);
   }
-  return { plugins: await listPiPlugins(cwd) };
+  return { plugins: await listPiPlugins(cwd), configs: await listPiPluginConfigs() };
 }
 
 export async function testProviderModelConnectivity(

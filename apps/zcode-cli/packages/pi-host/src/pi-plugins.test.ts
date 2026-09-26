@@ -3,7 +3,12 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { listPiPlugins, setPiPluginEnabled } from "./pi-plugins.js";
+import {
+  applyZcodePluginPlan,
+  listPiPlugins,
+  setPiPluginEnabled,
+  zcodePluginSourceId,
+} from "./pi-plugins.js";
 
 test("lists and toggles Pi packages and extension files", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-plugins-"));
@@ -19,7 +24,7 @@ test("lists and toggles Pi packages and extension files", async () => {
     JSON.stringify({ packages: [pkgDir] }),
   );
 
-  const listed = await listPiPlugins(cwd, agentDir);
+  const listed = await listPiPlugins(cwd, agentDir, root);
   const pkg = listed.find((row) => row.kind === "package");
   const ext = listed.find((row) => row.kind === "extension");
   assert.equal(pkg?.enabled, true);
@@ -27,16 +32,45 @@ test("lists and toggles Pi packages and extension files", async () => {
   assert.equal(ext?.detail, "extensions/demo.ts");
   assert.equal(ext?.enabled, true);
 
-  await setPiPluginEnabled(cwd, pkg!.id, false, agentDir);
-  await setPiPluginEnabled(cwd, ext!.id, false, agentDir);
-  const saved = JSON.parse(await readFile(join(agentDir, "settings.json"), "utf8")) as {
-    packages: Array<{ source: string; autoload?: boolean }>;
-    extensions: string[];
-  };
-  assert.equal(saved.packages[0]?.autoload, false);
-  assert.ok(saved.extensions.includes("-extensions/demo.ts"));
+  await setPiPluginEnabled(cwd, pkg!.id, false, agentDir, root);
+  await setPiPluginEnabled(cwd, ext!.id, false, agentDir, root);
+  const saved = await readFile(join(agentDir, "settings.json"), "utf8");
+  assert.equal(saved, JSON.stringify({ packages: [pkgDir] }));
+  const switches = JSON.parse(await readFile(join(root, "pi-plugin-switches.json"), "utf8")) as Record<
+    string,
+    boolean
+  >;
+  assert.equal(switches[pkg!.id], false);
+  assert.equal(switches[ext!.id], false);
 
-  const after = await listPiPlugins(cwd, agentDir);
+  const after = await listPiPlugins(cwd, agentDir, root);
   assert.equal(after.find((row) => row.id === pkg!.id)?.enabled, false);
   assert.equal(after.find((row) => row.id === ext!.id)?.enabled, false);
+  const info = {
+    origin: "package",
+    source: pkgDir,
+    scope: "user",
+  };
+  assert.equal(zcodePluginSourceId(info, pkgDir), pkg!.id);
+  const extensions = [
+    { path: pkgDir, sourceInfo: info },
+    {
+      path: join(agentDir, "extensions", "demo.ts"),
+      sourceInfo: {
+        origin: "top-level",
+        source: "auto",
+        scope: "user",
+        baseDir: agentDir,
+      },
+    },
+  ];
+  applyZcodePluginPlan(
+    {
+      getExtensions: () => ({ extensions }),
+      getSkills: () => ({ skills: [] }),
+      getPrompts: () => ({ prompts: [] }),
+    },
+    { extensionPaths: [], skillPaths: [], promptPaths: [], disabled: new Set([pkg!.id, ext!.id]) },
+  );
+  assert.equal(extensions.length, 0);
 });

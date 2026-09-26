@@ -2447,13 +2447,8 @@ export function SessionPane({
     ): Promise<boolean | "confirmationRequired"> => {
       let type: CommandType | null = null;
       let payload: Record<string, unknown> = {};
-      // compact 是可排队 input command，不走 CAS；resumeGoal 仍是 CAS。
+      // compact 直接执行，不走 CAS，也不进输入队列；resumeGoal 仍是 CAS。
       let withBaseRevision = false;
-      const currentRoutingMode = snapshotRef.current?.inputRouting.mode;
-      const compactExpectedToQueue =
-        command.kind === "compact" &&
-        currentRoutingMode !== undefined &&
-        currentRoutingMode !== "startNow";
       switch (command.kind) {
         case "compact":
           type = "compact";
@@ -2508,8 +2503,6 @@ export function SessionPane({
           // 兼容尚未升级的 CLI：旧端仍会返回 activeTurn，不能再次无声清空命令。
           toast(intl.formatMessage({ id: "chat.compact.runningBlocked" }));
         }
-      } else if (command.kind === "compact" && compactExpectedToQueue) {
-        toast(intl.formatMessage({ id: "chat.compact.queued" }));
       } else if (heldQueueDisposition === "clearQueueAndSend") {
         settleCurrentQueueInputs(targetSessionId);
       }
@@ -2616,7 +2609,7 @@ export function SessionPane({
         !heldQueueDisposition &&
         (slashCommand === null || slashCommand.kind === "sendGoalCommand")
       ) {
-        // UI choice 只对普通输入和 /goal <新目标> 生效；/compact 直接追加暂停队列，
+        // UI choice 只对普通输入和 /goal <新目标> 生效；/compact 直接压缩，
         // resumeGoal 等控制命令也不应被发送消息确认框截获。
         return "confirmationRequired" as const;
       }
@@ -3415,8 +3408,28 @@ export function SessionPane({
     snapshotSessionId,
   ]);
 
-  // Composer 选择表达“下一次提交”。点击只更新 renderer intent；Session Selection
-  // 在 Submission 真正开跑（Guide 为下一次 model-step）时由 CLI/Core 更新。
+  // 空闲时选择仍只属于下一次提交。正在跑的轮次里，Pi 会在下一次模型请求前读
+  // session.model；只改草稿会让输入框已切换、请求仍用旧模型。
+  const applyRunningModelSelection = useCallback(() => {
+    const targetSessionId = sessionId ?? prewarmBindingRef.current?.sessionId ?? null;
+    const snapshot = snapshotRef.current;
+    if (!targetSessionId || !snapshot || snapshot.sessionId !== targetSessionId) return;
+    if (snapshot.control.phase !== "running") return;
+    const config = draftConfigRef.current;
+    if (!config.provider || !config.model) return;
+    const thought = config.thought ?? "";
+    const sameModel =
+      snapshot.config.provider === config.provider && snapshot.config.model === config.model;
+    if (sameModel && (!thought || thought === (snapshot.config.thought ?? ""))) return;
+    void configCommandBarrier.enqueue(() =>
+      dispatchConfigCas(
+        "switchModelConfig",
+        { provider: config.provider, model: config.model, thought },
+        { targetSessionId },
+      ),
+    );
+  }, [configCommandBarrier, dispatchConfigCas, draftConfigRef, sessionId]);
+
   const handleSelectModel = useCallback(
     (modelProvider: string, model: string, sourceModel: ModelSelectionSource | null) => {
       const resolvedProvider =
@@ -3427,15 +3440,17 @@ export function SessionPane({
         branch: "composer-submission-intent",
       });
       handleDraftSelectModel(resolvedProvider, model);
+      applyRunningModelSelection();
     },
-    [draftConfigRef, handleDraftSelectModel],
+    [applyRunningModelSelection, draftConfigRef, handleDraftSelectModel],
   );
 
   const handleSelectThought = useCallback(
     (thought: string, _modelContext: { provider: string; model: string }) => {
       handleDraftSelectThought(thought);
+      applyRunningModelSelection();
     },
-    [handleDraftSelectThought],
+    [applyRunningModelSelection, handleDraftSelectThought],
   );
 
   const handleRecoverCustomModelSelection = useCallback(

@@ -16,6 +16,7 @@ export {
   type RegistryOptions,
 } from "./session-registry.js";
 export { readPiJsonl, replayPiJsonl, summarizePiJsonl } from "./jsonl-history.js";
+export { queryPiSessionUsage, type PiAppUsageQuery } from "./pi-usage.js";
 export {
   listPiSubagentChildren,
   piSubagentRevision,
@@ -34,6 +35,11 @@ export { ensurePiSdk, getPiSdkStatus } from "./pi-sdk.js";
 export { listPiSkills } from "./pi-skills.js";
 export { listPiSlashCommands, listSessionSlashCommands } from "./pi-slash-commands.js";
 export { listPiPlugins, setPiPluginEnabled, type PiPluginView } from "./pi-plugins.js";
+export {
+  listPiPluginConfigs,
+  writePiPluginConfig,
+  type PiPluginConfigView,
+} from "./pi-plugin-config.js";
 export type { PiCapabilityPorts, ZcodeMcpTool, ZcodeSubagentProfile } from "./host-capabilities.js";
 export type { PiDiscoveredModel, PiModelConfigView, PiProviderDraft } from "./model-config-file.js";
 export { gateTool, type ToolPermissionCheck } from "./permission-gate.js";

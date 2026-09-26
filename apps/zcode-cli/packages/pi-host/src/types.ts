@@ -114,7 +114,7 @@ export interface PiSlashCommandView {
   name: string;
   description: string;
   inputHint: string;
-  source: "builtin" | "custom";
+  source: "builtin" | "custom" | "extension";
 }
 
 export interface PiSkillView {
@@ -142,6 +142,8 @@ export interface PiSessionPort {
   followUp(text: string): Promise<void>;
   abort(): Promise<void>;
   compact(): Promise<void>;
+  /** Pi `getContextUsage()`。tokens 未知时 used 为 0。 */
+  contextUsage?(): { used: number; max: number } | null;
   navigateTree?(targetId: string): Promise<unknown>;
   /** Pi `createBranchedSession`：新文件只含到该节点的路径。 */
   branchFrom?(entryId: string): { sessionId: string; sessionFile: string };
@@ -168,3 +170,8 @@ export interface CreatePiSessionInput {
 }
 
 export type CreatePiSession = (input: CreatePiSessionInput) => Promise<PiSessionPort>;
+
+export function asPiEvent(event: unknown): PiHostEvent | null {
+  if (!event || typeof event !== "object" || !("type" in event)) return null;
+  return event as PiHostEvent;
+}

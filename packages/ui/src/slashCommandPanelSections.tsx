@@ -6,10 +6,30 @@ import {
   type MentionPanelSection,
 } from "@/mentions/components/MentionPanel.js";
 
+function commandOption(suggestion: PromptInputSuggestionItem): MentionPanelOption {
+  return {
+    id: suggestion.id,
+    label: `/${suggestion.value}`,
+    description: suggestion.description,
+    content: (
+      <span className="min-w-0 flex-1 flex items-center gap-2">
+        <span className="truncate text-ui-base font-medium text-foreground max-w-[40%]">
+          {`/${suggestion.value}`}
+        </span>
+        <span className="truncate text-ui-base text-foreground-subtlest flex-1">
+          {suggestion.description}
+        </span>
+      </span>
+    ),
+  };
+}
+
 export function useSlashCommandMentionPanelSections(
   intl: IntlInstance,
   commandsLength: number,
   filteredCommandSuggestions: PromptInputSuggestionItem[],
+  extensionCommandsLength: number,
+  filteredExtensionSuggestions: PromptInputSuggestionItem[],
   filteredSkillSuggestions: PromptInputSuggestionItem[],
   skillsLoading: boolean,
   skillsError: string | null,
@@ -22,27 +42,24 @@ export function useSlashCommandMentionPanelSections(
       {
         id: "commands",
         title: intl.formatMessage({ id: "chat.slash.commands.title" }),
-        options: filteredCommandSuggestions.map<MentionPanelOption>((suggestion) => ({
-          id: suggestion.id,
-          label: `/${suggestion.value}`,
-          description: suggestion.description,
-          content: (
-            <span className="min-w-0 flex-1 flex items-center gap-2">
-              <span className="truncate text-ui-base font-medium text-foreground max-w-[40%]">
-                {`/${suggestion.value}`}
-              </span>
-              <span className="truncate text-ui-base text-foreground-subtlest flex-1">
-                {suggestion.description}
-              </span>
-            </span>
-          ),
-        })),
+        options: filteredCommandSuggestions.map(commandOption),
         loading: false,
         emptyText:
           commandsLength === 0
             ? intl.formatMessage({ id: "chat.slash.emptyUnavailable" })
             : intl.formatMessage({ id: "chat.slash.emptyResults" }),
       },
+      ...(extensionCommandsLength === 0
+        ? []
+        : [
+            {
+              id: "extensions",
+              title: intl.formatMessage({ id: "chat.slash.extensions.title" }),
+              options: filteredExtensionSuggestions.map(commandOption),
+              loading: false,
+              emptyText: intl.formatMessage({ id: "chat.slash.emptyResults" }),
+            },
+          ]),
       {
         id: "skills",
         title: intl.formatMessage({ id: "chat.slash.skills.title" }),
@@ -91,7 +108,9 @@ export function useSlashCommandMentionPanelSections(
     ],
     [
       commandsLength,
+      extensionCommandsLength,
       filteredCommandSuggestions,
+      filteredExtensionSuggestions,
       filteredSkillSuggestions,
       filteredSubagentSuggestions,
       intl,

@@ -5,22 +5,27 @@ import { join } from "node:path";
 import test from "node:test";
 import { assemblePiSlashCommands, listPiSlashCommands } from "./pi-slash-commands.js";
 
-test("pi slash commands follow builtin, template, extension, then skill", () => {
-  const names = assemblePiSlashCommands({
+test("pi slash commands keep gui builtins, then prompts, then extensions", () => {
+  const commands = assemblePiSlashCommands({
     templates: [{ name: "ship", description: "Ship it" }],
     extensions: [
-      { name: "settings", description: "hidden by builtin" },
+      { name: "compact", description: "hidden by builtin" },
       { name: "subagents", description: "Run subagents" },
+      { name: "skill:ponytail", description: "skill is not a command" },
     ],
-    skills: [{ name: "ponytail", description: "Be lazy" }],
-    skillCommands: true,
-  }).map((command) => command.name);
+  });
+  const names = commands.map((command) => command.name);
 
-  assert.equal(names[0], "settings");
+  assert.equal(names[0], "compact");
+  assert.equal(names.includes("copy"), false);
+  assert.equal(names.includes("new"), false);
+  assert.equal(names.includes("resume"), false);
+  assert.equal(names.includes("skill:ponytail"), false);
   assert.ok(names.indexOf("compact") < names.indexOf("ship"));
   assert.ok(names.indexOf("ship") < names.indexOf("subagents"));
-  assert.ok(names.includes("skill:ponytail"));
-  assert.equal(names.filter((name) => name === "settings").length, 1);
+  assert.equal(commands.find((command) => command.name === "ship")?.source, "custom");
+  assert.equal(commands.find((command) => command.name === "subagents")?.source, "extension");
+  assert.equal(names.filter((name) => name === "compact").length, 1);
 });
 
 test("pi slash commands read prompt files without a session", async () => {
@@ -38,5 +43,6 @@ test("pi slash commands read prompt files without a session", async () => {
   const ship = found.find((command) => command.name === "ship");
   assert.equal(ship?.description, "Ship the change");
   assert.equal(ship?.inputHint, "/ship <note>");
-  assert.equal(found[0]?.name, "settings");
+  assert.equal(found[0]?.name, "compact");
+  assert.equal(found.some((command) => command.name === "copy"), false);
 });

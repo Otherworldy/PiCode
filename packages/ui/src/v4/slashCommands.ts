@@ -1,3 +1,5 @@
+import { TUI_ONLY_PI_SLASH_COMMANDS } from "@zcode/shared";
+
 export type V4VisibleSlashCommand =
   | {
       kind: "compact";
@@ -54,11 +56,12 @@ const TERMINAL_ONLY_SLASH_EXEMPT = new Set(["compact", "plan"]);
 /** Pi 终端菜单里的命令。compact / plan 已有 GUI 行为，其余提交不能变成用户消息。 */
 export function isTerminalOnlySlashCommand(
   content: string,
-  commands: readonly { name: string; source?: "builtin" | "custom" }[],
+  commands: readonly { name: string; source?: "builtin" | "custom" | "extension" }[],
 ): boolean {
   const match = /^\/([^\s]+)/.exec(content.trim());
   const name = match?.[1]?.toLowerCase();
   if (!name || TERMINAL_ONLY_SLASH_EXEMPT.has(name)) return false;
+  if (TUI_ONLY_PI_SLASH_COMMANDS.has(name)) return true;
   return commands.some(
     (command) =>
       command.source === "builtin" &&

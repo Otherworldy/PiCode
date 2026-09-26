@@ -65,6 +65,15 @@ test("toolcall_start without a name does not throw", () => {
   assert.equal(tool && tool.kind === "toolCall" ? tool.toolName : "", "Bash");
 });
 
+test("context usage is a ring input and ignores an unchanged value", () => {
+  const projector = new PiToV4Projector("s1", "e1");
+  const first = projector.setContextUsage(1200, 8000);
+  assert.equal(projector.getSnapshot().usage.contextWindow?.usedTokens, 1200);
+  assert.equal(projector.getSnapshot().usage.contextWindow?.maxTokens, 8000);
+  assert.equal(first.length > 0, true);
+  assert.equal(projector.setContextUsage(1200, 8000).length, 0);
+});
+
 test("projects text, tools, abort, compact", () => {
   const projector = new PiToV4Projector("s1", "e1", { profile: "continuous" });
   projector.apply({ type: "agent_start" });
@@ -96,7 +105,7 @@ test("projects text, tools, abort, compact", () => {
   projector.apply({ type: "compaction_start" });
   projector.apply({
     type: "compaction_end",
-    result: { tokensBefore: 10, estimatedTokensAfter: 2 },
+    result: { summary: "kept the greeting", tokensBefore: 10, estimatedTokensAfter: 2 },
   });
   projector.apply({ type: "agent_settled" });
   const kinds = projector.getSnapshot().rows.window.map((row) => row.kind);
@@ -105,6 +114,13 @@ test("projects text, tools, abort, compact", () => {
   assert.equal(tool && tool.kind === "toolCall" ? tool.toolName : "", "Read");
   const header = projector.getSnapshot().rows.window[0];
   assert.equal(header && header.kind === "turnHeader" ? header.state : "", "completedInterrupted");
+  const compact = projector.getSnapshot().rows.window.find((row) => row.kind === "timelineMarker");
+  assert.equal(
+    compact && compact.kind === "timelineMarker" && compact.marker.type === "compact"
+      ? compact.marker.summary
+      : "",
+    "kept the greeting",
+  );
 });
 
 test("retry keeps one working turn and shows the final error", () => {
@@ -348,10 +364,9 @@ test("extension ui request/response and empty custom registry", async () => {
   assert.equal(custom.widgets[0]?.lines[0], "(unsupported plugin view)");
 });
 
-test("full access answers extension questions without a dialog", async () => {
+test("full access skips confirms but still shows questions", async () => {
   const ui = new ExtensionUiHost();
   ui.autoConfirm = true;
-  const selectWait = ui.wait("q1");
   const select = ui.handle({
     type: "extension_ui_request",
     id: "q1",
@@ -359,17 +374,17 @@ test("full access answers extension questions without a dialog", async () => {
     title: "Pick",
     options: ["A", "B"],
   });
-  assert.equal(select.pending.length, 0);
-  assert.deepEqual(await selectWait, { id: "q1", value: "A" });
-  const inputWait = ui.wait("q2");
-  ui.handle({
+  assert.equal(select.pending.length, 1);
+  const confirmWait = ui.wait("q2");
+  const confirm = ui.handle({
     type: "extension_ui_request",
     id: "q2",
-    method: "input",
-    title: "Name",
-    placeholder: "1",
+    method: "confirm",
+    title: "Go?",
   });
-  assert.deepEqual(await inputWait, { id: "q2", value: "1" });
+  assert.equal(confirm.pending.length, 1);
+  assert.equal(confirm.pending[0]?.interactionId, "q1");
+  assert.deepEqual(await confirmWait, { id: "q2", confirmed: true });
 });
 
 test("tool permission ask projects PermissionDialog payload", async () => {

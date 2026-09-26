@@ -3780,6 +3780,7 @@ export function createZCodeAgentService(
           action: params.action,
           ...(params.id ? { id: params.id } : {}),
           ...(params.enabled === undefined ? {} : { enabled: params.enabled }),
+          ...(params.values ? { values: params.values } : {}),
         },
         zcodePiPluginsResultSchema,
       );

@@ -1945,8 +1945,7 @@ const enUS: Record<string, string> = {
   "settings.migration.reason.session_not_found_or_workspace_mismatch":
     "The source session was not found, or it no longer matches the current workspace filter.",
   "settings.usageTitle": "Usage stats",
-  "settings.usageDescription":
-    "Review rough activity and model usage aggregated from local sessions.",
+  "settings.usageDescription": "Activity and model usage aggregated from local Pi sessions.",
   "resourceManager.storage.summaryTotal": "Total used by ZCode",
   "resourceManager.storage.scanning": "Calculating…",
   "resourceManager.storage.lastScanned": "Last calculated {time}",
@@ -2322,10 +2321,16 @@ const enUS: Record<string, string> = {
     "Disabled {plugin} in this workspace (overriding User default)",
   "settings.plugins.toggle.failed": "Couldn't update {plugin}. Try again.",
   "settings.plugins.pi.title": "Pi plugins",
-  "settings.plugins.pi.hint": "From Pi settings.json. A switch applies on the next session.",
+  "settings.plugins.pi.hint": "Applies only in ZCode and does not change Pi settings.json. Takes effect on the next new session.",
   "settings.plugins.pi.loading": "Reading Pi plugins…",
   "settings.plugins.pi.empty": "No Pi plugins in this scope.",
   "settings.plugins.pi.failed": "Couldn't update Pi plugins. Try again.",
+  "settings.plugins.pi.configure": "Settings",
+  "settings.plugins.pi.configHint":
+    "Edits switches, numbers, and text in this plugin's config.json. Nested values stay in the file. Changes apply to the next new session.",
+  "settings.plugins.pi.configSkipped": "These values stay in the file: {keys}",
+  "settings.plugins.pi.configSave": "Save",
+  "settings.plugins.pi.configSaved": "Saved. Applies to the next new session.",
   "settings.modelProviderDescription":
     "Pi providers and models from ~/.pi/agent/models.json and auth.json.",
   "settings.modelProvider.pi.source":
@@ -3069,7 +3074,7 @@ const enUS: Record<string, string> = {
   "settings.modelProvider.modelsCount": "{count} models",
   "settings.modelProvider.presetTitle": "Providers",
   "settings.usage.sectionTitle": "Usage stats",
-  "settings.usage.sectionDescription": "Built from local app session history.",
+  "settings.usage.sectionDescription": "Aggregated from local Pi session history.",
   "settings.usage.tab.appUsage": "App usage",
   "settings.usage.tab.codingPlan": "Individual Plan",
   "settings.usage.sectionDescriptionRemote":
@@ -3246,7 +3251,7 @@ const enUS: Record<string, string> = {
   "settings.usage.refresh": "Refresh",
   "settings.usage.loadingTitle": "Computing usage",
   "settings.usage.appUsageLoadingDescription":
-    "Reading local app session history, so it can take a moment.",
+    "Reading local Pi session history, so it can take a moment.",
   "settings.usage.codingPlanLoadingDescription":
     "Reading the selected provider monitor API, so it can take a moment.",
   "settings.usage.lastRefreshTime": "Last refreshed: {time}",
@@ -4377,6 +4382,7 @@ const enUS: Record<string, string> = {
   "chat.contextCompaction.retrying": "Retrying context compression ({attempt}/{maxAttempts})",
   "chat.contextCompaction.skipped": "Context is up to date; no compression needed",
   "chat.contextCompaction.completed": "Context compressed",
+  "chat.contextCompaction.viewSummary": "View summary",
   "chat.modelChange.switched": "Model switched {from} → {to}",
   "chat.modelChange.using": "Using {model}",
   "chat.contextCompaction.completedAuto": "Context automatically compressed",
@@ -5367,6 +5373,7 @@ const enUS: Record<string, string> = {
   "chat.slash.terminalOnly": "This command only runs in the Pi terminal",
   "chat.slash.app.side.description": "Open a new side conversation",
   "chat.slash.commands.title": "Commands",
+  "chat.slash.extensions.title": "Extension commands",
   "chat.slash.skills.title": "Skills",
   "chat.slash.skills.empty": "No matching skills",
   "chat.slash.subagents.title": "Agents",

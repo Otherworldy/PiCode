@@ -6,6 +6,33 @@ export type BuiltinZCodeSlashCommandHelpEntry = {
   usage: string;
 };
 
+/** Pi 内置命令里只在终端里有界面的那些。GUI 不展示，打出来也不发给模型。 */
+export const TUI_ONLY_PI_SLASH_COMMANDS = new Set([
+  "settings",
+  "model",
+  "tree",
+  "thinking",
+  "scoped-models",
+  "export",
+  "import",
+  "share",
+  "bug",
+  "copy",
+  "name",
+  "session",
+  "changelog",
+  "hotkeys",
+  "fork",
+  "clone",
+  "trust",
+  "login",
+  "logout",
+  "new",
+  "resume",
+  "reload",
+  "quit",
+]);
+
 export const BUILTIN_ZCODE_SLASH_COMMAND_HELP_ENTRIES: readonly BuiltinZCodeSlashCommandHelpEntry[] =
   [
     {

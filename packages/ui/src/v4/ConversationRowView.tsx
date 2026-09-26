@@ -1751,6 +1751,9 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
   const { intl } = useZCodeIntl();
   const isOfficeMode = useIsOfficeMode();
   const marker = row.marker;
+  const [summaryRowId, setSummaryRowId] = useState<number | null>(null);
+  const summary = marker.type === "compact" ? marker.summary : undefined;
+  const summaryOpen = summaryRowId === row.rowId;
   const modelSelectionView = context.modelSelectionView ?? null;
   const view = useMemo((): {
     icon: React.ReactNode;
@@ -1774,9 +1777,13 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
                   : marker.origin === "auto" && !automaticOptimization
                     ? "completedAuto"
                     : "completed";
+        const label = intl.formatMessage({ id: `${scope}.${statusMessage}` });
         return {
           icon: MARKER_ARCHIVE_ICON,
-          label: intl.formatMessage({ id: `${scope}.${statusMessage}` }),
+          label:
+            summary && !running
+              ? `${label} · ${intl.formatMessage({ id: "chat.contextCompaction.viewSummary" })}`
+              : label,
           running,
         };
       }
@@ -1848,22 +1855,24 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
       default:
         return null;
     }
-  }, [intl, isOfficeMode, marker, modelSelectionView]);
+  }, [intl, isOfficeMode, marker, modelSelectionView, summary]);
 
   // fork 跳父会话（Tier 1）：仅 forkNotice 且宿主提供 onNavigateToRow 时可点，
   // 切到 marker.parentSessionId（rowId 预留 Tier 2 精确滚动，当前恒 0 占位）。
   const onNavigate = context.onNavigateToRow;
   const handleClick = useMemo(() => {
+    if (summary) return () => setSummaryRowId((current) => (current === row.rowId ? null : row.rowId));
     if (marker.type !== "forkNotice" || !onNavigate) {
       return undefined;
     }
     return () => onNavigate(marker.parentSessionId, marker.parentRowId);
-  }, [marker, onNavigate]);
+  }, [marker, onNavigate, row.rowId, summary]);
 
   if (!view) {
     return null;
   }
   return (
+    <div>
     <MarkerDividerRow
       rowId={row.rowId}
       markerType={marker.type}
@@ -1883,6 +1892,12 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
       running={view.running}
       onClick={handleClick}
     />
+    {summaryOpen && summary ? (
+      <div className="px-4 pb-2 text-ui-base whitespace-pre-wrap text-[var(--color-foreground)]">
+        {summary}
+      </div>
+    ) : null}
+    </div>
   );
 });
 

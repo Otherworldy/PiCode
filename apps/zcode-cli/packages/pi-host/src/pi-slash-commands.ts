@@ -1,13 +1,13 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
+import { TUI_ONLY_PI_SLASH_COMMANDS } from "@zcode/shared";
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
-import { listPiSkills } from "./pi-skills.js";
 import type { PiSlashCommandView } from "./types.js";
 
 export type { PiSlashCommandView };
 
-/** 与 Pi `BUILTIN_SLASH_COMMANDS` 同序。终端专属项仍列出，提交时不发给模型。 */
+/** 与 Pi `BUILTIN_SLASH_COMMANDS` 同序。终端专属项不进 GUI 目录。 */
 const PI_BUILTIN_SLASH_COMMANDS = [
   { name: "settings", description: "Open settings menu" },
   { name: "model", description: "Select model (opens selector UI)", argumentHint: "<provider/model>" },
@@ -44,23 +44,18 @@ interface NamedCommand {
 interface PiSlashCommandParts {
   templates: readonly NamedCommand[];
   extensions: readonly NamedCommand[];
-  skills: readonly NamedCommand[];
-  skillCommands: boolean;
 }
 
 export function assemblePiSlashCommands(parts: PiSlashCommandParts): PiSlashCommandView[] {
-  const builtins = PI_BUILTIN_SLASH_COMMANDS.map((command) => toView(command, "builtin"));
+  const builtins = PI_BUILTIN_SLASH_COMMANDS.filter(
+    (command) => !TUI_ONLY_PI_SLASH_COMMANDS.has(command.name),
+  ).map((command) => toView(command, "builtin"));
   const taken = new Set(builtins.map((command) => command.name));
   const rest = [
     ...parts.templates.map((command) => toView(command, "custom")),
-    ...parts.extensions.map((command) => toView(command, "custom")),
-    ...(parts.skillCommands
-      ? parts.skills.map((skill) =>
-          toView({ name: `skill:${skill.name}`, description: skill.description }, "custom"),
-        )
-      : []),
+    ...parts.extensions.map((command) => toView(command, "extension")),
   ].filter((command) => {
-    if (taken.has(command.name)) return false;
+    if (taken.has(command.name) || command.name.startsWith("skill:")) return false;
     taken.add(command.name);
     return true;
   });
@@ -72,11 +67,9 @@ interface PiCommandSession {
   extensionRunner: {
     getRegisteredCommands(): ReadonlyArray<NamedCommand & { invocationName: string }>;
   };
-  settingsManager: { getEnableSkillCommands(): boolean };
-  resourceLoader: { getSkills(): { skills: ReadonlyArray<NamedCommand> } };
 }
 
-/** 活会话：和 Pi 自动补全同一份（内置、提示词、扩展命令、skill:）。 */
+/** 活会话：GUI 能用的内置命令、提示词、扩展命令。技能不进命令目录。 */
 export function listSessionSlashCommands(session: PiCommandSession): PiSlashCommandView[] {
   return assemblePiSlashCommands({
     templates: session.promptTemplates,
@@ -84,12 +77,10 @@ export function listSessionSlashCommands(session: PiCommandSession): PiSlashComm
       name: command.invocationName,
       description: command.description,
     })),
-    skills: session.resourceLoader.getSkills().skills,
-    skillCommands: session.settingsManager.getEnableSkillCommands(),
   });
 }
 
-/** 还没有会话时不加载扩展。提示词目录和技能开关仍跟 Pi。 */
+/** 还没有会话时不加载扩展。提示词目录仍跟 Pi。 */
 export async function listPiSlashCommands(
   cwd: string,
   agentDir?: string,
@@ -97,16 +88,12 @@ export async function listPiSlashCommands(
   await ensurePiSdk();
   const coding = piCoding();
   const dir = agentDir ?? coding.getAgentDir();
-  const settings = coding.SettingsManager.create(cwd, dir);
-  const skillCommands = settings.getEnableSkillCommands();
   return assemblePiSlashCommands({
     templates: [
       ...readPromptDir(join(dir, "prompts")),
       ...readPromptDir(join(cwd, coding.CONFIG_DIR_NAME, "prompts")),
     ],
     extensions: [],
-    skills: skillCommands ? await listPiSkills(cwd, dir) : [],
-    skillCommands,
   });
 }
 

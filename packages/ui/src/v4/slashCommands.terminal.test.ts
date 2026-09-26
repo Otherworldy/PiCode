@@ -9,7 +9,9 @@ const commands = [
 ];
 
 test("terminal-only pi commands are not sent to the model", () => {
-  assert.equal(isTerminalOnlySlashCommand("/settings", commands), true);
+  assert.equal(isTerminalOnlySlashCommand("/settings", []), true);
+  assert.equal(isTerminalOnlySlashCommand("/copy", []), true);
+  assert.equal(isTerminalOnlySlashCommand("/new", []), true);
   assert.equal(isTerminalOnlySlashCommand("/compact", commands), false);
   assert.equal(isTerminalOnlySlashCommand("/subagents list", commands), false);
   assert.equal(isTerminalOnlySlashCommand("/plan", commands), false);

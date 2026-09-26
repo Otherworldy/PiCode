@@ -2,7 +2,13 @@
  * slashCommandHelpers — 纯函数辅助工具，供 SlashCommandPlugin.tsx 使用
  */
 import { $getRoot, $getSelection, $isRangeSelection, $isTextNode } from "lexical";
-import type { AgentSummary, Locale, SkillSummary, ZCodeSlashCommand } from "@zcode/shared";
+import {
+  TUI_ONLY_PI_SLASH_COMMANDS,
+  type AgentSummary,
+  type Locale,
+  type SkillSummary,
+  type ZCodeSlashCommand,
+} from "@zcode/shared";
 import type { MentionItem } from "@/mentions/mentionTypes.js";
 import { mapSubagentsToMentionItemsForTest } from "@/mentions/providers/subagentsMentionProvider.js";
 import { mapSkillsToMentionItemsForTest } from "@/mentions/providers/skillsMentionProvider.js";
@@ -89,7 +95,8 @@ export function buildSlashSuggestions(commands: ZCodeSlashCommand[]): PromptInpu
     // UI 曾同时维护内建白名单、GLM `/goal` fallback 和 v4 追加目录，
     // CLI catalog 丢失时仍会显示部分命令，掩盖 `/init` 与自定义命令缺失。命令发现
     // 统一以 CLI protocol catalog 为权威，UI 不再追加命令或维护内建白名单。
-    if (!value) {
+    // 终端命令和 Pi 的 skill: 命令不进命令区：技能已经在技能分组里。
+    if (!value || TUI_ONLY_PI_SLASH_COMMANDS.has(value.toLowerCase()) || value.toLowerCase().startsWith("skill:")) {
       return [];
     }
     return [
@@ -100,6 +107,7 @@ export function buildSlashSuggestions(commands: ZCodeSlashCommand[]): PromptInpu
         label: command.inputHint?.trim() || `/${value}`,
         description: command.description,
         keywords: [...new Set([value, command.name, command.description, command.inputHint ?? ""])],
+        ...(command.source === "extension" ? { data: { source: "plugin" as const } } : {}),
       },
     ];
   });

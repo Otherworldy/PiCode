@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ZCodePiPluginsResult } from "@zcode/shared";
+import { Button } from "@/components/ui/button.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog.js";
+import { Input } from "@/components/ui/input.js";
 import { Switch } from "@/components/ui/switch.js";
 import { toast } from "@/components/ui/toast.js";
 import { useZCodeSessionService } from "@/hooks/useZCodeSessionService.js";
@@ -8,6 +18,66 @@ import { logger } from "@/logger.js";
 import { SettingsGroupCard, SettingsRow } from "@/settings/SettingsPageParts.js";
 
 type PiPlugin = ZCodePiPluginsResult["plugins"][number];
+type PiPluginConfig = NonNullable<ZCodePiPluginsResult["configs"]>[number];
+type PiPluginConfigValue = PiPluginConfig["fields"][number]["value"];
+
+function draftOf(config: PiPluginConfig): Record<string, PiPluginConfigValue> {
+  return Object.fromEntries(config.fields.map((field) => [field.key, field.value]));
+}
+
+function namesOf(plugin: PiPlugin): Set<string> {
+  const keys = new Set<string>();
+  const push = (value: string) => {
+    const lower = value.trim().toLowerCase();
+    if (!lower) return;
+    keys.add(lower);
+    const bare = lower.replace(/^pi-/u, "");
+    keys.add(bare);
+    if (bare.endsWith("s")) keys.add(bare.slice(0, -1));
+  };
+  push(plugin.name);
+  push(plugin.detail.split(/[\\/:@]/u).filter(Boolean).at(-1) ?? "");
+  return keys;
+}
+
+function editDistance(left: string, right: string): number {
+  if (Math.abs(left.length - right.length) > 1) return 2;
+  let changes = 0;
+  let i = 0;
+  let j = 0;
+  while (i < left.length && j < right.length) {
+    if (left[i] === right[j]) {
+      i += 1;
+      j += 1;
+      continue;
+    }
+    changes += 1;
+    if (changes > 1) return 2;
+    if (left.length > right.length) i += 1;
+    else if (right.length > left.length) j += 1;
+    else {
+      i += 1;
+      j += 1;
+    }
+  }
+  return changes + (left.length - i) + (right.length - j);
+}
+
+function configFor(plugin: PiPlugin, configs: PiPluginConfig[]): PiPluginConfig | undefined {
+  const keys = namesOf(plugin);
+  const exact = configs.filter((config) => {
+    const id = config.id.toLowerCase();
+    const bare = id.replace(/^pi-/u, "");
+    return keys.has(id) || keys.has(bare) || (bare.endsWith("s") && keys.has(bare.slice(0, -1)));
+  });
+  if (exact.length > 0) {
+    return exact.find((config) => config.id.toLowerCase() === plugin.name.toLowerCase()) ?? exact[0];
+  }
+  const near = configs.filter(
+    (config) => editDistance(plugin.name.toLowerCase(), config.id.toLowerCase()) === 1,
+  );
+  return near.length === 1 ? near[0] : undefined;
+}
 
 export function PiPluginsSection({
   workspacePath,
@@ -25,7 +95,11 @@ export function PiPluginsSection({
   const { intl } = useZCodeIntl();
   const session = useZCodeSessionService(workspacePath, null, workspaceIdentity);
   const [plugins, setPlugins] = useState<PiPlugin[] | null>(null);
+  const [configs, setConfigs] = useState<PiPluginConfig[]>([]);
+  const [editing, setEditing] = useState<PiPluginConfig | null>(null);
+  const [draft, setDraft] = useState<Record<string, PiPluginConfigValue>>({});
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const workspace = useMemo(
     () => ({
       workspacePath,
@@ -36,7 +110,9 @@ export function PiPluginsSection({
 
   const load = useCallback(async () => {
     try {
-      setPlugins((await session.mutatePiPlugins({ ...workspace, action: "list" })).plugins);
+      const result = await session.mutatePiPlugins({ ...workspace, action: "list" });
+      setPlugins(result.plugins);
+      setConfigs(result.configs ?? []);
     } catch (error) {
       logger.warn("[pi-plugins] load failed", { error });
       setPlugins([]);
@@ -78,38 +154,141 @@ export function PiPluginsSection({
         </div>
       ) : (
         <SettingsGroupCard>
-          {visible.map((plugin) => (
-            <SettingsRow
-              key={plugin.id}
-              label={plugin.name}
-              description={plugin.detail}
-              control={
-                <Switch
-                  checked={plugin.enabled}
-                  disabled={pendingId === plugin.id}
-                  data-testid={`pi-plugin-switch-${plugin.kind}`}
-                  onCheckedChange={(enabled) => {
-                    setPendingId(plugin.id);
-                    void session
-                      .mutatePiPlugins({
-                        ...workspace,
-                        action: "setEnabled",
-                        id: plugin.id,
-                        enabled,
-                      })
-                      .then((result) => setPlugins(result.plugins))
-                      .catch((error) => {
-                        logger.warn("[pi-plugins] toggle failed", { error });
-                        toast(intl.formatMessage({ id: "settings.plugins.pi.failed" }));
-                      })
-                      .finally(() => setPendingId(null));
-                  }}
-                />
-              }
-            />
-          ))}
+          {visible.map((plugin) => {
+            const config = scope === "user" ? configFor(plugin, configs) : undefined;
+            return (
+              <SettingsRow
+                key={plugin.id}
+                label={plugin.name}
+                description={plugin.detail}
+                controlLayout="wide"
+                control={
+                  <>
+                    {config ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setEditing(config);
+                          setDraft(draftOf(config));
+                        }}
+                      >
+                        {intl.formatMessage({ id: "settings.plugins.pi.configure" })}
+                      </Button>
+                    ) : null}
+                    <Switch
+                      checked={plugin.enabled}
+                      disabled={pendingId === plugin.id}
+                      data-testid={`pi-plugin-switch-${plugin.kind}`}
+                      onCheckedChange={(enabled) => {
+                        setPendingId(plugin.id);
+                        void session
+                          .mutatePiPlugins({
+                            ...workspace,
+                            action: "setEnabled",
+                            id: plugin.id,
+                            enabled,
+                          })
+                          .then((result) => setPlugins(result.plugins))
+                          .catch((error) => {
+                            logger.warn("[pi-plugins] toggle failed", { error });
+                            toast(intl.formatMessage({ id: "settings.plugins.pi.failed" }));
+                          })
+                          .finally(() => setPendingId(null));
+                      }}
+                    />
+                  </>
+                }
+              />
+            );
+          })}
         </SettingsGroupCard>
       )}
+      <Dialog
+        open={editing !== null}
+        onOpenChange={(open) => {
+          if (!open && !saving) setEditing(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editing?.name}</DialogTitle>
+            <DialogDescription>
+              {intl.formatMessage({ id: "settings.plugins.pi.configHint" })}
+            </DialogDescription>
+          </DialogHeader>
+          {editing && editing.skipped.length > 0 ? (
+            <div className="text-ui-base text-foreground-subtle">
+              {intl.formatMessage(
+                { id: "settings.plugins.pi.configSkipped" },
+                { keys: editing.skipped.join(", ") },
+              )}
+            </div>
+          ) : null}
+          <div className="grid max-h-[60vh] gap-3 overflow-y-auto pr-1">
+            {editing?.fields.map((field) => (
+              <label key={field.key} className="grid gap-1 text-ui-base text-foreground">
+                <span className="text-foreground-subtle">{field.key}</span>
+                {field.type === "boolean" ? (
+                  <Switch
+                    checked={draft[field.key] === true}
+                    disabled={saving}
+                    onCheckedChange={(checked) =>
+                      setDraft((current) => ({ ...current, [field.key]: checked }))
+                    }
+                  />
+                ) : (
+                  <Input
+                    type={
+                      field.sensitive ? "password" : field.type === "number" ? "number" : "text"
+                    }
+                    size="sm"
+                    className="h-8"
+                    value={String(draft[field.key] ?? "")}
+                    disabled={saving}
+                    onChange={(event) => {
+                      const next =
+                        field.type === "number" ? Number(event.target.value) : event.target.value;
+                      if (typeof next === "number" && !Number.isFinite(next)) return;
+                      setDraft((current) => ({ ...current, [field.key]: next }));
+                    }}
+                  />
+                )}
+              </label>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              disabled={saving || !editing}
+              onClick={() => {
+                if (!editing) return;
+                setSaving(true);
+                void session
+                  .mutatePiPlugins({
+                    ...workspace,
+                    action: "writeConfig",
+                    id: editing.id,
+                    values: draft,
+                  })
+                  .then((result) => {
+                    setConfigs(result.configs ?? []);
+                    setEditing(null);
+                    toast(intl.formatMessage({ id: "settings.plugins.pi.configSaved" }));
+                  })
+                  .catch((error) => {
+                    logger.warn("[pi-plugins] config save failed", { error });
+                    toast(intl.formatMessage({ id: "settings.plugins.pi.failed" }));
+                  })
+                  .finally(() => setSaving(false));
+              }}
+            >
+              {intl.formatMessage({ id: "settings.plugins.pi.configSave" })}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

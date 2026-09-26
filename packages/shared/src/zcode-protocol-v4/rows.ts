@@ -334,6 +334,7 @@ export const timelineMarkerPayloadSchema = z.union([
     status: z.enum(["running", "success", "failed", "noop", "cancelled"]),
     tokensBefore: z.number().optional(),
     tokensAfter: z.number().optional(),
+    summary: z.string().optional(),
     summaryRef: z.string().optional(),
   }),
   // 出现在 child 会话首部（forkTimelineIsBoundary）。

@@ -988,7 +988,7 @@ export const zcodeSlashCommandSchema = z
     name: nonEmptyString,
     description: z.string(),
     inputHint: z.string().optional(),
-    source: z.enum(["builtin", "custom"]).optional(),
+    source: z.enum(["builtin", "custom", "extension"]).optional(),
   })
   .strict();
 export type ZCodeSessionApiRetryStatus = z.infer<typeof zcodeSessionApiRetryStatusSchema>;
@@ -2108,12 +2108,30 @@ export const zcodePiModelsMutateResultSchema = z
   })
   .strict();
 export type ZCodePiModelsMutateResult = z.infer<typeof zcodePiModelsMutateResultSchema>;
+const zcodePiPluginConfigValueSchema = z.union([z.boolean(), z.number(), z.string()]);
+export const zcodePiPluginConfigFieldSchema = z
+  .object({
+    key: z.string(),
+    type: z.enum(["boolean", "number", "string"]),
+    value: zcodePiPluginConfigValueSchema,
+    sensitive: z.boolean(),
+  })
+  .strict();
+export const zcodePiPluginConfigSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    fields: z.array(zcodePiPluginConfigFieldSchema),
+    skipped: z.array(z.string()),
+  })
+  .strict();
 export const zcodePiPluginsParamsSchema = z
   .object({
     workspace: zcodeWorkspaceRefSchema.optional(),
-    action: z.enum(["list", "setEnabled"]),
+    action: z.enum(["list", "setEnabled", "writeConfig"]),
     id: z.string().min(1).optional(),
     enabled: z.boolean().optional(),
+    values: z.record(z.string(), zcodePiPluginConfigValueSchema).optional(),
   })
   .strict();
 export type ZCodePiPluginsParams = z.infer<typeof zcodePiPluginsParamsSchema>;
@@ -2131,6 +2149,7 @@ export const zcodePiPluginsResultSchema = z
         })
         .strict(),
     ),
+    configs: z.array(zcodePiPluginConfigSchema).optional(),
   })
   .strict();
 export type ZCodePiPluginsResult = z.infer<typeof zcodePiPluginsResultSchema>;

@@ -210,6 +210,21 @@ export class PiToV4Projector {
     return this.applyState({ meta: { title, titleSource } });
   }
 
+  setContextUsage(usedTokens: number, maxTokens: number): ConversationDelta[] {
+    const current = this.snapshot.usage.contextWindow;
+    if (current?.usedTokens === usedTokens && current.maxTokens === maxTokens) return [];
+    return this.applyState({
+      usage: {
+        ...this.snapshot.usage,
+        contextWindow: {
+          usedTokens,
+          maxTokens,
+          autoCompactThresholdTokens: null,
+        },
+      },
+    });
+  }
+
   private applyState(patch: StatePatch): ConversationDelta[] {
     const deltas: ConversationDelta[] = [{ op: "state.updated", patch }];
     this.seq += 1;
@@ -616,6 +631,7 @@ export class PiToV4Projector {
             status: event.aborted ? "cancelled" : event.result ? "success" : "failed",
             tokensBefore: event.result?.tokensBefore,
             tokensAfter: event.result?.estimatedTokensAfter,
+            ...(event.result?.summary ? { summary: event.result.summary } : {}),
           },
         },
       },

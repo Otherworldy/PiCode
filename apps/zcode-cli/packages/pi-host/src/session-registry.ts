@@ -485,28 +485,6 @@ export class HostSessionRegistry {
       viaRegistry: meta.viaRegistry,
       workId: meta.workId,
     });
-    const applyModel = async (selection: SubmissionModel) => {
-      const provider = selection.providerId.trim();
-      const modelId = selection.modelId.trim();
-      if (!provider || !modelId) return;
-      const config = projector.getSnapshot().config;
-      const thought = selection.thought?.trim();
-      if (config.provider === provider && config.model === modelId) {
-        if (thought && thought !== config.thought) {
-          projector.setConfig({ thought });
-          pi.setThinkingLevel?.(mapThought(thought));
-        }
-        return;
-      }
-      const applied = await pi.setModel?.(provider, modelId, thought);
-      if (applied === false) return;
-      projector.setConfig({
-        provider,
-        model: modelId,
-        ...(thought ? { thought } : {}),
-      });
-    };
-    const bridge = new CommandBridge(pi, queue, applyModel);
     const deltaListeners = new Set<(deltas: ConversationDelta[]) => void>();
     const notifyListeners = new Set<(message: string, notifyType: "info" | "warning" | "error") => void>();
     const pendingDeltas: ConversationDelta[] = [];
@@ -518,6 +496,35 @@ export class HostSessionRegistry {
         return;
       }
       for (const listener of deltaListeners) listener(deltas);
+    };
+    const applyModel = async (selection: SubmissionModel) => {
+      const provider = selection.providerId.trim();
+      const modelId = selection.modelId.trim();
+      if (!provider || !modelId) return;
+      const config = projector.getSnapshot().config;
+      const thought = selection.thought?.trim();
+      if (config.provider === provider && config.model === modelId) {
+        if (thought && thought !== config.thought) {
+          pi.setThinkingLevel?.(mapThought(thought));
+          emit(projector.setConfig({ thought }));
+        }
+        return;
+      }
+      const applied = await pi.setModel?.(provider, modelId, thought);
+      if (applied === false) return;
+      emit(
+        projector.setConfig({
+          provider,
+          model: modelId,
+          ...(thought ? { thought } : {}),
+        }),
+      );
+    };
+    const bridge = new CommandBridge(pi, queue, applyModel);
+    const publishContext = () => {
+      const usage = pi.contextUsage?.();
+      if (!usage) return;
+      emit(projector.setContextUsage(usage.used, usage.max));
     };
     const handleUi = (event: Extract<PiHostEvent, { type: "extension_ui_request" }>) => {
       const next = ui.handle(event);
@@ -580,6 +587,12 @@ export class HostSessionRegistry {
           return;
         }
         emit(projector.apply(event));
+        if (
+          event.type === "compaction_end" ||
+          (event.type === "agent_end" && !event.willRetry)
+        ) {
+          publishContext();
+        }
         scheduleSubagents();
         // zcode_subagent 在工具里跑完才返回，这段时间父会话没有新事件，目录不会刷新。
         if (event.type === "agent_start" && !subagentPoll) {
@@ -607,6 +620,7 @@ export class HostSessionRegistry {
         thoughtLevels: ["off", "minimal", "low", "medium", "high"],
       });
     }
+    publishContext();
     return {
       sessionId: meta.sessionId,
       identity: meta.identity,
@@ -629,7 +643,10 @@ export class HostSessionRegistry {
         await pi.abort();
       },
       compact: () => pi.compact(),
-      setModel: (provider, modelId, thought) => applyModel({ providerId: provider, modelId, thought }),
+      setModel: async (provider, modelId, thought) => {
+        await applyModel({ providerId: provider, modelId, thought });
+        publishContext();
+      },
       setThinkingLevel: (level) => {
         projector.setConfig({ thought: level });
         pi.setThinkingLevel?.(mapThought(level));
