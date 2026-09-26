@@ -72,7 +72,7 @@ test("pi ask_user_question text result is the selected answer", () => {
   });
 });
 
-test("ZCode subagent identity wins over retired Codex nicknames", () => {
+test("PiCode subagent identity wins over retired Codex nicknames", () => {
   const tool = {
     id: "tool-example",
     kind: "Agent",

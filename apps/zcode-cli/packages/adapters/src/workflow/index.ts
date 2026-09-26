@@ -1,3 +1,4 @@
+import { ensureAppDataDir } from "@zcode/shared/node";
 import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -32,7 +33,7 @@ interface WorkflowIndexFile {
   runs: WorkflowRunListItem[];
 }
 
-const DEFAULT_WORKFLOW_ROOT = join(homedir(), ".zcode", "cli", "workflows");
+const DEFAULT_WORKFLOW_ROOT = join(ensureAppDataDir(homedir()), "cli", "workflows");
 const WORKFLOW_DEFINITION_FILE_EXTENSION = ".json";
 
 export class NodeWorkflowStore implements WorkflowStorePort {

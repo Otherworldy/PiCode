@@ -1,6 +1,6 @@
 ---
 name: control-browser
-description: "Use when opening, navigating, inspecting, testing, clicking, typing, filling, screenshotting, or verifying web pages and local HTTP targets (localhost, 127.0.0.1, ::1) inside ZCode, including browser/web-UI automation, rendered-page scraping, frontend checks, and visible page-state reading. Prefer this over Computer Use for anything that stays inside a web page, unless the user explicitly asks for Computer Use. Main agent only."
+description: "Use when opening, navigating, inspecting, testing, clicking, typing, filling, screenshotting, or verifying web pages and local HTTP targets (localhost, 127.0.0.1, ::1) inside PiCode, including browser/web-UI automation, rendered-page scraping, frontend checks, and visible page-state reading. Prefer this over Computer Use for anything that stays inside a web page, unless the user explicitly asks for Computer Use. Main agent only."
 ---
 
 # Browser automation (agent.browsers)
@@ -48,7 +48,7 @@ It can tell you which visible page to inspect, but it is not evidence that the u
 
 In the first browser call, run the bootstrap, select the backend, and emit the complete API guide in one go. On later fresh calls, run the bootstrap and repeat only the same backend selection; the API guide remains in model context and does not need to be emitted again. Never create an `iab` alias and then call `browser.*`.
 
-If the user explicitly asks for ZCode's in-app browser:
+If the user explicitly asks for PiCode's in-app browser:
 
 ```js
 const browser = await agent.browsers.get("iab");
@@ -80,7 +80,7 @@ Do not slice, truncate, or summarize it. Only if the tool output itself reports 
 
 ## Core workflow
 
-1. Start every browser `js` call with the bootstrap, then assign the selected backend to a local `browser` binding. If the user explicitly asks for ZCode's in-app browser, use `const browser = await agent.browsers.get("iab")`. If they explicitly ask for Chrome, use `await agent.browsers.get("extension")` only when the runtime advertises it. For an unspecified target URL use `await agent.browsers.getForUrl(url)`; with no URL/backend preference use `await agent.browsers.getDefault()`.
+1. Start every browser `js` call with the bootstrap, then assign the selected backend to a local `browser` binding. If the user explicitly asks for PiCode's in-app browser, use `const browser = await agent.browsers.get("iab")`. If they explicitly ask for Chrome, use `await agent.browsers.get("extension")` only when the runtime advertises it. For an unspecified target URL use `await agent.browsers.getForUrl(url)`; with no URL/backend preference use `await agent.browsers.getDefault()`.
 2. `browser.tabs.new()` automatically opens and activates the IAB pane so the user can see browser use. Use the advertised visibility capability only when the task explicitly needs to hide the pane or show it again.
 3. At the start of every logical tab operation batch, make a dedicated JS call whose result is the complete
    `await browser.tabs.list()` array, so the model sees all current ids, URLs, titles, and the active marker. Only in
@@ -119,7 +119,7 @@ Do not slice, truncate, or summarize it. Only if the tool output itself reports 
    ```
 
    Return `{ controlledTabs, userTabs }` as that cell's final result so the model makes one decision from both lists. Do not return the controlled list first or decide whether to query user tabs from its contents. Match both lists by verified id/url/title, then in the next cell activate the matching controlled tab or claim a matching user tab. Only after the source page and the combined tab observation all fail to show the expected effect may you take a fresh snapshot and choose a new locator. **Do not request a DOM snapshot and a screenshot both by default.**
-8. Browser tabs persist for the lifetime of the current ZCode process unless you explicitly call `tab.close()` or
+8. Browser tabs persist for the lifetime of the current PiCode process unless you explicitly call `tab.close()` or
    the user closes them. Use `browser.tabs.finalize({ keep })` only to mark listed pages as `deliverable` or
    `handoff`; omitting a tab from `keep` does not close it. Do not close research/source tabs merely because the
    turn is ending.
@@ -161,7 +161,7 @@ string id, recover the same verified tab before every status/cancel batch, and p
 - `goto()` accepts `http:`, `https:`, and exact `about:blank`. `file:`, other `about:*`, `data:`, and
   `javascript:` targets are not navigable. A `file:` URL may still be used only as a `getForUrl()` backend-selection
   hint when multiple backends exist.
-- `networkidle` is present in the shared type but is rejected by every ZCode browser backend. For
+- `networkidle` is present in the shared type but is rejected by every PiCode browser backend. For
   `expectNavigation(...)`, pass an expected `url` when the action must prove a new navigation; without `url`, an
   already-loaded old page can satisfy the load-state waiter.
 

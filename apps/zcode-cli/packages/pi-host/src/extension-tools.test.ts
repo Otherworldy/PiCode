@@ -7,7 +7,7 @@ import test from "node:test";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { createSdkSessionFactory } from "./session-factory.js";
 
-test("extension tools are sent upstream with ZCode tools", async () => {
+test("extension tools are sent upstream with PiCode tools", async () => {
   const dir = await mkdtemp(join(tmpdir(), "zcode-ext-tools-"));
   const bodies: string[] = [];
   const server = createServer((req, res) => {

@@ -31,8 +31,8 @@ export function buildHarnessBlock(): string {
 
 function buildIdentityPrompt(outputStyle?: OutputStylePromptConfig): string {
   const intro = outputStyle
-    ? "You respond to the user according to the active Output Style below while using ZCode's tools and instructions."
-    : "You are an interactive ZCode agent that helps users with software engineering tasks.";
+    ? "You respond to the user according to the active Output Style below while using PiCode's tools and instructions."
+    : "You are an interactive PiCode agent that helps users with software engineering tasks.";
 
   const identityLines = ["", intro, "", SECURITY_NOTICE].join("\n");
 

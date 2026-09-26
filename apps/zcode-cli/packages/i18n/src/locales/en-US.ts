@@ -15,7 +15,7 @@ Usage:
 With no command, zcode prints this help. Use Desktop/Web or app-server --stdio.
 
 Commands:
-  app-server Run the ZCode Protocol stdio app server
+  app-server Run the PiCode Protocol stdio app server
   commands   List custom slash commands (\`commands list\`)
   doctor     Inspect runtime and packaging assumptions
   login [zai|bigmodel]  Sign in through browser authorization
@@ -285,7 +285,7 @@ Slash Commands:
     },
     terminal: {
       requiresInteractive: "TUI requires an interactive terminal.",
-      starting: "Starting ZCode... Ctrl+C to exit",
+      starting: "Starting PiCode... Ctrl+C to exit",
     },
     transcript: {
       compact: {

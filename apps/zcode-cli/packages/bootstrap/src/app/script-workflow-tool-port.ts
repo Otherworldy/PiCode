@@ -1,3 +1,4 @@
+import { ensureAppDataDir } from "@zcode/shared/node";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -314,8 +315,8 @@ async function resolveNamedWorkflowPath(
 ): Promise<string> {
   const fileName = workflowFileName(name);
   const candidates = [
-    join(deps.workingDirectory, ".zcode", "workflows", fileName),
-    join(homedir(), ".zcode", "workflows", fileName),
+    join(ensureAppDataDir(deps.workingDirectory), "workflows", fileName),
+    join(ensureAppDataDir(homedir()), "workflows", fileName),
   ];
   const builtIn = BUILTIN_WORKFLOW_ALLOWLIST.get(name);
   if (builtIn) candidates.push(builtIn);

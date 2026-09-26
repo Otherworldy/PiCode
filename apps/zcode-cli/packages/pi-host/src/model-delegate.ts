@@ -238,10 +238,10 @@ export function createDelegateProvider(input: {
   ) => runDelegateStream(requestModel, context, options, input.stream);
   const provider = createProvider({
     id: providerId,
-    name: "ZCode",
+    name: "PiCode",
     auth: {
       apiKey: {
-        name: "ZCode",
+        name: "PiCode",
         resolve: async () => ({ auth: {} }),
       },
     },

@@ -43,8 +43,8 @@ interface UserMcpRecord {
 const ZCODE_MCP_DESCRIPTOR: DirectoryMcpDescriptor = {
   source: "zcode",
   directorySource: "zcode",
-  userConfigDirSegments: [".zcode", "cli"],
-  workspaceConfigDirSegments: [".zcode"],
+  userConfigDirSegments: [".PiCode", "cli"],
+  workspaceConfigDirSegments: [".PiCode"],
   fileName: "config.json",
   configKeyName: "mcp.servers",
 };

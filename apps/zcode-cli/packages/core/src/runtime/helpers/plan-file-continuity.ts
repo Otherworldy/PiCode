@@ -1,3 +1,4 @@
+import { ensureAppDataDir } from "@zcode/shared/node";
 import { join } from "node:path";
 import {
   CoreErrorType,
@@ -19,9 +20,7 @@ function resolveApprovedPlanFilePath(input: {
   sessionId: SessionId | string;
   workspaceRoot: string;
 }): string {
-  return join(
-    input.workspaceRoot,
-    ".zcode",
+  return join(ensureAppDataDir(input.workspaceRoot),
     "plans",
     `plan-${sanitizePlanFileSessionId(input.sessionId)}.md`,
   );

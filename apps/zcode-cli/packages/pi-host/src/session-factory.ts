@@ -282,7 +282,7 @@ export function createSdkSessionFactory(options: {
       modelRuntime,
       customTools: [...customTools, ...capabilityTools] as never,
       // noTools=builtin 关掉 Pi 同名工具。不传白名单，以免把 extension 工具全关掉。
-      // 插件自带的 subagent 与 ZCode 代理定义冲突，主会话禁用它。
+      // 插件自带的 subagent 与 PiCode 代理定义冲突，主会话禁用它。
       noTools: "builtin",
       ...(options.capabilities ? { excludeTools: ["subagent"] } : {}),
       resourceLoader,

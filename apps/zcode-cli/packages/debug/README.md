@@ -1,6 +1,6 @@
 # debug
 
-Development-only trace and context viewer for ZCode.
+Development-only trace and context viewer for PiCode.
 
 Run from the repository root:
 
@@ -10,8 +10,8 @@ pnpm --filter debug dev
 
 The Hono API reads existing local diagnostics only:
 
-- `~/.zcode/cli/log/*.jsonl`
-- `~/.zcode/cli/db/db.sqlite`
+- `~/.PiCode/cli/log/*.jsonl`
+- `~/.PiCode/cli/db/db.sqlite`
 - an optional session event JSONL file or directory selected in the UI
 
 It does not modify agent runtime behavior or write back to the agent database.

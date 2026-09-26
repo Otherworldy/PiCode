@@ -1,4 +1,5 @@
 /* path 规则集中维护：旧 task 快照与 provider 配置路径仍在这里收口。 */
+import { ensureAppDataDir } from "@zcode/shared/node";
 import { lstatSync } from "node:fs";
 import { cp } from "node:fs/promises";
 import { createHash } from "node:crypto";
@@ -39,17 +40,17 @@ export function getDataBaseDir(): string {
   return defaultDataBaseDir;
 }
 
-/** {dataBaseDir}/.zcode */
+/** {dataBaseDir}/.PiCode。旧 `.zcode` 在这里改名。 */
 export function getZCodeDataRootDir(): string {
-  return join(getDataBaseDir(), ".zcode");
+  return join(ensureAppDataDir(getDataBaseDir()));
 }
 
-/** 非项目对话共享的真实工作目录；默认 ~/.zcode/workspace/default。 */
+/** 非项目对话共享的真实工作目录；默认 ~/.PiCode/workspace/default。 */
 export function getConversationWorkspaceDir(): string {
   return join(getZCodeDataRootDir(), "workspace", "default");
 }
 
-/** {dataBaseDir}/.zcode/v2 */
+/** {dataBaseDir}/.PiCode/v2 */
 export function getAppConfigDir(): string {
   return join(getZCodeDataRootDir(), "v2");
 }
@@ -113,9 +114,13 @@ function collectWindowsForbiddenAppInstallDirs(
   const candidates = [
     options.appInstallDir,
     readEnvValue(env, ZCODE_WINDOWS_APP_INSTALL_DIR_ENV),
+    programFiles ? win32.join(programFiles, "PiCode") : null,
     programFiles ? win32.join(programFiles, "ZCode") : null,
+    programFilesX86 ? win32.join(programFilesX86, "PiCode") : null,
     programFilesX86 ? win32.join(programFilesX86, "ZCode") : null,
+    programW6432 ? win32.join(programW6432, "PiCode") : null,
     programW6432 ? win32.join(programW6432, "ZCode") : null,
+    localAppData ? win32.join(localAppData, "Programs", "PiCode") : null,
     localAppData ? win32.join(localAppData, "Programs", "ZCode") : null,
   ];
   const seen = new Set<string>();
@@ -182,7 +187,7 @@ export function getGitCheckpointIndexRootDir(): string {
   return join(getZCodeDataRootDir(), "git-checkpoint-index");
 }
 
-/** ~/.zcode/v2/tasks-index.sqlite */
+/** ~/.PiCode/v2/tasks-index.sqlite */
 export function getTasksIndexDatabasePath(): string {
   return join(getAppConfigDir(), "tasks-index.sqlite");
 }
@@ -192,7 +197,7 @@ function getWorkspaceKey(workspacePath: string, workspaceIdentity?: string): str
   return workspaceIdentity?.trim() || workspacePath;
 }
 
-/** 与 ZCode session 持久化一致：使用 workspaceKey 的 SHA-256 前 12 位 */
+/** 与 PiCode session 持久化一致：使用 workspaceKey 的 SHA-256 前 12 位 */
 export function getWorkspaceHash(workspacePath: string, workspaceIdentity?: string): string {
   return createHash("sha256")
     .update(getWorkspaceKey(workspacePath, workspaceIdentity))
@@ -200,12 +205,12 @@ export function getWorkspaceHash(workspacePath: string, workspaceIdentity?: stri
     .slice(0, 12);
 }
 
-/** ~/.zcode/v2/sessions/{workspaceHash} */
+/** ~/.PiCode/v2/sessions/{workspaceHash} */
 function getTaskSessionDir(workspacePath: string, workspaceIdentity?: string): string {
   return join(getAppConfigDir(), "sessions", getWorkspaceHash(workspacePath, workspaceIdentity));
 }
 
-/** ~/.zcode/v2/sessions/{workspaceHash}/{taskId}.json */
+/** ~/.PiCode/v2/sessions/{workspaceHash}/{taskId}.json */
 export function getLegacyTaskSessionSnapshotPath(
   workspacePath: string,
   taskId: string,
@@ -214,7 +219,7 @@ export function getLegacyTaskSessionSnapshotPath(
   return join(getTaskSessionDir(workspacePath, workspaceIdentity), `${taskId}.json`);
 }
 
-/** ~/.zcode/v2/sessions/{workspaceHash}/{taskId}.deleted.json */
+/** ~/.PiCode/v2/sessions/{workspaceHash}/{taskId}.deleted.json */
 export function getLegacyDeletedTaskSessionSnapshotPath(
   workspacePath: string,
   taskId: string,
@@ -229,8 +234,8 @@ export function getLegacyDeletedTaskSessionSnapshotPath(
  * state must only live at the default homedir location.
  */
 export async function copyDataDirectory(oldBaseDir: string, newBaseDir: string): Promise<void> {
-  const oldDir = join(oldBaseDir, ".zcode", "v2");
-  const newDir = join(newBaseDir, ".zcode", "v2");
+  const oldDir = join(ensureAppDataDir(oldBaseDir), "v2");
+  const newDir = join(ensureAppDataDir(newBaseDir), "v2");
   await cp(oldDir, newDir, {
     recursive: true,
     force: false,

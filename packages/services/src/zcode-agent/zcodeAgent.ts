@@ -1,5 +1,5 @@
 import type { BackgroundBashOutputResult, SessionDebugSnapshot } from "@zcode/shared";
-/* eslint-disable max-lines -- ZCode agent service 接口集中声明 protocol/session/workspace 方法，拆分会增加 service descriptor 迁移成本。 */
+/* eslint-disable max-lines -- PiCode agent service 接口集中声明 protocol/session/workspace 方法，拆分会增加 service descriptor 迁移成本。 */
 import type { Event, IDisposable } from "@zcode/rpc";
 import { ServiceChannels } from "@zcode/shared";
 import type { AppUsageRange, AppUsageSnapshot, ZCodeTaskTokenUsageResult } from "@zcode/shared";
@@ -622,7 +622,7 @@ export interface IZCodeAgentService {
   getSkillReferenceCatalog(
     params: ZCodeAgentSkillReferenceCatalogParams,
   ): Promise<ZCodeSkillsReferenceCatalogResult>;
-  // 已保存工作流的 GUI 中枢：workspace 级、无会话，每次调用现扫 `<cwd>/.zcode/workflows/`。
+  // 已保存工作流的 GUI 中枢：workspace 级、无会话，每次调用现扫 `<cwd>/.PiCode/workflows/`。
   // 全局档传 `scope: "global"`：带 workspace 就用它当载体，不带则由 services 层自选本机载体运行时。
   listSavedWorkflows(params: ZCodeAgentListSavedWorkflowsParams): Promise<ZCodeWorkflowsListResult>;
   getSavedWorkflow(params: ZCodeAgentGetSavedWorkflowParams): Promise<ZCodeWorkflowsGetResult>;

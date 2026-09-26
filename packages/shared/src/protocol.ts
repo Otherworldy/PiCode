@@ -77,7 +77,7 @@ export type Locale = "zh-CN" | "en-US";
 /** 界面语言偏好；system 表示跟随当前运行端系统语言。 */
 export type LocalePreference = "system" | Locale;
 
-/** ZCode 运行中继续输入时的交互行为 */
+/** PiCode 运行中继续输入时的交互行为 */
 export type ZCodeInteractionBehavior = "queue" | "guide";
 
 /** Windows Bash 工具可使用的集成终端 shell 方言。 */
@@ -260,7 +260,7 @@ export interface AppSettings {
   httpProxyCaCertPath?: string;
   /**
    * 内置浏览器忽略 HTTPS 证书校验错误（自签名、过期、域名不匹配等），用于访问内网测试站点。
-   * 只影响内置浏览器出口，不影响 ZCode 自身对后端与模型 API 的请求。默认关闭，重启后生效。
+   * 只影响内置浏览器出口，不影响 PiCode 自身对后端与模型 API 的请求。默认关闭，重启后生效。
    */
   embeddedBrowserAllowInsecureCertificates?: boolean;
   /** 内置浏览器工具。缺省开启。只影响之后新建的会话。 */
@@ -306,7 +306,7 @@ export interface AppSettings {
   toolGroupingTerminalEnabled?: boolean;
   /** 是否把连续的 Write/Edit/ApplyPatch 工具调用聚合成 Changes。 */
   toolGroupingChangesEnabled?: boolean;
-  /** ZCode 运行中继续输入时，是排队到下一轮，还是引导到下一次工具调用后运行 */
+  /** PiCode 运行中继续输入时，是排队到下一轮，还是引导到下一次工具调用后运行 */
   zcodeInteractionBehavior?: ZCodeInteractionBehavior;
   /** 是否完整保留 Model I/O；开启后不轮转、不限额重置、不压缩或裁剪，鉴权信息仍会脱敏。 */
   modelIoFullRetentionEnabled?: boolean;

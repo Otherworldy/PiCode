@@ -1,3 +1,4 @@
+import { ensureAppDataDir } from "@zcode/shared/node";
 import { access, readFile, mkdir, rename } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -53,7 +54,7 @@ function resolveUserHomeDir() {
 }
 
 function getSettingsDir() {
-  return join(resolveUserHomeDir(), ".zcode", "v2");
+  return join(ensureAppDataDir(resolveUserHomeDir()), "v2");
 }
 
 function getSettingsFile() {

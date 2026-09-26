@@ -4788,7 +4788,7 @@ export function SessionPane({
               })}
               headerSlot={
                 // unsupportedRowCount 也要开这个门：整份副本的行都被本 build 跳过时
-                // rows 为空，但只读块必须留下来显示「需要更新 ZCode」，不能整块消失。
+                // rows 为空，但只读块必须留下来显示「需要更新 PiCode」，不能整块消失。
                 importedShare &&
                 (importedShare.rows.length > 0 || importedShare.unsupportedRowCount > 0) ? (
                   <ConversationShareImportNotice

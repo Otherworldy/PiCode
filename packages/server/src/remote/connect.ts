@@ -362,7 +362,7 @@ function buildRemoteServerCommand(
 ): string {
   const envParts = [
     `${SERVICE_AUTHORITY_MODE_ENV}="desktop-attached-remote"`,
-    'ZCODE_SERVER_RUNTIME_ROOT="$HOME/.zcode/server"',
+    'ZCODE_SERVER_RUNTIME_ROOT="$HOME/.PiCode/server"',
   ];
   for (const [key, value] of Object.entries(
     pickRemoteRuntimeEnv(options?.remoteRuntimeEnv ?? {}),
@@ -388,5 +388,8 @@ function buildRemoteServerCommand(
       );
     }
   }
-  return `${envParts.join(" ")} ~/.zcode/server/node ~/.zcode/server/zcode-server.cjs`;
+  // 旧数据目录整份改名。新目录已存在就不动，避免把两套数据叠在一起。
+  const migrateLegacyDataDir =
+    'if [ ! -e "$HOME/.PiCode" ] && [ -d "$HOME/.zcode" ]; then mv "$HOME/.zcode" "$HOME/.PiCode"; fi; ';
+  return `${migrateLegacyDataDir}${envParts.join(" ")} ~/.PiCode/server/node ~/.PiCode/server/zcode-server.cjs`;
 }

@@ -1,3 +1,4 @@
+import { ensureAppDataDir } from "@zcode/shared/node";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -43,7 +44,7 @@ export function readBrowserHostEnabled(env: NodeJS.ProcessEnv | undefined): bool
     env?.USERPROFILE?.trim() ||
     homedir();
   try {
-    const raw = JSON.parse(readFileSync(join(home, ".zcode", "v2", "setting.json"), "utf8")) as {
+    const raw = JSON.parse(readFileSync(join(ensureAppDataDir(home), "v2", "setting.json"), "utf8")) as {
       browserHostEnabled?: unknown;
     };
     return raw.browserHostEnabled !== false;
@@ -181,7 +182,7 @@ export async function connectZCodeMcp(
     try {
       await mcpPort.connectServer(name, server, { workingDirectory: input.workspacePath });
     } catch (error) {
-      context.logger?.warn("ZCode MCP direct tool connect failed", {
+      context.logger?.warn("PiCode MCP direct tool connect failed", {
         error: error instanceof Error ? error.message : String(error),
         event: "zcode_protocol.mcp_connect_failed",
         server: name,

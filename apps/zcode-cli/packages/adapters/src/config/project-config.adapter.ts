@@ -1,3 +1,4 @@
+import { isAppDataDirName } from "@zcode/shared/node";
 import { basename, dirname, isAbsolute, resolve } from "node:path";
 import type { McpServerConfig, RuntimeConfigPatch } from "@zcode/contracts";
 import {
@@ -116,7 +117,7 @@ export function summarizeProjectConfigs(files: ProjectConfigFile[]): ProjectConf
 
 function getProjectConfigBaseDir(path: string): string {
   const configDirectory = dirname(path);
-  return basename(configDirectory) === ".zcode" ? dirname(configDirectory) : configDirectory;
+  return isAppDataDirName(basename(configDirectory)) ? dirname(configDirectory) : configDirectory;
 }
 
 function normalizeProjectConfig(config: RuntimeConfigPatch, baseDir: string): RuntimeConfigPatch {

@@ -2,6 +2,7 @@
 // Node logging adapter - JSONL file and optional stderr sink
 // ============================================================
 
+import { ensureAppDataDir } from "@zcode/shared/node";
 import { appendFileSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -220,7 +221,7 @@ export function createNodeLoggerFactory(options: NodeLoggerFactoryOptions = {}):
 }
 
 export function getDefaultLogDir(): string {
-  return join(homedir(), ".zcode", "cli", "log");
+  return join(ensureAppDataDir(homedir()), "cli", "log");
 }
 
 function getDefaultMinLevel(env: NodeJS.ProcessEnv | undefined): LogLevel {

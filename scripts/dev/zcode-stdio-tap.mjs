@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { ensureAppDataDir } from "@zcode/shared/node";
 import { createHash } from "node:crypto";
 import { createWriteStream, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -53,7 +54,7 @@ function parseArgs(argv) {
   return {
     command: commandAndArgs[0],
     args: commandAndArgs.slice(1),
-    logDir: logDir || join(homedir(), ".zcode", "v2", "dev", "stdio-traffic"),
+    logDir: logDir || join(ensureAppDataDir(homedir()), "v2", "dev", "stdio-traffic"),
     workspaceKey,
   };
 }

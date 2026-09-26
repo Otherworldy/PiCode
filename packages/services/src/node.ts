@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- host process 服务注册和启动装配需要集中维护，拆散后会更难追踪依赖注入顺序 */
 // Node.js service implementations — NOT safe to import in browser code
+import { ensureAppDataDir } from "@zcode/shared/node";
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -813,7 +814,7 @@ export function createDynamicCuaProductMcpServerResolver(options: {
       // 委托到底层真实 resolver（由 ICuaPermissionService.restartHelper 经此调用）。
       const resolver = await options.getResolver();
       if (!resolver) {
-        throw new Error("ZCode Computer Use is not enabled (plugin off or not product mode).");
+        throw new Error("PiCode Computer Use is not enabled (plugin off or not product mode).");
       }
       await resolver.restart();
     },
@@ -821,7 +822,7 @@ export function createDynamicCuaProductMcpServerResolver(options: {
       // 授权完成后的 restart 必须保留 session id，才能复用底层的幂等与时序保障。
       const resolver = await options.getResolver();
       if (!resolver) {
-        throw new Error("ZCode Computer Use is not enabled (plugin off or not product mode).");
+        throw new Error("PiCode Computer Use is not enabled (plugin off or not product mode).");
       }
       await resolver.restartAfterPermissionGrant(onboardingSessionId);
     },
@@ -1071,7 +1072,7 @@ export { isOfficialCuaPluginEnabledForWorkspace };
 
 export function hasGlobalCliZCodeCuaServer(env: NodeJS.ProcessEnv = process.env): boolean {
   const home = env.HOME?.trim() || homedir();
-  const configPath = join(home, ".zcode", "cli", "config.json");
+  const configPath = join(ensureAppDataDir(home), "cli", "config.json");
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(configPath, "utf8"));
@@ -1321,7 +1322,7 @@ export function createLocalServices(options: {
     httpProxy?: string;
     noProxy?: string;
   };
-  /** 所属 Environment 的 ZCode Built-in Provider Config 物理路径。 */
+  /** 所属 Environment 的 PiCode Built-in Provider Config 物理路径。 */
   zcodeBuiltinProviderConfigFilePath: string;
   /** HTTP Server 只有在调用方明确配置认证时才暴露跨 Environment Provisioning target。 */
   providerProvisioningTargetEnabled?: boolean;
@@ -1369,9 +1370,9 @@ export function createLocalServices(options: {
   const isDesktopAttachedRemote = options?.serviceAuthorityMode === "desktop-attached-remote";
   // host / remote server 以前直接沿用当前进程环境启动后续服务。
   // GUI 启动的 desktop、SSH/WSL/Docker 拉起的 remote server 往往拿不到用户 login shell 里的 PATH，
-  // 导致 bun 这类只在 shell profile 里追加的命令在 ZCode Agent/终端里不可见。
+  // 导致 bun 这类只在 shell profile 里追加的命令在 PiCode Agent/终端里不可见。
   // 这里在所有本地服务启动前统一修正运行时环境，并顺带把内置 rg 注入 PATH，
-  // 让 ZCode Agent、终端、认证 runtime 共用同一套命令解析结果。
+  // 让 PiCode Agent、终端、认证 runtime 共用同一套命令解析结果。
   initializeRuntimeProcessEnv(options?.runtimeProcessEnvPatch);
 
   const desktopContextPromptEnabledRaw =
@@ -1519,8 +1520,8 @@ export function createLocalServices(options: {
       resolveEndpointOrigin: resolveCurrentZCodeEndpointOrigin,
       onRefreshResult: (event) => {
         if (event.result === "updated")
-          providerConfigLog.info(undefined, "ZCode Built-in CDN 配置已更新", event);
-        else providerConfigLog.debug(undefined, "ZCode Built-in 刷新检查", event);
+          providerConfigLog.info(undefined, "PiCode Built-in CDN 配置已更新", event);
+        else providerConfigLog.debug(undefined, "PiCode Built-in 刷新检查", event);
       },
       fetchRelease: (endpointOrigin, signal) =>
         fetchZCodeBuiltinRemoteRelease({
@@ -1532,7 +1533,7 @@ export function createLocalServices(options: {
         }),
     },
     onZCodeBuiltinRefreshError: (error) => {
-      providerConfigLog.warn(undefined, "ZCode Built-in Config 远端刷新失败", { error });
+      providerConfigLog.warn(undefined, "PiCode Built-in Config 远端刷新失败", { error });
     },
     onPersonalConfigRecovery: (event) => {
       providerConfigLog.warn(
@@ -1549,7 +1550,7 @@ export function createLocalServices(options: {
         error,
       });
     },
-    // 已发布 config.json 保存的是 ZCode 用户配置；清理第三方 ACP 不能移除这条升级路径。
+    // 已发布 config.json 保存的是 PiCode 用户配置；清理第三方 ACP 不能移除这条升级路径。
     // Repository 仅在新 Personal 配置不存在时导入，并保留旧文件以便回滚。
     readLegacyProviders: () => readLegacyZCodeConfigProviders(),
   });
@@ -1799,7 +1800,7 @@ export function createLocalServices(options: {
     const socketPath = resolveBrokerSocketPath();
     // standaloneHelperCandidatePaths 未在上游 exports 白名单——此处按同一规则枚举安装候选
     //（dev-desktop → dev/ 前缀；app 名一律取 helperConstants，不写字面量）。
-    const home = process.env.ZCODE_HOME?.trim() || join(homedir(), ".zcode");
+    const home = process.env.ZCODE_HOME?.trim() || join(ensureAppDataDir(homedir()));
     const baseRoot = join(home, "computer-use");
     // 安装布局见上游 helperLauncher.resolveCuaHelperInstallRoot：dev 是独立子根 `dev/` 且 app
     // 名换成 DEV_HELPER_APP_NAME；preview 是独立子根 `preview/` 但**沿用**稳定 app 名
@@ -1846,7 +1847,7 @@ export function createLocalServices(options: {
     enabled: cuaPipSessionEnabled,
     resolveCredentials: async () => {
       const host = defaultCuaProductHelperLifecycle.peek()?.helper.macPermissionHost;
-      // PiP 客户端以 role=presentation 声明，资格由 Helper 按对端（ZCode 主进程）签名 identifier 裁决。
+      // PiP 客户端以 role=presentation 声明，资格由 Helper 按对端（PiCode 主进程）签名 identifier 裁决。
       if (host?.running && host.socketPath) {
         return {
           socketPath: host.socketPath,
@@ -1892,7 +1893,7 @@ export function createLocalServices(options: {
       ) {
         return {
           available: false,
-          reason: "ZCode Computer Use is not enabled (plugin off or not product mode).",
+          reason: "PiCode Computer Use is not enabled (plugin off or not product mode).",
         };
       }
       // 懒启动：状态查询绝不拉起 Helper。托管 host 在（如刚完成授权流）→ 全量查询；
@@ -1911,7 +1912,7 @@ export function createLocalServices(options: {
           return {
             available: false,
             reason:
-              "ZCode Computer Use is not running; it will start automatically on first Computer Use use.",
+              "PiCode Computer Use is not running; it will start automatically on first Computer Use use.",
             idle: true,
           } satisfies { available: false; reason: string; idle: true };
         }
@@ -1940,7 +1941,7 @@ export function createLocalServices(options: {
         } catch {
           return {
             available: false,
-            reason: "ZCode Computer Use is starting up; retry in a moment.",
+            reason: "PiCode Computer Use is starting up; retry in a moment.",
             idle: true,
           } satisfies { available: false; reason: string; idle: true };
         }
@@ -1950,7 +1951,7 @@ export function createLocalServices(options: {
         if (!helper || !isDefaultCuaProductHelperCurrent(helper)) {
           return {
             available: false,
-            reason: "ZCode Computer Use lifecycle is disposed.",
+            reason: "PiCode Computer Use lifecycle is disposed.",
           };
         }
         // Screen Recording 的真值必须来自一个新进程：撤销对已运行的常驻 Helper 不生效，
@@ -1959,7 +1960,7 @@ export function createLocalServices(options: {
         if (!isDefaultCuaProductHelperCurrent(helper)) {
           return {
             available: false,
-            reason: "ZCode Computer Use lifecycle is disposed.",
+            reason: "PiCode Computer Use lifecycle is disposed.",
           };
         }
         // 真实 screen-capture 探针：TCC screen_recording === "granted" 只说明系统记录了授权，并不保证
@@ -1974,7 +1975,7 @@ export function createLocalServices(options: {
         if (!isDefaultCuaProductHelperCurrent(helper)) {
           return {
             available: false,
-            reason: "ZCode Computer Use lifecycle is disposed.",
+            reason: "PiCode Computer Use lifecycle is disposed.",
           };
         }
         const reportedOwnerDisplayName =
@@ -2018,7 +2019,7 @@ export function createLocalServices(options: {
       ) {
         return {
           ok: false,
-          reason: "ZCode Computer Use is not enabled (plugin off or not product mode).",
+          reason: "PiCode Computer Use is not enabled (plugin off or not product mode).",
         };
       }
       // 走 resolver.restart()，让 host 尽可能复用 transport；不得通过 disposeWorkspace
@@ -2031,7 +2032,7 @@ export function createLocalServices(options: {
       if (!resolver) {
         return {
           ok: false,
-          reason: "ZCode Computer Use is not enabled (plugin off or not product mode).",
+          reason: "PiCode Computer Use is not enabled (plugin off or not product mode).",
         };
       }
       try {
@@ -2043,14 +2044,14 @@ export function createLocalServices(options: {
         if (!helper || !isDefaultCuaProductHelperCurrent(helper)) {
           return {
             ok: false,
-            reason: "ZCode Computer Use lifecycle is disposed.",
+            reason: "PiCode Computer Use lifecycle is disposed.",
           };
         }
         return { ok: true };
       } catch (error) {
         return {
           ok: false,
-          reason: `Failed to restart ZCode Computer Use: ${
+          reason: `Failed to restart PiCode Computer Use: ${
             error instanceof Error ? error.message : String(error)
           }`,
         };
@@ -2125,7 +2126,7 @@ export function createLocalServices(options: {
     })
       ? options?.cuaOperationStateReporter
       : undefined,
-    // ZCode 只发布 turn/session 事实；面板 terminal policy 由 producer coordinator 决定。
+    // PiCode 只发布 turn/session 事实；面板 terminal policy 由 producer coordinator 决定。
     ...(options?.serviceAuthorityMode === "desktop-local"
       ? {
           onCuaPipSessionLifecycle: (_workspace, event) => {
@@ -2267,7 +2268,7 @@ export function createLocalServices(options: {
   // Helper health probe 短暂超时不应在 Computer Use turn 中途回收 Agent。resolver 会把 restart
   // 推迟到下一个 request/turn 边界；若 broker 确实已失效，当前 turn 会自然失败并由下一次请求恢复。
   hasActiveTurnRef = () => zcodeAgentService.hasActiveCuaOperationTurn();
-  // desktop-continuous UI 直接订阅 zcodeSessionService，绕开 ZCode task adapter 的
+  // desktop-continuous UI 直接订阅 zcodeSessionService，绕开 PiCode task adapter 的
   // mapServiceEvent 路径，导致 task_complete 永远不会写回 sqlite，侧边栏 spinner 不停。
   // 在 services 层装配一个共享的 taskIndexRepo + syncer，session 任意入口都会唤醒
   // shadow 订阅，把 runtime 终态收敛进 sqlite。
@@ -2322,7 +2323,7 @@ export function createLocalServices(options: {
   const gitService = createGitService({
     commitMessageGenerator: gitCommitMessageGenerator,
   });
-  // task wrapper 由 ZCode task service adapter 提供；核心 session 状态由 ZCode agent server 维护。
+  // task wrapper 由 PiCode task service adapter 提供；核心 session 状态由 PiCode agent server 维护。
   const zcodeTaskService = createZCodeTaskServiceAdapter({
     zcodeAgentService,
     taskIndexRepo,
@@ -2349,7 +2350,7 @@ export function createLocalServices(options: {
         }
       })
       .catch((error) => {
-        zcodeJwtLogoutLogger.warn("ZCode JWT logout failed", { error });
+        zcodeJwtLogoutLogger.warn("PiCode JWT logout failed", { error });
       });
   };
   // Desktop Host 曾从 Settings View 再扫描一次 Account Provider，既绕开
@@ -2661,7 +2662,7 @@ export function createTelemetryUserIdLoader(
   };
 }
 
-/** 仅给同一事件账号返回当前 ZCode JWT；不缓存、不修改登录凭据。 */
+/** 仅给同一事件账号返回当前 PiCode JWT；不缓存、不修改登录凭据。 */
 export function createTelemetryAuthorizationLoader(
   credentialService: Pick<ICredentialService, "load">,
 ): (userId: string) => Promise<string | null> {

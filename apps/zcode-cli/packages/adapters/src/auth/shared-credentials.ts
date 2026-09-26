@@ -1,3 +1,4 @@
+import { ensureAppDataDir } from "@zcode/shared/node";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -286,7 +287,7 @@ export function resolveSharedZCodeCredentialsPath(
 
   const env = options.env ?? process.env;
   const baseDir = options.baseDir ?? env[ZCODE_DATA_BASE_DIR_ENV_KEY] ?? homedir();
-  return join(resolveUserPath(baseDir), ".zcode", "v2", "credentials.json");
+  return join(ensureAppDataDir(resolveUserPath(baseDir)), "v2", "credentials.json");
 }
 
 async function readRawCredentialRecord(filePath: string): Promise<Record<string, string>> {
@@ -297,7 +298,7 @@ async function readRawCredentialRecord(filePath: string): Promise<Record<string,
     if (getErrorCode(error) === "ENOENT") {
       return {};
     }
-    throw new Error(`Unable to read shared ZCode credentials: ${filePath}`, { cause: error });
+    throw new Error(`Unable to read shared PiCode credentials: ${filePath}`, { cause: error });
   }
 
   try {
@@ -307,7 +308,7 @@ async function readRawCredentialRecord(filePath: string): Promise<Record<string,
     // 先保留现场再失败，调用方必须显式处理恢复，不能静默覆盖。
     const backupPath = await backupCorruptFile(filePath).catch(() => undefined);
     const evidence = backupPath ? ` Backup: ${backupPath}` : "";
-    throw new Error(`Shared ZCode credentials are corrupt: ${filePath}.${evidence}`, {
+    throw new Error(`Shared PiCode credentials are corrupt: ${filePath}.${evidence}`, {
       cause: error,
     });
   }

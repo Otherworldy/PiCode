@@ -1,3 +1,4 @@
+import { ensureAppDataDir } from "@zcode/shared/node";
 import { createLocalTtftExporter } from "./localTtftExporter.js";
 /* eslint-disable max-lines */
 import "./desktopEarlyDataBaseDirBootstrap.js";
@@ -225,7 +226,7 @@ registerLocalMediaPreviewScheme(protocol);
 const localMediaPreviewPathRegistry = createLocalMediaPreviewPathRegistry();
 
 // e2e 由 Chromedriver 管理远程调试端口；如果这里继续固定到 9229，
-// 会和开发态已打开的 ZCode Dev 抢端口，导致 WebDriver session 创建前白屏超时。
+// 会和开发态已打开的 PiCode Dev 抢端口，导致 WebDriver session 创建前白屏超时。
 // 仅本地开发运行默认开启远程调试端口，并允许 e2e 通过环境变量交给 Chromedriver 接管。
 if (!app.isPackaged && process.env.ZCODE_DISABLE_FIXED_REMOTE_DEBUGGING_PORT !== "1") {
   app.commandLine.appendSwitch("remote-debugging-port", "9229");
@@ -502,7 +503,7 @@ async function runBrowserCommandOnView(params: {
 let currentDesktopZoomLevel = 0;
 let currentDesktopWindowSize: DesktopWindowSize | undefined;
 const preloadPath = join(import.meta.dirname, "../preload/index.cjs");
-const settingsFile = join(homedir(), ".zcode", "v2", "setting.json");
+const settingsFile = join(ensureAppDataDir(homedir()), "v2", "setting.json");
 let activeAppShutdownPolicy = resolveAppShutdownPolicy(process.platform);
 
 const broadcastHub = new BroadcastHub();
@@ -730,7 +731,7 @@ function syncAppTelemetryInteractiveState(): void {
 app.on("browser-window-focus", (_event, win) => {
   syncAppTelemetryInteractiveState();
   rebuildMenu();
-  // 设置/更新等无 Host 的 ZCode 窗口也算前台：router 会先把旧 workspace Host 清成 null，
+  // 设置/更新等无 Host 的 PiCode 窗口也算前台：router 会先把旧 workspace Host 清成 null，
   // 再把无 Host 的新窗口事实静默丢弃，避免旧会话 PiP 继续显示。
   cuaPipFocusRouter.focusWindow(resolveCuaPipWindowKey(win));
 });

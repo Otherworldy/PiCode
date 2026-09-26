@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- skill 发现 + 校验 + 状态 + 通用目录管理在同一服务里聚合，分层后跳转成本更高 */
+import { ensureAppDataDir } from "@zcode/shared/node";
 import {
   access,
   appendFile,
@@ -47,8 +48,8 @@ interface ParsedFrontmatter {
 }
 
 const SKILL_META_FILE_NAME = "_meta.json";
-const SKILL_SETTINGS_DIR = join(resolveUserHomeDir(), ".zcode", "v2");
-const SKILL_CLI_SETTINGS_DIR = join(resolveUserHomeDir(), ".zcode", "cli");
+const SKILL_SETTINGS_DIR = join(ensureAppDataDir(resolveUserHomeDir()), "v2");
+const SKILL_CLI_SETTINGS_DIR = join(ensureAppDataDir(resolveUserHomeDir()), "cli");
 const SKILL_CLI_CONFIG_FILE = join(SKILL_CLI_SETTINGS_DIR, "config.json");
 const GIT_MARKER = ".git";
 const HOME_PREFIX = "~/";
@@ -69,7 +70,7 @@ interface SkillsServiceOptions {
   isDesktopRuntime?: boolean;
 }
 
-/** ZCode Agent 工作区级技能目录。 */
+/** PiCode Agent 工作区级技能目录。 */
 function getWorkspaceZcodeSkillRoot(workspacePath: string): string {
   return join(workspacePath, ".pi", "skills");
 }
@@ -79,7 +80,7 @@ function getWorkspaceAgentsSkillRoot(workspacePath: string): string {
   return join(workspacePath, ".agents", "skills");
 }
 
-/** ZCode Agent 用户级技能目录。 */
+/** PiCode Agent 用户级技能目录。 */
 function getUserZcodeSkillRoot(): string {
   return join(resolveUserHomeDir(), ".pi", "agent", "skills");
 }
@@ -640,7 +641,7 @@ function readStorageDirFromConfig(config: Record<string, unknown>): string {
   const storage = isObjectRecord(config.storage) ? config.storage : {};
   return typeof storage.dir === "string" && storage.dir.trim().length > 0
     ? storage.dir
-    : "~/.zcode";
+    : "~/.PiCode";
 }
 
 function resolveConfigPath(path: string): string {
@@ -859,7 +860,7 @@ async function discoverSkills(params: {
       rootPath: getUserAgentsSkillRoot(),
     });
   }
-  // ZCode 插件技能不进 Pi 会话，设置页不再列。
+  // PiCode 插件技能不进 Pi 会话，设置页不再列。
   void resolvePluginSkillRootDescriptors;
 
   const diagnostics: SkillDiagnostic[] = [];
@@ -941,7 +942,7 @@ async function discoverSkills(params: {
       }
 
       // frontmatter 扩展字段通常来自不同 skill 生态的元信息。
-      // 这些字段不影响 ZCode 读取 name/description，继续报 warning 只会制造无操作价值的噪音。
+      // 这些字段不影响 PiCode 读取 name/description，继续报 warning 只会制造无操作价值的噪音。
 
       const body = parsed.body.trim();
       const metadata = await readSkillMetadata(skillPath);
@@ -1191,7 +1192,7 @@ export function createSkillsService(options?: SkillsServiceOptions): ISkillsServ
 
       // 用发现阶段命中的原始路径（sourcePath，未 realpath）定位技能目录项。
       // 软链导入的技能 skill.path 是 realpath 后的目标文件，dirname 会指向目标目录；
-      // sourcePath 才指向 `~/.zcode/skills/<name>` 下的目录项本身。
+      // sourcePath 才指向 `~/.PiCode/skills/<name>` 下的目录项本身。
       const skillDir = dirname(skill.sourcePath ?? skill.path);
       const skillLeafName = basename(skillDir);
       // 只解析父目录，不解析叶子本身：

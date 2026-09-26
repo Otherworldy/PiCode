@@ -158,7 +158,7 @@ export interface AgentRuntimeConfig {
   runtimeFeatures?: {
     /**
      * 是否注册 node_repl 工具（js）。
-     * 由 bootstrap 根据 ZCode 官方插件启停推导，不由普通插件 manifest 自声明。
+     * 由 bootstrap 根据 PiCode 官方插件启停推导，不由普通插件 manifest 自声明。
      */
     nodeRepl?: boolean;
     /**
@@ -206,7 +206,7 @@ export interface AgentRuntimeConfig {
   taskType?: SessionTaskType;
   /**
    * 动态工作流灰度门：Host 判定后经
-   * ZCode Protocol 下发，runtime 只消费。**缺席即开启**——TUI、headless `-p` 与
+   * PiCode Protocol 下发，runtime 只消费。**缺席即开启**——TUI、headless `-p` 与
    * workflow_child 都不会设置它，它们必须保留完整工具面；只有受信 Host
    * 创建的 protocol session 才会显式写 false 把十个工作流工具关掉。
    */

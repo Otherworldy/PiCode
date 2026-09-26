@@ -15,7 +15,7 @@ export const zhCN: ZCodeCopy = {
 不传 command 时打印本帮助。GUI 请用 Desktop/Web 或 app-server --stdio。
 
 命令:
-  app-server 运行 ZCode Protocol stdio app server
+  app-server 运行 PiCode Protocol stdio app server
   commands   列出自定义 slash commands（\`commands list\`）
   doctor     检查运行时和打包假设
   login [zai|bigmodel]  通过浏览器授权登录
@@ -281,7 +281,7 @@ Slash Commands:
       turnFailed: "本轮失败。",
     },
     terminal: {
-      starting: "正在启动 ZCode… Ctrl+C 退出",
+      starting: "正在启动 PiCode… Ctrl+C 退出",
       requiresInteractive: "TUI 需要交互式终端。",
     },
     transcript: {

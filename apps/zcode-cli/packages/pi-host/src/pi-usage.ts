@@ -1,3 +1,4 @@
+import { ensureAppDataDir } from "@zcode/shared/node";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -357,7 +358,7 @@ export class PiUsageAccumulator {
   }
 }
 
-export function defaultPiUsageRoots(storageRoot = join(homedir(), ".zcode")): string[] {
+export function defaultPiUsageRoots(storageRoot = join(ensureAppDataDir(homedir()))): string[] {
   return [join(homedir(), ".pi", "agent", "sessions"), join(storageRoot, "pi-host-sessions")];
 }
 

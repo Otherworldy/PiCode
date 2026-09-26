@@ -12,7 +12,7 @@ const enUS: Record<string, string> = {
   "startPlan.recommendation.dismiss": "Don’t show again",
   "occupationOnboarding.stepMode": "UI mode",
   "occupationOnboarding.modeTitle": "Choose your UI mode",
-  "occupationOnboarding.modeDescription": "How would you like ZCode to show its work?",
+  "occupationOnboarding.modeDescription": "How would you like PiCode to show its work?",
   "occupationOnboarding.coding": "Coding mode",
   "occupationOnboarding.codingDescription":
     "I want to see code, command output, and change details throughout the development process.",
@@ -61,27 +61,27 @@ const enUS: Record<string, string> = {
   "occupationOnboarding.migration": "Migrate conversations",
   "occupationOnboarding.migrationDescription": "Migrate conversation history from Claude Code",
   "occupationOnboarding.memory": "Enable Workspace Memory",
-  "occupationOnboarding.memoryDescription": "Let ZCode remember your preferences and work context.",
+  "occupationOnboarding.memoryDescription": "Let PiCode remember your preferences and work context.",
   "occupationOnboarding.suggestions": "Enable proactive task suggestions",
   "occupationOnboarding.suggestionsDescription":
     "Show suggestions in new conversations. Click to fill the composer.",
   "occupationOnboarding.close": "Exit onboarding",
-  "startup.global.silent": "Starting ZCode",
+  "startup.global.silent": "Starting PiCode",
   "startup.global.upgrading": "Upgrading local data",
   "startup.global.initializing": "Initializing local data",
   "startup.global.waiting": "Waiting for database preparation",
   "startup.global.saving": "Saving updates",
   "startup.global.finishing": "Finishing startup",
   "startup.global.servicesFailed":
-    "Local data is ready, but app services failed to start. Copy the diagnostics, then exit and reopen ZCode.",
+    "Local data is ready, but app services failed to start. Copy the diagnostics, then exit and reopen PiCode.",
   "startup.global.starting": "Preparing local data",
   "startup.global.preparing_host_storage": "Preparing task index",
   "startup.global.preparing_session_storage": "Preparing chat history",
-  "startup.global.starting_services": "Starting ZCode",
+  "startup.global.starting_services": "Starting PiCode",
   "startup.global.ready": "Local data is ready",
   "startup.global.failed": "Startup preparation failed",
   "startup.global.help":
-    "ZCode will open when preparation finishes. Large histories may take longer. Please keep the app running.",
+    "PiCode will open when preparation finishes. Large histories may take longer. Please keep the app running.",
   "startup.global.diagnostic": "Diagnostic ID",
   "startup.global.copy": "Copy diagnostics",
   "startup.global.exit": "Exit",
@@ -102,15 +102,15 @@ const enUS: Record<string, string> = {
   "startup.global.error.open_failed":
     "The database could not be opened. Check that the data directory exists and is accessible, then retry.",
   "startup.global.error.lock_timeout":
-    "Waiting for the database write lock timed out. Another ZCode or CLI process may be updating data. Retry after it finishes.",
+    "Waiting for the database write lock timed out. Another PiCode or CLI process may be updating data. Retry after it finishes.",
   "startup.global.error.sql_failed":
     "Preparation did not finish. Copy the diagnostics and check the logs. Resolve the issue, then retry manually. The app will not retry automatically.",
   "startup.global.error.startup_status_timeout":
-    "No startup status was received. Exit and reopen ZCode. If it fails again, provide the diagnostics to support.",
+    "No startup status was received. Exit and reopen PiCode. If it fails again, provide the diagnostics to support.",
   "startup.global.error.transport_closed":
-    "The preparation process exited or disconnected. Exit and reopen ZCode to check the migration records again.",
+    "The preparation process exited or disconnected. Exit and reopen PiCode to check the migration records again.",
   "startup.global.error.unsupported_runtime":
-    "The configured Agent does not support storage preparation. Restore the bundled Agent, then reopen ZCode.",
+    "The configured Agent does not support storage preparation. Restore the bundled Agent, then reopen PiCode.",
 
   "startup.database.checking": "Checking history",
   "startup.database.waiting_for_lock": "Waiting for another window to prepare data",
@@ -158,7 +158,7 @@ const enUS: Record<string, string> = {
   "offPeak.chatCreated.queuedAt": "#{position} in queue",
   "offPeak.chatCreated.open": "Go to idle-time tasks",
   "settings.computerUse.disabledToast":
-    "Computer Use is disabled. Existing conversations require a ZCode restart to take effect.",
+    "Computer Use is disabled. Existing conversations require a PiCode restart to take effect.",
   "settings.modelProvider.connectionUnavailableNotice": "The current plan is unavailable.",
   "settings.modelProvider.switchConnection": "Switch to “{connection}”",
   "settings.modelProvider.connectionSuggestionStale":
@@ -195,7 +195,7 @@ const enUS: Record<string, string> = {
   "conversationShare.permission.linkViewerHint": "Cannot import and continue",
   "conversationShare.permission.linkViewerSummary": "Link holders can view",
   "conversationShare.permission.linkEditor": "Anyone with the link can import and continue",
-  "conversationShare.permission.linkEditorHint": "Import into ZCode",
+  "conversationShare.permission.linkEditorHint": "Import into PiCode",
   "conversationShare.permission.linkEditorSummary": "Link holders can import and continue",
   "conversationShare.permission.privateSummary": "Only me",
   "conversationShare.openLink": "Open share page",
@@ -422,7 +422,7 @@ const enUS: Record<string, string> = {
   "conversationShare.import.committing": "Creating the shared conversation",
   "conversationShare.import.complete": "Share import complete",
   "conversationShare.import.loginRequired":
-    "This share cannot be imported anonymously. Sign in to ZCode and try again",
+    "This share cannot be imported anonymously. Sign in to PiCode and try again",
   "conversationShare.import.notFound": "The share is unavailable for this account",
   "conversationShare.import.expired": "The share expired. Ask the author to create a new one",
   "conversationShare.import.integrityFailed": "Share file verification failed; import stopped",
@@ -547,14 +547,14 @@ const enUS: Record<string, string> = {
     "Project “{projectName}” will be removed from the sidebar, but files on disk will remain untouched.",
 
   // Welcome / Login
-  "welcome.title": "Welcome to ZCode",
+  "welcome.title": "Welcome to PiCode",
   "welcome.username": "Username",
   "welcome.password": "Password",
   "welcome.login": "Login",
   "welcome.loggingIn": "Logging in...",
   "welcome.loginFailed": "Login failed",
-  "login.title": "Welcome to ZCode",
-  "login.description": "Connect your account to start using ZCode",
+  "login.title": "Welcome to PiCode",
+  "login.description": "Connect your account to start using PiCode",
   "login.oauth.activeProviderHint":
     "Current active provider: {provider}. Signing in again replaces the current identity.",
   "login.oauth.loadingProviders": "Loading account providers...",
@@ -597,7 +597,7 @@ const enUS: Record<string, string> = {
   "app.currentTheme": "Current: {theme}",
   "app.login": "Connect",
   "app.logout": "Disconnect",
-  "logout.confirm.title": "Disconnect and restart ZCode?",
+  "logout.confirm.title": "Disconnect and restart PiCode?",
   "logout.confirm.descriptionWithRunningSessions":
     "{count} session(s) are currently running. Disconnecting will interrupt them and restart the app.",
   "logout.confirm.descriptionDefault":
@@ -743,7 +743,7 @@ const enUS: Record<string, string> = {
   "modelTrajectory.refresh": "Refresh",
   "modelTrajectory.close": "Close",
   "modelTrajectory.loading": "Loading trajectory…",
-  "modelTrajectory.empty": "No model calls recorded (only ZCode Agent writes model-io)",
+  "modelTrajectory.empty": "No model calls recorded (only PiCode Agent writes model-io)",
   "modelTrajectory.error": "Failed to load trajectory",
   "modelTrajectory.truncatedNotice": "Too many records, showing the most recent calls",
   "modelTrajectory.summaryCalls": "{count} calls",
@@ -1205,7 +1205,7 @@ const enUS: Record<string, string> = {
   "titleBar.menu.view.actualSize": "Actual size",
   "titleBar.menu.view.zoomIn": "Zoom in",
   "titleBar.menu.view.zoomOut": "Zoom out",
-  "titleBar.menu.help.about": "About ZCode",
+  "titleBar.menu.help.about": "About PiCode",
   "titleBar.menu.help.feedback": "Feedback",
   "sidebar.menu.community": "Community",
   "titleBar.menu.help.exportLogs": "Export logs",
@@ -1290,7 +1290,7 @@ const enUS: Record<string, string> = {
   "workspaceSidebar.notConnected": "Not connected",
   "workspaceSidebar.empty": "No workspaces yet. Open a workspace to get started.",
   "workspaceSidebar.unavailableLocalDirectory":
-    "The workspace directory does not exist or cannot be accessed. You can only view history for now. Restore the directory and restart ZCode to continue.",
+    "The workspace directory does not exist or cannot be accessed. You can only view history for now. Restore the directory and restart PiCode to continue.",
   "workspaceSidebar.showSidebar": "Toggle sidebar",
   "workspaceSidebar.hideSidebar": "Toggle sidebar",
   "workspaceSidebar.toggleSidebar": "Toggle sidebar",
@@ -1333,9 +1333,9 @@ const enUS: Record<string, string> = {
   "ssh.assetInstallMode.local-download-upload": "Download locally, then upload",
   "ssh.assetInstallMode.remote-download": "Download on remote server",
   "ssh.assetInstallModeDescription":
-    "Remote server download reduces upload waiting, but the server must reach the ZCode CDN and have download, extract, and checksum tools.",
+    "Remote server download reduces upload waiting, but the server must reach the PiCode CDN and have download, extract, and checksum tools.",
   "ssh.localRuntime":
-    "Uses the local models and the system ssh client. Nothing is downloaded from or uploaded to the ZCode CDN.",
+    "Uses the local models and the system ssh client. Nothing is downloaded from or uploaded to the PiCode CDN.",
   "ssh.password": "Password",
   "ssh.passwordPlaceholder": "Enter your SSH password",
   "ssh.privateKey": "Private key",
@@ -1588,7 +1588,7 @@ const enUS: Record<string, string> = {
   "chat.changeSummary.reverted": "Undone",
   "chat.changeSummary.rewindDialog.title": "Undo file changes",
   "chat.changeSummary.rewindDialog.description":
-    "ZCode checks current file content again before writing. If another process changed a file, no files will be written.",
+    "PiCode checks current file content again before writing. If another process changed a file, no files will be written.",
   "chat.changeSummary.rewindDialog.loading": "Checking reversible files…",
   "chat.changeSummary.rewindDialog.safeTitle": "Safe to undo {count}",
   "chat.changeSummary.rewindDialog.unsafeTitle": "Unsafe to undo {count}",
@@ -1756,7 +1756,7 @@ const enUS: Record<string, string> = {
   "settings.locale": "Language",
   "settings.localeDescription": "Choose the display language used by the application UI.",
   "settings.piSdkSource": "Pi SDK",
-  "settings.piSdkSource.description": "The built-in package ships with ZCode. Global uses the Pi package installed by npm on this machine. Takes effect after restarting the app.",
+  "settings.piSdkSource.description": "The built-in package ships with PiCode. Global uses the Pi package installed by npm on this machine. Takes effect after restarting the app.",
   "settings.piSdkSource.builtin": "Built-in",
   "settings.piSdkSource.global": "Global install",
   "settings.piSdkSource.pending": "This process is still on the previous SDK. Restart to apply the new choice.",
@@ -1769,7 +1769,7 @@ const enUS: Record<string, string> = {
     "When launching the built-in terminal, inherit login shell environment, proxy, Kubernetes variables, and local terminal font when possible.",
   "settings.terminalFontFamily": "Terminal font",
   "settings.terminalFontFamilyDescription":
-    "Leave blank to auto-detect system terminal settings; set a value to override the ZCode terminal font.",
+    "Leave blank to auto-detect system terminal settings; set a value to override the PiCode terminal font.",
   "settings.terminalFontFamilyPlaceholder": "Leave blank to inherit, e.g. MesloLGS NF, monospace",
   "settings.memory": "Memory",
   "settings.memory.workspaceMemory": "Workspace Memory",
@@ -1873,7 +1873,7 @@ const enUS: Record<string, string> = {
     "Group consecutive Write, Edit, and ApplyPatch calls into a Changes section.",
   "settings.zcodeInteractionBehavior": "Interaction behavior",
   "settings.zcodeInteractionBehaviorDescription":
-    "While ZCode is running, add follow-up actions to the queue or guide them to run after the next tool call.",
+    "While PiCode is running, add follow-up actions to the queue or guide them to run after the next tool call.",
   "settings.zcodeInteractionBehavior.option.queue": "Queue",
   "settings.zcodeInteractionBehavior.option.guide": "Guide",
   "settings.performanceMode": "Performance mode",
@@ -1893,7 +1893,7 @@ const enUS: Record<string, string> = {
   "settings.migration.title": "Migration",
   "settings.migration.sectionTitle": "Claude History Migration",
   "settings.migration.sectionDescription":
-    "Scan native Claude Code history on this machine, optionally filter by workspace and activity window, then import the selected sessions into their matching ZCode task lists.",
+    "Scan native Claude Code history on this machine, optionally filter by workspace and activity window, then import the selected sessions into their matching PiCode task lists.",
   "settings.migration.badge.localOnly": "Local Claude records",
   "settings.migration.badge.manualOnly": "Manual only",
   "settings.migration.currentWorkspace": "Current workspace",
@@ -1946,14 +1946,14 @@ const enUS: Record<string, string> = {
     "The source session was not found, or it no longer matches the current workspace filter.",
   "settings.usageTitle": "Usage stats",
   "settings.usageDescription": "Activity and model usage aggregated from local Pi sessions.",
-  "resourceManager.storage.summaryTotal": "Total used by ZCode",
+  "resourceManager.storage.summaryTotal": "Total used by PiCode",
   "resourceManager.storage.scanning": "Calculating…",
   "resourceManager.storage.lastScanned": "Last calculated {time}",
   "resourceManager.storage.idle": "Not calculated yet",
   "resourceManager.storage.failed": "Calculation failed",
   "resourceManager.storage.rescan": "Recalculate",
   "resourceManager.storage.disk": "Disk",
-  "resourceManager.storage.diskUsage": "ZCode uses {used}",
+  "resourceManager.storage.diskUsage": "PiCode uses {used}",
   "resourceManager.storage.diskFree": "{free} free of {total}",
   "resourceManager.storage.diskUnknown": "Disk capacity unavailable",
   "resourceManager.storage.roots": "Data directories",
@@ -2021,7 +2021,7 @@ const enUS: Record<string, string> = {
   "settings.embeddedBrowserAllowInsecureCertificatesSavedHint":
     "Certificate setting saved. Restart the app to take effect.",
   "settings.browser.data.section": "Browser data",
-  "settings.browser.desktopOnly": "Browser data can only be managed in the ZCode desktop app.",
+  "settings.browser.desktopOnly": "Browser data can only be managed in the PiCode desktop app.",
   "settings.browser.import.title": "Import Chrome sign-in state",
   "settings.browser.import.description":
     "Bring your Chrome sign-in state into the built-in browser once, so the AI can open sites you are already signed in to and work more smoothly.",
@@ -2039,13 +2039,13 @@ const enUS: Record<string, string> = {
   "settings.browser.import.elevationCancelled":
     "Windows administrator access was canceled. No cookies were imported.",
   "settings.browser.import.helperVerificationFailed":
-    "ZCode could not verify its Windows secure import component. Reinstall or update ZCode before importing cookies.",
+    "PiCode could not verify its Windows secure import component. Reinstall or update PiCode before importing cookies.",
   "settings.browser.import.appBoundFailed":
     "Windows could not unlock Chrome's App-Bound cookies. No cookies were imported.",
   "settings.browser.import.adminConfirmTitle":
     "Allow administrator access to import Chrome cookies?",
   "settings.browser.import.adminConfirmDescription":
-    "Chrome protects cookies with App-Bound encryption on Windows. For this import only, ZCode will request administrator access, start a temporary system service, and delete it immediately afterward. Chrome passwords are never read or imported.",
+    "Chrome protects cookies with App-Bound encryption on Windows. For this import only, PiCode will request administrator access, start a temporary system service, and delete it immediately afterward. Chrome passwords are never read or imported.",
   "settings.browser.import.adminConsent":
     "I confirm administrator access for this cookie import only",
   "settings.browser.import.adminConfirmAction": "Continue and request access",
@@ -2104,7 +2104,7 @@ const enUS: Record<string, string> = {
   "settings.previewBadge.dark": "Dark",
   "settings.modelProviderTitle": "Model settings",
   "settings.mcpTitle": "MCP Servers",
-  "settings.mcp.description": "Manage MCP server configurations used by ZCode Agent.",
+  "settings.mcp.description": "Manage MCP server configurations used by PiCode Agent.",
   "settings.mcp.create.open": "Add MCP server",
   "settings.mcp.import.open": "Import MCP servers from external agents",
   "settings.mcp.import.action": "Import",
@@ -2181,7 +2181,7 @@ const enUS: Record<string, string> = {
     "This plugin MCP server is loaded but not currently connected.",
   "settings.mcp.host.active": "Host built-in",
   "settings.mcp.host.activeDescription":
-    "ZCode provides this MCP server for the {pluginName} plugin. Its runtime identity is managed by the host.",
+    "PiCode provides this MCP server for the {pluginName} plugin. Its runtime identity is managed by the host.",
   "settings.mcp.plugin.disabled": "Plugin disabled",
   "settings.mcp.plugin.disabledDescription":
     "This MCP server is built into a plugin. Enable the plugin to load it.",
@@ -2193,7 +2193,7 @@ const enUS: Record<string, string> = {
     "Open authorization to finish connecting this plugin MCP server.",
   "settings.mcp.oauth.openAuthorization": "Open authorization",
   "settings.mcp.statusOnlyUnsupported":
-    "This ZCode Agent cannot refresh OAuth status. Upgrade or restart ZCode, then reopen MCP settings to run a full refresh.",
+    "This PiCode Agent cannot refresh OAuth status. Upgrade or restart PiCode, then reopen MCP settings to run a full refresh.",
   "settings.mcp.refreshFailed": "Failed to refresh MCP status: {error}",
   "settings.mcp.status.toolCount": "{count} tools",
   "settings.mcp.status.connectedReason": "Connected and available.",
@@ -2220,7 +2220,7 @@ const enUS: Record<string, string> = {
   "settings.mcp.failure.official_origin_untrusted":
     "The MCP server URL failed the security check. The connection was blocked.",
   "settings.mcp.failure.not_authenticated":
-    "You are not signed in. Sign in to ZCode to use this MCP server.",
+    "You are not signed in. Sign in to PiCode to use this MCP server.",
   "settings.mcp.failure.coding_plan_required":
     "This account has no Coding Plan. Purchase or configure a Coding Plan to use this MCP server.",
   "settings.mcp.failure.server_not_found":
@@ -2292,7 +2292,7 @@ const enUS: Record<string, string> = {
   "settings.mcpServers.import.targetLabel": "Import target",
   "settings.mcpServers.import.target.global": "Import to Global",
   "settings.mcpServers.import.target.project": "Import to Project",
-  "settings.mcpServers.import.importing": "Importing MCP servers into ZCode",
+  "settings.mcpServers.import.importing": "Importing MCP servers into PiCode",
   "settings.mcpServers.import.imported": "Imported",
   "settings.mcpServers.import.skipped": "Skipped",
   "settings.mcpServers.import.failed": "Failed",
@@ -2321,7 +2321,7 @@ const enUS: Record<string, string> = {
     "Disabled {plugin} in this workspace (overriding User default)",
   "settings.plugins.toggle.failed": "Couldn't update {plugin}. Try again.",
   "settings.plugins.pi.title": "Pi plugins",
-  "settings.plugins.pi.hint": "Applies only in ZCode and does not change Pi settings.json. Takes effect on the next new session.",
+  "settings.plugins.pi.hint": "Applies only in PiCode and does not change Pi settings.json. Takes effect on the next new session.",
   "settings.plugins.pi.loading": "Reading Pi plugins…",
   "settings.plugins.pi.empty": "No Pi plugins in this scope.",
   "settings.plugins.pi.failed": "Couldn't update Pi plugins. Try again.",
@@ -2491,7 +2491,7 @@ const enUS: Record<string, string> = {
   "settings.modelProvider.startPlan.highlight.trial.label": "Trial period",
   "settings.modelProvider.startPlan.highlight.trial.value": "5 calendar days",
   "settings.modelProvider.startPlan.highlight.trial.description":
-    "Timing starts after signing in to ZCode 3.x.",
+    "Timing starts after signing in to PiCode 3.x.",
   "settings.modelProvider.startPlan.highlight.quota.label": "Daily quota",
   "settings.modelProvider.startPlan.highlight.quota.value": "3M tokens daily",
   "settings.modelProvider.startPlan.highlight.quota.description":
@@ -2501,7 +2501,7 @@ const enUS: Record<string, string> = {
   "settings.modelProvider.startPlan.highlight.metering.description":
     "Metered only after using platform GLM flagship models.",
   "settings.modelProvider.startPlan.compatibility":
-    "Supports BYOK and BYOA. Base URL, API format, and API Key are maintained by ZCode automatically.",
+    "Supports BYOK and BYOA. Base URL, API format, and API Key are maintained by PiCode automatically.",
   "settings.modelProvider.codingPlan.title": "{provider} - Coding Plan",
   "settings.modelProvider.codingPlan.webview.title": "Upgrade Plan",
   "settings.modelProvider.codingPlan.webview.authInjectFailed":
@@ -2638,7 +2638,7 @@ const enUS: Record<string, string> = {
   "settings.modelProvider.codingPlan.purchase.teamMemberNoticeTitle":
     "Assign members to your team plan",
   "settings.modelProvider.codingPlan.purchase.teamMemberNoticeDescription":
-    "Add yourself or other members on the BigModel team plan management page. Once assigned, the team quota will be available in ZCode.",
+    "Add yourself or other members on the BigModel team plan management page. Once assigned, the team quota will be available in PiCode.",
   "settings.modelProvider.codingPlan.purchase.manageTeamPlan": "Manage team plan",
   "settings.modelProvider.codingPlan.manage": "Manage",
   "settings.modelProvider.planCard.codingPlan": "Coding Plan",
@@ -3020,7 +3020,7 @@ const enUS: Record<string, string> = {
   "settings.modelProvider.resetForm": "Reset form",
   "settings.modelProvider.fieldHelp": "About {field}",
   "settings.modelProvider.help.contextWindow":
-    "The context capacity the model can process at once, in tokens. ZCode uses this to manage context.\nDo not exceed the model's actual limit.",
+    "The context capacity the model can process at once, in tokens. PiCode uses this to manage context.\nDo not exceed the model's actual limit.",
   "settings.modelProvider.help.maxOutputTokens":
     "The maximum number of tokens a single model request may generate.\nDo not exceed the model's actual limit.",
   "settings.modelProvider.help.inputModalities":
@@ -3036,7 +3036,7 @@ const enUS: Record<string, string> = {
   "settings.modelProvider.help.advanced":
     "**MFJS tool schema**: Enables Moonshot Flavored JSON Schema compatibility, commonly used by Moonshot's Kimi model API. Enable only when the model API requires this format.",
   "settings.modelProvider.help.followRecommendedConfig":
-    "Matches recommended configuration using the model ID, Base URL, and API format. ZCode continually updates recommendations and automatically syncs them to you.\nWhen you manually change a setting, that setting becomes manually managed and stops following recommendation updates; other settings remain managed by smart configuration.",
+    "Matches recommended configuration using the model ID, Base URL, and API format. PiCode continually updates recommendations and automatically syncs them to you.\nWhen you manually change a setting, that setting becomes manually managed and stops following recommendation updates; other settings remain managed by smart configuration.",
   "settings.modelProvider.modelDefaultsLoaded": "Smart configuration matched for this model",
   "settings.modelProvider.modelConfigIncomplete": "Model configuration is incomplete",
   "settings.modelProvider.models": "Model list",
@@ -3106,7 +3106,7 @@ const enUS: Record<string, string> = {
   "settings.usage.sourceProvider": "Source: {provider}",
   "settings.usage.billingBanner.title": "{provider} Coding Plan",
   "settings.usage.billingBanner.description":
-    "Connect your {provider} account to query Coding Plan entitlement, then keep coding in ZCode after purchase or setup.",
+    "Connect your {provider} account to query Coding Plan entitlement, then keep coding in PiCode after purchase or setup.",
   "settings.usage.billingBanner.compactDescription":
     "Connect your {provider} account to sync usage.",
   "settings.usage.billingBanner.buy": "Buy Coding Plan",
@@ -3165,7 +3165,7 @@ const enUS: Record<string, string> = {
   "settings.usage.entitlementFiveHourUsage": "5-hour remaining",
   "settings.usage.entitlementWeeklyUsage": "Weekly remaining",
   "settings.usage.entitlementMonthlyMcpUsage": "Tool calls",
-  "settings.usage.entitlementServerMcpUsage": "ZCode MCP",
+  "settings.usage.entitlementServerMcpUsage": "PiCode MCP",
   "settings.usage.entitlementResetAt": "Resets {time}",
   "settings.usage.entitlementUsageDetails": "Tool usage detail",
   "settings.usage.entitlementPromptCap": "5-hour prompt pool",
@@ -3223,9 +3223,9 @@ const enUS: Record<string, string> = {
   "sidebar.usage.plan.fiveHour": "5 hours",
   "sidebar.usage.plan.weekly": "Weekly",
   "sidebar.usage.plan.toolCalls": "Tool calls",
-  "sidebar.usage.plan.mcp": "ZCode MCP",
-  "sidebar.usage.plan.zcodeMcp": "ZCode MCP",
-  "sidebar.usage.plan.zcodeMcpDescription": "Daily aggregate quota for ZCode built-in plugin MCPs",
+  "sidebar.usage.plan.mcp": "PiCode MCP",
+  "sidebar.usage.plan.zcodeMcp": "PiCode MCP",
+  "sidebar.usage.plan.zcodeMcpDescription": "Daily aggregate quota for PiCode built-in plugin MCPs",
   "chat.planUsage.title": "Plan usage",
   "chat.planUsage.titleWithPlan": "{plan} Plan usage",
   "chat.planUsage.providerFallback": "Current provider",
@@ -3448,10 +3448,10 @@ const enUS: Record<string, string> = {
   "settings.skills.import.mode.copy": "Copy",
   "settings.skills.import.mode.symlink": "Symlink",
   "settings.skills.import.mode.copy.description":
-    "Copy the full skill directory into ZCode. Later changes in the external agent directory will not sync automatically.",
+    "Copy the full skill directory into PiCode. Later changes in the external agent directory will not sync automatically.",
   "settings.skills.import.mode.symlink.description":
-    "Create a directory link to the external agent skill. ZCode follows later source changes, but the skill depends on that source path remaining available.",
-  "settings.skills.import.importing": "Importing skills into ZCode",
+    "Create a directory link to the external agent skill. PiCode follows later source changes, but the skill depends on that source path remaining available.",
+  "settings.skills.import.importing": "Importing skills into PiCode",
   "settings.skills.import.imported": "Imported",
   "settings.skills.import.skipped": "Skipped",
   "settings.skills.import.failed": "Failed",
@@ -3527,7 +3527,7 @@ const enUS: Record<string, string> = {
   "settings.skills.diagnostics.code.skill_not_found": "Skill not found",
   "settings.subagents.title": "Subagents",
   "settings.subagents.description":
-    "Manage user-level subagent Markdown files consumed by ZCode Agent.",
+    "Manage user-level subagent Markdown files consumed by PiCode Agent.",
   "settings.subagents.workspaceScopeUnsupported":
     "Workspace-level creation or editing is unsupported",
   "settings.subagents.searchPlaceholder": "Search subagents...",
@@ -3669,7 +3669,7 @@ const enUS: Record<string, string> = {
   "settings.plugins.description":
     "Enable or disable installed plugins. Plugins bundle skills, commands, hooks, and MCP servers.",
   "settings.plugins.store.subtitle":
-    "Extend ZCode with skills, commands, and MCP servers from plugins",
+    "Extend PiCode with skills, commands, and MCP servers from plugins",
   "settings.plugins.store.searchPlaceholder": "Search plugins",
   "settings.plugins.store.searchResults": "Search results ({count})",
   "settings.plugins.store.searchEmpty": "No plugins match your search",
@@ -3876,10 +3876,10 @@ const enUS: Record<string, string> = {
   "settings.plugins.import.mode.copy": "Copy",
   "settings.plugins.import.mode.symlink": "Symlink",
   "settings.plugins.import.mode.copy.description":
-    "Copy the full plugin directory into ZCode and register it in plugins.dirs. Later changes in the external agent directory will not sync automatically.",
+    "Copy the full plugin directory into PiCode and register it in plugins.dirs. Later changes in the external agent directory will not sync automatically.",
   "settings.plugins.import.mode.symlink.description":
-    "Create a directory link to the external agent plugin and register it in plugins.dirs. ZCode follows later source changes, but the plugin depends on that source path remaining available.",
-  "settings.plugins.import.importing": "Importing plugins into ZCode",
+    "Create a directory link to the external agent plugin and register it in plugins.dirs. PiCode follows later source changes, but the plugin depends on that source path remaining available.",
+  "settings.plugins.import.importing": "Importing plugins into PiCode",
   "settings.plugins.import.imported": "Imported",
   "settings.plugins.import.skipped": "Skipped",
   "settings.plugins.import.failed": "Failed",
@@ -3888,9 +3888,9 @@ const enUS: Record<string, string> = {
   "settings.plugins.import.finish": "Done",
   "settings.commands.title": "Commands",
   "settings.commands.description":
-    "Manage ZCode Agent .md command files. Commands can be invoked with /command-name in chat.",
+    "Manage PiCode Agent .md command files. Commands can be invoked with /command-name in chat.",
   "settings.commands.sourceFilterLabel": "Source filter",
-  "settings.commands.source.zcodeAgent": "ZCode Agent",
+  "settings.commands.source.zcodeAgent": "PiCode Agent",
   "settings.commands.add": "New",
   "settings.commands.addNew": "New command",
   "settings.commands.addDescription":
@@ -3950,10 +3950,10 @@ const enUS: Record<string, string> = {
   "settings.commands.import.mode.copy": "Copy",
   "settings.commands.import.mode.symlink": "Symlink",
   "settings.commands.import.mode.copy.description":
-    "Copy the command file into ZCode. Later changes in the external agent file will not sync automatically.",
+    "Copy the command file into PiCode. Later changes in the external agent file will not sync automatically.",
   "settings.commands.import.mode.symlink.description":
-    "Create a file link to the external agent command. ZCode follows later source changes, but the command depends on that source path remaining available.",
-  "settings.commands.import.importing": "Importing commands into ZCode",
+    "Create a file link to the external agent command. PiCode follows later source changes, but the command depends on that source path remaining available.",
+  "settings.commands.import.importing": "Importing commands into PiCode",
   "settings.commands.import.imported": "Imported",
   "settings.commands.import.skipped": "Skipped",
   "settings.commands.import.failed": "Failed",
@@ -4049,8 +4049,8 @@ const enUS: Record<string, string> = {
   "settingsSync.action.rescanning": "Scanning...",
   "settingsSync.action.importSelected": "Import selected",
   "settingsSync.action.importing": "Importing...",
-  "settingsSync.action.finish": "Start using ZCode",
-  "settingsSync.agent.zcode": "ZCode Agent",
+  "settingsSync.action.finish": "Start using PiCode",
+  "settingsSync.agent.zcode": "PiCode Agent",
   "settingsSync.agent.claudeCode": "Claude Code",
   "settingsSync.agent.codexCli": "Codex CLI",
   "settingsSync.agent.openCode": "OpenCode",
@@ -4099,17 +4099,17 @@ const enUS: Record<string, string> = {
   "settingsSync.discovery.description":
     "Importable agent settings are no longer scanned automatically.",
   "settingsSync.discovery.helper":
-    "Only missing items will be imported and your current ZCode settings will not be overwritten.",
+    "Only missing items will be imported and your current PiCode settings will not be overwritten.",
   "settingsSync.discovery.agentCount": "Agents found: {count}",
   "settingsSync.discovery.categoryCount": "Categories found: {count}",
   "settingsSync.discovery.error": "Scan failed: {error}",
   "settingsSync.discovery.continue": "Continue",
-  "onboarding.dialog.title": "Welcome to ZCode",
+  "onboarding.dialog.title": "Welcome to PiCode",
   "onboarding.dialog.description": "Choose how to start your first session.",
   "onboarding.wizard.label": "Migration guide",
   "onboarding.welcome.eyebrow": "First run setup",
-  "onboarding.welcome.title": "Welcome to ZCode",
-  "onboarding.welcome.start": "Start ZCode",
+  "onboarding.welcome.title": "Welcome to PiCode",
+  "onboarding.welcome.start": "Start PiCode",
   "onboarding.welcome.migrate": "Migration Guide",
   "onboarding.welcome.helper":
     "Import existing tool settings now, or skip and continue later from Settings.",
@@ -4131,7 +4131,7 @@ const enUS: Record<string, string> = {
   "onboarding.stepDescription.commandsImport":
     "Import selected commands from external agents before the final migration.",
   "onboarding.stepDescription.migration":
-    "Start migration and wait while ZCode imports your selections.",
+    "Start migration and wait while PiCode imports your selections.",
   "onboarding.sessions.empty":
     "No workspaces yet. Scan local history, then pick workspaces to migrate.",
   "onboarding.sessions.count": "{count} sessions",
@@ -4149,7 +4149,7 @@ const enUS: Record<string, string> = {
   "onboarding.agentsFile.error": "Could not check AGENTS.md migration status: {error}",
   "onboarding.agentsFile.confirmTitle": "Overwrite default AGENTS.md?",
   "onboarding.agentsFile.confirmDescription":
-    "ZCode will copy {source} to {target}.\nIf the target file already exists, the ZCode default AGENTS configuration will be overwritten.",
+    "PiCode will copy {source} to {target}.\nIf the target file already exists, the PiCode default AGENTS configuration will be overwritten.",
   "onboarding.agentsFile.confirmAction": "Overwrite and migrate",
   "onboarding.finish.summary.label.imported": "Imported",
   "onboarding.finish.summary.label.skipped": "Skipped",
@@ -4230,8 +4230,8 @@ const enUS: Record<string, string> = {
   "chat.emptyResult.description":
     "This task finished without any chat content. It may have been stopped before the model produced a response.",
   "chat.placeholder.newTask":
-    "Ask ZCode anything, @ to add context, / for commands or capabilities",
-  "chat.placeholder.newTaskMobile": "Ask ZCode anything…",
+    "Ask PiCode anything, @ to add context, / for commands or capabilities",
+  "chat.placeholder.newTaskMobile": "Ask PiCode anything…",
   "chat.placeholder.followUpAsk": "Ask for follow-up changes",
   "chat.placeholder.followUpQueue": "Keep typing to queue follow-up changes",
   "chat.placeholder.loading": "Initializing task...",
@@ -4494,7 +4494,7 @@ const enUS: Record<string, string> = {
   "chat.compact.duplicateBlocked": "A compaction is already running or queued.",
   "chat.modelSwitch.contextWindowGuard.title": "Compress context before switching models",
   "chat.modelSwitch.contextWindowGuard.description":
-    "This conversation has used {used} tokens, which exceeds {modelName}'s available context of {target} tokens after reserving maximum output.\nCompress the current conversation with the current model first. If the compressed context fits, ZCode will continue switching models.",
+    "This conversation has used {used} tokens, which exceeds {modelName}'s available context of {target} tokens after reserving maximum output.\nCompress the current conversation with the current model first. If the compressed context fits, PiCode will continue switching models.",
   "chat.modelSwitch.contextWindowGuard.compress": "Compress",
   "chat.modelSwitch.contextWindowGuard.runningBlocked":
     "This conversation has used more context than the target model's available context after reserving maximum output. The conversation must be compressed before switching models, but the current task is still running and context compression cannot run now. Wait for the task to finish, then switch models again.",
@@ -4507,11 +4507,11 @@ const enUS: Record<string, string> = {
     "Computer Use is idle — it will start automatically on first use",
   "chat.toolbar.computerUse.tooltip.starting": "Enabling Computer Use plugin…",
   "chat.toolbar.computerUse.tooltip.ready":
-    "Computer Use ready — just describe what you want ZCode to do",
+    "Computer Use ready — just describe what you want PiCode to do",
   "chat.toolbar.computerUse.tooltip.permissionRequired":
     "Missing macOS permissions — click to grant",
   "chat.toolbar.computerUse.tooltip.error":
-    "Computer Use enablement failed. Please restart ZCode app and retry, or ask ZCode to investigate the logs",
+    "Computer Use enablement failed. Please restart PiCode app and retry, or ask PiCode to investigate the logs",
   "chat.toolbar.computerUse.tooltip.sessionBusy":
     "A conversation is running. Computer Use can't be toggled right now — try again after it finishes.",
   "chat.toolbar.mode.description":
@@ -4812,7 +4812,7 @@ const enUS: Record<string, string> = {
     "Could not reach the local agent; global workflows are unavailable.",
   "workflows.hub.empty.title": "No saved workflows in your open projects yet",
   "workflows.hub.empty.hint":
-    "Design a workflow with ZCode in chat, then have it save the workflow to a project once it works. Projects that aren't open don't appear here.",
+    "Design a workflow with PiCode in chat, then have it save the workflow to a project once it works. Projects that aren't open don't appear here.",
   "workflows.hub.noWorkspace": "Open a workspace to see its workflows.",
   "workflows.hub.loadError": "Could not read workflows: {error}",
   "workflows.hub.invalid": "{count} files could not be read",
@@ -4875,7 +4875,7 @@ const enUS: Record<string, string> = {
   "workflows.hub.detail.description": "Description",
   "workflows.hub.detail.whenToUse": "When to use",
   "workflows.hub.detail.whenToUse.help":
-    "A routing hint for ZCode: when this workflow is the right pick.",
+    "A routing hint for PiCode: when this workflow is the right pick.",
   "workflows.hub.detail.args": "Arguments",
   "workflows.hub.detail.args.name": "Name",
   "workflows.hub.detail.args.type": "Type",
@@ -4896,7 +4896,7 @@ const enUS: Record<string, string> = {
   "workflows.hub.detail.meta.descriptionRequired": "Description is required",
   "workflows.hub.detail.script": "Script",
   "workflows.hub.detail.script.note":
-    "The script is read-only. To change it, revise it with ZCode in chat and save a new version.",
+    "The script is read-only. To change it, revise it with PiCode in chat and save a new version.",
   "workflows.hub.detail.script.copy": "Copy script",
   "workflows.hub.detail.loadError": "Could not read this workflow: {reason}",
   "workflows.hub.detail.notFound": "This workflow is no longer in the project.",
@@ -5395,7 +5395,7 @@ const enUS: Record<string, string> = {
   "chat.slash.subagents.title": "Agents",
   "chat.slash.subagents.empty": "No matching agents",
   "chat.slash.emptyUnavailable":
-    "No slash commands have been broadcast for the current ZCode Agent session",
+    "No slash commands have been broadcast for the current PiCode Agent session",
   "chat.slash.emptyResults": "No matching slash commands",
   // Errors
   "chat.error.connectionLost": "Connection to agent lost",
@@ -5438,9 +5438,9 @@ const enUS: Record<string, string> = {
   "chat.quota.startPlan.concurrentLimit.switchModel":
     "The current model request concurrency limit has been reached. Switch models to continue your current task.",
   "chat.quota.mcp.quotaExhausted":
-    'ZCode MCP "{server}" has used up today\'s quota. It resets tomorrow.',
+    'PiCode MCP "{server}" has used up today\'s quota. It resets tomorrow.',
   "chat.quota.mcp.codingPlanRequired":
-    'No ZCode MCP "{server}" quota. Sign in or get a Coding Plan to use it.',
+    'No PiCode MCP "{server}" quota. Sign in or get a Coding Plan to use it.',
   "chat.quota.providerLimited":
     "The current account quota or plan limit has been reached. Upgrade or adjust the plan to continue.",
   "chat.quota.action.upgrade": "Upgrade",
@@ -5583,7 +5583,7 @@ const enUS: Record<string, string> = {
   "planTool.guidance.enterMode": "Entered plan mode",
   "chat.permission.switchMode.placeholder": "Implementation plan",
 
-  // ZCode Agent
+  // PiCode Agent
   "zcode.unavailable": "AI agent not available",
   "zcode.initFailed": "Failed to start AI agent",
   "zcode.error.TASK_OWNED_BY_OTHER_HOST": "This task is already running in another connected view.",
@@ -5641,7 +5641,7 @@ const enUS: Record<string, string> = {
   "resourceManager.cpu": "CPU",
   "resourceManager.memory": "Memory",
   "resourceManager.storage": "Storage",
-  "resourceManager.appUsage": "ZCode",
+  "resourceManager.appUsage": "PiCode",
   "resourceManager.systemUsage": "System",
   "resourceManager.category.base": "Base services",
   "resourceManager.category.builtinPlugin": "Built-in plugins",
@@ -5885,7 +5885,7 @@ const enUS: Record<string, string> = {
   "feedback.submit.template.section.errorSummaryLine": "Error Summary: {message}",
   "feedback.submit.template.section.errorDetail": "Error Details",
   "feedback.submit.template.section.errorTraceId": "TraceID: {traceId}",
-  "feedback.submit.template.section.copyErrorHeading": "ZCode Error Info",
+  "feedback.submit.template.section.copyErrorHeading": "PiCode Error Info",
   "feedback.submit.template.section.notProvided": "Not provided",
   "feedback.submit.template.section.remoteLogEmpty": "No connection logs captured",
   "feedback.submit.template.section.taskFeedbackTitle": "Feedback about task: {title}",
@@ -6045,7 +6045,7 @@ const enUS: Record<string, string> = {
   "automations.statusFilter.completed": "Completed",
   "automations.statusFilter.failed": "Failed",
   "automations.statusFilter.empty": "No tasks match this filter",
-  "offPeak.keepAwakeBanner": "Keep your computer awake while ZCode is running a chat.",
+  "offPeak.keepAwakeBanner": "Keep your computer awake while PiCode is running a chat.",
   "offPeak.sectionTitle": "Idle-time tasks",
   "offPeak.createButton": "Create idle-time task",
   "offPeak.templates.sectionTitle": "Idle-time task template",
@@ -6102,7 +6102,7 @@ const enUS: Record<string, string> = {
   "offPeak.form.titlePlaceholder": "e.g. Nightly refactor",
   "offPeak.form.instructionsLabel": "Instructions",
   "offPeak.form.instructionsPlaceholder":
-    "Describe a task ZCode can work on in the background, including the expected result and any constraints…",
+    "Describe a task PiCode can work on in the background, including the expected result and any constraints…",
   "offPeak.form.permissionWarning":
     "Idle-time runs are unattended. Actions that need confirmation will pause the task until you respond.",
   "offPeak.form.modelLabel": "Model",
@@ -6297,9 +6297,9 @@ const enUS: Record<string, string> = {
   "automations.runs.nextPage": "Next",
   // CUA (Computer Use)
   "chat.cuaReadiness.toolsNotLoaded":
-    "ZCode Computer Use is still preparing — its tools aren't loaded yet ({count} loaded). Grant the permissions below; tools appear once the helper is ready.",
+    "PiCode Computer Use is still preparing — its tools aren't loaded yet ({count} loaded). Grant the permissions below; tools appear once the helper is ready.",
   "chat.cuaReadiness.toolsPreparing":
-    "ZCode Computer Use is still preparing — its tools aren't loaded yet. Grant the permissions below; tools appear once the helper is ready.",
+    "PiCode Computer Use is still preparing — its tools aren't loaded yet. Grant the permissions below; tools appear once the helper is ready.",
   "chat.toolCall.cua.requestAccess": "Check Computer Use access",
   "chat.toolCall.cua.appName": "Computer Use",
   "chat.toolCall.cua.group.completedLabel": "Computer Use",
@@ -6427,9 +6427,9 @@ const enUS: Record<string, string> = {
   "cuaPermission.modal.restartButton": "Restart Helper",
   "cuaPermission.modal.restarting": "Restarting Helper…",
   "cuaPermission.modal.restartFailed": "Couldn't restart Helper: {error}",
-  "cuaPermission.modal.relaunchAppButton": "Restart ZCode",
+  "cuaPermission.modal.relaunchAppButton": "Restart PiCode",
   "cuaPermission.modal.relaunchAppHint":
-    "Still not working after restarting Helper? Restart ZCode to fully reload the Helper process.",
+    "Still not working after restarting Helper? Restart PiCode to fully reload the Helper process.",
   "cuaPermission.status.granted": "Granted",
   "cuaPermission.status.missing": "Missing",
   "cuaPermission.status.unknown": "Unknown",
@@ -6443,7 +6443,7 @@ const enUS: Record<string, string> = {
   "cuaPermission.tools.agentUpdateRequired":
     "The connected Agent is too old for a safe readiness check. Update or restart it, then check again.",
   "cuaPermission.tools.untrustedRuntime":
-    "Computer Use tools were found, but they did not come from the verified ZCode plugin. Review the plugin installation, then check again.",
+    "Computer Use tools were found, but they did not come from the verified PiCode plugin. Review the plugin installation, then check again.",
   "cuaPermission.perm.accessibility": "Accessibility",
   "cuaPermission.perm.accessibility.purpose": "Read/drive UI elements + synthesize input",
   "cuaPermission.perm.screenRecording": "Screen Recording",
@@ -6454,7 +6454,7 @@ const enUS: Record<string, string> = {
     "Please upgrade macOS before using it. Permission setup cannot be completed on older versions.",
   "cuaPermission.ready": "Permissions ready",
   "cuaPermission.ready.sessionValidationHint":
-    "ZCode will verify the Computer Use tools against the exact session when your first session starts.",
+    "PiCode will verify the Computer Use tools against the exact session when your first session starts.",
   "settings.computerUse.title": "Computer Use",
   "settings.computerUse.toggleLabel": "Enable Computer Use",
   "settings.computerUse.toggleDescription":

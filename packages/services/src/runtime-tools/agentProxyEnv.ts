@@ -83,7 +83,7 @@ export function buildAgentRuntimeEnv(input: {
 }
 
 /**
- * 把 host 已解析出的**权威 ZCode API origin** 下发给 agent 子进程。
+ * 把 host 已解析出的**权威 PiCode API origin** 下发给 agent 子进程。
  *
  * 两侧的官方 MCP 信任判定共用 `@zcode/shared` 的同一份实现，但**输入**
  * 曾经分叉——host 用 `resolveRuntimeZCodeEndpointOrigin(env, { overrideOrigin: settings

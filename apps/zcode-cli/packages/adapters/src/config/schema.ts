@@ -354,7 +354,7 @@ function normalizeMcpServerConfigInput(value: unknown): unknown {
   }
   delete server.enable;
 
-  // External MCP configs may carry provider-specific timeout fields. ZCode does not migrate
+  // External MCP configs may carry provider-specific timeout fields. PiCode does not migrate
   // those values, but the strict runtime schema should still accept old imported entries.
   delete server.timeout;
   delete server.startup_timeout_sec;

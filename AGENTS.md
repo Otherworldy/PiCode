@@ -31,7 +31,7 @@
 - `packages/ui`：共享 React 组件、hooks 与 Zustand store。
 - `packages/services`：业务服务；`packages/rpc`：RPC 框架。
 - `packages/shared`：共享协议与类型；`packages/client`：Agent 客户端 SDK。
-- `apps/zcode-cli`：Agent CLI 与运行时。Agent 循环在 `@zcode/pi-host`（Pi `AgentSession`）；不要再给主路径加 ZCode 工具 handler。
+- `apps/zcode-cli`：Agent CLI 与运行时。Agent 循环在 `@zcode/pi-host`（Pi `AgentSession`）；不要再给主路径加 PiCode 工具 handler。
 - `CONTEXT.md`：插件商店领域词汇；修改相关 UI 前阅读。
 - `DESIGN.md`：UI 设计规范；修改 UI 前阅读。
 

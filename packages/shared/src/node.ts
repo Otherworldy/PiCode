@@ -18,6 +18,12 @@ export {
 } from "./node/sshRemote.js";
 export { scanOfficialPluginCacheRoots } from "./node/officialPluginCache.js";
 export {
+  APP_DATA_DIR_NAME,
+  LEGACY_APP_DATA_DIR_NAME,
+  ensureAppDataDir,
+  isAppDataDirName,
+} from "./node/appDataDir.js";
+export {
   migrateUserSubagentMarkdown,
   migrateSubagentStateFile,
 } from "./node/subagentMarkdownMigration.js";

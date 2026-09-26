@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- settings-sync 需要集中维护外部 skills/commands/plugins/MCP 扫描、去重和导入状态机，后续按资源类别拆分 */
+import { ensureAppDataDir } from "@zcode/shared/node";
 import type {
   McpServerConfig,
   SettingsSyncAgent,
@@ -438,19 +439,19 @@ function getUserZcodeCommandRoot(): string {
 }
 
 function getWorkspaceZcodePluginRoot(workspacePath: string): string {
-  return join(workspacePath, ".zcode", "plugins");
+  return join(ensureAppDataDir(workspacePath), "plugins");
 }
 
 function getUserZcodePluginRoot(): string {
-  return join(resolveUserHomeDir(), ".zcode", "plugins");
+  return join(ensureAppDataDir(resolveUserHomeDir()), "plugins");
 }
 
 function getUserZcodeCliConfigPath(): string {
-  return join(resolveUserHomeDir(), ".zcode", "cli", "config.json");
+  return join(ensureAppDataDir(resolveUserHomeDir()), "cli", "config.json");
 }
 
 function getWorkspaceZcodeConfigPath(workspacePath: string): string {
-  return join(workspacePath, ".zcode", "config.json");
+  return join(ensureAppDataDir(workspacePath), "config.json");
 }
 
 function getClaudeUserAgentsFileSourcePath(): string {
@@ -458,7 +459,7 @@ function getClaudeUserAgentsFileSourcePath(): string {
 }
 
 function getUserZcodeAgentsFilePath(): string {
-  return join(resolveUserHomeDir(), ".zcode", "AGENTS.md");
+  return join(ensureAppDataDir(resolveUserHomeDir()), "AGENTS.md");
 }
 
 function resolveTargetRootForScope(

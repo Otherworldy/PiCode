@@ -509,7 +509,7 @@ function createProviderProxyFetch(options: ProviderProxyFetchOptions): ProviderF
 }
 
 /**
- * 模型请求出口：官方 Coding Plan 端点经 ZCode 平台网关发送（做套餐权益校验等平台侧处理），
+ * 模型请求出口：官方 Coding Plan 端点经 PiCode 平台网关发送（做套餐权益校验等平台侧处理），
  * 其余 provider 直连；之后统一进入用户 HTTP 代理 fetch，httpProxy / noProxy 按实际发送地址判定。
  * 官方端点与网关端点的对应关系见 official-coding-plan-gateway.ts。
  */
@@ -580,7 +580,7 @@ export function readProviderBusinessFailureFromBody(body: unknown):
     toProviderCode(errorRecord?.providerCode) ??
     toProviderCode(record.error_code) ??
     toProviderCode(errorRecord?.error_code) ??
-    // 二次包装后的外层 code 是 ZCode 自己的 PROVIDER_BUSINESS_ERROR，
+    // 二次包装后的外层 code 是 PiCode 自己的 PROVIDER_BUSINESS_ERROR，
     // 真实上游码在 providerCode；只有没有 providerCode 时才退回读取 code。
     toProviderCode(record.code) ??
     toProviderCode(errorRecord?.code);

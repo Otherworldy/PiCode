@@ -542,7 +542,7 @@ contextBridge.exposeInMainWorld("zcode", {
   openInFileManager: (path: string) => ipcRenderer.invoke(PlatformChannels.OpenInFileManager, path),
   /** 使用系统默认应用打开本地文件 */
   openExternalFile: (path: string) => ipcRenderer.invoke(PlatformChannels.OpenExternalFile, path),
-  /** 打开 ZCode Computer Use 完整权限引导 */
+  /** 打开 PiCode Computer Use 完整权限引导 */
   openCuaPermissionOnboarding: (options?: OpenCuaPermissionOnboardingOptions) =>
     ipcRenderer.invoke(PlatformChannels.OpenCuaPermissionOnboarding, options),
   /** 只取消当前 renderer 以 operationId 发起的 onboarding participant。 */
@@ -631,7 +631,7 @@ contextBridge.exposeInMainWorld("zcode", {
   /** 通过 main process 触发原生任务通知 */
   showTaskNotification: (payload: TaskNotificationPayload) =>
     ipcRenderer.send(PlatformChannels.ShowTaskNotification, payload),
-  /** 导出日志：打包 ~/.zcode/v2 及外部 agent 日志为 zip 并在 Finder 中显示 */
+  /** 导出日志：打包 ~/.PiCode/v2 及外部 agent 日志为 zip 并在 Finder 中显示 */
   exportLogs: (): Promise<{
     success: boolean;
     path?: string;

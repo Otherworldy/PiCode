@@ -19,11 +19,10 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { ensureAppDataDir } from "@zcode/shared/node";
 import {
   SAVED_WORKFLOW_FILE_EXTENSION,
-  SAVED_WORKFLOW_GLOBAL_DIR,
   SAVED_WORKFLOW_MAX_NAME_CHARS,
-  SAVED_WORKFLOW_PROJECT_DIR,
   isValidSavedWorkflowName,
   type SavedWorkflowEntry,
   type SavedWorkflowInvalidEntry,
@@ -50,7 +49,7 @@ export interface SavedWorkflowRootsOptions {
 /**
  * 本次会话的查找根，**按优先级排列**：`[project, global]`。
  *
- * 项目档落在会话工作目录的 `.zcode/workflows/`，全局档落在家目录的 `~/.zcode/workflows/`。
+ * 项目档落在会话工作目录的 `.zcode/workflows/`，全局档落在家目录的 `~/.PiCode/workflows/`。
  * 所有查找按顺序 first-wins：项目里的那份永远赢过全局那份（同名遮蔽）。
  */
 export function savedWorkflowRoots(
@@ -58,8 +57,11 @@ export function savedWorkflowRoots(
   options?: SavedWorkflowRootsOptions,
 ): SavedWorkflowRoot[] {
   return [
-    { scope: "project", dir: join(cwd, SAVED_WORKFLOW_PROJECT_DIR) },
-    { scope: "global", dir: join(options?.homeDir ?? homedir(), SAVED_WORKFLOW_GLOBAL_DIR) },
+    { scope: "project", dir: join(ensureAppDataDir(cwd), "workflows") },
+    {
+      scope: "global",
+      dir: join(ensureAppDataDir(options?.homeDir ?? homedir()), "workflows"),
+    },
   ];
 }
 

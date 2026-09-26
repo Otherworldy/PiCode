@@ -5,7 +5,7 @@ export function installScriptSource(baseUrl) {
 set -eu
 
 BASE_URL="\${ZCODE_DIST_BASE_URL:-${baseUrl}}"
-INSTALL_DIR="\${ZCODE_DIST_HOME:-$HOME/.zcode/runtime}"
+INSTALL_DIR="\${ZCODE_DIST_HOME:-$HOME/.PiCode/runtime}"
 BIN_DIR="\${ZCODE_DIST_BIN_DIR:-$HOME/.local/bin}"
 
 need_cmd() {
@@ -48,7 +48,7 @@ exec node "$INSTALL_DIR/current/bin/zcode.mjs" "\\$@"
 SH
 chmod +x "$BIN_DIR/zcode"
 
-echo "ZCode $VERSION installed."
+echo "PiCode $VERSION installed."
 echo "Run: zcode (TUI) or zcode --web (Web)"
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;

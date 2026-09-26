@@ -86,13 +86,13 @@ export const ServiceChannels = {
   CuaPipSession: "cua-pip-session",
   /** 跨窗口广播 */
   Broadcast: "broadcast",
-  /** ZCode task wrapper 服务 */
+  /** PiCode task wrapper 服务 */
   ZCodeTask: "zcode-task",
   /** 窗口 Host 聚合 workspace/task 投影与列表写路由 */
   WindowController: "window-controller",
-  /** ZCode Protocol agent 服务 */
+  /** PiCode Protocol agent 服务 */
   ZCodeAgent: "zcode-agent",
-  /** ZCode session 应用服务 */
+  /** PiCode session 应用服务 */
   ZCodeSession: "zcode-session",
   /** 会话分享发布、预览与 continuation API 编排 */
   ConversationShare: "conversation-share",
@@ -111,7 +111,7 @@ export const ServiceChannels = {
   /** Coding Plan 订阅购买服务 */
   CodingPlanSubscription: "coding-plan-subscription",
   ClientConfig: "client-config",
-  /** ZCode 客户端场景配置服务 */
+  /** PiCode 客户端场景配置服务 */
   ClientScenes: "client-scenes",
   /** Skills 管理服务 */
   Skills: "skills",
@@ -159,7 +159,7 @@ export const PlatformChannels = {
   SelectFile: "zcode:select-file",
   /** 打开系统多文件选择框 */
   SelectFiles: "zcode:select-files",
-  /** Renderer → Main：写入宿主 ~/.zcode 临时文本附件 */
+  /** Renderer → Main：写入宿主 ~/.PiCode 临时文本附件 */
   CreateTempTextAttachment: "zcode:create-temp-text-attachment",
   /** Renderer → Main：通过原生另存为对话框保存文件 */
   SaveFile: "zcode:save-file",
@@ -276,7 +276,7 @@ export const PlatformChannels = {
   OpenInFileManager: "zcode:open-in-file-manager",
   /** Renderer → Main：使用系统默认应用打开本地文件 */
   OpenExternalFile: "zcode:open-external-file",
-  /** Renderer → Main：打开 ZCode Computer Use 权限引导 */
+  /** Renderer → Main：打开 PiCode Computer Use 权限引导 */
   OpenCuaPermissionOnboarding: "zcode:open-cua-permission-onboarding",
   /** Renderer → Main：取消当前 renderer 发起的一次权限引导 participant */
   CancelCuaPermissionOnboarding: "zcode:cancel-cua-permission-onboarding",
@@ -333,7 +333,7 @@ export const PlatformChannels = {
   TaskNotificationSound: "zcode:task-notification-sound",
   /** Main → Preload：用户点击了系统通知，携带 taskId 让 renderer 跳转到对应任务 */
   TaskNotificationClick: "zcode:task-notification-click",
-  /** Renderer → Main：导出日志（打包 ~/.zcode/v2 及外部 agent 日志为 zip 并在 Finder 中显示） */
+  /** Renderer → Main：导出日志（打包 ~/.PiCode/v2 及外部 agent 日志为 zip 并在 Finder 中显示） */
   ExportLogs: "zcode:export-logs",
   /** Renderer → Main：截取当前窗口作为反馈附件 */
   CaptureWindowScreenshot: "zcode:capture-window-screenshot",
@@ -517,7 +517,7 @@ export const HostMessageTypes = {
   BrowserExecuteResult: "browser-execute-result",
   /** main → host：本地视频 canonical path 授权结果 */
   LocalMediaPreviewPathAuthorizeResult: "local-media-preview-path-authorize-result",
-  /** Main → Host：全局前台 ZCode 窗口派生的 producer focus fact。 */
+  /** Main → Host：全局前台 PiCode 窗口派生的 producer focus fact。 */
   CuaPipFocusChanged: "cua-pip-focus-changed",
   /** main → host：要求 Host 现读本地 Source，并同步指定 Remote Environment。 */
   ProviderProvisioningExecute: "provider-provisioning-execute",
@@ -590,7 +590,7 @@ export const HostResponseTypes = {
   TaskOwnerCommandResult: "task-owner-command-result",
   /** host → main：Agent 请求向另一个 session 发送消息 */
   SessionMessageSendRequested: "session-message-send-requested",
-  /** host → main：声明一个 ZCode Agent session 当前归属该 host */
+  /** host → main：声明一个 PiCode Agent session 当前归属该 host */
   SessionRouteAnnounce: "session-route-announce",
   /** host → main：目标 host 完成本地 session message 投递 */
   SessionMessageDeliverResult: "session-message-deliver-result",

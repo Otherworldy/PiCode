@@ -2,7 +2,7 @@ import { CodingPlanEntryButton } from "@/settings/CodingPlanEntryButton.js";
 /**
  * ChatErrorBanner — 错误提示组件
  *
- * 显示 ZCode Agent 链路中的错误，带 traceId 方便排查。
+ * 显示 PiCode Agent 链路中的错误，带 traceId 方便排查。
  */
 import { useState } from "react";
 import {

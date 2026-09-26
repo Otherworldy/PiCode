@@ -1,4 +1,4 @@
-// 远端 ZCode Agent 以「独立 node + 编译产物 zcode.cjs」的形态运行，而不是各平台内嵌 node 的原生二进制。
+// 远端 PiCode Agent 以「独立 node + 编译产物 zcode.cjs」的形态运行，而不是各平台内嵌 node 的原生二进制。
 // 远端部署时本来就有一份独立 node（用于跑 zcode-server.cjs），agent 复用它执行 zcode.cjs 即可。
 //
 // 部署布局：把 zcode.cjs 放到 agents/<provider>/zcode.cjs，再写一个同名 wrapper —— 就是 resolver
@@ -12,8 +12,9 @@ export function buildRemoteAgentBundleWrapper(runtimeResourceDir: string): strin
   return [
     "#!/bin/sh",
     "set -eu",
-    'runtime_root="${ZCODE_SERVER_RUNTIME_ROOT:-$HOME/.zcode/server}"',
-    `exec "$runtime_root/node" "$HOME/.zcode/server/agents/${runtimeResourceDir}/${REMOTE_AGENT_BUNDLE_NAME}" "$@"`,
+    'if [ ! -e "$HOME/.PiCode" ] && [ -d "$HOME/.zcode" ]; then mv "$HOME/.zcode" "$HOME/.PiCode"; fi',
+    'runtime_root="${ZCODE_SERVER_RUNTIME_ROOT:-$HOME/.PiCode/server}"',
+    `exec "$runtime_root/node" "$HOME/.PiCode/server/agents/${runtimeResourceDir}/${REMOTE_AGENT_BUNDLE_NAME}" "$@"`,
     "",
   ].join("\n");
 }

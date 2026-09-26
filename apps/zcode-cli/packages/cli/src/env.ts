@@ -1,4 +1,4 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, renameSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 import { config as loadDotenv } from "dotenv";
@@ -135,5 +135,12 @@ function applyBetaStorageDefault(env: CliEnv, argv: readonly string[]): void {
   const explicitBeta = env.ZCODE_BETA === "1" || env.ZCODE_ENV === "beta";
   const invokedAsBeta = argv.some((arg) => /(^|[/\\])zcode-beta(?:$|\.)/u.test(arg));
   if (!explicitBeta && !invokedAsBeta) return;
-  env.ZCODE_STORAGE_DIR = join(homedir(), ".zcode-beta");
+  const next = join(homedir(), ".PiCode-beta");
+  const legacy = join(homedir(), ".zcode-beta");
+  try {
+    if (!existsSync(next) && existsSync(legacy)) renameSync(legacy, next);
+  } catch {
+    // 目录被占用时继续用旧路径，避免写成两套数据。
+  }
+  env.ZCODE_STORAGE_DIR = !existsSync(next) && existsSync(legacy) ? legacy : next;
 }

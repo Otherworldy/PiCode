@@ -186,7 +186,7 @@ export function TaskActionMenuContent({
         title={taskTargetActionsDisabled ? disabledReason : undefined}
         onSelect={onCopyTaskLogPath}
       >
-        {/* ZCode Agent 的日志路径可能先按运行时约定得出，当前日期文件尚未落盘。
+        {/* PiCode Agent 的日志路径可能先按运行时约定得出，当前日期文件尚未落盘。
             复制动作只依赖路径字符串，不能把 exists=false 当成不可复制，否则菜单会表现成“不能点”。 */}
         {intl.formatMessage({ id: "appHeader.copyLogPath" })}
       </Item>
@@ -202,7 +202,7 @@ export function TaskActionMenuContent({
       {onViewModelTrajectory ? (
         <>
           <Separator />
-          {/* 调用轨迹查看：从 ~/.zcode/cli 的 model-io 还原该 task 的模型请求/响应/工具调用，
+          {/* 调用轨迹查看：从 ~/.PiCode/cli 的 model-io 还原该 task 的模型请求/响应/工具调用，
               在右侧边栏可视化。只依赖 taskId（即 sessionId），不依赖快照文件是否落盘。 */}
           <Item
             disabled={taskTargetActionsDisabled || !activeSessionId}

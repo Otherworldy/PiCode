@@ -194,8 +194,8 @@ export async function createCapabilityTools(input: {
   const subagent = tool<{ agent?: string; task?: string }>({
     name: "zcode_subagent",
     label: "Subagent",
-    description: `Run a ZCode subagent and return its final answer.\n${catalog}`,
-    promptSnippet: "Delegate a task to a ZCode subagent",
+    description: `Run a PiCode subagent and return its final answer.\n${catalog}`,
+    promptSnippet: "Delegate a task to a PiCode subagent",
     promptGuidelines: [
       "Use zcode_subagent for work that should run in a separate agent. Pick a name from the tool description.",
     ],
@@ -233,8 +233,8 @@ export async function createCapabilityTools(input: {
     name: "mcp",
     label: "MCP",
     description:
-      "Call ZCode MCP servers without loading every tool schema. Omit fields to list servers. Set server plus search or describe to inspect one server. Set server, tool, and args to call.",
-    promptSnippet: "Search or call a ZCode MCP server",
+      "Call PiCode MCP servers without loading every tool schema. Omit fields to list servers. Set server plus search or describe to inspect one server. Set server, tool, and args to call.",
+    promptSnippet: "Search or call a PiCode MCP server",
     promptGuidelines: [
       "Use mcp to discover and call MCP tools. Do not assume a server's tools are registered unless they were marked direct.",
     ],

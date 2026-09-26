@@ -22,7 +22,7 @@ pnpm --filter @zcode/prompt-trajectory derive -- \
   --out /tmp/zcode-prompt-trajectory/basic-live
 
 pnpm --filter @zcode/prompt-trajectory model-io -- \
-  --input ~/.zcode/cli/debug/model-io-<session>.jsonl \
+  --input ~/.PiCode/cli/debug/model-io-<session>.jsonl \
   --out /tmp/zcode-prompt-trajectory/model-io-session
 ```
 
@@ -62,7 +62,7 @@ shape.
 
 ## Model-IO Converter
 
-`model-io` reads a real ZCode `model-io-*.jsonl` file and turns the main
+`model-io` reads a real PiCode `model-io-*.jsonl` file and turns the main
 conversation into a reusable Anthropic trajectory:
 
 ```text

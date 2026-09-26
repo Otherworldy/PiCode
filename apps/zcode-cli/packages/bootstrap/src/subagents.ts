@@ -1,3 +1,4 @@
+import { ensureAppDataDir } from "@zcode/shared/node";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { migrateUserSubagentMarkdown, migrateSubagentStateFile } from "@zcode/shared/node";
@@ -53,7 +54,7 @@ export async function loadZCodeAgentProfiles(
   await migrateSubagentStateFile(join(input.storageRoot, "v2", "agents-state.json"));
   const roots = [
     { path: join(input.storageRoot, "agents"), source: "user" as const },
-    { path: join(input.workingDirectory, ".zcode", "agents"), source: "project" as const },
+    { path: join(ensureAppDataDir(input.workingDirectory), "agents"), source: "project" as const },
   ];
   const diagnostics: AgentProfileParseDiagnostic[] = [];
   for (const failure of migration.failures) {

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { existsSync, renameSync } from "node:fs";
 import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -220,12 +221,23 @@ function normalizeTelemetryId(value: string | undefined): string | undefined {
   return normalized && TELEMETRY_ID_PATTERN.test(normalized) ? normalized : undefined;
 }
 
+function ensureAppDataDir(parent: string): string {
+  const next = join(parent, ".PiCode");
+  const legacy = join(parent, ".zcode");
+  try {
+    if (!existsSync(next) && existsSync(legacy)) renameSync(legacy, next);
+  } catch {
+    if (!existsSync(next) && existsSync(legacy)) return legacy;
+  }
+  return next;
+}
+
 async function resolveStandaloneDeviceMid(
   zcodeHome: string | undefined,
 ): Promise<string | undefined> {
   const stateFile = zcodeHome
     ? join(zcodeHome, "v2", "telemetry-state.json")
-    : join(homedir(), ".zcode", "v2", "telemetry-state.json");
+    : join(ensureAppDataDir(homedir()), "v2", "telemetry-state.json");
   const pending = pendingStandaloneDeviceMidByStateFile.get(stateFile);
   if (pending) return pending;
   const resolution = resolveStandaloneDeviceMidFromFile(stateFile);

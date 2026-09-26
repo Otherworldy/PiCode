@@ -55,7 +55,7 @@ function getSidebarProfileName(user?: UserInfo | null): string {
     return username;
   }
 
-  return "ZCode";
+  return "PiCode";
 }
 
 function getSidebarProfileBadge(

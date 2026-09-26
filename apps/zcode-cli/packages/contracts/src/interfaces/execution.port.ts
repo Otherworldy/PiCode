@@ -21,7 +21,7 @@ export type ExecutionCommand =
        */
       shellProfile?: "posix-bash";
       /**
-       * ZCode runtime-provided Bash shell selection. Current consumers must only use
+       * PiCode runtime-provided Bash shell selection. Current consumers must only use
        * this when shellProfile === "posix-bash"; generic shell execution must ignore it.
        */
       shellOverride?: ExecutionShellSelection;
@@ -44,7 +44,7 @@ export interface ExecutionShellSelection {
   id?: string;
   /** Human-readable diagnostic label. This can include more detail than display.name. */
   label?: string;
-  /** Executable path when ZCode resolved a concrete shell. Omitted for legacy shell fallback. */
+  /** Executable path when PiCode resolved a concrete shell. Omitted for legacy shell fallback. */
   path?: string;
   /** Shell syntax and cwd capture wrapper semantics. */
   dialect: ExecutionShellDialect | "legacy-shell";

@@ -70,7 +70,7 @@ export function isPreapprovedWorkflowDraftWrite(input: WorkflowDraftWriteInput):
   });
 }
 
-/** `filePath` 是否落在 `<workingDirectory>/.zcode/workflow-drafts/` 之内。 */
+/** `filePath` 是否落在 `<workingDirectory>/.PiCode/workflow-drafts/` 之内。 */
 function isWorkflowDraftPath(input: WorkflowDraftPathInput): boolean {
   const path = input.pathModule ?? nodePath;
   // 没有工作目录就没有"哪个项目的草稿目录"可言，宁可不放行：免确认的前提是目标可被定位。

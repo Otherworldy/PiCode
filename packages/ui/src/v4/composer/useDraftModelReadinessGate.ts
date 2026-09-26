@@ -49,7 +49,7 @@ export function useDraftModelReadinessGate(params: {
   const { workspacePath, workspaceIdentity, provider, modelSelectionService } = params;
   const workspaceKey = workspaceIdentity?.trim() || workspacePath;
   const displayProvider = provider ?? ZCODE_AGENT_PROVIDER;
-  // Pi Host 用 Pi ModelRuntime，草稿首发不再等 ZCode provider registry。
+  // Pi Host 用 Pi ModelRuntime，草稿首发不再等 PiCode provider registry。
   const enabled = false;
   const gateKey = `${workspaceKey}\u0000${displayProvider}`;
   const [state, setState] = useState<DraftModelReadinessState>(() => ({

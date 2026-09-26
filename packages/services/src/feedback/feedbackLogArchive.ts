@@ -161,7 +161,7 @@ export async function createFeedbackDiagnosticArchive(options: {
     zip.addBuffer(
       Buffer.from(
         [
-          "ZCode diagnostic logs",
+          "PiCode diagnostic logs",
           `timestamp: ${now.toISOString()}`,
           `appVersion: ${ZCODE_VERSION}`,
           `commit: ${ZCODE_COMMIT}`,

@@ -9,7 +9,7 @@
  * 时序（happy path）：
  *
  *   parent                         child(vm)
- *     │  write <cwd>/.zcode/workflow-runs/<runId>.mjs（payload: lowered+args 内嵌）
+ *     │  write <cwd>/.PiCode/workflow-runs/<runId>.mjs（payload: lowered+args 内嵌）
  *     │  spawn(node <entry>)
  *     │──────────────────────────▶│  build __host in context
  *     │◀── create-actor(local#1) ──│  createActor 同步返回 local#1

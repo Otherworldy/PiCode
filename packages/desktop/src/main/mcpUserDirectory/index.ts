@@ -37,8 +37,8 @@ interface DirectoryMcpDescriptor {
 const ZCODE_MCP_DESCRIPTOR: DirectoryMcpDescriptor = {
   source: "zcodeagentmcp",
   directorySource: "zcode",
-  userConfigDirSegments: [".zcode", "cli"],
-  workspaceConfigDirSegments: [".zcode"],
+  userConfigDirSegments: [".PiCode", "cli"],
+  workspaceConfigDirSegments: [".PiCode"],
   fileName: "config.json",
   format: "json",
   configKeyName: "mcp.servers",
@@ -363,7 +363,7 @@ export async function loadCliMcpFromUserDirectory(
 ): Promise<LoadCliMcpFromUserDirectoryResult> {
   const servers: NativeMcpServerRecord[] = [];
 
-  // 去掉其他 provider 后，ZCode Agent 只按目录约定读取；先 workspace，再 user。
+  // 去掉其他 provider 后，PiCode Agent 只按目录约定读取；先 workspace，再 user。
   if (request?.workspacePath) {
     servers.push(
       ...(await readDirectoryServersFromPreferredSources("workspace", request.workspacePath)),

@@ -1,3 +1,4 @@
+import piFaviconUrl from "../../../../ui/src/assets/pi_favicon.svg";
 import { DatabaseStartupAdmission } from "./databaseStartupAdmission.js";
 import { initializeDesktopLocalTtft } from "./localTtftBootstrap.js";
 import { createRoot } from "react-dom/client";
@@ -38,6 +39,15 @@ import {
   parseRemoteWorkspaceServicePortMessage,
   type RemoteWorkspaceServicePortRegistration,
 } from "./remoteWorkspaceServicePortBridge.js";
+
+{
+  const favicon =
+    document.querySelector<HTMLLinkElement>("link[rel='icon']") ?? document.createElement("link");
+  favicon.rel = "icon";
+  favicon.type = "image/svg+xml";
+  favicon.href = piFaviconUrl;
+  if (!favicon.isConnected) document.head.append(favicon);
+}
 
 type DesktopRendererImportMetaEnv = {
   VITE_ZCODE_E2E_STORE_BRIDGE?: string;

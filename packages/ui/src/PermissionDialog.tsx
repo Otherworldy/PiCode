@@ -163,7 +163,7 @@ const PROVIDER_PERMISSION_OPTION_NAME_LABELS: Partial<
   Record<ZCodeProvider, Record<string, string>>
 > = {
   glm: {
-    // GLM/ZCode Agent 通过 ZCode Agent 发来的项目级记忆授权文案是英文原文。
+    // GLM/PiCode Agent 通过 PiCode Agent 发来的项目级记忆授权文案是英文原文。
     // 这里把已知 provider-native 权限文案统一归一到 i18n，避免被当成自定义选项直出英文。
     "always allow in this project": "chat.permission.allowForProject",
   },
@@ -682,7 +682,7 @@ export function PermissionDialog({
             : blockKind === "execute"
               ? ExecuteToolCallBlock
               : FallbackToolCallBlock;
-  // 当前 ZCode Agent 的 ExitPlanMode 权限请求不再传 legacy switch_mode。
+  // 当前 PiCode Agent 的 ExitPlanMode 权限请求不再传 legacy switch_mode。
   // 这里复用 tool identity，避免审批弹窗和聊天区的计划模式工具分流再次漂移。
   const shouldUseSwitchModePlaceholder = resolveToolCallIdentity(toolCall).family === "switch-mode";
   // 工作流确认窗自带本地化标题（「运行此工作流？」）和图主体，走独立块而不是通用预览块。
@@ -756,7 +756,7 @@ export function PermissionDialog({
                 const knownNameLabel = nameMessageIds
                   ? intl.formatMessage({ id: nameMessageIds.label })
                   : null;
-                // ZCode Agent 协议里 option.name 才是给用户看的真实选项文案，kind 只表示按钮语义。
+                // PiCode Agent 协议里 option.name 才是给用户看的真实选项文案，kind 只表示按钮语义。
                 // 之前这里一律按 kind 本地化，像 switch_mode 这类不同语义但同属 allow_always 的选项，
                 // 会被错误压成两条一模一样的“始终允许”。
                 const preferOptionName = shouldPreferPermissionOptionName(option);

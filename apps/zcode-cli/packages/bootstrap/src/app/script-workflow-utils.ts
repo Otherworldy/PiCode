@@ -1,3 +1,4 @@
+import { ensureAppDataDir } from "@zcode/shared/node";
 import type {
   ScriptWorkflowRunStats,
   ScriptWorkflowStorePort,
@@ -170,8 +171,8 @@ export function inferScriptWorkflowScope(
   scriptPath: string,
   workingDirectory: string,
 ): "explicit" | "project" | "user" {
-  if (isWithin(scriptPath, join(workingDirectory, ".zcode", "workflows"))) return "project";
-  if (isWithin(scriptPath, join(homedir(), ".zcode", "workflows"))) return "user";
+  if (isWithin(scriptPath, join(ensureAppDataDir(workingDirectory), "workflows"))) return "project";
+  if (isWithin(scriptPath, join(ensureAppDataDir(homedir()), "workflows"))) return "user";
   return "explicit";
 }
 

@@ -1,5 +1,5 @@
 // 影子重放对账（交付 / 测试基建）。
-// 用途：把本机真实 CLI 库（默认 ~/.zcode/cli/db/db.sqlite）的历史会话全量喂给
+// 用途：把本机真实 CLI 库（默认 ~/.PiCode/cli/db/db.sqlite）的历史会话全量喂给
 // 冷恢复管线（transcript 合成 → ProductProjection），输出守恒对账报告——
 // 每阶段上线门槛 = 全量重放无崩溃、无静默丢弃、失败清单审查完毕。
 //
@@ -12,7 +12,7 @@
 import { parseArgs } from "node:util";
 import { homedir, tmpdir } from "node:os";
 import { join, dirname, basename } from "node:path";
-import { copyFileSync, existsSync, mkdtempSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, renameSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -43,7 +43,18 @@ const {
 const { ProductProjection } = projectionModule;
 const { SESSION_ENTRY_TARGET_COMPLETION_VERIFICATION } = contracts;
 
-const sourceDbPath = args.db ?? join(homedir(), ".zcode", "cli", "db", "db.sqlite");
+function ensureAppDataDir(parent) {
+  const next = join(parent, ".PiCode");
+  const legacy = join(parent, ".zcode");
+  try {
+    if (!existsSync(next) && existsSync(legacy)) renameSync(legacy, next);
+  } catch {
+    if (!existsSync(next) && existsSync(legacy)) return legacy;
+  }
+  return next;
+}
+
+const sourceDbPath = args.db ?? join(ensureAppDataDir(homedir()), "cli", "db", "db.sqlite");
 const limit = args.limit ? Number(args.limit) : Infinity;
 
 let dbPath = sourceDbPath;

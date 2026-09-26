@@ -1,3 +1,4 @@
+import { ensureAppDataDir } from "@zcode/shared/node";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -59,7 +60,7 @@ type PluginSourceInfo = {
 };
 
 function switchPath(root?: string): string {
-  return join(root ?? join(homedir(), ".zcode"), "pi-plugin-switches.json");
+  return join(root ?? join(ensureAppDataDir(homedir())), "pi-plugin-switches.json");
 }
 
 async function readSwitches(root?: string): Promise<Record<string, boolean>> {

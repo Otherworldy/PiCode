@@ -43,7 +43,7 @@ export function createComposerSubmissionConfig(
       }),
     });
   }
-  // Pi Host：ZCode registry 为空时不再挡发送。Host 用 Pi ModelRuntime 当前/默认模型。
+  // Pi Host：PiCode registry 为空时不再挡发送。Host 用 Pi ModelRuntime 当前/默认模型。
   return Object.freeze({
     mode: mode.data === "plan" ? "build" : mode.data,
     planEnabled: resolveExecutionState(composer).planEnabled,

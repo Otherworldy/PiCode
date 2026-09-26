@@ -1,3 +1,4 @@
+import { ensureAppDataDir } from "@zcode/shared/node";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve as resolvePath } from "node:path";
@@ -23,7 +24,7 @@ function resolvePlatformScopedBundledAgentRoots(moduleDir?: string): Array<strin
     resolvePath(process.cwd(), "bundled-agents", platformKey),
     resolvePath(process.cwd(), "packages", "desktop", "bundled-agents", platformKey),
     // dev:web 会用 pnpm --filter @zcode/server dev 启动，cwd 落在 packages/server。
-    // ZCode Agent 资源可能位于桌面包或仓库根的 bundled-agents/<platform>。
+    // PiCode Agent 资源可能位于桌面包或仓库根的 bundled-agents/<platform>。
     // 这里统一补齐仓库内所有平台化目录候选，desktop/web/server 共享一套解析链路。
     resolvePath(process.cwd(), "..", "desktop", "bundled-agents", platformKey),
     moduleDir ? resolvePath(moduleDir, "..", "..", "desktop", "bundled-agents", platformKey) : null,
@@ -59,7 +60,7 @@ export function findZCodeAgentRuntimeBinary(): string | null {
 
   const candidates = [
     packagedResourcesPath ? resolvePath(packagedResourcesPath, ...resourceSegments) : null,
-    resolvePath(homedir(), ".zcode", "server", "agents", ...resourceSegments),
+    resolvePath(ensureAppDataDir(homedir()), "server", "agents", ...resourceSegments),
     ...platformScopedRoots.map((root) =>
       root ? resolvePath(root, runtime.bundledResourceDir, ...entrySegments) : null,
     ),
@@ -87,7 +88,7 @@ export function findZCodeAgentRuntimeNodeBundle(): string | null {
 
   const candidates = [
     packagedResourcesPath ? resolvePath(packagedResourcesPath, ...resourceSegments) : null,
-    resolvePath(homedir(), ".zcode", "server", "agents", ...resourceSegments),
+    resolvePath(ensureAppDataDir(homedir()), "server", "agents", ...resourceSegments),
     ...platformScopedRoots.map((root) =>
       root ? resolvePath(root, runtime.bundledResourceDir, ...entrySegments) : null,
     ),

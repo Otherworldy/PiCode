@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, renameSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
@@ -15,12 +15,23 @@ import type {
   SourceLoadResult,
 } from "./types.js";
 
+function ensureAppDataDir(parent: string): string {
+  const next = join(parent, ".PiCode");
+  const legacy = join(parent, ".zcode");
+  try {
+    if (!existsSync(next) && existsSync(legacy)) renameSync(legacy, next);
+  } catch {
+    if (!existsSync(next) && existsSync(legacy)) return legacy;
+  }
+  return next;
+}
+
 export function defaultLogDir(): string {
-  return join(homedir(), ".zcode", "cli", "log");
+  return join(ensureAppDataDir(homedir()), "cli", "log");
 }
 
 export function defaultDbPath(): string {
-  return join(homedir(), ".zcode", "cli", "db", "db.sqlite");
+  return join(ensureAppDataDir(homedir()), "cli", "db", "db.sqlite");
 }
 
 export async function loadLogs(options: ObservationOptions): Promise<SourceLoadResult<LogRecord>> {

@@ -2,6 +2,7 @@
 // Node Context Source Adapter
 // ============================================================
 
+import { ensureAppDataDir } from "@zcode/shared/node";
 import { readFile, stat } from "node:fs/promises";
 import { arch, homedir, release } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -234,7 +235,7 @@ async function findDefaultUserInstructionFile(
     return undefined;
   }
 
-  const filePath = join(resolveUserHomeDir(env), ".zcode", "AGENTS.md");
+  const filePath = join(ensureAppDataDir(resolveUserHomeDir(env)), "AGENTS.md");
   if (await isFile(filePath)) {
     return { filePath, fileName: "AGENTS.md" };
   }

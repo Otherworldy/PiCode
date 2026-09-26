@@ -1,6 +1,6 @@
 # Formal Proof
 
-这是 ZCode 的产品行为状态空间枚举器。当前版本聚焦对话场景里的 compact、fork、goal、消息队列和 query 编辑组合。
+这是 PiCode 的产品行为状态空间枚举器。当前版本聚焦对话场景里的 compact、fork、goal、消息队列和 query 编辑组合。
 
 启动：
 

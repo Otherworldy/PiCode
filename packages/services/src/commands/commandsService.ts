@@ -1,4 +1,5 @@
 /* eslint-disable max-lines -- commandsService 需要集中处理目录来源优先级、读写和命令解析，拆分会削弱读取顺序的一致性 */
+import { ensureAppDataDir } from "@zcode/shared/node";
 import { access, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
@@ -80,7 +81,7 @@ function getUserCommandsRoot(agentSource?: CommandAgentSource): string {
 }
 
 function getUserCliConfigPath(): string {
-  return join(resolveUserHomeDir(), ".zcode", "cli", "config.json");
+  return join(ensureAppDataDir(resolveUserHomeDir()), "cli", "config.json");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -197,7 +198,7 @@ function readStorageDirFromConfig(config: Record<string, unknown>): string {
   const storage = isRecord(config.storage) ? config.storage : {};
   return typeof storage.dir === "string" && storage.dir.trim().length > 0
     ? storage.dir
-    : "~/.zcode";
+    : "~/.PiCode";
 }
 
 function readPluginConfigFromConfig(config: Record<string, unknown>): PluginConfigSummary {
@@ -517,7 +518,7 @@ export function createCommandsService(_options?: CommandsServiceOptions): IComma
     const agentSources = getCommandAgentSources(params.agentSource);
     const enabledOverrides = await readCommandEnabledOverridesFromUserConfig();
 
-    // ZCode Agent 需要先合并所有 workspace 目录，再合并所有 user 目录；
+    // PiCode Agent 需要先合并所有 workspace 目录，再合并所有 user 目录；
     // 按每个目录交错读取 project/user 会让 user .zcode 抢在 workspace .agents 前面。
     for (const agentSource of agentSources) {
       const descriptors =
@@ -775,7 +776,7 @@ function buildPluginCommandId(params: {
 async function discoverPluginCommands(
   _enabledOverrides: ReadonlyMap<string, boolean>,
 ): Promise<PluginCommand[]> {
-  // ZCode 插件命令不进 Pi 会话。
+  // PiCode 插件命令不进 Pi 会话。
   void resolvePluginCommandRootDescriptors;
   void discoverPluginCommandsRecursive;
   return [];

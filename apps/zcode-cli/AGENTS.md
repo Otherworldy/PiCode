@@ -70,7 +70,7 @@
 - Coding agent CLI 应把 session、message、tool call、permission、checkpoint、队列和 pending 状态视为一等状态对象，支持恢复、分叉、回滚和并发 session。
 - TUI 只负责输入采集、布局渲染和临时交互态，例如光标、输入框、滚动位置和当前弹窗选择；session、mode、model、tool、todo、permission、checkpoint 等业务状态不得保存在 TUI 层，必须由 server/bootstrap/core/session 存储并通过显式接口或 session event 下发。
 - TUI 中的折叠/展开指示符统一使用 `+`/`-`（折叠为 `+`，展开为 `-`），不要使用 `v` 和 `>`。
-- 与用户交互相关的确认、选择、输入、进度、错误恢复等能力，应面向 TUI 和 ZCode Protocol V4 客户端设计为稳定的交互请求/响应接口或 session event；不同客户端只是呈现和传输适配层，不应把交互流程写死在单一前端中。
+- 与用户交互相关的确认、选择、输入、进度、错误恢复等能力，应面向 TUI 和 PiCode Protocol V4 客户端设计为稳定的交互请求/响应接口或 session event；不同客户端只是呈现和传输适配层，不应把交互流程写死在单一前端中。
 - 所有任务执行都必须携带可传播的 `traceId`。`traceId` 默认对应一次顶层 session 的完整任务链，session 内创建的子 session、subagent、重试任务、后台队列任务和异步 I/O 都应归属到同一个 `traceId`。
 - `traceId` 位于 `sessionId` 之上；`sessionId`、`turnId`、`messageId`、`toolCallId`、`spanId`、`parentSpanId` 等应作为 `traceId` 下的结构化子标识，用于还原完整调用链。
 - 所有模块、service、adapter、tool runtime、provider client、I/O adapter 和权限判断逻辑都应接收并继续传递统一的执行上下文，不得在中途丢弃、覆盖或临时生成无关联的 `traceId`。

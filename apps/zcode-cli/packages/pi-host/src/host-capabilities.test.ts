@@ -14,7 +14,7 @@ test("agent tool names map onto Pi tools", () => {
   assert.deepEqual(piToolNamesForAgent(["WebSearch"], available), []);
 });
 
-test("capability tools call ZCode subagents and MCP", async () => {
+test("capability tools call PiCode subagents and MCP", async () => {
   const calls: string[] = [];
   const tools = await createCapabilityTools({
     cwd: "D:/work",

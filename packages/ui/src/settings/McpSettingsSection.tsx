@@ -3,7 +3,7 @@
  * MCP Settings Section
  *
  * Manages MCP server configuration in the settings page.
- * Supports the unified ZCode Agent MCP source backed by settings directories.
+ * Supports the unified PiCode Agent MCP source backed by settings directories.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
