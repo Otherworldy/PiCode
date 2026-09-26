@@ -11,6 +11,7 @@ import {
   type ToolCallRow,
 } from "@zcode/shared/zcode-protocol-v4";
 import { summarizeTurnFileChanges } from "./file-rewind.js";
+import { PI_PROCESS_WORK_PREFIX } from "./pi-process-bridge.js";
 import { bashDisplay, editDisplay, mapPiToolName, toolResultText } from "./presentation.js";
 import { createEmptySnapshot, emptyAvailability } from "./snapshot.js";
 import type { PiAssistantDelta, PiHostEvent } from "./types.js";
@@ -204,6 +205,23 @@ export class PiToV4Projector {
 
   replaceSubagents(subagents: ConversationSnapshot["subagents"]): ConversationDelta[] {
     return this.applyState({ subagents });
+  }
+
+  replaceManagedProcesses(works: ConversationSnapshot["backgroundWorks"]): ConversationDelta[] {
+    const kept = this.snapshot.backgroundWorks.filter(
+      (work) => !work.workId.startsWith(PI_PROCESS_WORK_PREFIX),
+    );
+    const next = [...kept, ...works];
+    const prev = this.snapshot.backgroundWorks;
+    if (
+      prev.length === next.length &&
+      prev.every(
+        (work, index) => work.workId === next[index]?.workId && work.title === next[index]?.title,
+      )
+    ) {
+      return [];
+    }
+    return this.applyState({ backgroundWorks: next });
   }
 
   setTitle(title: string, titleSource: ConversationSnapshot["meta"]["titleSource"] = "custom"): ConversationDelta[] {

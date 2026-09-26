@@ -1,4 +1,4 @@
-import { TUI_ONLY_PI_SLASH_COMMANDS } from "@zcode/shared";
+import { isPiProcessSlashCommand, TUI_ONLY_PI_SLASH_COMMANDS } from "@zcode/shared";
 
 export type V4VisibleSlashCommand =
   | {
@@ -61,7 +61,7 @@ export function isTerminalOnlySlashCommand(
   const match = /^\/([^\s]+)/.exec(content.trim());
   const name = match?.[1]?.toLowerCase();
   if (!name || TERMINAL_ONLY_SLASH_EXEMPT.has(name)) return false;
-  if (TUI_ONLY_PI_SLASH_COMMANDS.has(name)) return true;
+  if (TUI_ONLY_PI_SLASH_COMMANDS.has(name) || isPiProcessSlashCommand(name)) return true;
   return commands.some(
     (command) =>
       command.source === "builtin" &&

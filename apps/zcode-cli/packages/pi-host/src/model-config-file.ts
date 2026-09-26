@@ -12,6 +12,8 @@ export type PiProviderModelDraft = {
   thinkingLevels?: string[];
   defaultThinkingLevel?: string;
   input?: Array<"text" | "image">;
+  /** 省略则沿用渠道 api。 */
+  api?: string;
 };
 
 export type PiProviderDraft = {
@@ -32,6 +34,7 @@ export type PiModelView = {
   thinkingLevels: string[];
   defaultThinkingLevel?: string;
   input: Array<"text" | "image">;
+  api?: string;
 };
 
 export type PiDiscoveredModel = {
@@ -48,6 +51,7 @@ export type PiModelConfigView = {
     baseUrl: string;
     api: string;
     hasApiKey: boolean;
+    apiKey?: string;
     models: PiModelView[];
   }>;
   defaultProvider?: string;
@@ -94,6 +98,7 @@ export function toPiModelConfigView(
       baseUrl: typeof raw.baseUrl === "string" ? raw.baseUrl : "",
       api: typeof raw.api === "string" && raw.api ? raw.api : "openai-completions",
       hasApiKey: typeof raw.apiKey === "string" && raw.apiKey.length > 0,
+      ...(typeof raw.apiKey === "string" && raw.apiKey ? { apiKey: raw.apiKey } : {}),
       models: models.flatMap((entry) => {
         if (!entry || typeof entry !== "object") return [];
         const model = toViewModel(entry as Record<string, unknown>);
@@ -162,7 +167,13 @@ function toViewModel(model: Record<string, unknown>): PiModelView | undefined {
     thinkingLevels,
     ...(defaultThinkingLevel ? { defaultThinkingLevel } : {}),
     input: asInput(model.input),
+    ...(typeof model.api === "string" && model.api ? { api: model.api } : {}),
   };
+}
+
+function modelApiForSave(draft: PiProviderModelDraft, providerApi: string): string {
+  const chosen = draft.api?.trim();
+  return chosen || providerApi;
 }
 
 function defaultModelRecord(
@@ -179,8 +190,8 @@ function defaultModelRecord(
   return {
     ...(existing ?? { cost: { ...ZERO_COST } }),
     id: draft.id,
-    // 设置页只有渠道这一处格式。模型上残留的 api 会让 Pi 改走别的协议。
-    api,
+    // 未指定时写成渠道 api。指定了别的驱动就留在模型项上，Pi 按这项发请求。
+    api: modelApiForSave(draft, api),
     name: draft.name ?? (typeof existing?.name === "string" && existing.name ? existing.name : draft.id),
     reasoning,
     thinkingLevelMap,
@@ -209,7 +220,10 @@ export function upsertProvider(file: ModelsJsonFile, draft: PiProviderDraft): Mo
   previous.baseUrl = draft.baseUrl;
   previous.api = draft.api;
   if (draft.name?.trim()) previous.name = draft.name.trim();
-  if (draft.apiKey) previous.apiKey = draft.apiKey;
+  if (typeof draft.apiKey === "string") {
+    if (draft.apiKey) previous.apiKey = draft.apiKey;
+    else delete previous.apiKey;
+  }
   previous.models = draft.models.map((model) =>
     defaultModelRecord(model, byId.get(model.id), draft.api),
   );
@@ -276,10 +290,10 @@ export function toRuntimeConfig(raw: Record<string, unknown>): {
                   cacheWrite: Number((model.cost as { cacheWrite?: unknown }).cacheWrite) || 0,
                 }
               : { ...ZERO_COST },
-          ...(typeof raw.api === "string" && raw.api
-            ? { api: raw.api }
-            : typeof model.api === "string"
-              ? { api: model.api }
+          ...(typeof model.api === "string" && model.api
+            ? { api: model.api }
+            : typeof raw.api === "string" && raw.api
+              ? { api: raw.api }
               : {}),
           ...(model.compat && typeof model.compat === "object" ? { compat: model.compat } : {}),
         },
@@ -288,7 +302,7 @@ export function toRuntimeConfig(raw: Record<string, unknown>): {
   };
 }
 
-/** 渠道 api 是请求格式。模型项上不同的 api 改成渠道的，Pi 才不会改走别的协议。 */
+/** 没写 api 的模型补上渠道格式。已经写成别的驱动的不动。 */
 export function alignProviderModelApi(file: ModelsJsonFile): { file: ModelsJsonFile; changed: boolean } {
   let changed = false;
   const providers: NonNullable<ModelsJsonFile["providers"]> = {};
@@ -303,7 +317,7 @@ export function alignProviderModelApi(file: ModelsJsonFile): { file: ModelsJsonF
     const nextModels = models.map((entry) => {
       if (!entry || typeof entry !== "object") return entry;
       const model = entry as Record<string, unknown>;
-      if (model.api === api) return entry;
+      if (typeof model.api === "string" && model.api) return entry;
       modelsChanged = true;
       return { ...model, api };
     });

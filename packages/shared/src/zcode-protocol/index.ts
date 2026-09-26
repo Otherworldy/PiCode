@@ -2048,6 +2048,7 @@ const zcodePiProviderModelDraftSchema = z
     thinkingLevels: z.array(z.string().min(1)).optional(),
     defaultThinkingLevel: z.string().min(1).optional(),
     input: z.array(z.enum(["text", "image"])).optional(),
+    api: z.string().min(1).optional(),
   })
   .strict();
 const zcodePiProviderModelViewSchema = z
@@ -2060,6 +2061,7 @@ const zcodePiProviderModelViewSchema = z
     thinkingLevels: z.array(z.string()),
     defaultThinkingLevel: z.string().optional(),
     input: z.array(z.enum(["text", "image"])),
+    api: z.string().optional(),
   })
   .strict();
 const zcodePiDiscoveredModelSchema = z
@@ -2099,6 +2101,7 @@ export const zcodePiModelsMutateResultSchema = z
         baseUrl: z.string(),
         api: z.string(),
         hasApiKey: z.boolean(),
+        apiKey: z.string().optional(),
         models: z.array(zcodePiProviderModelViewSchema),
       }),
     ),

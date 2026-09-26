@@ -3,6 +3,7 @@
  */
 import { $getRoot, $getSelection, $isRangeSelection, $isTextNode } from "lexical";
 import {
+  isPiProcessSlashCommand,
   TUI_ONLY_PI_SLASH_COMMANDS,
   type AgentSummary,
   type Locale,
@@ -96,7 +97,12 @@ export function buildSlashSuggestions(commands: ZCodeSlashCommand[]): PromptInpu
     // CLI catalog 丢失时仍会显示部分命令，掩盖 `/init` 与自定义命令缺失。命令发现
     // 统一以 CLI protocol catalog 为权威，UI 不再追加命令或维护内建白名单。
     // 终端命令和 Pi 的 skill: 命令不进命令区：技能已经在技能分组里。
-    if (!value || TUI_ONLY_PI_SLASH_COMMANDS.has(value.toLowerCase()) || value.toLowerCase().startsWith("skill:")) {
+    if (
+      !value ||
+      TUI_ONLY_PI_SLASH_COMMANDS.has(value.toLowerCase()) ||
+      value.toLowerCase().startsWith("skill:") ||
+      isPiProcessSlashCommand(value)
+    ) {
       return [];
     }
     return [

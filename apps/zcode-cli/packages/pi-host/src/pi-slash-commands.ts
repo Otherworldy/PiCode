@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
-import { TUI_ONLY_PI_SLASH_COMMANDS } from "@zcode/shared";
+import { isPiProcessSlashCommand, TUI_ONLY_PI_SLASH_COMMANDS } from "@zcode/shared";
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
 import type { PiSlashCommandView } from "./types.js";
 
@@ -55,7 +55,13 @@ export function assemblePiSlashCommands(parts: PiSlashCommandParts): PiSlashComm
     ...parts.templates.map((command) => toView(command, "custom")),
     ...parts.extensions.map((command) => toView(command, "extension")),
   ].filter((command) => {
-    if (taken.has(command.name) || command.name.startsWith("skill:")) return false;
+    if (
+      taken.has(command.name) ||
+      command.name.startsWith("skill:") ||
+      isPiProcessSlashCommand(command.name)
+    ) {
+      return false;
+    }
     taken.add(command.name);
     return true;
   });

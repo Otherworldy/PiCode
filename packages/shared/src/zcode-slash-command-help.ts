@@ -6,6 +6,12 @@ export type BuiltinZCodeSlashCommandHelpEntry = {
   usage: string;
 };
 
+/** pi-processes 的 TUI 命令。查看和停止在状态面板里做。 */
+export function isPiProcessSlashCommand(name: string): boolean {
+  const normalized = name.trim().replace(/^\/+/, "").toLowerCase();
+  return normalized === "ps" || normalized.startsWith("ps:");
+}
+
 /** Pi 内置命令里只在终端里有界面的那些。GUI 不展示，打出来也不发给模型。 */
 export const TUI_ONLY_PI_SLASH_COMMANDS = new Set([
   "settings",

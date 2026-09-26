@@ -106,7 +106,7 @@ SDK 来源是 `AppSettings.piSdkSource`。缺省 `builtin`，用打进 `zcode.cj
 
 **目录所有者：** Pi `ModelRuntime.getAvailableSnapshot()`。CLI 在 `workspace/readPresentation` 上行目录；Host `IModelSelectionService` 只投影这份目录，不再用 ZCode Provider Registry 当聊天/设置页候选。投影必须把 `getView(input.selection)` 写成 `effectiveSelection`，否则 Composer 触发器拿不到当前草稿模型。Composer 与设置「模型设置」共用该视图。`switchModelConfig` 走 `session.setModel`。空闲时输入框里的模型属于下一次提交，在 `prompt` 或 steer 之前写入。会话已经在跑时，输入框一切模型或思考档位就立刻 `setModel`：已经发出的那次请求不中断，同一轮里的下一次模型请求用新的。排队项仍带着入队时的选择，出队再换。
 
-设置页通过 `pi/models` 读写 `~/.pi/agent/models.json`（apiKey 只写不读）和 `settings.json` 默认模型；保存后 `registerProvider`/`unregisterProvider` 更新活着的 `ModelRuntime`。渠道的 `api` 是请求格式。模型项上另写的 `api` 在保存和进程启动时改成渠道的，避免设置是 responses、请求却走 anthropic。壳不另写 ZCode 供应商库。ZCode 账号登录、升级套餐、Coding Plan 额度不再作为产品面。
+设置页通过 `pi/models` 读写 `~/.pi/agent/models.json`（apiKey 明文回读，输入框不脱敏；保存时空字符串清掉密钥，请求不带 `apiKey` 则保留原值）和 `settings.json` 默认模型；保存后 `registerProvider`/`unregisterProvider` 更新活着的 `ModelRuntime`。渠道的 `api` 是默认请求格式。模型项没写 `api` 时补成渠道的；写成另一种驱动时保留，运行时用模型项上的 `api`。壳不另写 ZCode 供应商库。ZCode 账号登录、升级套餐、Coding Plan 额度不再作为产品面。
 
 设置页「使用统计」只恢复应用用量。事实源是本机 Pi 会话 jsonl：`~/.pi/agent/sessions` 和旧的 `~/.zcode/pi-host-sessions`，含子目录里的子会话。只读，不写回旧 usage 表。每个文件只计当前叶子；分叉抄来的同一条消息按 id 只计一次。时间窗外的消息不计。Pi 的 `input` 不含缓存，汇总时把 cache 加进 input，命中率才不会超过 1。没有首 token 耗时和工具耗时，这两项留空。
 
@@ -122,20 +122,29 @@ SDK 来源是 `AppSettings.piSdkSource`。缺省 `builtin`，用打进 `zcode.cj
 
 SSH 工作区不部署远端 zcode-server，也不从 ZCode CDN 下载或上传运行时。状态所有者仍是本机 Pi：模型读本机 `~/.pi/agent`，会话 jsonl 写在本机。窗口 Host 只记住该 workspace identity 对应的 SSH 目标（别名优先，否则 `user@host` 加端口），并在拉起本机 agent 时放进 `ZCODE_SSH_REMOTE`。这个进程里的 read / write / edit / bash / ls / grep / find 经系统 `ssh` 作用在远端路径上。Pi 在 Windows 上会把远端路径 resolve 成盘符路径；会话提示改回远端 posix 路径，命令里的盘符前缀在执行前换回去。bash 的 timeout 按秒计。会话 jsonl 按 workspace identity 分目录，侧栏才能列出来；目录选择的默认路径是远端 `/home`。密码和私钥不进环境变量；认证失败就失败，不回退到远端安装。WSL 和 Docker 仍走原来的远端 server。
 
-编辑供应商是双面板：左侧发现/勾选模型，右侧为每个已选模型写 Pi 原生字段。状态所有者仍是 `models.json`，不另建一套绑定表。
+编辑供应商是两步弹窗：第一步写名称、ID、端点、密钥和渠道 `api`；第二步是单列模型卡片，可从端点拉取或手填模型 ID。状态所有者仍是 `models.json`，不另建一套绑定表。已有供应商的 ID 不可改。
 
 |界面|落盘（Pi `models.json` 模型项）|
 |---|---|
 |别名|`name`|
+|API 格式|跟随渠道则写成渠道 `api`；选了别的驱动则写模型项 `api`|
 |上下文窗口|`contextWindow`|
 |最大输出|`maxTokens`|
 |图片输入|`input` 含 `image`|
 |启用的思考等级|`thinkingLevelMap` 的 key；已有 value（含自定义 mapping）保留|
-|默认思考等级|附加字段 `defaultThinkingLevel`，仅设置页回显；`ModelRuntime` 不消费|
+|默认思考等级|向导不编辑。文件里已有的 `defaultThinkingLevel` 原样保留；`ModelRuntime` 不消费|
 
-测试连接复用 `discover`（`GET {baseUrl}/models`），不走旧 ZCode `testModelConnectivity`。不做拖拽排序、高级 Headers/超时、子智能体可用、PDF 能力——Pi schema 没有对应字段。
+测试连接复用 `discover`（`GET {baseUrl}/models`），不走旧 ZCode `testModelConnectivity`。不做拖拽排序、思考格式、自定义 Headers、超时、子智能体可用、PDF 能力——这些不进设置页。`compat` 等文件里已有的字段保存时原样留下。
 
 测试可仍传 `stream`/`delegate` 走隔离 `InMemoryCredentialStore` + `zcode-delegate`，不碰磅真实 Pi 凭证。
+
+## Pi 进程
+
+长驻命令的主人是 Pi 插件 `pi-processes`，不是旧的后台 bash。加载扩展的会话会挂一个隐藏 inline extension，只听 `processes:changed`，把仍在跑的进程写成 `backgroundWorks`：`kind` 仍是 `bash`，`workId` 前缀是 `pi-process:`。状态面板里已有的「终端」列表、日志侧栏和停止按钮因此能用，不必再打 `/ps` 或 `/ps:kill`。
+
+停止这个前缀只发插件的 `processes:command:kill`，不调用 `session.abort()`。日志走原来的 `readBackgroundBashOutput`，读插件的合并输出；侧栏仍按一秒轮询，跑着就继续读。进程结束就离开列表，不写入会话 jsonl。
+
+`/ps` 和 `ps:` 开头的命令是 Pi TUI 的。GUI 不展示，打出来也不发给模型。模型继续用插件的 `process` 工具。没装这个插件时列表为空，停止和读日志都当不存在。SSH 工作区里插件起的是本机进程，不是远端 shell；远端命令仍走现有的 ssh bash。
 
 ## 明确不做
 

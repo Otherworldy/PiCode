@@ -12,6 +12,7 @@ test("pi slash commands keep gui builtins, then prompts, then extensions", () =>
       { name: "compact", description: "hidden by builtin" },
       { name: "subagents", description: "Run subagents" },
       { name: "skill:ponytail", description: "skill is not a command" },
+      { name: "ps:kill", description: "tui process kill" },
     ],
   });
   const names = commands.map((command) => command.name);
@@ -21,6 +22,7 @@ test("pi slash commands keep gui builtins, then prompts, then extensions", () =>
   assert.equal(names.includes("new"), false);
   assert.equal(names.includes("resume"), false);
   assert.equal(names.includes("skill:ponytail"), false);
+  assert.equal(names.includes("ps:kill"), false);
   assert.ok(names.indexOf("compact") < names.indexOf("ship"));
   assert.ok(names.indexOf("ship") < names.indexOf("subagents"));
   assert.equal(commands.find((command) => command.name === "ship")?.source, "custom");

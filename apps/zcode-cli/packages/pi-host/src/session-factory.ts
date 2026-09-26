@@ -2,6 +2,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CreateAgentSessionOptions, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
+import { createPiProcessBridge } from "./pi-process-bridge.js";
 import { applyZcodePluginPlan, zcodePluginLoaderExtras } from "./pi-plugins.js";
 import { listSessionSlashCommands } from "./pi-slash-commands.js";
 import { toPiSkillView } from "./pi-skills.js";
@@ -19,7 +20,7 @@ import {
   type DelegateProvider,
   type ZCodeModelStreamPort,
 } from "./model-delegate.js";
-import { readProcessSshRemoteSpec, sshCodingToolOptions, sshSearchText } from "./ssh-remote.js";
+import { readProcessSshRemoteSpec, sshCodingToolOptions, sshSearchText, sshWorkspacePrompt } from "./ssh-remote.js";
 import { asPiEvent, type CreatePiSession, type PiSessionPort } from "./types.js";
 import {
   alignStoredModelApi,
@@ -231,18 +232,14 @@ export function createSdkSessionFactory(options: {
     const pluginExtras = !isolated && input.loadExtensions
       ? await zcodePluginLoaderExtras(input.cwd, agentDir, options.skillPaths?.(input.cwd) ?? [])
       : undefined;
+    const processes = !isolated && input.loadExtensions ? createPiProcessBridge() : undefined;
     const resourceLoader = new (piCoding().DefaultResourceLoader)({
       cwd: input.cwd,
       agentDir,
       settingsManager,
       ...(pluginExtras?.loader ?? { additionalSkillPaths: options.skillPaths?.(input.cwd) ?? [] }),
-      ...(ssh
-        ? {
-            appendSystemPrompt: [
-              `This session is an SSH workspace on a remote POSIX host. The working directory is ${ssh.remotePath}. Use POSIX paths and a POSIX shell. Do not use cmd, PowerShell, or Windows drive paths.`,
-            ],
-          }
-        : {}),
+      ...(processes ? { extensionFactories: processes.factories } : {}),
+      ...(ssh ? { appendSystemPrompt: [sshWorkspacePrompt(ssh)] } : {}),
     });
     await resourceLoader.reload();
     if (pluginExtras) applyZcodePluginPlan(resourceLoader, pluginExtras.plan);
@@ -343,6 +340,10 @@ export function createSdkSessionFactory(options: {
       steer: (text) => session.steer(text),
       followUp: (text) => session.followUp(text),
       abort: () => session.abort(),
+      subscribeManagedProcesses: (listener) => processes?.subscribe(listener) ?? (() => undefined),
+      killManagedProcess: (id: string) => processes?.kill(id) ?? Promise.resolve(false),
+      readManagedProcessOutput: (workId: string) =>
+        processes?.output(workId) ?? Promise.resolve({ kind: "unavailable" as const, workId }),
       compact: async () => {
         await session.compact();
       },

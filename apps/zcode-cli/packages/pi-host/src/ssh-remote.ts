@@ -33,6 +33,10 @@ export function readProcessSshRemoteSpec(workspacePath: string): SshRemoteSpec |
   return parsed;
 }
 
+export function sshWorkspacePrompt(spec: SshRemoteSpec): string {
+  return `This session is an SSH workspace on a remote POSIX host. The working directory is ${spec.remotePath}. Use POSIX paths and a POSIX shell. Do not use cmd, PowerShell, or Windows drive paths.`;
+}
+
 /** 模型跟着 Windows cwd 写出的盘符路径，执行前换回远端 posix。 */
 export function rewriteRemoteCommand(command: string, remoteRoot: string): string {
   const root = remoteRoot.replaceAll("\\", "/").replace(/\/+$/u, "") || "/";

@@ -1,3 +1,5 @@
+import type { BackgroundBashOutputResult } from "@zcode/shared";
+import type { BackgroundWorkSummary } from "@zcode/shared/zcode-protocol-v4";
 import type { ToolPermissionCheck } from "./permission-gate.js";
 
 export type PiThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
@@ -141,6 +143,10 @@ export interface PiSessionPort {
   steer(text: string): Promise<void>;
   followUp(text: string): Promise<void>;
   abort(): Promise<void>;
+  /** pi-processes 列表变化。没装插件时列表一直是空的。 */
+  subscribeManagedProcesses?(listener: (works: BackgroundWorkSummary[]) => void): () => void;
+  killManagedProcess?(id: string): Promise<boolean>;
+  readManagedProcessOutput?(workId: string): Promise<BackgroundBashOutputResult>;
   compact(): Promise<void>;
   /** Pi `getContextUsage()`。tokens 未知时 used 为 0。 */
   contextUsage?(): { used: number; max: number } | null;

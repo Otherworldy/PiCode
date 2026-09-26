@@ -44,6 +44,8 @@ export interface HostedSession {
   prompt(text: string): Promise<boolean>;
   waitTurn(): Promise<void>;
   abort(): Promise<void>;
+  cancelManagedProcess(workId: string): Promise<"killed" | "missing" | "unrelated">;
+  readManagedProcessOutput(workId: string): Promise<import("@zcode/shared").BackgroundBashOutputResult>;
   compact(): Promise<void>;
   navigateTree(targetId: string): Promise<void>;
   branchFrom?(entryId: string): { sessionId: string; sessionFile: string };
@@ -580,6 +582,10 @@ export class HostSessionRegistry {
       clearInterval(subagentPoll);
       subagentPoll = undefined;
     };
+    const unsubscribeProcesses =
+      pi.subscribeManagedProcesses?.((works) => {
+        emit(projector.replaceManagedProcesses(works));
+      }) ?? (() => undefined);
     const unsubscribe = pi.subscribe((event: PiHostEvent) => {
       try {
         if (event.type === "extension_ui_request") {
@@ -642,6 +648,13 @@ export class HostSessionRegistry {
         projector.markAborted();
         await pi.abort();
       },
+      cancelManagedProcess: async (workId) => {
+        const id = workId.startsWith("pi-process:") ? workId.slice("pi-process:".length) : "";
+        if (!id) return "unrelated";
+        return (await pi.killManagedProcess?.(id)) ? "killed" : "missing";
+      },
+      readManagedProcessOutput: (workId) =>
+        pi.readManagedProcessOutput?.(workId) ?? Promise.resolve({ kind: "unavailable", workId }),
       compact: () => pi.compact(),
       setModel: async (provider, modelId, thought) => {
         await applyModel({ providerId: provider, modelId, thought });
@@ -699,6 +712,7 @@ export class HostSessionRegistry {
       dispose: () => {
         if (subagentTimer) clearTimeout(subagentTimer);
         stopSubagentPoll();
+        unsubscribeProcesses();
         unsubscribe();
         pi.dispose();
       },

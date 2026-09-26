@@ -9,7 +9,7 @@ import {
   type ModelsJsonFile,
 } from "./model-config-file.js";
 
-test("upsert keeps extra model fields and masks api keys in the view", () => {
+test("upsert keeps extra model fields and returns the api key", () => {
   const file: ModelsJsonFile = {
     providers: {
       lens: {
@@ -46,7 +46,7 @@ test("upsert keeps extra model fields and masks api keys in the view", () => {
   assert.equal(next.providers?.lens?.apiKey, "secret-key");
   const view = toPiModelConfigView(next);
   assert.equal(view.providers[0]?.hasApiKey, true);
-  assert.equal(JSON.stringify(view).includes("secret-key"), false);
+  assert.equal(view.providers[0]?.apiKey, "secret-key");
   assert.equal(view.providers[0]?.models.length, 2);
 });
 
@@ -107,19 +107,35 @@ test("upsert writes per-model limits and keeps thinkingLevelMap values", () => {
   assert.equal(glm.api, "openai-responses");
 });
 
-test("provider api replaces a stale per-model api", () => {
+test("missing model api inherits the provider; an override is kept", () => {
   const file: ModelsJsonFile = {
     providers: {
       lens: {
         api: "openai-responses",
-        models: [{ id: "glm-5.3-flash", api: "anthropic-messages" }],
+        models: [{ id: "plain" }, { id: "claude", api: "anthropic-messages" }],
       },
     },
   };
   const aligned = alignProviderModelApi(file);
-  const model = aligned.file.providers?.lens?.models?.[0] as { api?: string } | undefined;
+  const models = aligned.file.providers?.lens?.models as Array<{ id: string; api?: string }>;
   assert.equal(aligned.changed, true);
-  assert.equal(model?.api, "openai-responses");
+  assert.equal(models[0]?.api, "openai-responses");
+  assert.equal(models[1]?.api, "anthropic-messages");
   const runtime = toRuntimeConfig(file.providers?.lens ?? {});
   assert.equal(runtime.models[0]?.api, "openai-responses");
+  assert.equal(runtime.models[1]?.api, "anthropic-messages");
+  const saved = upsertProvider(
+    { providers: {} },
+    {
+      id: "mix",
+      baseUrl: "https://example.test/v1",
+      api: "openai-completions",
+      models: [{ id: "claude", api: "anthropic-messages" }, { id: "gpt" }],
+    },
+  );
+  const mix = saved.providers?.mix?.models as Array<{ api?: string }>;
+  assert.equal(mix[0]?.api, "anthropic-messages");
+  assert.equal(mix[1]?.api, "openai-completions");
+  const view = toPiModelConfigView(saved);
+  assert.equal(view.providers[0]?.models[0]?.api, "anthropic-messages");
 });

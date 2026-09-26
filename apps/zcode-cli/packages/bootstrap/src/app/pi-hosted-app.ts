@@ -397,7 +397,13 @@ export function createPiHostedApp(
     async close() {
       hosted.dispose();
     },
+    async readBackgroundBashOutput(workId: string) {
+      return hosted.readManagedProcessOutput(workId);
+    },
     async cancelBackgroundTask(workId: string) {
+      const managed = await hosted.cancelManagedProcess(workId);
+      if (managed === "killed") return {};
+      if (managed === "missing") return { reason: "not_found" as const };
       if (options.abortWork) {
         const ok = await options.abortWork(workId);
         if (!ok) return { reason: "not_found" as const };
