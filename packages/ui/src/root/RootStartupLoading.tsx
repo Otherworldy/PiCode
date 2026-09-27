@@ -24,11 +24,7 @@ export function RootStartupLoading({ label, children, busy = true }: RootStartup
   );
 }
 
-/** 初始化与引导共用品牌图标，保持底色、描边、圆角和标志比例一致。 */
+/** 启动与引导共用品牌标志，透明底，不再套深色底板。 */
 export function ZCodeStartupLogoBadge({ animated: _animated = true }: { animated?: boolean }) {
-  return (
-    <div className="relative flex size-24 items-center justify-center rounded-3xl bg-[linear-gradient(180deg,#000000_0%,#151718_100%)] text-[#ffffff] shadow-xl/20 before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] before:border before:border-[rgba(255,255,255,0.1)] before:content-['']">
-      <img src={piLogoUrl} alt="" className="size-14" draggable={false} />
-    </div>
-  );
+  return <img src={piLogoUrl} alt="" className="size-16" draggable={false} />;
 }
