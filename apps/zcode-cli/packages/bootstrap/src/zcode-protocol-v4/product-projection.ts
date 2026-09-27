@@ -505,12 +505,12 @@ export class ProductProjection {
       this.snapshot = { ...this.snapshot, seq };
       return;
     }
-    const previousRowsLength = this.snapshot.rows.window.length;
-    this.snapshot = {
-      ...applyConversationDeltas(this.snapshot, deltas),
-      seq,
-    };
-    this.updateRowIndexAfterImmutableApply(previousRowsLength, deltas);
+    // 冷恢复一次灌入全部历史 delta。逐条复制 window 会把打开拖死。
+    applyConversationDeltasMutable(
+      { snapshot: this.snapshot, rowIndexById: this.rowIndexById },
+      deltas,
+    );
+    this.snapshot.seq = seq;
     this.indexPiHostRows();
   }
 

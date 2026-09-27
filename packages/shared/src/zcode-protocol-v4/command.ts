@@ -154,6 +154,9 @@ export const commandPayloadSchemas = {
     attachments: z.array(attachmentRefSchema).optional(),
     // 缺省 preserve：仅切 conversation branch；rewind 会先安全恢复该轮文件。
     workspaceMode: z.enum(["preserve", "rewind"]).optional(),
+    // 缺省沿用该轮最初的模型。输入框已经换过模型时，重发必须带当前选择，
+    // 否则会把 session 模型盖回旧轮。
+    modelSelection: modelSelectionSchema.optional(),
   }),
   retryTurn: z.object({ target: conversationRowTargetSchema }),
   setAssistantFeedback: z.object({

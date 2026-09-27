@@ -10,6 +10,7 @@ import type {
   TurnStartedPayload,
 } from "@zcode/contracts";
 import type {
+  ConversationRow,
   GoalState,
   TimelineMarkerPayload,
   ToolOutput,
@@ -159,23 +160,58 @@ export function mapGoalStatus(status: GoalStatus): GoalState["status"] {
 
 // 终态截断全档统一：head+tail 各 32K，超出部分以 truncated.ref 按需拉取。
 // 阶段 ref 先用 toolCallId 占位（artifact 存取属传输外壳期）。
+function capUtf8Text(text: string): { text: string; totalBytes: number; truncated: boolean } {
+  const headBytes = PROTOCOL_V4_LIMITS.toolOutputFinalHeadBytes;
+  const tailBytes = PROTOCOL_V4_LIMITS.toolOutputFinalTailBytes;
+  const totalBytes = Buffer.byteLength(text, "utf8");
+  if (totalBytes <= headBytes + tailBytes) return { text, totalBytes, truncated: false };
+  const buffer = Buffer.from(text, "utf8");
+  const head = buffer.subarray(0, headBytes).toString("utf8");
+  const tail = buffer.subarray(buffer.length - tailBytes).toString("utf8");
+  return { text: `${head}\n…\n${tail}`, totalBytes, truncated: true };
+}
+
 export function buildToolOutput(result: ToolResultPayload, toolCallId: string): ToolOutput {
   const text = result.content;
   // 模型可见文本只保留图片占位符，若 V4 output 不独立携带 display，
   // 实时投影和冷恢复都会丢失 CUA 截图。Node REPL 图片仍走 ToolCallRow.display 专用通道。
   const display = result.display?.kind === "node_repl_images" ? undefined : result.display;
-  const headBytes = PROTOCOL_V4_LIMITS.toolOutputFinalHeadBytes;
-  const tailBytes = PROTOCOL_V4_LIMITS.toolOutputFinalTailBytes;
-  const totalBytes = Buffer.byteLength(text, "utf8");
-  if (totalBytes <= headBytes + tailBytes) {
-    return { text, ...(display ? { display } : {}) };
-  }
-  const buffer = Buffer.from(text, "utf8");
-  const head = buffer.subarray(0, headBytes).toString("utf8");
-  const tail = buffer.subarray(buffer.length - tailBytes).toString("utf8");
+  const capped = capUtf8Text(text);
+  if (!capped.truncated) return { text, ...(display ? { display } : {}) };
   return {
-    text: `${head}\n…\n${tail}`,
+    text: capped.text,
     ...(display ? { display } : {}),
-    truncated: { totalBytes, ref: `tool-output/${toolCallId}` },
+    truncated: { totalBytes: capped.totalBytes, ref: `tool-output/${toolCallId}` },
   };
+}
+
+/**
+ * 下发到页面的工具行只留 head+tail。宿主投影仍保留全文，文件回滚继续读原文。
+ * 长会话尾窗里若带上完整工具输出，订阅帧会超过 16MB，会话打不开。
+ */
+export function capRowForWire(row: ConversationRow): ConversationRow {
+  if (row.kind !== "toolCall") return row;
+  let next = row;
+  const input = capUtf8Text(row.inputText);
+  if (input.truncated) next = { ...next, inputText: input.text };
+  const output = row.output;
+  if (output?.text && !output.truncated) {
+    const capped = capUtf8Text(output.text);
+    if (capped.truncated) {
+      next = {
+        ...next,
+        output: {
+          ...output,
+          text: capped.text,
+          truncated: { totalBytes: capped.totalBytes, ref: `tool-output/${row.toolCallId}` },
+        },
+      };
+    }
+  }
+  const error = row.error;
+  if (error?.message) {
+    const message = capUtf8Text(error.message);
+    if (message.truncated) next = { ...next, error: { ...error, message: message.text } };
+  }
+  return next;
 }

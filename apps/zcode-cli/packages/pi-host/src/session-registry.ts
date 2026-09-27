@@ -494,7 +494,7 @@ export class HostSessionRegistry {
     const emit = (deltas: ConversationDelta[]) => {
       if (deltas.length === 0) return;
       if (deltaListeners.size === 0) {
-        pendingDeltas.push(...deltas);
+        for (const delta of deltas) pendingDeltas.push(delta);
         return;
       }
       for (const listener of deltaListeners) listener(deltas);
@@ -718,7 +718,7 @@ export class HostSessionRegistry {
       },
       hydrateHistory: (content) => {
         const parsed = readPiJsonl(content);
-        for (const event of parsed.events) emit(projector.apply(event));
+        emit(projector.replay(parsed.events));
         if (parsed.summary?.title) emit(projector.setTitle(parsed.summary.title, "generated"));
         void publishSubagents();
       },

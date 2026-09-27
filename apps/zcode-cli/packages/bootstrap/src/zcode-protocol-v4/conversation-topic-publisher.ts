@@ -44,6 +44,7 @@ import {
   type SessionSubagentsSeed,
   type SessionUsageSeed,
 } from "./product-projection.js";
+import { capRowForWire } from "./projection-rows.js";
 import type { TopicFrameReservation } from "./topic-frame-reservation.js";
 
 interface LogEntry {
@@ -311,10 +312,12 @@ export class ConversationTopicPublisher {
       },
     };
     const limit = PROTOCOL_V4_LIMITS.snapshotTailWindowRows;
-    if (visibleRows.length <= limit) return visibleSnapshot;
+    const window = (visibleRows.length <= limit ? visibleRows : visibleRows.slice(-limit)).map(
+      capRowForWire,
+    );
     return {
       ...visibleSnapshot,
-      rows: { ...visibleSnapshot.rows, window: visibleRows.slice(-limit) },
+      rows: { ...visibleSnapshot.rows, window },
     };
   }
 
@@ -410,7 +413,7 @@ export class ConversationTopicPublisher {
       params.beforeRowId === undefined
         ? visibleRows
         : visibleRows.filter((row) => row.rowId < (params.beforeRowId as number));
-    const rows = eligible.slice(-limit);
+    const rows = eligible.slice(-limit).map(capRowForWire);
     return {
       rows,
       atSeq: snapshot.seq,

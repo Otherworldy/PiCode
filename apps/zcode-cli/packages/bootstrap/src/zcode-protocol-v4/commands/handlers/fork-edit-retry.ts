@@ -4,6 +4,7 @@
 // - editUserQuery = 换文本的 retryTurn：rewind 截断该 turn → 原生 prompt turn 重发新文本。
 // - retryTurn = rewind 截断 + 重发原 user prompt（原文必须在 rewind 前解析，截断后拿不到）。
 // - forkAssistant = stable resolver + conversation-only copy；running parent 与 workspace 不动。
+import type { ModelSelection } from "@zcode/shared";
 import type {
   CommandEnvelope,
   CommandPayloadMap,
@@ -218,6 +219,7 @@ async function editUserQuery(
       payload.newText,
       attachmentRefs,
       attachments,
+      payload.modelSelection,
     );
   } catch (error) {
     // rewind 之后的 snapshot/重发失败都会把旧行留在截断态。jsonl 还在就画回去。
@@ -356,6 +358,8 @@ async function startCanonicalIntent(
   text: string,
   attachmentRefs: ReturnType<typeof stableAttachmentRefs>,
   attachments: Awaited<ReturnType<typeof mapAttachmentRefsToTurnAttachments>>,
+  // 编辑重发：输入框当前模型优先。不传则保持原轮模型（retry 与旧客户端）。
+  modelSelection?: ModelSelection,
 ): Promise<void> {
   const intent = inputIntentMetadataFromCanonical(
     envelope,
@@ -368,7 +372,7 @@ async function startCanonicalIntent(
       requestedDelivery: editTarget.intent.requestedDelivery,
       admittedDelivery: editTarget.intent.admittedDelivery,
       fallbackReasonCode: editTarget.intent.fallbackReasonCode,
-      modelSelection: editTarget.intent.modelSelection,
+      modelSelection: modelSelection ?? editTarget.intent.modelSelection,
       mode: editTarget.intent.mode,
       planEnabled: editTarget.intent.planEnabled,
       attachmentRefs,

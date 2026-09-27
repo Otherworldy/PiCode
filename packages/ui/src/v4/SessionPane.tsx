@@ -3057,12 +3057,19 @@ export function SessionPane({
         logger.warn("[v4-pane] edit 跳过：行内编辑内容为空且无附件");
         return false;
       }
+      const draftSelection = draftConfigRef.current.modelSelection;
+      const submission = createComposerSubmissionConfig(draftConfigRef.current, modelSelectionView);
       const ack = await dispatchCommand(
         "editUserQuery",
         {
           target,
           newText,
           workspaceMode,
+          // 空闲切模型只写在输入框草稿里，不会先改 session。重发不带当前选择时，
+          // CLI 会套回该轮最初的模型。
+          ...(draftSelection?.providerId && draftSelection.modelId && submission
+            ? { modelSelection: submission.modelSelection }
+            : {}),
           // editUserQuery 的 attachments 缺省表示保留 canonical 原附件；
           // 只有显式透传 []，CLI 才能区分“用户删除全部”与“调用方未修改附件”。
           ...(attachments ? { attachments: [...attachments] } : {}),
@@ -3078,7 +3085,7 @@ export function SessionPane({
       // fork ACK 只做旧协议解码兼容；新 edit 永不导航 child。blocked 由行内冲突弹窗处理。
       return ack;
     },
-    [dispatchCommand, sessionId],
+    [dispatchCommand, draftConfigRef, modelSelectionView, sessionId],
   );
 
   const dispatchRetryTurn = useCallback(
@@ -4777,8 +4784,6 @@ export function SessionPane({
               canLoadOlder={timelineSnapshot ? hasOlderRows(timelineSnapshot) : false}
               loadingOlder={timelineSnapshot ? state.loadingOlder : false}
               onLoadOlder={handleLoadOlder}
-              onLoadAllOlder={handleLoadAllOlder}
-              turnNavigatorDirectoryRevision={state.turnNavigatorDirectoryRevision}
               bottomDock={conversationBottomDock}
               hideTurnNavigator={shareActive && shareInSelectionStage}
               backgroundScrollLocked={resolveConversationShareBackgroundScrollLocked({

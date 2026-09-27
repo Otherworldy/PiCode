@@ -1,5 +1,6 @@
 import {
   applyConversationDeltas,
+  applyConversationDeltasMutable,
   DELIVERY_PROFILES,
   type ConversationDelta,
   type ConversationRow,
@@ -76,6 +77,7 @@ export class PiToV4Projector {
   private streamingReasoningRowId: number | null = null;
   private readonly toolRowId = new Map<string, number>();
   private readonly toolArgs = new Map<string, string>();
+  private readonly rowIndexById = new Map<number, number>();
   private aborted = false;
   private seq = 0;
   private assistantMessageId?: string;
@@ -103,17 +105,24 @@ export class PiToV4Projector {
   apply(event: PiHostEvent): ConversationDelta[] {
     const reduced = this.reduce(event);
     if (reduced.length === 0) return [];
-    this.seq += 1;
-    let withSeq = this.attachRevision(reduced);
-    this.snapshot = { ...applyConversationDeltas(this.snapshot, withSeq), seq: this.seq };
+    const withSeq = this.commit(reduced);
     const actions = this.syncActions();
-    if (actions.length > 0) {
-      this.seq += 1;
-      const extra = this.attachRevision(actions);
-      this.snapshot = { ...applyConversationDeltas(this.snapshot, extra), seq: this.seq };
-      withSeq = [...withSeq, ...extra];
+    return actions.length === 0 ? withSeq : [...withSeq, ...this.commit(actions)];
+  }
+
+  /**
+   * 历史重放。每条事件都 syncActions 会扫整窗，3 万行的会话打开时主线程一直不回来。
+   * 行先按事件落完，actions 只在最后算一次。
+   */
+  replay(events: readonly PiHostEvent[]): ConversationDelta[] {
+    const deltas: ConversationDelta[] = [];
+    for (const event of events) {
+      const reduced = this.reduce(event);
+      if (reduced.length === 0) continue;
+      for (const delta of this.commit(reduced)) deltas.push(delta);
     }
-    return withSeq;
+    for (const delta of this.commit(this.syncActions())) deltas.push(delta);
+    return deltas;
   }
 
   truncateFrom(entityId: string): ConversationDelta[] {
@@ -141,9 +150,7 @@ export class PiToV4Projector {
     this.toolArgs.clear();
     this.aborted = false;
     const cleared = this.commit([{ op: "row.removed", fromRowId: 1 }]);
-    const rest: ConversationDelta[] = [];
-    for (const event of events) rest.push(...this.apply(event));
-    return [...cleared, ...rest];
+    return cleared.concat(this.replay(events));
   }
 
   markTurnFilesReverted(turnId: string): ConversationDelta[] {
@@ -179,7 +186,12 @@ export class PiToV4Projector {
     if (deltas.length === 0) return [];
     this.seq += 1;
     const withSeq = this.attachRevision(deltas);
-    this.snapshot = { ...applyConversationDeltas(this.snapshot, withSeq), seq: this.seq };
+    // 原地写入。按条复制 window 的话，长历史重放是 O(n²)，会话打不开。
+    applyConversationDeltasMutable(
+      { snapshot: this.snapshot, rowIndexById: this.rowIndexById },
+      withSeq,
+    );
+    this.snapshot.seq = this.seq;
     return withSeq;
   }
 

@@ -66,35 +66,11 @@ interface ResolveConversationTurnNavigatorVisualFocusItemIndexOptions {
   interactionItemIndex: number | undefined;
 }
 
-const CONVERSATION_TURN_NAVIGATOR_MIN_WIDTH_PX = 864;
-
 export type ConversationTurnNavigatorHydrationResult =
   | { status: "hydrated"; logEpoch: string }
   | { status: "not-enough-queries"; logEpoch: string }
   | { status: "retryable-failure"; logEpoch: string }
   | { status: "stale"; logEpoch: string };
-
-export function shouldHydrateConversationTurnNavigatorDirectory(params: {
-  canLoadOlder: boolean;
-  containerWidthPx: number;
-  hasLoadHandler: boolean;
-  loadingOlder: boolean;
-}): boolean {
-  return (
-    params.canLoadOlder &&
-    !params.loadingOlder &&
-    params.hasLoadHandler &&
-    params.containerWidthPx >= CONVERSATION_TURN_NAVIGATOR_MIN_WIDTH_PX
-  );
-}
-
-export function resolveConversationTurnNavigatorHydrationRetryDelayMs(
-  failedAttemptCount: number,
-): number | null {
-  if (failedAttemptCount === 1) return 250;
-  if (failedAttemptCount === 2) return 1_000;
-  return null;
-}
 
 const DEFAULT_MAX_PREVIEW_CHARS = 220;
 const DEFAULT_MAX_PREVIEW_PARAGRAPHS = 2;

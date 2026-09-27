@@ -13,6 +13,21 @@ const sample = [
   '{"type":"message","id":"a3","timestamp":"2026-01-02T03:05:03.000Z","message":{"role":"assistant","content":[{"type":"text","text":"empty dir"}]}}',
 ].join("\n");
 
+test("replay matches per-event apply", () => {
+  const events = readPiJsonl(sample).events;
+  const stepwise = new PiToV4Projector("s1", "e1");
+  for (const event of events) stepwise.apply(event);
+  const bulk = new PiToV4Projector("s1", "e1");
+  bulk.replay(events);
+  const view = (rows: ReturnType<PiToV4Projector["getSnapshot"]>["rows"]["window"]) =>
+    rows.map((row) => ({
+      kind: row.kind,
+      text: "text" in row ? row.text : undefined,
+      actions: "actions" in row ? row.actions : undefined,
+    }));
+  assert.deepEqual(view(bulk.getSnapshot().rows.window), view(stepwise.getSnapshot().rows.window));
+});
+
 test("summarize skips header-only jsonl", () => {
   const parsed = readPiJsonl(
     '{"type":"session","timestamp":"2026-01-02T03:04:05.000Z","cwd":"C:\\\\work"}',

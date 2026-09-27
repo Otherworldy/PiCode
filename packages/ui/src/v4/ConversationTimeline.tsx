@@ -48,9 +48,6 @@ import {
 } from "@/v4/conversationTurnRenderUnits.js";
 import {
   resolveConversationTurnNavigatorActiveQueryRowId,
-  resolveConversationTurnNavigatorHydrationRetryDelayMs,
-  shouldHydrateConversationTurnNavigatorDirectory,
-  type ConversationTurnNavigatorHydrationResult,
   type ConversationTurnNavigatorQueryPosition,
   type ConversationTurnNavigatorVirtualItem,
 } from "@/v4/conversationTurnNavigatorHelpers.js";
@@ -278,14 +275,6 @@ interface ConversationTimelineProps {
   loadingOlder?: boolean;
   /** 拉取更早一窗历史（接近顶部时自动预取）。 */
   onLoadOlder?: () => Promise<void> | void;
-  /** 宽屏问题目录挂载后一次补齐当前有效分支的全部历史。 */
-  onLoadAllOlder?: () => Promise<ConversationTurnNavigatorHydrationResult>;
-  /**
-   * 问题导航目录失效代际（store turnNavigatorDirectoryRevision）。
-   * real-user query 增删后终态必须失效重探测；组件 hydration key
-   * 追加此 revision，避免同一 logEpoch 内永久拦截。
-   */
-  turnNavigatorDirectoryRevision?: number;
   /** 与旧 ChatView 对齐：composer dock 属于同一个滚动视口，sticky 到滚动容器底部。 */
   bottomDock?: ReactNode;
   /** 分享选择面板所在的共享父容器；用于把 dock 的真实位置写入同一坐标系。 */
@@ -364,8 +353,6 @@ function ConversationTimelineImpl({
   canLoadOlder = false,
   loadingOlder = false,
   onLoadOlder,
-  onLoadAllOlder,
-  turnNavigatorDirectoryRevision = 0,
   bottomDock,
   selectionPanelLayoutContainerRef,
   backgroundScrollLocked = false,
@@ -502,15 +489,7 @@ function ConversationTimelineImpl({
     viewportHeightPx: 0,
     activeQueryRowId: undefined as number | undefined,
   });
-  const [turnNavigatorContainerWidthPx, setTurnNavigatorContainerWidthPx] = useState(0);
   const turnNavigatorJumpFrameRef = useRef<number | null>(null);
-  const turnNavigatorHydrationAttemptRef = useRef<{
-    attemptCount: number;
-    key: string | null;
-    retryTimer: number | null;
-    status: "idle" | "in-flight" | "waiting" | "terminal";
-  }>({ attemptCount: 0, key: null, retryTimer: null, status: "idle" });
-  const [turnNavigatorHydrationRetryRevision, setTurnNavigatorHydrationRetryRevision] = useState(0);
   const timelineRootRef = useRef<HTMLDivElement>(null);
   const composerDockRef = useRef<HTMLDivElement>(null);
   const shareSelectionPanelLayoutRef = useRef<{
@@ -581,116 +560,6 @@ function ConversationTimelineImpl({
 
     return () => window.clearInterval(timer);
   }, [hasRunningUnit]);
-
-  useLayoutEffect(() => {
-    const element = timelineRootRef.current;
-    if (!element) return;
-
-    // rail 改由 CSS container query 隐藏后，完整历史补拉失去了同一宽度
-    // 资格边界，手机远控与窄分屏也会请求全部 rows。这里仅同步只读分页资格；
-    // rail 的显隐、占位与过渡仍完全由 CSS 裁决，不恢复 composer 几何测量。
-    const commitWidth = (width: number) => {
-      const normalizedWidth = Math.max(0, Math.round(width));
-      setTurnNavigatorContainerWidthPx((current) =>
-        current === normalizedWidth ? current : normalizedWidth,
-      );
-    };
-    const readWidth = () => commitWidth(element.clientWidth);
-    readWidth();
-
-    if (typeof ResizeObserver !== "undefined") {
-      const observer = new ResizeObserver((entries) => {
-        const entry = entries[0];
-        const borderBox = entry?.borderBoxSize?.[0];
-        commitWidth(borderBox?.inlineSize ?? entry?.contentRect.width ?? element.clientWidth);
-      });
-      observer.observe(element);
-      return () => observer.disconnect();
-    }
-
-    window.addEventListener("resize", readWidth);
-    return () => window.removeEventListener("resize", readWidth);
-  }, []);
-
-  useEffect(() => {
-    if (
-      !shouldHydrateConversationTurnNavigatorDirectory({
-        canLoadOlder,
-        containerWidthPx: turnNavigatorContainerWidthPx,
-        hasLoadHandler: Boolean(onLoadAllOlder),
-        loadingOlder,
-      })
-    ) {
-      return;
-    }
-    // terminal key 必须与 store turnNavigatorDirectoryRevision 同步。
-    // 仅用 sessionKey + logEpoch 时，real-user query 增删不换 epoch，
-    // 组件层 terminal 永久拦截，store 即使失效缓存也无法重新探测。
-    const hydrationKey = `${sessionKey}:${rowContext.logEpoch ?? "unknown"}:${turnNavigatorDirectoryRevision}`;
-    const attempt = turnNavigatorHydrationAttemptRef.current;
-    if (attempt.key !== hydrationKey) {
-      if (attempt.retryTimer !== null) window.clearTimeout(attempt.retryTimer);
-      Object.assign(attempt, {
-        attemptCount: 0,
-        key: hydrationKey,
-        retryTimer: null,
-        status: "idle" as const,
-      });
-    }
-    if (attempt.status !== "idle" || !onLoadAllOlder) return;
-    attempt.status = "in-flight";
-    logger.debug("[v4-turn-navigator] 目录请求补齐完整历史", {
-      attempt: attempt.attemptCount + 1,
-      loadedRows: rows.length,
-      sessionKey,
-      totalRows: totalCount,
-    });
-    void onLoadAllOlder().then((result) => {
-      if (attempt.key !== hydrationKey) return;
-      if (result.status === "hydrated" || result.status === "not-enough-queries") {
-        attempt.status = "terminal";
-        return;
-      }
-      if (result.status === "stale") {
-        attempt.status = "idle";
-        return;
-      }
-      attempt.attemptCount += 1;
-      const retryDelayMs = resolveConversationTurnNavigatorHydrationRetryDelayMs(
-        attempt.attemptCount,
-      );
-      if (retryDelayMs === null) {
-        attempt.status = "terminal";
-        return;
-      }
-      attempt.status = "waiting";
-      attempt.retryTimer = window.setTimeout(() => {
-        if (attempt.key !== hydrationKey) return;
-        attempt.retryTimer = null;
-        attempt.status = "idle";
-        setTurnNavigatorHydrationRetryRevision((revision) => revision + 1);
-      }, retryDelayMs);
-    });
-  }, [
-    canLoadOlder,
-    loadingOlder,
-    onLoadAllOlder,
-    rowContext.logEpoch,
-    rows,
-    sessionKey,
-    totalCount,
-    turnNavigatorContainerWidthPx,
-    turnNavigatorDirectoryRevision,
-    turnNavigatorHydrationRetryRevision,
-  ]);
-
-  useEffect(
-    () => () => {
-      const timer = turnNavigatorHydrationAttemptRef.current.retryTimer;
-      if (timer !== null) window.clearTimeout(timer);
-    },
-    [],
-  );
 
   const getScrollElement = useCallback(() => scrollRef.current, []);
   const getItemKey = useCallback(
