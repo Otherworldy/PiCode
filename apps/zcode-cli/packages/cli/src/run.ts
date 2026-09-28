@@ -17,13 +17,10 @@ import { loadBootstrapModule } from "./bootstrap-loader.js";
 import { runEmbeddedSearchCli } from "./internal-search/embedded-search-cli.js";
 import { runCommandsCommand } from "./commands-command.js";
 import { resolveCliCwd } from "./cwd.js";
-import { runLoginCommand, runLogoutCommand } from "./login-command.js";
 import { CLI_COMMAND_NAME, CLI_PROCESS_NAME } from "./process-name.js";
 import { isPluginHostInvocation, runPluginHostCommand } from "./plugin-host-command.js";
 import { isDwfChildInvocation, runDwfChildCommand } from "./dwf-child-command.js";
-import { runPrompt } from "./prompt-command.js";
 import { runPluginsCommand, type PluginsCommandFlags } from "./plugins-command.js";
-import { runSkillsCommand } from "./skills-command.js";
 import type {
   CliPermissionMode,
   CliResumeRequest,
@@ -38,7 +35,6 @@ declare const __CLI_VERSION__: string | undefined;
 const version = typeof __CLI_VERSION__ === "string" ? __CLI_VERSION__ : "0.0.0";
 
 const EMPTY_TARGET_ERROR = "--target requires non-empty text.";
-const DEFAULT_HEADLESS_PROMPT_MODE: CliPermissionMode = "yolo";
 const FORCE_MCS_SCOPE_ERROR = "--force-mcs can only be used with --prompt or --target.";
 const TARGET_REPLACE_REQUIRES_TARGET_ERROR = "--target-replace requires --target.";
 const TARGET_CONFLICTS_WITH_PROMPT_ERROR =
@@ -171,11 +167,6 @@ const normalizeTargetRequest = (
   };
 };
 
-const buildHeadlessTargetCommand = (targetRequest: CliTargetRequest): string =>
-  targetRequest.replaceExisting
-    ? `/goal replace ${targetRequest.objective}`
-    : `/goal ${targetRequest.objective}`;
-
 const writeHelp = (
   stdout: NodeJS.WriteStream,
   locale?: UiLocale,
@@ -307,12 +298,9 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
   }
 
   let parsed: ReturnType<typeof parseGlobalArgs>;
-  let toolDisallowlist: readonly string[] | undefined;
 
   try {
-    const extracted = extractDisallowedToolsArgs(ctx.argv);
-    parsed = parseGlobalArgs(extracted.args);
-    toolDisallowlist = extracted.toolDisallowlist;
+    parsed = parseGlobalArgs(extractDisallowedToolsArgs(ctx.argv).args);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     ctx.stderr.write(`${message}\n\n`);
@@ -329,11 +317,10 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
     return 1;
   }
 
-  let mode: CliPermissionMode | undefined;
   let browserUse: GlobalOptions["browserUse"];
   let presentationSurface: PresentationSurface;
   try {
-    mode = normalizePromptMode(parsed.values.mode as string | undefined);
+    normalizePromptMode(parsed.values.mode as string | undefined);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     ctx.stderr.write(`${message}\n`);
@@ -482,36 +469,9 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
     },
   };
 
-  if (typeof parsed.values.prompt === "string") {
-    return await runPrompt(
-      ctx,
-      parsed.values.prompt,
-      parsed.values.attach ?? [],
-      options,
-      commandDeps,
-      version,
-      mode ?? DEFAULT_HEADLESS_PROMPT_MODE,
-      resumeRequest,
-      toolDisallowlist,
-      forceMcs,
-      presentationSurface,
-    );
-  }
-
-  if (targetRequest) {
-    return await runPrompt(
-      ctx,
-      buildHeadlessTargetCommand(targetRequest),
-      [],
-      options,
-      commandDeps,
-      version,
-      mode,
-      resumeRequest,
-      toolDisallowlist,
-      forceMcs,
-      presentationSurface,
-    );
+  if (typeof parsed.values.prompt === "string" || targetRequest) {
+    ctx.stderr.write("Headless prompt was removed. Use the PiCode app.\n");
+    return 1;
   }
 
   switch (commandName(parsed.positionals)) {
@@ -532,16 +492,6 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
       );
     case "doctor":
       return runDoctor(ctx, options, workingDirectory);
-    case "login":
-      return await runLoginCommand(
-        ctx,
-        options,
-        commandDeps,
-        parsed.values["no-browser"] === true,
-        parsed.positionals.slice(1),
-      );
-    case "logout":
-      return await runLogoutCommand(ctx, options, commandDeps);
     case "commands":
       return await runCommandsCommand(ctx, options, commandDeps, parsed.positionals.slice(1));
     case "plugin":
@@ -553,8 +503,6 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
         parsed.positionals.slice(1),
         pluginsCommandFlags(parsed.values),
       );
-    case "skills":
-      return await runSkillsCommand(ctx, options, commandDeps, parsed.positionals.slice(1));
     default:
       ctx.stderr.write(`Unknown command: ${commandName(parsed.positionals)}\n\n`);
       writeHelp(ctx.stderr, options.locale, options.detectedLocale);
