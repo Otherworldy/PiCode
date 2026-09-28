@@ -325,6 +325,9 @@ export function createSdkSessionFactory(options: {
       get isStreaming() {
         return session.isStreaming;
       },
+      get isIdle() {
+        return session.isIdle;
+      },
       prompt: (text, options) =>
         new Promise<boolean>((resolve, reject) => {
           let settled = false;

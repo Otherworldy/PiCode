@@ -1,7 +1,8 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { planTurnFileRewind, readProcessSshRemoteSpec, sshReadText, sshRemoveFile, sshWriteText, summarizeTurnFileChanges, type HostedSession } from "@zcode/pi-host";
+import { abortInflightNetworkFetches } from "@zcode/adapters/network";
+import { planTurnFileRewind, readProcessSshRemoteSpec, sendDelivery, setInflightNetworkAbort, sshReadText, sshRemoveFile, sshWriteText, summarizeTurnFileChanges, type HostedSession } from "@zcode/pi-host";
 import { remotePosixPath } from "@zcode/shared/node";
 import { RewindStrategy, type CollaborationMode, type ModelSelection, type SessionId, type TurnId } from "@zcode/contracts";
 import type { ZCodeApp, PromptInput, SendInputResult } from "./types.js";
@@ -73,6 +74,7 @@ export function createPiHostedApp(
     persistSession?: (title: string) => Promise<void>;
   } = {},
 ): ZCodeApp {
+  setInflightNetworkAbort(abortInflightNetworkFetches);
   const sessionId = hosted.sessionId as SessionId;
   const dummyCompletion = (turnId: string) =>
     Promise.resolve({
@@ -336,8 +338,12 @@ export function createPiHostedApp(
       return { bytes, mediaType: input.mime };
     },
     async sendInput(input: PromptInput, options?: { queueDelivery?: "guide"; inputId?: string; intent?: { modelSelection?: ModelSelection } }) {
-      const streaming = hosted.projector.getSnapshot().control.phase === "running";
-      const delivery = options?.queueDelivery === "guide" ? "guide" : streaming ? "queue" : "startNow";
+      const phaseRunning = hosted.projector.getSnapshot().control.phase === "running";
+      const delivery = sendDelivery({
+        guide: options?.queueDelivery === "guide",
+        phaseRunning,
+        idle: hosted.isIdle,
+      });
       return send(input, delivery, options?.inputId, options?.intent?.modelSelection);
     },
     async steerTurn(input: string, options?: { inputId?: string }) {
@@ -413,6 +419,10 @@ export function createPiHostedApp(
     },
     async close() {
       hosted.dispose();
+    },
+    // Pi 会话没有 goal。缺这个方法时 stop 会在 abort 之后抛 readTarget is not a function。
+    async readTarget() {
+      return null;
     },
     async readBackgroundBashOutput(workId: string) {
       return hosted.readManagedProcessOutput(workId);

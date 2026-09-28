@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
+import net from "node:net";
 import { afterEach, describe, it } from "node:test";
 import { ZCODE_HTTP_PROXY_ENV_KEY, ZCODE_NO_PROXY_ENV_KEY } from "@zcode/shared";
-import { createNetworkProxyFetch, installProcessProxyFetch } from "./proxy-fetch.js";
+import {
+  abortInflightNetworkFetches,
+  createNetworkProxyFetch,
+  installProcessProxyFetch,
+} from "./proxy-fetch.js";
 
 const PROXY_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"];
 
@@ -50,6 +55,37 @@ describe("installProcessProxyFetch", () => {
 
     await assert.rejects(fetch("https://api.example.com/v1"));
     assert.deepEqual(seen, ["https://api.example.test/v1"]);
+  });
+
+  it("abortInflightNetworkFetches cancels a hung proxy request", async () => {
+    const sockets = new Set<net.Socket>();
+    const proxy = net.createServer((socket) => {
+      sockets.add(socket);
+      socket.on("close", () => sockets.delete(socket));
+      socket.on("error", () => undefined);
+      socket.once("data", () => {
+        socket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+      });
+    });
+    await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", () => resolve()));
+    const address = proxy.address();
+    if (!address || typeof address === "string") throw new Error("proxy did not bind");
+    const fetch = createNetworkProxyFetch({ httpProxy: `http://127.0.0.1:${address.port}` });
+    const pending = fetch("https://api.example.com/v1/models", {
+      body: "{}",
+      method: "POST",
+    });
+    const aborted = pending.then(
+      () => {
+        throw new Error("hung proxy request resolved");
+      },
+      () => undefined,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    abortInflightNetworkFetches();
+    await aborted;
+    for (const socket of sockets) socket.destroy();
+    await new Promise<void>((resolve) => proxy.close(() => resolve()));
   });
 
   it("installs one process fetch and keeps the proxy across a second call", () => {

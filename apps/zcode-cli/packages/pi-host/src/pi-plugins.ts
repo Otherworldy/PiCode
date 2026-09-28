@@ -247,6 +247,43 @@ export function applyZcodePluginPlan(
   prompts.splice(0, prompts.length, ...nextPrompts);
 }
 
+export function piPluginPackageSource(id: string): { scope: PiPluginScope; source: string } {
+  const match = /^pkg:(user|project):(.+)$/u.exec(id);
+  const scope = match?.[1];
+  const source = match?.[2];
+  if ((scope !== "user" && scope !== "project") || !source) {
+    throw new Error(`Pi plugin "${id}" cannot be updated`);
+  }
+  return { scope, source };
+}
+
+async function openPackageManager(cwd: string, agentDir?: string) {
+  await ensurePiSdk();
+  const { DefaultPackageManager: PackageManager, SettingsManager, getAgentDir } = piCoding();
+  const dir = agentDir ?? getAgentDir();
+  const settings = SettingsManager.create(cwd, dir);
+  return new PackageManager({ cwd, agentDir: dir, settingsManager: settings });
+}
+
+export async function checkPiPluginUpdates(cwd: string, agentDir?: string) {
+  const packages = await openPackageManager(cwd, agentDir);
+  const found = await packages.checkForAvailableUpdates();
+  return found
+    .filter((item) => item.scope === "user" || item.scope === "project")
+    .map((item) => ({
+      id: `pkg:${item.scope}:${item.source}`,
+      source: item.source,
+      scope: item.scope,
+      name: item.displayName,
+    }));
+}
+
+export async function updatePiPlugin(cwd: string, id: string, agentDir?: string): Promise<void> {
+  const { source } = piPluginPackageSource(id);
+  const packages = await openPackageManager(cwd, agentDir);
+  await packages.update(source);
+}
+
 export async function setPiPluginEnabled(
   cwd: string,
   id: string,

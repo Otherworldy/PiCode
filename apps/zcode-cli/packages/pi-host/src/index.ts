@@ -7,9 +7,10 @@ export { createEmptySnapshot } from "./snapshot.js";
 export { PiToV4Projector } from "./projector.js";
 export { HostQueue } from "./host-queue.js";
 export { ExtensionUiHost } from "./extension-ui-host.js";
-export { CommandBridge } from "./command-bridge.js";
+export { CommandBridge, sendDelivery } from "./command-bridge.js";
 export {
   HostSessionRegistry,
+  setInflightNetworkAbort,
   type HostedSession,
   type PiStoredSession,
   type PiStoredSummary,
@@ -34,7 +35,13 @@ export { createSdkSessionFactory, listPiCatalog, mutatePiCatalog } from "./sessi
 export { ensurePiSdk, getPiSdkStatus } from "./pi-sdk.js";
 export { listPiSkills } from "./pi-skills.js";
 export { listPiSlashCommands, listSessionSlashCommands } from "./pi-slash-commands.js";
-export { listPiPlugins, setPiPluginEnabled, type PiPluginView } from "./pi-plugins.js";
+export {
+  checkPiPluginUpdates,
+  listPiPlugins,
+  setPiPluginEnabled,
+  updatePiPlugin,
+  type PiPluginView,
+} from "./pi-plugins.js";
 export {
   listPiPluginConfigs,
   writePiPluginConfig,

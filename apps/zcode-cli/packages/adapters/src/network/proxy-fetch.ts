@@ -29,6 +29,24 @@ interface NormalizedFetchRequest {
 }
 
 const PROCESS_PROXY_FETCH = Symbol.for("zcode.processProxyFetch");
+const inflightNetworkFetches = new Set<() => void>();
+
+/**
+ * Stop 时 Pi 的 abort 信号可能到不了这条 socket（代理 CONNECT 挂起、重试中的下一次请求）。
+ * 直接拆掉还没结束的代理请求。MCP 的长连接也会被拆，客户端会重连。
+ */
+export function abortInflightNetworkFetches(): void {
+  while (inflightNetworkFetches.size > 0) {
+    const abort = inflightNetworkFetches.values().next().value;
+    if (!abort) break;
+    inflightNetworkFetches.delete(abort);
+    try {
+      abort();
+    } catch {
+      // ClientRequest.destroy 有时会把 AbortError 同步抛出。调用方是 Stop，不能再往外抛。
+    }
+  }
+}
 
 /** Pi 的模型请求用 global fetch，bash 继承 process.env。两者都要看到设置页代理。 */
 export function installProcessProxyFetch(
@@ -140,6 +158,7 @@ function fetchWithAgent(
     let clientRequest: http.ClientRequest | undefined;
 
     const cleanupAll = (): void => {
+      inflightNetworkFetches.delete(onAbort);
       signal?.removeEventListener("abort", onAbort);
       clientRequest?.off("error", onRequestError);
       clientRequest?.off("close", onRequestClose);
@@ -164,19 +183,28 @@ function fetchWithAgent(
     };
     const onAbort = (): void => {
       const error = abortReason(signal);
-      responseMessage?.destroy(error);
-      clientRequest?.destroy(error);
-      if (!settled) {
-        settled = true;
-        reject(error);
+      try {
+        clientRequest?.socket?.on("error", () => undefined);
+        responseMessage?.on("error", () => undefined);
+        responseMessage?.destroy(error);
+        clientRequest?.destroy(error);
+      } catch {
+        // 隧道已经建好时 destroy 会把 AbortError 同步抛出来。请求本身仍要拒绝。
+      } finally {
+        rejectOnce(error);
       }
     };
 
     signal?.addEventListener("abort", onAbort, { once: true });
+    inflightNetworkFetches.add(onAbort);
+    const agent = createRequestAgent(request.url, options);
+    // 拆掉 CONNECT 时 https-proxy-agent 的 promise 会在请求销毁后拒绝。不接住，Stop 会打崩进程。
+    watchProxyConnect(agent);
+    agent.on("error", () => undefined);
 
     clientRequest = transport.request(
       {
-        agent: createRequestAgent(request.url, options),
+        agent,
         headers: headersToOutgoing(request.headers),
         hostname: request.url.hostname,
         method: request.method,
@@ -211,6 +239,12 @@ function fetchWithAgent(
     );
 
     clientRequest.once("error", onRequestError);
+    clientRequest.on("error", () => undefined);
+    const ignoreSocketError = (socket: NodeJS.EventEmitter): void => {
+      socket.on("error", () => undefined);
+    };
+    clientRequest.on("socket", ignoreSocketError);
+    if (clientRequest.socket) ignoreSocketError(clientRequest.socket);
     clientRequest.once("close", onRequestClose);
     clientRequest.end(request.body);
   });
@@ -224,6 +258,33 @@ function abortReason(signal: AbortSignal | undefined): Error {
   const error = new Error("The operation was aborted.");
   error.name = "AbortError";
   return error;
+}
+
+const PROXY_CONNECT_WATCHED = Symbol.for("zcode.proxyConnectWatched");
+
+function watchProxyConnect(agent: http.Agent): void {
+  const record = agent as http.Agent & {
+    [PROXY_CONNECT_WATCHED]?: true;
+    connect?: (this: unknown, ...args: never[]) => unknown;
+  };
+  if (record[PROXY_CONNECT_WATCHED] || !record.connect) return;
+  record[PROXY_CONNECT_WATCHED] = true;
+  const connect = record.connect;
+  record.connect = function (this: unknown, ...args: never[]) {
+    const result = connect.apply(this, args);
+    if (result && typeof (result as Promise<unknown>).then === "function") {
+      // 接住拒绝，避免 Stop 拆 socket 后变成 unhandledRejection。Node 自己的 await 仍能看到失败。
+      void (result as Promise<unknown>).then(
+        (inner) => {
+          if (inner && typeof inner === "object" && "connect" in inner) {
+            watchProxyConnect(inner as unknown as http.Agent);
+          }
+        },
+        () => undefined,
+      );
+    }
+    return result;
+  };
 }
 
 function createRequestAgent(

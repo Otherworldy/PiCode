@@ -5,6 +5,17 @@ import type { PiSessionPort } from "./types.js";
 
 export type SendDelivery = "startNow" | "queue" | "guide";
 
+/** 画面还在跑、或 Pi 正在压缩，都先入队。guide 只在这一轮真正在跑时 steer。 */
+export function sendDelivery(input: {
+  guide: boolean;
+  phaseRunning: boolean;
+  idle: boolean;
+}): SendDelivery {
+  if (input.guide && input.phaseRunning) return "guide";
+  if (input.phaseRunning || !input.idle) return "queue";
+  return "startNow";
+}
+
 function queuedSelection(selection: SubmissionModel | undefined) {
   if (!selection?.providerId || !selection.modelId) return undefined;
   return {

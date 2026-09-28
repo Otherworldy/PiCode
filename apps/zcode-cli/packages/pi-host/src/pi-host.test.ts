@@ -3,7 +3,7 @@ import { access, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { CommandBridge } from "./command-bridge.js";
+import { CommandBridge, sendDelivery } from "./command-bridge.js";
 import { ExtensionUiHost } from "./extension-ui-host.js";
 import { FakePiSession } from "./fake-session.js";
 import { HostQueue } from "./host-queue.js";
@@ -225,6 +225,29 @@ test("retry shows a count and the final error stays one sentence", () => {
   assert.equal(done.control.apiRetry, null);
 });
 
+test("stop during retry stays aborted when the next attempt starts", () => {
+  const projector = new PiToV4Projector("s1", "e1");
+  projector.apply({ type: "agent_start" });
+  projector.apply({ type: "agent_end", willRetry: true });
+  projector.apply({
+    type: "auto_retry_start",
+    attempt: 1,
+    maxAttempts: 3,
+    delayMs: 1000,
+    errorMessage: "Connection error.",
+  });
+  projector.markAborted();
+  projector.apply({ type: "agent_start" });
+  assert.equal(projector.wantsStop(), true);
+  assert.equal(projector.getSnapshot().control.phase, "running");
+  projector.apply({ type: "agent_end" });
+  projector.apply({ type: "agent_settled" });
+  const done = projector.getSnapshot();
+  assert.equal(done.control.phase, "completedInterrupted");
+  assert.equal(done.control.canStop, false);
+  assert.equal(projector.wantsStop(), false);
+});
+
 test("message_end + agent_end flushes assistant text", () => {
   const projector = new PiToV4Projector("s1", "e1", { profile: "continuous" });
   projector.apply({ type: "agent_start" });
@@ -378,6 +401,50 @@ test("image attachments are sent as bytes and shown on the user row", async () =
     if (row?.kind === "userInput") assert.equal(row.attachments?.[0]?.ref, file);
   } finally {
     await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("busy or compacting sends join the queue instead of prompting", () => {
+  assert.equal(sendDelivery({ guide: false, phaseRunning: false, idle: true }), "startNow");
+  assert.equal(sendDelivery({ guide: false, phaseRunning: true, idle: false }), "queue");
+  assert.equal(sendDelivery({ guide: true, phaseRunning: true, idle: false }), "guide");
+  assert.equal(sendDelivery({ guide: true, phaseRunning: false, idle: false }), "queue");
+});
+
+test("queued text is sent after compaction finishes", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const fakes = new Map<string, FakePiSession>();
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async (input) => {
+      const fake = new FakePiSession(input.sessionId, input.sessionFile);
+      fakes.set(input.sessionId, fake);
+      return fake;
+    },
+  });
+  try {
+    const hosted = await registry.create({ workspacePath: root });
+    const fake = fakes.get(hosted.sessionId);
+    assert.ok(fake);
+    await hosted.bridge.admitSend({
+      text: "later",
+      clientId: "c",
+      commandId: "q1",
+      delivery: "queue",
+      streaming: false,
+    });
+    assert.deepEqual(fake.prompts, []);
+    fake.isStreaming = true;
+    fake.emit({ type: "compaction_end" });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(fake.prompts, []);
+    fake.isStreaming = false;
+    fake.emit({ type: "compaction_end", result: { summary: "ok" } });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(fake.prompts, ["later"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
 

@@ -22,8 +22,8 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
   → HostQueue / V4 CommandInbox 准入（CAS / held / guide|queue|startNow）
   → 准入失败：ACK 拒绝，不调用 Pi
   → idle startNow → session.prompt（图片读成本地文件，跟文字一起交给 Pi）
-    busy guide → session.steer（同样带图片）
-    busy queue → HostQueue.enqueue（只存路径），必要时 session.followUp
+    正在跑的 turn + guide → session.steer（同样带图片）
+    正在跑、或压缩中 → HostQueue.enqueue（只存路径）；压缩结束且不再 streaming 时 drain
   → Pi 事件
   → Projector 写 ConversationDelta
   → ConversationTopicPublisher.ingestDeltas
@@ -45,7 +45,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 - 打开会话只下发尾部一窗。页面向上滚动再拉更早的一窗，不再在打开时把整段历史灌进时间线。下发的工具参数和输出只留 head+tail；宿主里的原文仍留给文件回滚。投影未到时时间线显示加载，不留白。
 - 冷恢复重放 jsonl 时，行先落完，actions 只算一次。不能每条事件都扫整窗，否则几万行的会话订阅一直不返回。
 - 折叠的工具历史不挂载，时间线只保留视口附近的轮次。截断轮自动补齐最多 3 窗，其余靠上滚再拉。
-- abort：turn `completedInterrupted`，运行中工具 `cancelled`。
+- abort：turn `completedInterrupted`，运行中工具 `cancelled`。用户已经停止后，重试再发的 `agent_start` / `auto_retry_start` 不能把这次停止清掉，要再 abort。Stop 同时拆掉还在飞的代理请求，避免重试里的 CONNECT 不看 abort 信号。
 - `custom()` 无 adapter：降级 widget 文本，不卡循环。
 - 插件抛错：`extension_error` → notify，会话继续。
 - Pi extension 注册的工具和 PiCode 的 customTools 一起进上游 `tools`。`noTools: "builtin"` 只关掉同名内置工具，不传 `tools` 白名单。
@@ -68,7 +68,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 ## 死面
 
-壳上拆掉：PluginStore、SavedWorkflows、Automations/OffPeak、CUA、Goal、PiCode 子代理 profile、官方 plugin 商店。设置改为已加载 Pi extensions 列表。
+壳上拆掉：PluginStore、SavedWorkflows、Automations/OffPeak、CUA、Goal、PiCode 子代理 profile、官方 plugin 商店。设置改为已加载 Pi extensions 列表。插件页用 Pi `PackageManager.checkForAvailableUpdates` / `update` 检查并更新 npm、git 包。本地 extension 文件和钉死版本不更新。装完后下次新建会话生效。
 
 壳上新增：输入框 Extension Widget 槽、会话 Status chips。
 

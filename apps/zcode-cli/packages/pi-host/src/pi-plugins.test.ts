@@ -6,9 +6,22 @@ import test from "node:test";
 import {
   applyZcodePluginPlan,
   listPiPlugins,
+  piPluginPackageSource,
   setPiPluginEnabled,
+  updatePiPlugin,
   zcodePluginSourceId,
 } from "./pi-plugins.js";
+
+test("only package ids can be updated", async () => {
+  assert.deepEqual(piPluginPackageSource("pkg:user:npm:@scope/pkg"), {
+    scope: "user",
+    source: "npm:@scope/pkg",
+  });
+  await assert.rejects(
+    () => updatePiPlugin(process.cwd(), "ext:user:extensions/demo.ts"),
+    /cannot be updated/,
+  );
+});
 
 test("lists and toggles Pi packages and extension files", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-plugins-"));

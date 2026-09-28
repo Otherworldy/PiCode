@@ -41,6 +41,7 @@ export interface HostedSession {
   listModels(): Array<{ providerId: string; modelId: string }>;
   listSkills(): PiSkillView[];
   listSlashCommands(): PiSlashCommandView[];
+  readonly isIdle: boolean;
   prompt(text: string): Promise<boolean>;
   waitTurn(): Promise<void>;
   abort(): Promise<void>;
@@ -70,6 +71,13 @@ export type PiStoredSummary = {
   lastActivityAt: number;
   lastAssistantPreview?: string;
 };
+
+let abortInflightNetwork = (): void => undefined;
+
+/** bootstrap 把代理 fetch 的取消接进来。Pi abort 信号到不了 socket 时，Stop 仍能拆掉请求。 */
+export function setInflightNetworkAbort(abort: () => void): void {
+  abortInflightNetwork = abort;
+}
 
 export type PiStoredSession = {
   sessionId: string;
@@ -595,6 +603,14 @@ export class HostSessionRegistry {
           return;
         }
         emit(projector.apply(event));
+        // 停止之后 Pi 仍可能把重试的下一跳发出来。再 abort 一次，别让它接着跑。
+        if (
+          projector.wantsStop() &&
+          (event.type === "agent_start" || event.type === "auto_retry_start")
+        ) {
+          abortInflightNetwork();
+          void pi.abort();
+        }
         if (
           event.type === "compaction_end" ||
           (event.type === "agent_end" && !event.willRetry)
@@ -608,9 +624,15 @@ export class HostSessionRegistry {
             void publishSubagents();
           }, 1000);
         }
-        if (event.type === "agent_settled" || (event.type === "agent_end" && !event.willRetry)) {
-          stopSubagentPoll();
-          void publishSubagents();
+        const turnDone =
+          event.type === "agent_settled" || (event.type === "agent_end" && !event.willRetry);
+        // 手动压缩不发 agent_end。轮次里的自动压缩仍在 streaming，那时不能把队列提前 prompt。
+        const compactDone = event.type === "compaction_end" && !pi.isStreaming;
+        if (turnDone || compactDone) {
+          if (turnDone) {
+            stopSubagentPoll();
+            void publishSubagents();
+          }
           void bridge.drainNext().then((drained) => {
             if (drained) emit(projector.replaceQueue(queue.snapshot()));
           });
@@ -644,10 +666,14 @@ export class HostSessionRegistry {
       listModels: () => pi.listModels?.() ?? (pi.currentModel ? [pi.currentModel] : []),
       listSkills: () => pi.listSkills?.() ?? [],
       listSlashCommands: () => pi.listSlashCommands?.() ?? [],
+      get isIdle() {
+        return pi.isIdle ?? !pi.isStreaming;
+      },
       prompt: (text) => pi.prompt(text),
       waitTurn: () => pi.waitTurn?.() ?? Promise.resolve(),
       abort: async () => {
         projector.markAborted();
+        abortInflightNetwork();
         await pi.abort();
       },
       cancelManagedProcess: async (workId) => {

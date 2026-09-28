@@ -79,6 +79,7 @@ export class PiToV4Projector {
   private readonly toolArgs = new Map<string, string>();
   private readonly rowIndexById = new Map<number, number>();
   private aborted = false;
+  private stopRequested = false;
   private seq = 0;
   private assistantMessageId?: string;
   private pendingError?: string;
@@ -101,6 +102,11 @@ export class PiToV4Projector {
 
   markAborted(): void {
     this.aborted = true;
+    this.stopRequested = true;
+  }
+
+  wantsStop(): boolean {
+    return this.stopRequested;
   }
 
   apply(event: PiHostEvent): ConversationDelta[] {
@@ -392,7 +398,8 @@ export class PiToV4Projector {
   private startTurn(): ConversationDelta[] {
     // Pi 重试会再发 agent_start。上一轮还在跑时不能再开一条「工作中」。
     if (this.snapshot.control.phase === "running" && this.turnId) {
-      this.aborted = false;
+      // 重试的下一次请求不能把用户已经按过的停止清掉。
+      if (!this.stopRequested) this.aborted = false;
       this.streamingTextRowId = null;
       this.streamingReasoningRowId = null;
       this.assistantMessageId = undefined;
@@ -400,6 +407,7 @@ export class PiToV4Projector {
     }
     this.pendingError = undefined;
     this.retryFailures = [];
+    this.stopRequested = false;
     this.aborted = false;
     this.turnId = `turn:${this.nextRowId}`;
     this.productTurnId = this.turnId;
@@ -764,6 +772,8 @@ export class PiToV4Projector {
   }
 
   private settleTurn(): ConversationDelta[] {
+    // agent_end 已经收过口时，紧跟着的 agent_settled 不能把 interrupted 盖成 success。
+    if (this.snapshot.control.phase !== "running") return [];
     const errorText = this.pendingError;
     this.pendingError = undefined;
     const presented = errorText ? presentModelError(errorText) : undefined;
@@ -827,6 +837,7 @@ export class PiToV4Projector {
       },
     });
     this.aborted = false;
+    this.stopRequested = false;
     return deltas;
   }
 

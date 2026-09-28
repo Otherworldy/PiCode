@@ -133,6 +133,8 @@ export interface PiSessionPort {
   readonly sessionId: string;
   readonly sessionFile?: string;
   readonly isStreaming: boolean;
+  /** 压缩、重试或轮次还没结束。缺省时按 !isStreaming。 */
+  readonly isIdle?: boolean;
   readonly currentModel?: { providerId: string; modelId: string };
   listModels?(): Array<{ providerId: string; modelId: string; name?: string }>;
   /** 这个会话里 Pi 已经加载的技能，含用户目录、项目目录和包技能。 */
