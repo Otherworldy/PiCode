@@ -1,5 +1,6 @@
-import { readFile, rm, writeFile } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { isAbsolute, join, resolve } from "node:path";
 import { planTurnFileRewind, readProcessSshRemoteSpec, sshReadText, sshRemoveFile, sshWriteText, summarizeTurnFileChanges, type HostedSession } from "@zcode/pi-host";
 import { remotePosixPath } from "@zcode/shared/node";
 import { RewindStrategy, type CollaborationMode, type ModelSelection, type SessionId, type TurnId } from "@zcode/contracts";
@@ -90,12 +91,14 @@ export function createPiHostedApp(
   ): Promise<SendInputResult> => {
     const streaming = hosted.projector.getSnapshot().control.phase === "running";
     const thought = modelSelection?.options?.reasoningLevel;
+    const attachments = typeof input === "string" ? undefined : input.attachments;
     const result = await hosted.bridge.admitSend({
       text: textOf(input),
       clientId: "v4",
       commandId,
       delivery,
       streaming,
+      ...(attachments?.length ? { attachments } : {}),
       ...(modelSelection
         ? {
             modelSelection: {
@@ -318,6 +321,20 @@ export function createPiHostedApp(
     getDefaultThoughtLevel: () => undefined,
     getLocale: () => "en" as const,
     getTheme: () => "system" as const,
+    async writePromptAttachment(input: { fileName: string; mime: string; bytes: Uint8Array }) {
+      // 粘贴的图没有本地路径。落成临时文件，后面跟选文件一样读给 Pi。
+      const dir = join(tmpdir(), "picode-prompt-images");
+      await mkdir(dir, { recursive: true });
+      const safe = input.fileName.replace(/[^\w.-]+/g, "_").slice(0, 40) || "image";
+      const file = join(dir, `${Date.now().toString(36)}-${safe}`);
+      await writeFile(file, input.bytes);
+      return { ref: file };
+    },
+    async readPromptAttachment(input: { ref: string; mime: string; maxBytes: number }) {
+      const bytes = await readFile(input.ref);
+      if (bytes.byteLength > input.maxBytes) throw new Error("fault.attachment.previewTooLarge");
+      return { bytes, mediaType: input.mime };
+    },
     async sendInput(input: PromptInput, options?: { queueDelivery?: "guide"; inputId?: string; intent?: { modelSelection?: ModelSelection } }) {
       const streaming = hosted.projector.getSnapshot().control.phase === "running";
       const delivery = options?.queueDelivery === "guide" ? "guide" : streaming ? "queue" : "startNow";

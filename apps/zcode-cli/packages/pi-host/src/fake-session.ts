@@ -7,6 +7,7 @@ export class FakePiSession implements PiSessionPort {
   private readonly listeners = new Set<(event: PiHostEvent) => void>();
   events: PiHostEvent[] = [];
   prompts: string[] = [];
+  promptImages: Array<Array<{ type: "image"; data: string; mimeType: string }>> = [];
   steers: string[] = [];
   followUps: string[] = [];
   aborted = false;
@@ -24,8 +25,12 @@ export class FakePiSession implements PiSessionPort {
     for (const listener of this.listeners) listener(event);
   }
 
-  async prompt(text: string): Promise<boolean> {
+  async prompt(
+    text: string,
+    options?: { images?: Array<{ type: "image"; data: string; mimeType: string }> },
+  ): Promise<boolean> {
     this.prompts.push(text);
+    this.promptImages.push(options?.images ?? []);
     return this.acceptPrompt;
   }
 

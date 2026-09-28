@@ -21,9 +21,9 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 用户提交
   → HostQueue / V4 CommandInbox 准入（CAS / held / guide|queue|startNow）
   → 准入失败：ACK 拒绝，不调用 Pi
-  → idle startNow → session.prompt
-    busy guide → session.steer
-    busy queue → HostQueue.enqueue，必要时 session.followUp
+  → idle startNow → session.prompt（图片读成本地文件，跟文字一起交给 Pi）
+    busy guide → session.steer（同样带图片）
+    busy queue → HostQueue.enqueue（只存路径），必要时 session.followUp
   → Pi 事件
   → Projector 写 ConversationDelta
   → ConversationTopicPublisher.ingestDeltas
@@ -64,7 +64,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 `applyFileRewind` 只退这一轮的文件，不截断聊天。真相是这一轮成功的 Pi 工具参数，不是旧 checkpoint。`edit` 要当前文件仍能唯一匹配 `newText` 才写回 `oldText`。`write` 要当前内容仍等于写入内容才删除该文件；覆盖掉的旧内容找不回来。对不上就整批不写。`bash` 只记为忽略，不阻止文件摘要上的撤销；编辑消息并选了回滚文件时，有忽略项仍拒绝。成功后把该轮 `fileChanges.state` 改成 `reverted`。SSH 工作区走和工具同一条远端读写。
 
-`switchCollaborationMode` 不恢复为 PiCode 协作模式机。危险工具仍走 PiCode `PermissionService`（Pi 无权限面）：allow 放行、deny 拒绝、ask 投影 `kind: permission` 给壳 PermissionDialog（Allow once / Allow for session / Block）。session allow 由 HostedSession 记忆。`mode=yolo` 直接放行全部工具，不再弹权限窗。插件 `confirm` 视为同意。`select` / `input` / `editor` 仍进底栏等人答，完全访问也不代答。其它模式的 `confirm/select` 同样走底栏 userInput，不用 viewport overlay。
+`switchCollaborationMode` 不恢复为 PiCode 协作模式机。危险工具仍走 PiCode `PermissionService`（Pi 无权限面）：allow 放行、deny 拒绝、ask 投影 `kind: permission` 给壳 PermissionDialog（Allow once / Allow for session / Block）。session allow 由 HostedSession 记忆。`mode=yolo` 直接放行全部工具，不再弹权限窗。插件 `confirm` 视为同意。`select` / `input` / `editor` 仍进底栏等人答，完全访问也不代答。`select` 把 `1. 标签 — 说明` 拆成问卷选项，回答仍回传原行。其它模式的 `confirm/select` 同样走底栏 userInput，不用 viewport overlay。
 
 ## 死面
 

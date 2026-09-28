@@ -188,7 +188,10 @@ export class ExtensionUiHost {
   }
 
   private toInput(event: PiExtensionUiEvent): PendingInteraction {
-    const options = (event.options ?? []).map((label) => ({ optionId: label, label }));
+    const rawOptions = event.options ?? [];
+    const options = rawOptions.map((label) => ({ optionId: label, label }));
+    const questions =
+      event.method === "select" ? askSelectQuestions(event.title ?? "", rawOptions) : undefined;
     return {
       interactionId: event.id,
       kind: "userInput",
@@ -196,10 +199,34 @@ export class ExtensionUiHost {
       createdAt: Date.now(),
       payload: {
         kind: "userInput",
-        prompt: event.title ?? event.message ?? "",
+        prompt: questions?.[0]?.question ?? event.title ?? event.message ?? "",
         freeText: event.method !== "select",
         ...(options.length > 0 ? { options } : {}),
+        ...(questions ? { questions } : {}),
       },
     };
   }
+}
+
+const CUSTOM_OPTION = /^\d+\.\s+(?:自己输入|Type something\.)$/;
+
+/** Pi ask 的选项是 `1. 标签 — 说明`。拆开给问卷；value 仍是原行，回答才能对回去。 */
+function askSelectQuestions(title: string, rawOptions: string[]) {
+  const choices = rawOptions.filter((label) => !CUSTOM_OPTION.test(label));
+  if (choices.length === 0) return undefined;
+  const headerMatch = /^\[([^\]]{1,16})\]\s*/.exec(title);
+  const question = (headerMatch ? title.slice(headerMatch[0].length) : title).trim() || title;
+  return [
+    {
+      question,
+      header: headerMatch?.[1] ?? "Ask",
+      options: choices.map((raw) => {
+        const body = raw.replace(/^\d+\.\s+/, "");
+        const cut = body.indexOf(" \u2014 ");
+        const label = (cut >= 0 ? body.slice(0, cut) : body).trim() || raw;
+        const description = cut >= 0 ? body.slice(cut + 3).trim() : "";
+        return { value: raw, label, ...(description ? { description } : {}) };
+      }),
+    },
+  ];
 }

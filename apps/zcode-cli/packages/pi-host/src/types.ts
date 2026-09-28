@@ -139,10 +139,19 @@ export interface PiSessionPort {
   listSkills?(): PiSkillView[];
   /** Pi 自动补全那份斜杠命令：内置、提示词、扩展命令、skill: 。 */
   listSlashCommands?(): PiSlashCommandView[];
-  prompt(text: string): Promise<boolean>;
+  prompt(
+    text: string,
+    options?: { images?: Array<{ type: "image"; data: string; mimeType: string }> },
+  ): Promise<boolean>;
   waitTurn?(): Promise<void>;
-  steer(text: string): Promise<void>;
-  followUp(text: string): Promise<void>;
+  steer(
+    text: string,
+    images?: Array<{ type: "image"; data: string; mimeType: string }>,
+  ): Promise<void>;
+  followUp(
+    text: string,
+    images?: Array<{ type: "image"; data: string; mimeType: string }>,
+  ): Promise<void>;
   abort(): Promise<void>;
   /** pi-processes 列表变化。没装插件时列表一直是空的。 */
   subscribeManagedProcesses?(listener: (works: BackgroundWorkSummary[]) => void): () => void;

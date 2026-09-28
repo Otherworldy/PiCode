@@ -1,4 +1,6 @@
+import type { AttachmentRef } from "@zcode/shared/zcode-protocol-v4";
 import type { HostQueue } from "./host-queue.js";
+import { loadPromptImages, promptAttachmentRefs, type PiPromptAttachment } from "./prompt-images.js";
 import type { PiSessionPort } from "./types.js";
 
 export type SendDelivery = "startNow" | "queue" | "guide";
@@ -25,6 +27,7 @@ export interface AdmitSendInput {
   delivery: SendDelivery;
   streaming: boolean;
   modelSelection?: SubmissionModel;
+  attachments?: PiPromptAttachment[];
 }
 
 export type AdmitSendResult =
@@ -38,12 +41,13 @@ export class CommandBridge {
     private readonly session: PiSessionPort,
     private readonly queue: HostQueue,
     private readonly applyModel?: (selection: SubmissionModel) => Promise<void>,
+    private readonly noteAttachments?: (attachments: AttachmentRef[]) => void,
   ) {}
 
   async admitSend(input: AdmitSendInput): Promise<AdmitSendResult> {
     if (input.streaming && input.delivery === "guide") {
       await this.useModel(input.modelSelection);
-      await this.session.steer(input.text);
+      await this.promptNow("steer", input.text, input.attachments);
       return { kind: "steer" };
     }
     if (input.streaming || input.delivery === "queue") {
@@ -53,13 +57,13 @@ export class CommandBridge {
         text: input.text,
         admitted: "queue",
         modelSelection: queuedSelection(input.modelSelection),
+        attachments: promptAttachmentRefs(input.attachments),
       });
       this.queue.enqueue(item);
       return { kind: "queued", queueItemId: item.queueItemId };
     }
     await this.useModel(input.modelSelection);
-    const accepted = await this.session.prompt(input.text);
-    if (!accepted) throw new Error("pi prompt rejected");
+    await this.promptNow("prompt", input.text, input.attachments);
     return { kind: "prompt" };
   }
 
@@ -77,9 +81,27 @@ export class CommandBridge {
           }
         : undefined,
     );
-    const accepted = await this.session.prompt(item.text);
-    if (!accepted) throw new Error("pi prompt rejected");
+    await this.promptNow("prompt", item.text, item.attachments);
     return true;
+  }
+
+  private async promptNow(
+    kind: "prompt" | "steer",
+    text: string,
+    attachments: readonly PiPromptAttachment[] | undefined,
+  ): Promise<void> {
+    const images = await loadPromptImages(attachments);
+    const refs = promptAttachmentRefs(attachments);
+    if (refs.length > 0) this.noteAttachments?.(refs);
+    if (kind === "steer") {
+      await this.session.steer(text, images.length > 0 ? images : undefined);
+      return;
+    }
+    const accepted = await this.session.prompt(text, images.length > 0 ? { images } : undefined);
+    if (!accepted) {
+      if (refs.length > 0) this.noteAttachments?.([]);
+      throw new Error("pi prompt rejected");
+    }
   }
 
   private async useModel(selection: SubmissionModel | undefined): Promise<void> {

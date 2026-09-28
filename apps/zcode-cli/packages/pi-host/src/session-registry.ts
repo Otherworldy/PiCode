@@ -522,7 +522,9 @@ export class HostSessionRegistry {
         }),
       );
     };
-    const bridge = new CommandBridge(pi, queue, applyModel);
+    const bridge = new CommandBridge(pi, queue, applyModel, (attachments) => {
+      projector.noteUserAttachments(attachments);
+    });
     const publishContext = () => {
       const usage = pi.contextUsage?.();
       if (!usage) return;

@@ -1,4 +1,4 @@
-import type { QueueItem, QueueState } from "@zcode/shared/zcode-protocol-v4";
+import type { AttachmentRef, QueueItem, QueueState } from "@zcode/shared/zcode-protocol-v4";
 
 export class HostQueue {
   private items: QueueItem[] = [];
@@ -21,6 +21,7 @@ export class HostQueue {
     text: string;
     admitted: "queue" | "guide";
     modelSelection?: QueueItem["modelSelection"];
+    attachments?: AttachmentRef[];
   }): QueueItem {
     this.seq += 1;
     const queueItemId = input.sourceCommandId;
@@ -31,7 +32,7 @@ export class HostQueue {
       kind: "sendText",
       text: input.text,
       ...(input.modelSelection ? { modelSelection: input.modelSelection } : {}),
-      attachments: [],
+      attachments: input.attachments ?? [],
       delivery: {
         requested: input.admitted,
         admitted: input.admitted,

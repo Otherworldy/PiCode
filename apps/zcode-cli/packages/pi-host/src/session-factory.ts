@@ -325,11 +325,12 @@ export function createSdkSessionFactory(options: {
       get isStreaming() {
         return session.isStreaming;
       },
-      prompt: (text) =>
+      prompt: (text, options) =>
         new Promise<boolean>((resolve, reject) => {
           let settled = false;
           lastTurn = session
             .prompt(text, {
+              ...(options?.images?.length ? { images: options.images } : {}),
               preflightResult: (ok) => {
                 settled = true;
                 resolve(ok);
@@ -343,8 +344,8 @@ export function createSdkSessionFactory(options: {
             });
         }),
       waitTurn: () => lastTurn,
-      steer: (text) => session.steer(text),
-      followUp: (text) => session.followUp(text),
+      steer: (text, images) => session.steer(text, images),
+      followUp: (text, images) => session.followUp(text, images),
       abort: () => session.abort(),
       subscribeManagedProcesses: (listener) => processes?.subscribe(listener) ?? (() => undefined),
       killManagedProcess: (id: string) => processes?.kill(id) ?? Promise.resolve(false),

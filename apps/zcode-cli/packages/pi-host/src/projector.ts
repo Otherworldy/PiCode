@@ -82,6 +82,7 @@ export class PiToV4Projector {
   private seq = 0;
   private assistantMessageId?: string;
   private pendingError?: string;
+  private pendingUserAttachments?: Extract<ConversationRow, { kind: "userInput" }>["attachments"];
   private retryFailures: { attempt: number; message: string }[] = [];
   readonly profile: DeliveryProfileName;
   private readonly viaRegistry: boolean;
@@ -441,13 +442,20 @@ export class PiToV4Projector {
     ];
   }
 
+  noteUserAttachments(attachments: Extract<ConversationRow, { kind: "userInput" }>["attachments"]): void {
+    this.pendingUserAttachments = attachments?.length ? attachments : undefined;
+  }
+
   private appendUser(text: string, messageId?: string): ConversationDelta[] {
-    if (!text && this.snapshot.control.phase === "draft") return [];
+    const attachments = this.pendingUserAttachments;
+    this.pendingUserAttachments = undefined;
+    if (!text && !attachments?.length && this.snapshot.control.phase === "draft") return [];
     const row: ConversationRow = {
       ...this.base(this.turnId || `turn:${this.nextRowId}`),
       kind: "userInput",
       text,
       origin: "realUser",
+      ...(attachments?.length ? { attachments } : {}),
     };
     if (messageId) row.entityId = messageId;
     const deltas: ConversationDelta[] = [{ op: "row.appended", row }];

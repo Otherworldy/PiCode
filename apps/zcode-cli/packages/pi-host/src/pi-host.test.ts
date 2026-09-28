@@ -321,6 +321,66 @@ test("submission model is applied when the prompt starts, not while queued", asy
   assert.deepEqual(session.prompts, ["now", "later"]);
 });
 
+test("image attachments are sent as bytes and shown on the user row", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pi-image-"));
+  const file = join(dir, "dot.png");
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  await writeFile(file, png);
+  try {
+    const session = new FakePiSession("s");
+    const queue = new HostQueue();
+    const noted: string[][] = [];
+    const bridge = new CommandBridge(session, queue, undefined, (refs) => {
+      noted.push(refs.map((item) => item.ref));
+    });
+    const attachment = {
+      type: "image" as const,
+      path: file,
+      filename: "dot.png",
+      mimeType: "image/png",
+      sizeBytes: png.length,
+    };
+    await bridge.admitSend({
+      text: "see this",
+      clientId: "c",
+      commandId: "1",
+      delivery: "startNow",
+      streaming: false,
+      attachments: [attachment],
+    });
+    assert.equal(session.promptImages[0]?.[0]?.data, png.toString("base64"));
+    session.isStreaming = true;
+    await bridge.admitSend({
+      text: "later",
+      clientId: "c",
+      commandId: "2",
+      delivery: "queue",
+      streaming: true,
+      attachments: [attachment],
+    });
+    session.isStreaming = false;
+    assert.equal(await bridge.drainNext(), true);
+    assert.equal(session.promptImages[1]?.[0]?.mimeType, "image/png");
+    assert.deepEqual(noted, [[file], [file]]);
+    const projector = new PiToV4Projector("s", "e1");
+    projector.noteUserAttachments([
+      { ref: file, fileName: "dot.png", mime: "image/png", bytes: png.length },
+    ]);
+    projector.apply({
+      type: "message_start",
+      message: { role: "user", content: [{ type: "text", text: "see this" }], id: "u1" },
+    });
+    const row = projector.getSnapshot().rows.window.find((item) => item.kind === "userInput");
+    assert.equal(row?.kind, "userInput");
+    if (row?.kind === "userInput") assert.equal(row.attachments?.[0]?.ref, file);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("inbox routes prompt/steer/queue without pi queue_update", async () => {
   const session = new FakePiSession("s");
   const queue = new HostQueue();
@@ -369,6 +429,12 @@ test("extension ui request/response and empty custom registry", async () => {
     options: ["A", "B"],
   });
   assert.equal(select.pending.length, 1);
+  const selectPayload = select.pending[0]?.payload;
+  assert.equal(selectPayload?.kind, "userInput");
+  if (selectPayload?.kind === "userInput") {
+    assert.equal(selectPayload.questions?.[0]?.options[0]?.value, "A");
+    assert.equal(selectPayload.questions?.[0]?.options[1]?.label, "B");
+  }
   const waiting = ui.wait("q1");
   assert.equal(ui.respond({ id: "q1", value: "A" }), true);
   assert.equal((await waiting).id, "q1");

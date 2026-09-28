@@ -33,6 +33,28 @@ export class V4CapabilityUnsupportedError extends Error {
   }
 }
 
+const CONFIRM_OPTION_IDS = new Set(["yes", "no", "allowOnce", "allowAlways", "deny"]);
+
+function askSelection(answer: {
+  optionId?: string;
+  freeText?: string;
+  content?: Record<string, unknown>;
+}): string | undefined {
+  if (answer.optionId) {
+    return CONFIRM_OPTION_IDS.has(answer.optionId) ? undefined : answer.optionId;
+  }
+  if (answer.freeText) return answer.freeText;
+  const content = answer.content;
+  if (!content) return undefined;
+  if (typeof content.answer === "string" && content.answer) return content.answer;
+  const answers = content.answers;
+  if (!answers || typeof answers !== "object" || Array.isArray(answers)) return undefined;
+  const values = Object.values(answers).filter(
+    (value): value is string => typeof value === "string" && value.length > 0,
+  );
+  return values.length === 1 ? values[0] : undefined;
+}
+
 /**
  * resolveInteraction：投递应答给等待中的反向请求（interaction-broker 的 race deferred）。
  *
@@ -69,8 +91,17 @@ async function resolveInteraction(
         )?.piHosted;
   if (hosted) {
     const answer = payload.answer;
-    if (answer.action === "cancel" || answer.optionId === "no" || answer.optionId === "deny") {
+    const picked = askSelection(answer);
+    if (
+      answer.action === "cancel" ||
+      answer.action === "decline" ||
+      answer.optionId === "no" ||
+      answer.optionId === "deny"
+    ) {
       hosted.ui.respond({ id: payload.interactionId, cancelled: true });
+    } else if (picked !== undefined) {
+      // 问卷选项不能当成 confirm。丢掉原文后插件对不上选项，表现成用户取消。
+      hosted.ui.respond({ id: payload.interactionId, value: picked });
     } else if (
       answer.action === "accept" ||
       answer.optionId === "yes" ||
