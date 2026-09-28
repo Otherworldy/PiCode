@@ -16,7 +16,6 @@ import {
   PaletteIcon,
   SquareTerminalIcon,
   TerminalIcon,
-  WaypointsIcon,
   Workflow as WorkflowIcon,
   XIcon,
 } from "lucide-react";
@@ -320,10 +319,6 @@ export function SidePaneTabIcon({ tab }: { tab: WorkspaceSidePaneTab }) {
     return <PaletteIcon className="size-3.5" />;
   }
 
-  if (tab.type === "model-trajectory") {
-    return <WaypointsIcon className="size-3.5" />;
-  }
-
   if (tab.type === "developer-tools") {
     return <BugIcon className="size-3.5" />;
   }
@@ -526,10 +521,6 @@ export function getSidePaneTabTitle(
 
   if (tab.type === "whiteboard") {
     return tab.title || formatMessage({ id: "whiteboard.title" });
-  }
-
-  if (tab.type === "model-trajectory") {
-    return tab.title?.trim() || formatMessage({ id: "modelTrajectory.title" });
   }
 
   if (tab.type === "developer-tools") {

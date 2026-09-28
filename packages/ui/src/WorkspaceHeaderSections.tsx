@@ -34,7 +34,6 @@ import {
 import { resolveWorkspaceHeaderProvider } from "@/lib/workspaceHeaderProvider.js";
 import { toast } from "@/components/ui/toast.js";
 import { useFeedbackStore } from "@/feedback/feedbackStore.js";
-import { useModelTrajectoryStore } from "@/store/modelTrajectoryStore.js";
 import { buildTaskFeedbackDescription } from "@/lib/taskFeedbackDraft.js";
 import { resolveGitBranchTriggerLabel } from "@/git-branch-switcher/display.js";
 import type {
@@ -710,17 +709,6 @@ export function WorkspaceHeaderTitleSection({
                     activeSessionId,
                   );
                 }}
-                onViewModelTrajectory={
-                  resolvedTaskActionTaskId
-                    ? () => {
-                        useModelTrajectoryStore.getState().requestOpen({
-                          taskId: resolvedTaskActionTaskId,
-                          workspaceKey: workspaceIdentity?.trim() || workspaceAbsPath,
-                          title: activeTaskMeta?.title ?? null,
-                        });
-                      }
-                    : undefined
-                }
               />
             </DropdownMenuContent>
           </DropdownMenu>

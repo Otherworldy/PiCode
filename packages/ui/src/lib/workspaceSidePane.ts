@@ -66,17 +66,6 @@ export interface WhiteboardSidePaneTab {
   title: string;
 }
 
-export interface ModelTrajectorySidePaneTab {
-  id: string;
-  type: "model-trajectory";
-  ownerTaskId?: string | null;
-  workspaceKey?: string | null;
-  openedAt?: number;
-  /** 目标 task/session id；model-io 按该 id 匹配。 */
-  taskId: string;
-  title?: string | null;
-}
-
 export interface DeveloperToolsSidePaneTab {
   id: "developer-tools";
   type: "developer-tools";
@@ -520,7 +509,6 @@ export type WorkspaceSidePaneTab =
   | CodeViewerSidePaneTab
   | TreemappingSidePaneTab
   | WhiteboardSidePaneTab
-  | ModelTrajectorySidePaneTab
   | DeveloperToolsSidePaneTab
   | TerminalSidePaneTab
   | BrowserUseSidePaneTab
@@ -568,9 +556,13 @@ export function normalizeWorkspaceSidePaneState(
     return null;
   }
 
-  // Treemapping 当前需要从侧边栏隐藏。旧版本可能已经把 treemapping tab
-  // 写进了 workspace 级 side pane 记忆，这里在状态边界统一过滤，避免恢复后入口继续出现。
-  const filteredTabs = current.tabs.filter((tab) => tab.type !== "treemapping");
+  // Treemapping 仍从侧栏隐藏；调用轨迹侧栏已删。旧记忆里的这两类 tab 在这里丢掉，
+  // 否则恢复后没有对应面板。
+  const filteredTabs = current.tabs.filter(
+    (tab) =>
+      tab.type !== "treemapping" &&
+      (tab as { type: string }).type !== "model-trajectory",
+  );
   if (filteredTabs.length === 0) {
     return null;
   }
@@ -648,20 +640,6 @@ function createBrowserSidePaneTab(options?: {
 
 function createGitSidePaneTab(): GitSidePaneTab {
   return { id: "git", type: "git", openedAt: Date.now() };
-}
-
-function createModelTrajectorySidePaneTab(options: {
-  taskId: string;
-  title?: string | null;
-}): ModelTrajectorySidePaneTab {
-  return {
-    // 同一个 task 复用同一个 tab，避免重复打开多份相同轨迹。
-    id: `model-trajectory:${options.taskId}`,
-    type: "model-trajectory",
-    openedAt: Date.now(),
-    taskId: options.taskId,
-    title: options.title ?? null,
-  };
 }
 
 function createDeveloperToolsSidePaneTab(): DeveloperToolsSidePaneTab {
@@ -1568,16 +1546,6 @@ export function openWhiteboardSidePane(
   },
 ): WorkspaceSidePaneState {
   return activateSidePaneTab(current, createWhiteboardSidePaneTab(options));
-}
-
-export function openModelTrajectorySidePane(
-  current: WorkspaceSidePaneState | null,
-  options: {
-    taskId: string;
-    title?: string | null;
-  },
-): WorkspaceSidePaneState {
-  return activateSidePaneTab(current, createModelTrajectorySidePaneTab(options));
 }
 
 export function activateDeveloperToolsSidePane(

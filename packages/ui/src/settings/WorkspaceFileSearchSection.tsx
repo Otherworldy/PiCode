@@ -175,8 +175,7 @@ function ActiveWorkspaceFileSearchEditor({
   // "有未保存的修改"提示只表达真实差异（template 态未编辑时不显示）。
   const dirty = loaded !== null && loaded.source === "file" && draft !== loaded.content;
 
-  // 「打开文件位置」：.zcodeignore 位于 workspace 根，打开根目录即所在位置
-  // （与 WindowsCaptionMenuButton/ModelTrajectoryPane 先例一致传目录）。
+  // 「打开文件位置」：.zcodeignore 位于 workspace 根，打开根目录即所在位置。
   // 远程 workspace 的规则文件在远端机器，本地文件管理器无法打开，按钮不展示。
   const isLocalWorkspace = !workspaceIdentity?.trim();
   const revealTargetReady = loaded?.source === "file";

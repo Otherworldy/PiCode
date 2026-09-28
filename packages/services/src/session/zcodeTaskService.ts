@@ -65,94 +65,6 @@ export interface ZCodeArchivedTaskDeletionResult {
   failedTaskIds: string[];
 }
 
-/** 一次模型请求里出现的消息内容片段（文本 / 工具调用 / 工具结果 / 其他原始结构）。 */
-export type ZCodeModelTrajectoryContentPart =
-  | { kind: "text"; text: string }
-  | { kind: "reasoning"; text: string }
-  | { kind: "tool-call"; toolCallId?: string; toolName: string; input?: unknown }
-  | { kind: "tool-result"; toolCallId?: string; toolName?: string; output?: unknown }
-  | { kind: "image"; mediaType?: string }
-  | { kind: "unknown"; raw: unknown };
-
-/** 单条对话消息（system / user / assistant / tool）。 */
-export interface ZCodeModelTrajectoryMessage {
-  role: string;
-  parts: ZCodeModelTrajectoryContentPart[];
-}
-
-/** model_io 记录里归一化出来的 token 用量。 */
-export interface ZCodeModelTrajectoryUsage {
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
-  cacheReadTokens?: number;
-  reasoningTokens?: number;
-}
-
-export type ZCodeModelTrajectoryCallSourceKind =
-  | "main"
-  | "sidecar"
-  | "subagent"
-  | "compact"
-  | "unknown";
-
-export interface ZCodeModelTrajectoryCallSource {
-  kind: ZCodeModelTrajectoryCallSourceKind;
-  querySource?: string;
-}
-
-/**
- * 一次模型调用（一条 model_io 记录）。轨迹按时间顺序由多条调用组成。
- * request.messages 是该次请求发送给模型的完整上下文（随轮次增长），
- * response 是这次调用模型产出的新内容。
- */
-export interface ZCodeModelTrajectoryRecord {
-  requestId: string;
-  attempt: number;
-  startedAt: string;
-  completedAt?: string;
-  durationMs?: number;
-  turnId?: string;
-  traceId?: string;
-  callSource?: ZCodeModelTrajectoryCallSource;
-  model: {
-    modelId?: string;
-    providerId?: string;
-    role?: string;
-    source?: string;
-  };
-  request: {
-    messages: ZCodeModelTrajectoryMessage[];
-    toolNames: string[];
-  };
-  response?: {
-    finishReason?: string;
-    text?: string;
-    reasoningText?: string;
-    toolCalls: ZCodeModelTrajectoryContentPart[];
-    usage?: ZCodeModelTrajectoryUsage;
-    responseId?: string;
-    modelId?: string;
-  };
-  error?: {
-    name: string;
-    message: string;
-    stack?: string;
-  };
-}
-
-/** 某个 task/session 的完整模型调用轨迹。 */
-export interface ZCodeModelTrajectory {
-  taskId: string;
-  /** runtime 是否支持读取 model-io 轨迹（仅 PiCode Agent 落盘 model-io）。 */
-  available: boolean;
-  records: ZCodeModelTrajectoryRecord[];
-  /** 命中的源文件绝对路径，便于排查。 */
-  sourceFiles: string[];
-  /** 是否因为超出上限而截断（只保留最近 N 条）。 */
-  truncated: boolean;
-}
-
 export type {
   ZCodeTaskListKind,
   ZCodeTaskListQuery,
@@ -587,16 +499,6 @@ export interface IZCodeTaskService {
     path: string | null;
     exists: boolean;
   }>;
-
-  /**
-   * 读取 task 对应的模型调用轨迹（来自 ~/.PiCode/cli/{debug,rollout} 的 model-io JSONL）。
-   * taskId 即 PiCode Agent 的 sessionId，按 sessionId 匹配 model-io 记录。
-   */
-  getModelTrajectory(params: {
-    taskId: string;
-    /** 最多返回的调用条数（按时间倒序保留最近 N 条），默认 200。 */
-    limit?: number;
-  }): Promise<ZCodeModelTrajectory>;
 
   /** 从 agent usage 数据库读取某个 task/session 的累计模型 token 用量。 */
   getTaskTokenUsage(params: {

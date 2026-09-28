@@ -21,7 +21,6 @@ import {
   closeGitSidePane,
   closeCodeViewerSidePane,
   openWhiteboardSidePane,
-  openModelTrajectorySidePane,
   openTerminalSidePane,
   openSubagentSessionSidePane,
   openSubagentDirectorySidePane,
@@ -78,7 +77,6 @@ import { logger } from "@/logger.js";
 import { getPathLeaf, joinFilePath, toFileUrl } from "@/lib/path.js";
 import { shouldOpenWorkflowArtifactInBrowser } from "@/lib/workflowArtifactOpen.js";
 import { useWhiteboardStore } from "@/store/whiteboardStore.js";
-import { useModelTrajectoryOpenBridge } from "@/hooks/useModelTrajectoryOpenBridge.js";
 import { useServices } from "@/hooks/useServices.js";
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { clearSelectionSideChat } from "@/lib/selectionSideChatRuntime.js";
@@ -809,23 +807,6 @@ export function useAppPanels(options: {
     workspaceRemoteSessionId,
   ]);
 
-  const handleOpenModelTrajectory = useCallback(
-    (params: { taskId: string; title?: string | null }) => {
-      if (!params.taskId) {
-        return;
-      }
-      revealSidePaneForCurrentOwner();
-      commitOpenedSidePaneState((current) => {
-        const next = openModelTrajectorySidePane(current, params);
-        logger.info(
-          `[App] 打开右侧面板 mode=model-trajectory workspace=${workspaceAbsPath} taskId=${params.taskId} tabs=${next.tabs.length}`,
-        );
-        return next;
-      });
-    },
-    [commitOpenedSidePaneState, revealSidePaneForCurrentOwner, workspaceAbsPath],
-  );
-
   const handleOpenBackgroundBash = useCallback(
     (request: OpenBackgroundBashSideTabRequest) => {
       revealSidePaneForCurrentOwner();
@@ -1219,12 +1200,6 @@ export function useAppPanels(options: {
     workspaceIdentity,
   ]);
 
-  // 订阅“打开模型调用轨迹”请求：菜单深处通过单例 store 发起，这里按 workspaceKey 匹配后消费。
-  useModelTrajectoryOpenBridge(
-    workspaceIdentity?.trim() || workspaceAbsPath,
-    handleOpenModelTrajectory,
-  );
-
   const handleToggleTerminal = useCallback(() => {
     setIsTerminalOpen((open) => {
       if (isOfficeMode && !open) return open;
@@ -1588,7 +1563,6 @@ export function useAppPanels(options: {
     handleOpenWhiteboard,
     handleOpenDeveloperTools,
     handleOpenTerminalTab,
-    handleOpenModelTrajectory,
     handleOpenSubagentSession,
     handleOpenBackgroundBash,
     handleOpenSubagentDirectory,

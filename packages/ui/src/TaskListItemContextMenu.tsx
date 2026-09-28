@@ -25,7 +25,6 @@ export function TaskListItemContextMenu({
   onCopyTaskPath,
   onCopyTaskLogPath,
   onCopySessionId,
-  onViewModelTrajectory,
   disableTaskActions = false,
   disabledReason,
 }: {
@@ -56,7 +55,6 @@ export function TaskListItemContextMenu({
   onCopyTaskPath: () => void;
   onCopyTaskLogPath: () => void;
   onCopySessionId?: () => void;
-  onViewModelTrajectory?: () => void;
   disableTaskActions?: boolean;
   disabledReason?: string;
 }) {
@@ -84,7 +82,6 @@ export function TaskListItemContextMenu({
         onCopyTaskPath={onCopyTaskPath}
         onCopyTaskLogPath={onCopyTaskLogPath}
         onCopySessionId={onCopySessionId}
-        onViewModelTrajectory={onViewModelTrajectory}
         disableTaskActions={disableTaskActions}
         disabledReason={disabledReason}
       />

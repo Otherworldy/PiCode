@@ -40,7 +40,6 @@ export function TaskActionMenuContent({
   onCopyTaskPath,
   onCopyTaskLogPath,
   onCopySessionId,
-  onViewModelTrajectory,
 }: {
   intl: {
     formatMessage: (desc: { id: string }, values?: Record<string, string>) => string;
@@ -76,7 +75,6 @@ export function TaskActionMenuContent({
   onCopyTaskPath: () => void;
   onCopyTaskLogPath: () => void;
   onCopySessionId?: () => void;
-  onViewModelTrajectory?: () => void;
 }) {
   const taskTargetActionsDisabled = disableTaskActions || disableTaskTargetActions;
 
@@ -198,20 +196,6 @@ export function TaskActionMenuContent({
         >
           {intl.formatMessage({ id: "appHeader.copySessionId" })}
         </Item>
-      ) : null}
-      {onViewModelTrajectory ? (
-        <>
-          <Separator />
-          {/* 调用轨迹查看：从 ~/.PiCode/cli 的 model-io 还原该 task 的模型请求/响应/工具调用，
-              在右侧边栏可视化。只依赖 taskId（即 sessionId），不依赖快照文件是否落盘。 */}
-          <Item
-            disabled={taskTargetActionsDisabled || !activeSessionId}
-            title={taskTargetActionsDisabled ? disabledReason : undefined}
-            onSelect={onViewModelTrajectory}
-          >
-            {intl.formatMessage({ id: "taskList.viewModelTrajectory" })}
-          </Item>
-        </>
       ) : null}
       {onOpenTaskFeedback ? (
         <>

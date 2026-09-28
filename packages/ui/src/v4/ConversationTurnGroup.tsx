@@ -164,7 +164,10 @@ function TurnChatLoadingSlot({
           <ul className="mt-1 space-y-1 pl-1 text-foreground-subtle">
             {failures.map((failure) => (
               <li key={failure.attempt}>
-                {intl.formatMessage({ id: "modelTrajectory.attempt" }, { attempt: failure.attempt })}
+                {intl.formatMessage(
+                  { id: "chat.apiRetry.failureAttempt" },
+                  { attempt: failure.attempt },
+                )}
                 {" · "}
                 {failure.message}
               </li>
