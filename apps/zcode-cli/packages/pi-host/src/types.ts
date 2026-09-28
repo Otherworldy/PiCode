@@ -70,6 +70,7 @@ export type PiHostEvent =
       type: "compaction_end";
       reason?: string;
       aborted?: boolean;
+      errorMessage?: string;
       result?: { summary?: string; tokensBefore?: number; estimatedTokensAfter?: number };
     }
   | { type: "extension_error"; extensionPath?: string; error: string }

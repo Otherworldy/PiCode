@@ -29,6 +29,7 @@ import type {
 import { cn } from "@/components/lib/utils.js";
 import { runUserAction } from "@/lib/userActionTelemetry.js";
 import { Button } from "@/components/ui/button.js";
+import { ChatLoading } from "@/components/ai-elements/chat-loading.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
 import { ConversationTurnGroup } from "@/v4/ConversationTurnGroup.js";
@@ -1557,6 +1558,17 @@ function ConversationTimelineImpl({
   // 分开暴露才能让恢复/分页验证不再把可见 unit 误当成持久 row。
   return (
     <div ref={timelineRootRef} className="relative flex min-h-0 flex-1 flex-col">
+      {loadingOlder ? (
+        <div className="pointer-events-none absolute inset-x-0 top-2 z-20 flex justify-center">
+          <div
+            role="status"
+            className="inline-flex items-center gap-2 rounded-full bg-background/90 px-3 py-1 text-ui-sm text-foreground-subtle shadow-sm"
+          >
+            <ChatLoading loading size="sm" />
+            {intl.formatMessage({ id: "chat.history.loadingOlderMessages" })}
+          </div>
+        </div>
+      ) : null}
       {selectionActions ? (
         <ConversationSelectionTooltip
           rootRef={scrollRef}

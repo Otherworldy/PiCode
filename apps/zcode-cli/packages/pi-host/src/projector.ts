@@ -648,24 +648,73 @@ export class PiToV4Projector {
   }
 
   private compactEnd(event: Extract<PiHostEvent, { type: "compaction_end" }>): ConversationDelta[] {
-    const row = [...this.snapshot.rows.window].reverse().find((item) => item.kind === "timelineMarker");
-    if (!row || row.kind !== "timelineMarker") return [];
-    return [
-      {
-        op: "row.upserted",
-        row: {
-          ...row,
-          marker: {
-            type: "compact",
-            origin: "manual",
-            status: event.aborted ? "cancelled" : event.result ? "success" : "failed",
-            tokensBefore: event.result?.tokensBefore,
-            tokensAfter: event.result?.estimatedTokensAfter,
-            ...(event.result?.summary ? { summary: event.result.summary } : {}),
+    const presented = event.errorMessage
+      ? presentModelError(event.errorMessage.replace(/^Compaction failed:\s*/i, ""))
+      : undefined;
+    const status: "cancelled" | "success" | "failed" = event.aborted
+      ? "cancelled"
+      : event.result
+        ? "success"
+        : "failed";
+    const marker = {
+      type: "compact" as const,
+      origin: "manual" as const,
+      status,
+      tokensBefore: event.result?.tokensBefore,
+      tokensAfter: event.result?.estimatedTokensAfter,
+      ...(event.result?.summary ? { summary: event.result.summary } : {}),
+      ...(presented ? { error: presented.message } : {}),
+    };
+    // 只收口这次正在跑的压缩。倒序碰到的任意 marker 可能是模型切换，
+    // 盖上去会让失败从时间线上消失。
+    const existing = [...this.snapshot.rows.window].reverse().find(
+      (item) =>
+        item.kind === "timelineMarker" &&
+        item.marker.type === "compact" &&
+        item.marker.status === "running",
+    );
+    const deltas: ConversationDelta[] = [
+      existing && existing.kind === "timelineMarker"
+        ? { op: "row.upserted", row: { ...existing, marker } }
+        : {
+            op: "row.appended",
+            row: {
+              ...this.base(this.turnId || "compact"),
+              kind: "timelineMarker",
+              lane: "assistantWork",
+              marker,
+            },
+          },
+    ];
+    if (status === "failed" && presented) {
+      deltas.push({
+        op: "state.updated",
+        patch: {
+          control: {
+            ...this.snapshot.control,
+            lastError: {
+              code: "fault.compact",
+              message: presented.message,
+              ...(presented.detail ? { detail: presented.detail } : {}),
+              recoverable: true,
+              at: Date.now(),
+              source: "runtime",
+            },
           },
         },
-      },
-    ];
+      });
+    } else if (
+      (status === "success" || status === "cancelled") &&
+      this.snapshot.control.lastError?.code === "fault.compact"
+    ) {
+      deltas.push({
+        op: "state.updated",
+        patch: {
+          control: { ...this.snapshot.control, lastError: null },
+        },
+      });
+    }
+    return deltas;
   }
 
   private flushAssistant(content: unknown): ConversationDelta[] {

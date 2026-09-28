@@ -56,6 +56,8 @@ import type {
   ImportedConversationShare,
 } from "@zcode/services";
 import { toast } from "@/components/ui/toast.js";
+import { ChatLoading } from "@/components/ai-elements/chat-loading.js";
+import { compactFailureText } from "@/v4/compactFailureText.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { DEFAULT_CODE_PREVIEW_SETTINGS } from "@/lib/codePreviewSettings.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
@@ -476,6 +478,9 @@ function resolveQueuedComposerRestore(
 function shouldRestoreQueuedComposerFromAck(status: CommandAck["status"]): boolean {
   return status === "accepted" || status === "duplicate";
 }
+
+/** 冷快照把长 turn 从中间截断时，只自动再补几窗，避免一打开就把整段历史拉进页面。 */
+const LEADING_TURN_AUTOLOAD_PAGES = 3;
 
 /**
  * 单 pane 竖切：订阅 → 渲染 rows → composer 发送 / stop。
@@ -1072,6 +1077,7 @@ export function SessionPane({
   const [assistantPreviewPptxAutoOpenTarget, setAssistantPreviewPptxAutoOpenTarget] =
     useState<AssistantPreviewPptxAutoOpenTarget | null>(null);
   const autoLoadIncompleteTurnCursorRef = useRef<string | null>(null);
+  const leadingTurnAutoloadRef = useRef({ sessionId: "", pages: 0 });
   snapshotRef.current = snapshot;
   const handleAutoOpenAssistantPptx = useCallback(
     (request: AssistantPreviewCardsAutoOpenRequest) => {
@@ -2502,6 +2508,13 @@ export function SessionPane({
         } else if (command.kind === "compact" && ack.reasonCode === "activeTurn") {
           // 兼容尚未升级的 CLI：旧端仍会返回 activeTurn，不能再次无声清空命令。
           toast(intl.formatMessage({ id: "chat.compact.runningBlocked" }));
+        } else if (command.kind === "compact") {
+          // 其它拒绝以前只写日志。点击压缩后界面没有任何变化。
+          toast(
+            ack.message
+              ? compactFailureText(ack.message, (id) => intl.formatMessage({ id }))
+              : intl.formatMessage({ id: "chat.contextCompaction.failed" }),
+          );
         }
       } else if (heldQueueDisposition === "clearQueueAndSend") {
         settleCurrentQueueInputs(targetSessionId);
@@ -3675,10 +3688,14 @@ export function SessionPane({
   }, [handleLoadAllOlder, sessionId, shareActive, snapshot]);
 
   useEffect(() => {
+    if (leadingTurnAutoloadRef.current.sessionId !== (sessionId ?? "")) {
+      leadingTurnAutoloadRef.current = { sessionId: sessionId ?? "", pages: 0 };
+    }
     if (
       !sessionId ||
       !lease?.store ||
-      !shouldAutoLoadIncompleteLeadingTurn(snapshot, state.loadingOlder)
+      !shouldAutoLoadIncompleteLeadingTurn(snapshot, state.loadingOlder) ||
+      leadingTurnAutoloadRef.current.pages >= LEADING_TURN_AUTOLOAD_PAGES
     ) {
       return;
     }
@@ -3687,11 +3704,10 @@ export function SessionPane({
     const cursorKey = `${sessionId}:${state.subscriptionId ?? "connecting"}:${firstRowId}`;
     if (autoLoadIncompleteTurnCursorRef.current === cursorKey) return;
     autoLoadIncompleteTurnCursorRef.current = cursorKey;
+    leadingTurnAutoloadRef.current.pages += 1;
 
-    // snapshotTailWindowRows 按 row 截尾，可能把一个长 turn 的 header/user
-    // 留在窗口外。旧 UI 只在 scroll 事件到达顶边时 loadOlder；内容不足一屏或 scrollTop
-    // 已经为 0 时不会再产生事件，于是只渲染 assistant，必须先下滚再上滚。检测到首 turn
-    // 缺 header 后立即逐窗补齐；cursor 去重避免空 range 或失败时 effect 自旋。
+    // 尾窗可能把这一轮的 header 留在外面。内容不够一屏时滚不到顶，不会触发 loadOlder。
+    // 最多再补 3 窗；更早的记录等用户上滚，避免长会话一打开就把整段历史拉进来。
     logger.debug("[v4-pane] 冷快照首 turn 不完整，自动补拉更早行", {
       firstRowId,
       sessionId,
@@ -3968,7 +3984,13 @@ export function SessionPane({
     : null;
   const projectedComposerError =
     controlLastError && controlLastErrorKey && !dismissedErrorKeys.includes(controlLastErrorKey)
-      ? toComposerUiError(snapshot?.sessionId ?? sessionId, controlLastError)
+      ? toComposerUiError(snapshot?.sessionId ?? sessionId, {
+          ...controlLastError,
+          message:
+            controlLastError.code === "fault.compact"
+              ? compactFailureText(controlLastError.message, (id) => intl.formatMessage({ id }))
+              : controlLastError.message,
+        })
       : null;
   // 官方 Server MCP 不可用（额度耗尽 / 无 Coding Plan）：事实来自 tool row 上的结构化标识，
   // 与模型额度是两条独立信息通道，这里只做投影。
@@ -4817,6 +4839,15 @@ export function SessionPane({
                 isDraft ? (
                   <div data-testid={TID_CHAT_EMPTY} className="w-full">
                     <ConversationDraftEmptyState />
+                  </div>
+                ) : timelineSnapshot === null ? (
+                  <div
+                    role="status"
+                    data-testid="v4-history-loading"
+                    className="flex h-full min-h-48 items-center justify-center gap-2 text-ui-sm text-foreground-subtle"
+                  >
+                    <ChatLoading loading size="sm" />
+                    {intl.formatMessage({ id: "chat.history.loadingSession" })}
                   </div>
                 ) : null
               }

@@ -124,11 +124,20 @@ function positiveInt(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
+function mapEntries(map: unknown): Array<[string, string | null]> {
+  if (!map || typeof map !== "object" || Array.isArray(map)) return [];
+  return Object.entries(map as Record<string, unknown>).flatMap(([key, value]) =>
+    typeof value === "string" || value === null ? [[key, value] as [string, string | null]] : [],
+  );
+}
+
+// thinkingLevelMap 值为 null 表示模型没有该思考等级（如 minimal/xhigh），读取可用等级时跳过。
 function thinkingLevelsOf(model: Record<string, unknown>): string[] {
   const map = model.thinkingLevelMap;
   if (map && typeof map === "object" && !Array.isArray(map)) {
-    const keys = Object.keys(map);
-    if (keys.length > 0) return keys;
+    return Object.entries(map)
+      .filter(([, value]) => value !== null)
+      .map(([key]) => key);
   }
   return model.reasoning === false ? ["off"] : [...DEFAULT_THINKING_LEVELS];
 }
@@ -137,15 +146,20 @@ function thinkingLevelMapFrom(
   levels: string[] | undefined,
   existing: unknown,
 ): Record<string, string | null> {
-  const prev =
-    existing && typeof existing === "object" && !Array.isArray(existing)
-      ? (existing as Record<string, unknown>)
-      : {};
-  const keys = levels ?? (Object.keys(prev).length > 0 ? Object.keys(prev) : [...DEFAULT_THINKING_LEVELS]);
+  const prev = mapEntries(existing);
+  if (!levels) {
+    return prev.length > 0
+      ? Object.fromEntries(prev)
+      : Object.fromEntries(DEFAULT_THINKING_LEVELS.map((level) => [level, level]));
+  }
+  // UI 只展示非 null 等级，保存时保留手写的 null 条目（不可用等级），避免下次编辑被覆盖丢失。
+  const prevMap = new Map(prev);
   const next: Record<string, string | null> = {};
-  for (const level of keys) {
-    const value = prev[level];
-    next[level] = typeof value === "string" || value === null ? value : level;
+  for (const [key, value] of prev) {
+    if (value === null) next[key] = null;
+  }
+  for (const level of levels) {
+    next[level] = prevMap.get(level) ?? level;
   }
   return next;
 }

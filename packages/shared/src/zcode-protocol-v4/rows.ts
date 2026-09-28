@@ -336,6 +336,8 @@ export const timelineMarkerPayloadSchema = z.union([
     tokensAfter: z.number().optional(),
     summary: z.string().optional(),
     summaryRef: z.string().optional(),
+    // Pi 拒绝或模型失败时的原因。成功压缩没有这个字段。
+    error: z.string().optional(),
   }),
   // 出现在 child 会话首部（forkTimelineIsBoundary）。
   z.object({

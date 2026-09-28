@@ -40,10 +40,11 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 - 流中途失败：turn `failed`，已写出的 row 保留。
 - 模型失败只把一句摘要写进回复和 `lastError.message`；原始 JSON 放 `lastError.detail`。
 - Pi `auto_retry_start` 写入 `control.apiRetry.failures`。最终失败只进输入框上方的原错误横幅，摘要一行，历次失败和原文在「展开详情」。不写成助手正文。成功后清掉重试状态。同一次失败的后续 `agent_settled` 不清掉这条错误。
-- `/compact` 直接调用 Pi `session.compact()`，不进入输入队列。Pi 会先中断当前操作再压缩。完成后的摘要写在 compact marker 的 `summary` 上，界面可展开查看。重开会话时从 jsonl 的 compaction 条目还原同一条 marker。
+- `/compact` 直接调用 Pi `session.compact()`，不进入输入队列。Pi 会先中断当前操作再压缩。完成后的摘要写在 compact marker 的 `summary` 上，界面可展开查看。失败原因写在 marker 的 `error` 上，并进入输入框上方的错误横幅。命令被拒绝时也要弹出原因，不能只写日志。重开会话时从 jsonl 的 compaction 条目还原同一条 marker。
 - 输入框模型左侧的圆环读 Pi `getContextUsage()`。一轮结束、压缩结束或切换模型后写入 `usage.contextWindow`。点击圆环发送 `/compact`。
-- 打开会话只下发尾部一窗。页面向上滚动再拉更早的一窗，不再在打开时把整段历史灌进时间线。下发的工具参数和输出只留 head+tail；宿主里的原文仍留给文件回滚。
+- 打开会话只下发尾部一窗。页面向上滚动再拉更早的一窗，不再在打开时把整段历史灌进时间线。下发的工具参数和输出只留 head+tail；宿主里的原文仍留给文件回滚。投影未到时时间线显示加载，不留白。
 - 冷恢复重放 jsonl 时，行先落完，actions 只算一次。不能每条事件都扫整窗，否则几万行的会话订阅一直不返回。
+- 折叠的工具历史不挂载，时间线只保留视口附近的轮次。截断轮自动补齐最多 3 窗，其余靠上滚再拉。
 - abort：turn `completedInterrupted`，运行中工具 `cancelled`。
 - `custom()` 无 adapter：降级 widget 文本，不卡循环。
 - 插件抛错：`extension_error` → notify，会话继续。

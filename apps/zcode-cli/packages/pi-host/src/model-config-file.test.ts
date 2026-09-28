@@ -107,6 +107,63 @@ test("upsert writes per-model limits and keeps thinkingLevelMap values", () => {
   assert.equal(glm.api, "openai-responses");
 });
 
+test("null thinkingLevelMap values are filtered from views and kept on upsert", () => {
+  const file: ModelsJsonFile = {
+    providers: {
+      lens: {
+        baseUrl: "https://example.test/v1",
+        api: "openai-completions",
+        models: [
+          {
+            id: "glm-5.3-flash",
+            reasoning: true,
+            thinkingLevelMap: {
+              off: null,
+              minimal: null,
+              low: "low",
+              medium: null,
+              high: "high",
+              xhigh: null,
+              max: "max",
+            },
+          },
+        ],
+      },
+    },
+  };
+  // 读取视图：null 条目不算可用等级。
+  const view = toPiModelConfigView(file);
+  assert.deepEqual(view.providers[0]?.models[0]?.thinkingLevels, ["low", "high", "max"]);
+  // runtime 同理。
+  const runtime = toRuntimeConfig(file.providers?.lens ?? {});
+  assert.deepEqual(runtime.models[0]?.thinkingLevelMap, {
+    off: null,
+    minimal: null,
+    low: "low",
+    medium: null,
+    high: "high",
+    xhigh: null,
+    max: "max",
+  });
+  // 保存时 UI 只勾选非 null 等级，null 条目保留不被覆盖。
+  const next = upsertProvider(file, {
+    id: "lens",
+    baseUrl: "https://example.test/v1",
+    api: "openai-completions",
+    models: [{ id: "glm-5.3-flash", thinkingLevels: ["low", "high", "max"] }],
+  });
+  const glm = next.providers?.lens?.models as Array<Record<string, unknown>>;
+  assert.deepEqual(glm[0]?.thinkingLevelMap, {
+    off: null,
+    minimal: null,
+    low: "low",
+    medium: null,
+    high: "high",
+    xhigh: null,
+    max: "max",
+  });
+});
+
 test("missing model api inherits the provider; an override is kept", () => {
   const file: ModelsJsonFile = {
     providers: {

@@ -354,6 +354,42 @@ function ConversationAssistantWorkItems({
     open: boolean;
   };
 }) {
+  if (historyContainer && !historyContainer.open) {
+    // 折叠时不挂工具和正文。长会话里这些节点才是滚动卡顿的来源，展开后再建。
+    return (
+      <CollapsibleContent
+        data-testid={testId(TID_CHAT_ASSISTANT_HISTORY_CONTENT, historyContainer.chunkKey)}
+        data-history-open="false"
+      />
+    );
+  }
+  return (
+    <OpenConversationAssistantWorkItems
+      rows={rows}
+      context={context}
+      stageTailIsRunning={stageTailIsRunning}
+      assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
+      historyContainer={historyContainer}
+    />
+  );
+}
+
+function OpenConversationAssistantWorkItems({
+  rows,
+  context,
+  stageTailIsRunning = false,
+  assistantCodeCommentProjectionEnabled = false,
+  historyContainer,
+}: {
+  rows: readonly AssistantWorkRow[];
+  context: ConversationRowRenderContext;
+  stageTailIsRunning?: boolean;
+  assistantCodeCommentProjectionEnabled?: boolean;
+  historyContainer?: {
+    chunkKey: string;
+    open: boolean;
+  };
+}) {
   const showReasoning = context.messageStreamShowReasoning === true;
   const firstReasoningRowId = context.messageStreamFirstReasoningRowId;
   const items = useMemo(

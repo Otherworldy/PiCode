@@ -102,9 +102,15 @@ function getProductionModelRuntime(): Promise<ModelRuntime> {
   return productionRuntime;
 }
 
+// thinkingLevelMap 值为 null 表示没有该思考等级，目录列表同步时过滤掉。
 function thoughtLevelsOf(model: { thinkingLevelMap?: Record<string, unknown> }): string[] {
-  const keys = Object.keys(model.thinkingLevelMap ?? {});
-  return keys.length > 0 ? keys : ["off", "low", "medium", "high"];
+  const map = model.thinkingLevelMap;
+  if (map && typeof map === "object") {
+    return Object.entries(map)
+      .filter(([, value]) => value !== null)
+      .map(([key]) => key);
+  }
+  return ["off", "low", "medium", "high"];
 }
 
 export async function listPiCatalog(): Promise<{

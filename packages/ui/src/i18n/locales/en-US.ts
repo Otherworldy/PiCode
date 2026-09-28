@@ -1453,6 +1453,7 @@ const enUS: Record<string, string> = {
   "terminal.closeTab": "Close {title}",
   "terminal.contextMenu.copy": "Copy",
   "terminal.contextMenu.paste": "Paste",
+  "chat.history.loadingSession": "Loading conversation...",
   "chat.history.loadingOlderMessages": "Loading earlier messages...",
   "chat.history.loadOlderMessages": "Load earlier messages",
   "chat.pendingCommand.discarded":
@@ -4393,6 +4394,8 @@ const enUS: Record<string, string> = {
   "chat.modelChange.using": "Using {model}",
   "chat.contextCompaction.completedAuto": "Context automatically compressed",
   "chat.contextCompaction.failed": "Context compression failed",
+  "chat.contextCompaction.tooSmall": "Context is too small to compress",
+  "chat.contextCompaction.alreadyCompacted": "Context was just compressed",
   "chat.contextCompaction.interrupted": "Context compression interrupted",
   "chat.contextCompaction.retry": "Retry",
   "chat.goalVerification.checking": "Verifying goal",

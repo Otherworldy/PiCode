@@ -123,6 +123,33 @@ test("projects text, tools, abort, compact", () => {
   );
 });
 
+test("compact failure keeps the Pi reason on the marker and the composer banner", () => {
+  const projector = new PiToV4Projector("s1", "e1");
+  projector.apply({ type: "compaction_start" });
+  projector.apply({
+    type: "compaction_end",
+    errorMessage: "Compaction failed: Nothing to compact (session too small)",
+  });
+  const compact = projector.getSnapshot().rows.window.find((row) => row.kind === "timelineMarker");
+  assert.equal(
+    compact && compact.kind === "timelineMarker" && compact.marker.type === "compact"
+      ? compact.marker.status
+      : "",
+    "failed",
+  );
+  assert.equal(
+    compact && compact.kind === "timelineMarker" && compact.marker.type === "compact"
+      ? compact.marker.error
+      : "",
+    "Nothing to compact (session too small)",
+  );
+  assert.equal(projector.getSnapshot().control.lastError?.code, "fault.compact");
+  assert.match(
+    projector.getSnapshot().control.lastError?.message ?? "",
+    /Nothing to compact/,
+  );
+});
+
 test("retry keeps one working turn and shows the final error", () => {
   const projector = new PiToV4Projector("s1", "e1");
   projector.apply({ type: "agent_start" });

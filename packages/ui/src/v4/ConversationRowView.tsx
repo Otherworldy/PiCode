@@ -1,5 +1,6 @@
 /* oxlint-disable eslint(max-lines) -- v4 逐行 row 渲染分发集中收口（每种 row 一个 memo 叶子 + timelineMarker 分隔线），拆分会打散行类型对照。 */
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
+import { compactFailureText } from "@/v4/compactFailureText.js";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArchiveIcon,
@@ -1777,7 +1778,11 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
                   : marker.origin === "auto" && !automaticOptimization
                     ? "completedAuto"
                     : "completed";
-        const label = intl.formatMessage({ id: `${scope}.${statusMessage}` });
+        const failureText =
+          marker.status === "failed" && marker.error
+            ? compactFailureText(marker.error, (id) => intl.formatMessage({ id }))
+            : undefined;
+        const label = failureText ?? intl.formatMessage({ id: `${scope}.${statusMessage}` });
         return {
           icon: MARKER_ARCHIVE_ICON,
           label:
