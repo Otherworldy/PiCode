@@ -2,11 +2,13 @@
 import { createInMemorySessionEventStore } from "@zcode/adapters/storage";
 import type { ModelSelection } from "@zcode/contracts";
 import {
+  checkPiPluginUpdates,
   listPiCatalog,
   listPiPluginConfigs,
   listPiPlugins,
   mutatePiCatalog,
   setPiPluginEnabled,
+  updatePiPlugin,
   writePiPluginConfig,
 } from "@zcode/pi-host";
 import {
@@ -75,8 +77,16 @@ export async function mutatePiPlugins(rawParams: unknown) {
   } else if (params.action === "writeConfig") {
     if (!params.id || !params.values) throw new Error("Pi plugin config requires id and values");
     await writePiPluginConfig(params.id, params.values);
+  } else if (params.action === "update") {
+    if (!params.id) throw new Error("Pi plugin update requires id");
+    await updatePiPlugin(cwd, params.id);
   }
-  return { plugins: await listPiPlugins(cwd), configs: await listPiPluginConfigs() };
+  const updates = params.action === "checkUpdates" ? await checkPiPluginUpdates(cwd) : undefined;
+  return {
+    plugins: await listPiPlugins(cwd),
+    configs: await listPiPluginConfigs(),
+    ...(updates ? { updates } : {}),
+  };
 }
 
 export async function testProviderModelConnectivity(

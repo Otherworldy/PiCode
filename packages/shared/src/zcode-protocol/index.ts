@@ -2131,7 +2131,7 @@ export const zcodePiPluginConfigSchema = z
 export const zcodePiPluginsParamsSchema = z
   .object({
     workspace: zcodeWorkspaceRefSchema.optional(),
-    action: z.enum(["list", "setEnabled", "writeConfig"]),
+    action: z.enum(["list", "setEnabled", "writeConfig", "checkUpdates", "update"]),
     id: z.string().min(1).optional(),
     enabled: z.boolean().optional(),
     values: z.record(z.string(), zcodePiPluginConfigValueSchema).optional(),
@@ -2153,6 +2153,18 @@ export const zcodePiPluginsResultSchema = z
         .strict(),
     ),
     configs: z.array(zcodePiPluginConfigSchema).optional(),
+    updates: z
+      .array(
+        z
+          .object({
+            id: z.string(),
+            source: z.string(),
+            scope: z.enum(["user", "project"]),
+            name: z.string(),
+          })
+          .strict(),
+      )
+      .optional(),
   })
   .strict();
 export type ZCodePiPluginsResult = z.infer<typeof zcodePiPluginsResultSchema>;

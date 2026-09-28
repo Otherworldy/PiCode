@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Download, RefreshCw } from "lucide-react";
 import type { ZCodePiPluginsResult } from "@zcode/shared";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -19,6 +20,7 @@ import { SettingsGroupCard, SettingsRow } from "@/settings/SettingsPageParts.js"
 
 type PiPlugin = ZCodePiPluginsResult["plugins"][number];
 type PiPluginConfig = NonNullable<ZCodePiPluginsResult["configs"]>[number];
+type PiPluginUpdate = NonNullable<ZCodePiPluginsResult["updates"]>[number];
 type PiPluginConfigValue = PiPluginConfig["fields"][number]["value"];
 
 function draftOf(config: PiPluginConfig): Record<string, PiPluginConfigValue> {
@@ -100,6 +102,8 @@ export function PiPluginsSection({
   const [draft, setDraft] = useState<Record<string, PiPluginConfigValue>>({});
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [updates, setUpdates] = useState<PiPluginUpdate[]>([]);
   const workspace = useMemo(
     () => ({
       workspacePath,
@@ -134,15 +138,56 @@ export function PiPluginsSection({
     onVisibleCountChange?.(visible.length);
   }, [onVisibleCountChange, visible.length]);
 
+  const checkUpdates = useCallback(() => {
+    setChecking(true);
+    void session
+      .mutatePiPlugins({ ...workspace, action: "checkUpdates" })
+      .then((result) => {
+        const found = result.updates ?? [];
+        const count = found.filter((item) => item.scope === scope).length;
+        setPlugins(result.plugins);
+        setConfigs(result.configs ?? []);
+        setUpdates(found);
+        toast(
+          intl.formatMessage(
+            {
+              id:
+                count > 0
+                  ? "settings.plugins.checkForUpdates.found"
+                  : "settings.plugins.checkForUpdates.none",
+            },
+            { count },
+          ),
+        );
+      })
+      .catch((error) => {
+        logger.warn("[pi-plugins] update check failed", { error });
+        toast(intl.formatMessage({ id: "settings.plugins.pi.checkFailed" }));
+      })
+      .finally(() => setChecking(false));
+  }, [intl, scope, session, workspace]);
+
   return (
     <div className="mb-6">
-      <div className="mb-3">
-        <div className="text-ui-base font-semibold text-foreground">
-          {intl.formatMessage({ id: "settings.plugins.pi.title" })}
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <div className="text-ui-base font-semibold text-foreground">
+            {intl.formatMessage({ id: "settings.plugins.pi.title" })}
+          </div>
+          <div className="mt-1 text-ui-base text-foreground-subtle">
+            {intl.formatMessage({ id: "settings.plugins.pi.hint" })}
+          </div>
         </div>
-        <div className="mt-1 text-ui-base text-foreground-subtle">
-          {intl.formatMessage({ id: "settings.plugins.pi.hint" })}
-        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={checking || plugins === null}
+          onClick={checkUpdates}
+        >
+          <RefreshCw />
+          {intl.formatMessage({ id: "settings.plugins.checkForUpdates" })}
+        </Button>
       </div>
       {plugins === null ? (
         <div className="text-ui-base text-foreground-subtle">
@@ -164,6 +209,39 @@ export function PiPluginsSection({
                 controlLayout="wide"
                 control={
                   <>
+                    {updates.some((item) => item.id === plugin.id && item.scope === scope) ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={pendingId === plugin.id}
+                        onClick={() => {
+                          setPendingId(plugin.id);
+                          void session
+                            .mutatePiPlugins({
+                              ...workspace,
+                              action: "update",
+                              id: plugin.id,
+                            })
+                            .then((result) => {
+                              setPlugins(result.plugins);
+                              setConfigs(result.configs ?? []);
+                              setUpdates((current) =>
+                                current.filter((item) => item.id !== plugin.id),
+                              );
+                              toast(intl.formatMessage({ id: "settings.plugins.pi.updated" }));
+                            })
+                            .catch((error) => {
+                              logger.warn("[pi-plugins] update failed", { error });
+                              toast(intl.formatMessage({ id: "settings.plugins.pi.failed" }));
+                            })
+                            .finally(() => setPendingId(null));
+                        }}
+                      >
+                        <Download />
+                        {intl.formatMessage({ id: "settings.plugins.pi.update" })}
+                      </Button>
+                    ) : null}
                     {config ? (
                       <Button
                         type="button"

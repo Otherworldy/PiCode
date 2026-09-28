@@ -3784,6 +3784,9 @@ export function createZCodeAgentService(
           ...(params.values ? { values: params.values } : {}),
         },
         zcodePiPluginsResultSchema,
+        params.action === "checkUpdates" || params.action === "update"
+          ? { timeoutMs: 5 * 60_000 }
+          : undefined,
       );
     },
 
