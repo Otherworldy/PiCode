@@ -16,6 +16,7 @@ import type {
   CommandAck,
   CommandEnvelope,
   CommandPayloadMap,
+  CommandResult,
   ConversationInputIntent,
   QueueItem,
   StableForkTarget,
@@ -185,6 +186,19 @@ export interface V4CommandCoreHost {
       feedback: "like" | "dislike" | null;
     },
   ): Promise<void>;
+  readSessionTree?(sessionId: string): Promise<CommandResult>;
+  navigateSessionTree?(
+    sessionId: string,
+    input: CommandPayloadMap["navigateSessionTree"],
+  ): Promise<CommandResult>;
+  labelSessionEntry?(
+    sessionId: string,
+    input: CommandPayloadMap["labelSessionEntry"],
+  ): Promise<CommandResult>;
+  deleteSessionBranch?(
+    sessionId: string,
+    input: CommandPayloadMap["deleteSessionBranch"],
+  ): Promise<CommandResult>;
   /**
    * 交互应答登记表（v4 原生基础设施，非过渡钩子）：interaction-broker 发起
    * 反向请求（permission/AskUserQuestion）时注册 deferred，resolveInteraction 命令

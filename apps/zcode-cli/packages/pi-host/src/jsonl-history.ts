@@ -156,6 +156,10 @@ export function readPiJsonl(content: string): {
       namedTitle = clip(entry.name, 60);
       continue;
     }
+    if (type === "branch_summary" && typeof entry.summary === "string" && entry.summary.trim()) {
+      events.push({ type: "branch_summary", summary: entry.summary });
+      continue;
+    }
     if (type === "compaction" && typeof entry.summary === "string" && entry.summary.trim()) {
       endTurn();
       events.push({ type: "compaction_start", reason: "manual" });

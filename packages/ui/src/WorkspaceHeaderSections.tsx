@@ -54,6 +54,7 @@ import { invalidateDeferredDraftSessionForSkillChange } from "@/lib/zcodeDraftSk
 import { refreshSharedSkillStoreForWorkspace } from "@/lib/skillStoreRefresh.js";
 import { refreshWorkspacePluginCapabilitiesAfterRemoteSync } from "@/lib/remotePluginSyncRefresh.js";
 import { useMcpStore } from "@/store/mcpStore.js";
+import { SessionBranchPill } from "@/v4/SessionBranchPill.js";
 
 export type { WorkspaceHeaderState, WorkspaceHeaderTitleSectionProps };
 export {
@@ -484,21 +485,8 @@ export function WorkspaceHeaderTitleSection({
         title={activeTaskTitle}
       >
         <span className="min-w-0 truncate">{activeTaskTitle}</span>
-        {/* {activeTaskChangeSummary ? (
-          <>
-            {activeTaskChangeSummary.added > 0 ? (
-              <span className="text-diff-added">
-                +{activeTaskChangeSummary.added}
-              </span>
-            ) : null}
-            {activeTaskChangeSummary.removed > 0 ? (
-              <span className="text-diff-removed">
-                -{activeTaskChangeSummary.removed}
-              </span>
-            ) : null}
-          </>
-        ) : null} */}
       </h1>
+      <SessionBranchPill sessionId={activeSessionId} />
       <div className="flex min-w-0 shrink-0 items-center gap-1">
         {!isDraftNewTask ? (
           <DropdownMenu open={taskMenuOpen} onOpenChange={setTaskMenuOpen}>

@@ -17,14 +17,18 @@ import {
 import { mapThought } from "./model-delegate.js";
 import { PiToV4Projector } from "./projector.js";
 import type { ToolPermissionCheck } from "./permission-gate.js";
+import { runSessionResume } from "./session-tree.js";
 import {
   contextUsagePublish,
   type CreatePiSession,
   type PiExtensionUiResponse,
   type PiHostEvent,
   type PiSessionPort,
+  type PiSessionTreeNode,
   type PiSkillView,
   type PiSlashCommandView,
+  type SessionResumeRequest,
+  type SessionResumeResult,
 } from "./types.js";
 
 export interface HostedSession {
@@ -50,6 +54,10 @@ export interface HostedSession {
   readManagedProcessOutput(workId: string): Promise<import("@zcode/shared").BackgroundBashOutputResult>;
   compact(): Promise<void>;
   navigateTree(targetId: string): Promise<void>;
+  resumeAt(request: SessionResumeRequest): Promise<SessionResumeResult>;
+  readSessionTree(): PiSessionTreeNode[];
+  labelSessionEntry(entryId: string, label?: string): PiSessionTreeNode[];
+  deleteSessionBranch(entryId: string): PiSessionTreeNode[];
   branchFrom?(entryId: string): { sessionId: string; sessionFile: string };
   reloadHistory(content: string): void;
   setModel(provider: string, modelId: string, thought?: string): Promise<void>;
@@ -657,6 +665,7 @@ export class HostSessionRegistry {
         console.error("pi-host event apply failed", event.type, error);
       }
     });
+    let summarizingBranch = false;
     void pi.bindUi?.(createHostExtensionUi(ui, handleUi));
     if (pi.currentModel) {
       projector.setConfig({
@@ -688,6 +697,10 @@ export class HostSessionRegistry {
       prompt: (text) => pi.prompt(text),
       waitTurn: () => pi.waitTurn?.() ?? Promise.resolve(),
       abort: async () => {
+        if (summarizingBranch) {
+          pi.abortBranchSummary?.();
+          return;
+        }
         projector.markAborted();
         abortInflightNetwork();
         await pi.abort();
@@ -709,6 +722,41 @@ export class HostSessionRegistry {
         pi.setThinkingLevel?.(mapThought(level));
       },
       branchFrom: pi.branchFrom,
+      resumeAt: (request) =>
+        runSessionResume({
+          pi,
+          request,
+          reload: (events) => {
+            emit(projector.reload(events));
+          },
+          setSummarizing: (active) => {
+            summarizingBranch = active;
+            emit(projector.noteBranchSummary(active));
+          },
+          releaseStop: () => {
+            projector.releaseStop();
+          },
+          publishContext,
+        }),
+      readSessionTree: () => pi.readTree?.() ?? [],
+      labelSessionEntry: (entryId, label) => {
+        pi.labelEntry?.(entryId, label);
+        return pi.readTree?.() ?? [];
+      },
+      deleteSessionBranch: (entryId) => {
+        if (pi.isCompacting || pi.isStreaming) {
+          throw Object.assign(new Error("Wait for the current response to finish"), {
+            reasonCode: "guard.sessionTreeBusy",
+          });
+        }
+        if (!pi.deleteBranch) {
+          throw Object.assign(new Error("Session tree is unavailable"), {
+            reasonCode: "fault.command.sessionTreeUnsupported",
+          });
+        }
+        pi.deleteBranch(entryId);
+        return pi.readTree?.() ?? [];
+      },
       navigateTree: async (targetId) => {
         let entryId = targetId;
         // 冷恢复的行 id 是 Pi entry。实时行 id 是 row:N，得用原文对上树节点。

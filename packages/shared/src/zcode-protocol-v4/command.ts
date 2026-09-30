@@ -166,6 +166,24 @@ export const commandPayloadSchemas = {
     target: conversationRowTargetSchema,
     feedback: z.enum(["like", "dislike"]).nullable(),
   }),
+  // Pi /tree。不走 CAS：叶子以 Pi SessionManager 为准，回执带当前树。
+  readSessionTree: z.object({}),
+  navigateSessionTree: z.object({
+    entryId: z.string().min(1),
+    text: z.string().optional(),
+    role: z.enum(["user", "assistant"]).optional(),
+    summarize: z.boolean(),
+    customInstructions: z.string().max(8000).optional(),
+    // 不总结时 Pi 只改内存叶子。带上标签才会追加一条记录，重开还停在这条分支。
+    label: z.string().max(200).optional(),
+  }),
+  labelSessionEntry: z.object({
+    entryId: z.string().min(1),
+    label: z.string().max(200).optional(),
+  }),
+  deleteSessionBranch: z.object({
+    entryId: z.string().min(1),
+  }),
   sendQueuedNow: z.object({ queueItemId: z.string() }),
   editQueueItem: z.object({ queueItemId: z.string(), newText: z.string() }),
   // beforeQueueItemId = null → 移到队尾。
@@ -369,8 +387,30 @@ export function parseCommandEnvelope(
   };
 }
 
+export const sessionTreeNodeSchema = z.object({
+  id: z.string().min(1),
+  parentId: z.string().min(1).nullable(),
+  role: z.enum(["user", "assistant", "tool", "summary", "compaction", "other"]),
+  preview: z.string(),
+  label: z.string().optional(),
+  depth: z.number().int().nonnegative(),
+  active: z.boolean(),
+  leaf: z.boolean(),
+});
+export type SessionTreeNodeView = z.infer<typeof sessionTreeNodeSchema>;
+
 // ── ACK ──
 export const commandResultSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("navigateSessionTree"),
+    cancelled: z.boolean(),
+    editorText: z.string().optional(),
+    tree: z.array(sessionTreeNodeSchema),
+  }),
+  z.object({
+    type: z.literal("sessionTree"),
+    tree: z.array(sessionTreeNodeSchema),
+  }),
   z.object({
     type: z.enum(["createSession", "createSelectionSideSession", "forkAssistant"]),
     sessionId: z.string(),

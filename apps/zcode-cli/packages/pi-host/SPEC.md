@@ -61,7 +61,11 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 ## V4 命令
 
-保留：`createSession`、`createSelectionSideSession`、`sendText`、`stop`、`compact`、`forkAssistant`、`editUserQuery`、`retryTurn`、队列五件套、`setFollowupMode`、`switchModelConfig`、`resolveInteraction`、`snoozeInteractionAutoResolution`、`cancelBackgroundWork`、`renameSession`、`deleteSession`、`setAssistantFeedback`、`applyFileRewind`。
+保留：`createSession`、`createSelectionSideSession`、`sendText`、`stop`、`compact`、`forkAssistant`、`editUserQuery`、`retryTurn`、队列五件套、`setFollowupMode`、`switchModelConfig`、`resolveInteraction`、`snoozeInteractionAutoResolution`、`cancelBackgroundWork`、`renameSession`、`deleteSession`、`setAssistantFeedback`、`applyFileRewind`、`readSessionTree`、`navigateSessionTree`、`labelSessionEntry`。
+
+`navigateSessionTree` 是 Pi `/tree`，不是分叉，也不是换会话。叶子仍在同一份 jsonl。助手节点停在该条；用户节点回到父节点，原文只在输入框为空时写回，不自动发送。界面不再弹会话树：标题旁只列分支末梢，点一条就切过去，不总结。被丢下的路径不删。命令仍可让 Pi `navigateTree` 总结，成功后追加 `branch_summary`，时间线用 `branchSummary` marker。导航后按内存里的 `getLeafId()` / `buildContextEntries()` 重放，不按文件最后一行，也不再用行号裁切。不总结且不带 `label` 时叶子只在内存里移动；带 `label` 时 Pi 会追加一条 label，重开仍停在该分支。压缩进行中拒绝。正在生成则先停掉当前回复。总结进行中 Stop 只调 `abortBranchSummary()`，叶子不动。不回滚工作区文件。`editUserQuery` 仍走原来的 `navigateTree` 裁切，不进这条命令。
+
+`readSessionTree` 把 `getTree()` 压成平铺节点，放在命令回执里，不进每条快照。`labelSessionEntry` 写 Pi 的 label，再回一份树。`deleteSessionBranch` 删掉侧枝上当前路径用不到的条目并重写 jsonl；当前分支、生成中、压缩中都拒绝。当前路径不变，不重建模型上下文，也不重放对话。
 
 删除（协议 + UI）：`sendGoalCommand`、`pauseGoal`、`resumeGoal`、`resumeWorkflowRun`、`startSavedWorkflow`、`amendWorkflowRunSettings`、workspace hook 审核三件套、`switchCollaborationMode`、`discardSharedContext`。
 

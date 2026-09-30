@@ -1482,6 +1482,17 @@ function ConversationTurnGroupImpl({
               sessionId={context.sessionId}
               onFork={canForkLatestAssistant ? onFork : undefined}
               onRetry={canRetryLatestAssistant ? onRetry : undefined}
+              onResume={
+                context.onResumeHere && latestAssistantTextRow.entityId
+                  ? (choice) =>
+                      context.onResumeHere?.({
+                        entryId: latestAssistantTextRow.entityId!,
+                        role: "assistant",
+                        text: latestAssistantTextRow.text,
+                        ...choice,
+                      })
+                  : undefined
+              }
               onFeedbackChange={onFeedbackChange}
               hookInvocations={unit.hookInvocations}
               turnId={unit.turnId}

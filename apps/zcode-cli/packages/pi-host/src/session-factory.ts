@@ -16,6 +16,13 @@ import {
 import { readPiContextUsage } from "./context-breakdown.js";
 import { createPermissionExtension } from "./permission-gate.js";
 import {
+  contextEventsOf,
+  deleteSessionBranch,
+  labelSessionEntry,
+  readSessionTree,
+  resolveSessionEntry,
+} from "./session-tree.js";
+import {
   createDelegateProvider,
   mapThought,
   type DelegateProvider,
@@ -322,36 +329,29 @@ export function createSdkSessionFactory(options: {
         await session.compact();
       },
       contextUsage: () => readPiContextUsage(session, piCoding().formatSkillsForPrompt),
-      navigateTree: (targetId) => session.navigateTree(targetId),
+      navigateTree: (targetId, options) => session.navigateTree(targetId, options),
+      abortBranchSummary: () => {
+        session.abortBranchSummary();
+      },
+      get isCompacting() {
+        return session.isCompacting;
+      },
+      readTree: () => readSessionTree(session.sessionManager),
+      labelEntry: (id, label) => {
+        labelSessionEntry(session.sessionManager, id, label);
+      },
+      deleteBranch: (entryId) => {
+        deleteSessionBranch(session, entryId);
+      },
+      contextEvents: () => contextEventsOf(session.sessionManager),
+      resolveEntry: (id, hint) => resolveSessionEntry(session.sessionManager, id, hint),
       branchFrom: (entryId) => {
         const file = session.sessionFile;
         if (!file) throw new Error("session file missing");
         return branchPiSessionFile(file, entryId);
       },
       hasEntry: (id) => session.sessionManager.getEntry(id) != null,
-      matchUserEntry: (text) => {
-        const wanted = text.trim();
-        if (!wanted) return undefined;
-        const entries = session.sessionManager.getEntries();
-        for (let index = entries.length - 1; index >= 0; index -= 1) {
-          const entry = entries[index];
-          if (!entry || entry.type !== "message" || entry.message.role !== "user") continue;
-          const content = entry.message.content;
-          const value = Array.isArray(content)
-            ? content
-                .map((part) =>
-                  part && typeof part === "object" && "text" in part && typeof part.text === "string"
-                    ? part.text
-                    : "",
-                )
-                .join("")
-            : typeof content === "string"
-              ? content
-              : "";
-          if (value.trim() === wanted) return entry.id;
-        }
-        return undefined;
-      },
+      matchUserEntry: (text) => resolveSessionEntry(session.sessionManager, "", { text, role: "user" }),
       setModel: async (provider, modelId, thought) => {
         if (isolated) {
           const next = { providerId: provider, modelId, thought };

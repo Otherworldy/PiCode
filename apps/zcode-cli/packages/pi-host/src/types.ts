@@ -74,6 +74,7 @@ export type PiHostEvent =
       errorMessage?: string;
       result?: { summary?: string; tokensBefore?: number; estimatedTokensAfter?: number };
     }
+  | { type: "branch_summary"; summary: string }
   | { type: "extension_error"; extensionPath?: string; error: string }
   | PiExtensionUiEvent;
 
@@ -130,6 +131,32 @@ export interface PiSkillView {
   packageName?: string;
 }
 
+export type PiSessionTreeNode = {
+  id: string;
+  parentId: string | null;
+  role: "user" | "assistant" | "tool" | "summary" | "compaction" | "other";
+  preview: string;
+  label?: string;
+  depth: number;
+  active: boolean;
+  leaf: boolean;
+};
+
+export type SessionResumeRequest = {
+  entryId: string;
+  text?: string;
+  role?: "user" | "assistant";
+  summarize: boolean;
+  customInstructions?: string;
+  label?: string;
+};
+
+export type SessionResumeResult = {
+  cancelled: boolean;
+  editorText?: string;
+  tree: PiSessionTreeNode[];
+};
+
 export interface PiSessionPort {
   readonly sessionId: string;
   readonly sessionFile?: string;
@@ -163,7 +190,25 @@ export interface PiSessionPort {
   compact(): Promise<void>;
   /** Pi `getContextUsage()`，外加按来源拆开的估算。 */
   contextUsage?(): PiContextUsage | null;
-  navigateTree?(targetId: string): Promise<unknown>;
+  readonly isCompacting?: boolean;
+  abortBranchSummary?(): void;
+  navigateTree?(
+    targetId: string,
+    options?: {
+      summarize?: boolean;
+      customInstructions?: string;
+      replaceInstructions?: boolean;
+      label?: string;
+    },
+  ): Promise<{ editorText?: string; cancelled?: boolean; aborted?: boolean } | void>;
+  readTree?(): PiSessionTreeNode[];
+  labelEntry?(id: string, label?: string): void;
+  deleteBranch?(entryId: string): void;
+  contextEvents?(): PiHostEvent[];
+  resolveEntry?(
+    id: string,
+    hint?: { text?: string; role?: "user" | "assistant" },
+  ): string | undefined;
   /** Pi `createBranchedSession`：新文件只含到该节点的路径。 */
   branchFrom?(entryId: string): { sessionId: string; sessionFile: string };
   hasEntry?(id: string): boolean;

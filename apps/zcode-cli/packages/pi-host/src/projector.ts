@@ -244,6 +244,36 @@ export class PiToV4Projector {
     return this.applyState({ config: { ...this.snapshot.config, ...patch } });
   }
 
+  /** 分支总结不是一轮对话。清掉上一轮的停止，避免总结请求被当成重试再 abort。 */
+  releaseStop(): void {
+    this.stopRequested = false;
+    this.aborted = false;
+  }
+
+  // ponytail: stopTargetKind 复用 compact，只为让停止键出现。不写 compact activeWork，界面不会画压缩条。
+  noteBranchSummary(active: boolean): ConversationDelta[] {
+    const control = this.snapshot.control;
+    if (active) {
+      return this.applyState({
+        control: {
+          ...control,
+          canStop: true,
+          stopState: "stoppable",
+          stopTargetKind: "compact",
+        },
+      });
+    }
+    const running = control.phase === "running";
+    return this.applyState({
+      control: {
+        ...control,
+        canStop: running,
+        stopState: running ? control.stopState : "idle",
+        stopTargetKind: running ? control.stopTargetKind : "unknown",
+      },
+    });
+  }
+
   replaceSubagents(subagents: ConversationSnapshot["subagents"]): ConversationDelta[] {
     return this.applyState({ subagents });
   }
@@ -377,6 +407,18 @@ export class PiToV4Projector {
         return this.compactStart();
       case "compaction_end":
         return this.compactEnd(event);
+      case "branch_summary":
+        return [
+          {
+            op: "row.appended",
+            row: {
+              ...this.base(this.turnId || "branch"),
+              kind: "timelineMarker",
+              lane: "turnTailBoundary",
+              marker: { type: "branchSummary", summary: event.summary },
+            },
+          },
+        ];
       case "extension_error":
         return this.applyState({
           control: {

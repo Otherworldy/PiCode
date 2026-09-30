@@ -717,6 +717,66 @@ test("navigateTree truncates and fork copies jsonl", async () => {
   await rm(root, { recursive: true, force: true });
 });
 
+test("resumeAt replays the live leaf and stop only cancels the summary", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const fakes = new Map<string, FakePiSession>();
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async (input) => {
+      const fake = new FakePiSession(input.sessionId, input.sessionFile);
+      fakes.set(input.sessionId, fake);
+      return fake;
+    },
+  });
+  const parent = await registry.create({ workspacePath: root });
+  const fake = fakes.get(parent.sessionId)!;
+  parent.projector.apply({
+    type: "message_start",
+    message: { role: "user", id: "u1", content: "old" },
+  });
+  fake.contextEventsList = [
+    { type: "message_start", message: { role: "user", id: "kept", content: "kept" } },
+  ];
+  fake.editorText = "later";
+  const resumed = await parent.resumeAt({
+    entryId: "u2",
+    role: "user",
+    text: "later",
+    summarize: false,
+  });
+  assert.equal(resumed.editorText, "later");
+  assert.equal(resumed.cancelled, false);
+  assert.deepEqual(
+    parent.projector
+      .getSnapshot()
+      .rows.window.filter((row) => row.kind === "userInput")
+      .map((row) => (row.kind === "userInput" ? row.text : "")),
+    ["kept"],
+  );
+
+  parent.projector.apply({
+    type: "message_start",
+    message: { role: "user", id: "u9", content: "stay" },
+  });
+  fake.holdNavigate = true;
+  fake.summaryAborted = false;
+  fake.editorText = undefined;
+  const pending = parent.resumeAt({ entryId: "a1", summarize: true });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  await parent.abort();
+  const cancelled = await pending;
+  assert.equal(cancelled.cancelled, true);
+  assert.equal(fake.summaryAborted, true);
+  assert.equal(fake.aborted, false);
+  assert.equal(
+    parent.projector.getSnapshot().rows.window.some((row) => row.kind === "userInput" && row.text === "stay"),
+    true,
+  );
+  assert.equal(parent.projector.getSnapshot().control.canStop, false);
+  await rm(root, { recursive: true, force: true });
+});
+
 test("registry spawn has workId; bypass does not", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-host-"));
   const fakes = new Map<string, FakePiSession>();

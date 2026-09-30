@@ -1,6 +1,7 @@
 /* oxlint-disable eslint(max-lines) -- v4 逐行 row 渲染分发集中收口（每种 row 一个 memo 叶子 + timelineMarker 分隔线），拆分会打散行类型对照。 */
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { compactFailureText } from "@/v4/compactFailureText.js";
+import { ResumeHereMenu } from "@/v4/ResumeHereMenu.js";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArchiveIcon,
@@ -1298,6 +1299,18 @@ const UserInputRowView = memo(function UserInputRowView({
             <PencilIcon className="size-3.5" />
           </MessageAction>
         ) : null}
+        {context.onResumeHere && row.entityId ? (
+          <ResumeHereMenu
+            onPick={(choice) =>
+              context.onResumeHere?.({
+                entryId: row.entityId!,
+                role: "user",
+                text: row.text,
+                ...choice,
+              })
+            }
+          />
+        ) : null}
       </MessageActions>
     </RowShell>
   );
@@ -1313,6 +1326,7 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
   sessionId,
   turnId,
   onFork,
+  onResume,
   onFeedbackChange,
   className,
 }: {
@@ -1326,6 +1340,7 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
   turnId?: string;
   onFork?: (target: ConversationRowTarget) => void;
   onRetry?: (target: ConversationRowTarget) => void;
+  onResume?: (choice: { summarize: boolean; customInstructions?: string }) => void;
   onFeedbackChange?: AssistantFeedbackHandler;
   className?: string;
 }) {
@@ -1458,6 +1473,7 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
           <TrendingUpDownIcon className="size-3.5" />
         </MessageAction>
       ) : null}
+      {onResume && entityId ? <ResumeHereMenu onPick={onResume} /> : null}
       {turnId && hookInvocations ? (
         <ConversationHookDetailsAction rows={hookInvocations} turnId={turnId} />
       ) : null}
@@ -1497,6 +1513,7 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
   codeCommentCards?: AssistantCodeCommentCard[];
   codeCommentProjectionEnabled?: boolean;
 }) {
+  const { intl } = useZCodeIntl();
   const streaming = row.state === "streaming";
   const isOfficeMode = useIsOfficeMode();
   const codeCommentCardsEnabled = useAssistantCodeCommentFeatureEnabled();
@@ -1564,6 +1581,20 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
       {/* 完成态动作行悬停显现（对齐旧 MessageActions）：复制 + fork（图标 ghost）。
           一轮对用户是一个回复：action 只在轮尾段（hideActions 由 TurnGroup 裁决），
           复制内容 = 整轮全部 text 段合并（copyText 覆盖）。 */}
+      {row.state === "complete" && hideActions && !deferActions && context.onResumeHere && row.entityId ? (
+        <MessageActions className="mt-1 opacity-0 transition-opacity group-hover/assistant-row:opacity-100 focus-within:opacity-100">
+          <ResumeHereMenu
+            onPick={(choice) =>
+              context.onResumeHere?.({
+                entryId: row.entityId!,
+                role: "assistant",
+                text: row.text,
+                ...choice,
+              })
+            }
+          />
+        </MessageActions>
+      ) : null}
       {row.state === "complete" && !hideActions && !deferActions ? (
         <ConversationAssistantTextActions
           rowId={row.rowId}
@@ -1574,6 +1605,17 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
           sessionId={context.sessionId}
           onFork={onFork}
           onRetry={onRetry}
+          onResume={
+            context.onResumeHere && row.entityId
+              ? (choice) =>
+                  context.onResumeHere?.({
+                    entryId: row.entityId!,
+                    role: "assistant",
+                    text: row.text,
+                    ...choice,
+                  })
+              : undefined
+          }
           onFeedbackChange={onFeedbackChange}
           className={cn(
             "mt-1",
@@ -1753,7 +1795,8 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
   const isOfficeMode = useIsOfficeMode();
   const marker = row.marker;
   const [summaryRowId, setSummaryRowId] = useState<number | null>(null);
-  const summary = marker.type === "compact" ? marker.summary : undefined;
+  const summary =
+    marker.type === "compact" || marker.type === "branchSummary" ? marker.summary : undefined;
   const summaryOpen = summaryRowId === row.rowId;
   const modelSelectionView = context.modelSelectionView ?? null;
   const view = useMemo((): {
@@ -1792,6 +1835,12 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
           running,
         };
       }
+      case "branchSummary":
+        return {
+          icon: MARKER_FORK_ICON,
+          label: `${intl.formatMessage({ id: "chat.tree.summaryMarker" })} · ${intl.formatMessage({ id: "chat.contextCompaction.viewSummary" })}`,
+          running: false,
+        };
       case "forkNotice":
         return {
           icon: MARKER_FORK_ICON,

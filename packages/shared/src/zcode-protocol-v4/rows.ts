@@ -339,6 +339,10 @@ export const timelineMarkerPayloadSchema = z.union([
     // Pi 拒绝或模型失败时的原因。成功压缩没有这个字段。
     error: z.string().optional(),
   }),
+  z.object({
+    type: z.literal("branchSummary"),
+    summary: z.string(),
+  }),
   // 出现在 child 会话首部（forkTimelineIsBoundary）。
   z.object({
     type: z.literal("forkNotice"),

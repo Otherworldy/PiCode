@@ -74,6 +74,14 @@ export interface ConversationRowRenderContext {
    * 需保持引用稳定（rowContext 的 memo 依赖）。
    */
   onNavigateToRow?: (sessionId: string, rowId: number) => void;
+  /** Pi /tree：从这条消息继续。行上的菜单选总结方式。 */
+  onResumeHere?: (target: {
+    entryId: string;
+    role: "user" | "assistant";
+    text: string;
+    summarize: boolean;
+    customInstructions?: string;
+  }) => void;
   /** Assistant Preview Cards：Website 卡片预览入口，由 app shell 注入 side pane 行为。 */
   onOpenBrowserUrl?: (url: string) => void;
   onOpenAutomationsMain?: OpenAutomationsMain;

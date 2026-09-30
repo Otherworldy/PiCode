@@ -566,6 +566,42 @@ async function registerCommittedForkBestEffort(
   }
 }
 
+type SessionTreeHost = {
+  readSessionTree(): Array<{
+    id: string;
+    parentId: string | null;
+    role: "user" | "assistant" | "tool" | "summary" | "compaction" | "other";
+    preview: string;
+    label?: string;
+    depth: number;
+    active: boolean;
+    leaf: boolean;
+  }>;
+  resumeAt(input: {
+    entryId: string;
+    text?: string;
+    role?: "user" | "assistant";
+    summarize: boolean;
+    customInstructions?: string;
+  }): Promise<{
+    cancelled: boolean;
+    editorText?: string;
+    tree: SessionTreeHost["readSessionTree"] extends () => infer T ? T : never;
+  }>;
+  labelSessionEntry(entryId: string, label?: string): ReturnType<SessionTreeHost["readSessionTree"]>;
+  deleteSessionBranch(entryId: string): ReturnType<SessionTreeHost["readSessionTree"]>;
+};
+
+function sessionTreeHost(
+  context: ZCodeProtocolAgentServerContext,
+  sessionId: string,
+): SessionTreeHost {
+  const record = context.sessions.get(sessionId);
+  const hosted = (record?.app as { piHosted?: SessionTreeHost } | undefined)?.piHosted;
+  if (!hosted) throw new Error("proto.sessionNotFound");
+  return hosted;
+}
+
 export function createConversationV4Gateway(
   context: ZCodeProtocolAgentServerContext,
 ): ConversationV4Gateway {
@@ -1032,6 +1068,29 @@ export function createConversationV4Gateway(
       const hosted = (record?.app as { piHosted?: { setFeedback: (entityId: string, feedback: "like" | "dislike" | null) => void } } | undefined)?.piHosted;
       if (!record || !hosted) throw new Error("proto.sessionNotFound");
       hosted.setFeedback(input.entityId, input.feedback);
+    },
+    readSessionTree: async (sessionId) => {
+      const hosted = sessionTreeHost(context, sessionId);
+      return { type: "sessionTree" as const, tree: hosted.readSessionTree() };
+    },
+    navigateSessionTree: async (sessionId, input) => {
+      const hosted = sessionTreeHost(context, sessionId);
+      const result = await hosted.resumeAt(input);
+      return { type: "navigateSessionTree" as const, ...result };
+    },
+    labelSessionEntry: async (sessionId, input) => {
+      const hosted = sessionTreeHost(context, sessionId);
+      return {
+        type: "sessionTree" as const,
+        tree: hosted.labelSessionEntry(input.entryId, input.label),
+      };
+    },
+    deleteSessionBranch: async (sessionId, input) => {
+      const hosted = sessionTreeHost(context, sessionId);
+      return {
+        type: "sessionTree" as const,
+        tree: hosted.deleteSessionBranch(input.entryId),
+      };
     },
     // ── 过渡钩子──────────────────────────────
     ensureModelReady: (record) =>

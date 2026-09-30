@@ -39,6 +39,7 @@ import type {
   ConversationSnapshot,
   ConversationRowTarget,
   SessionErrorInfo,
+  SessionTreeNodeView,
   SessionModelTransition,
   V4ConversationFileChangesResult,
 } from "@zcode/shared/zcode-protocol-v4";
@@ -126,6 +127,10 @@ import { shouldIgnoreEscapeForStopGeneration } from "@/v4/composer/escapeStop.js
 import { ConversationDraftEmptyState } from "@/v4/ConversationDraftEmptyState.js";
 import { ConversationDraftSuggestedPromptsContainer } from "@/v4/ConversationDraftSuggestedPromptsContainer.js";
 import { ConversationHeader, type PaneWorkspaceBadge } from "@/v4/ConversationHeader.js";
+import {
+  clearSessionBranchActions,
+  setSessionBranchActions,
+} from "@/v4/sessionBranchStore.js";
 import { ConversationQueuePanel } from "@/v4/ConversationQueuePanel.js";
 import { projectPendingGuideQueue } from "@/v4/pendingGuideProjection.js";
 import { ConversationQuotaBanner } from "@/v4/ConversationQuotaBanner.js";
@@ -1098,6 +1103,19 @@ export function SessionPane({
   queueEditOperationRef.current = queueEditOperation;
   const [composerRestoreRequest, setComposerRestoreRequest] =
     useState<ComposerRestoreRequest | null>(null);
+  const [sessionTreeNodes, setSessionTreeNodes] = useState<SessionTreeNodeView[]>([]);
+  const [sessionTreeBusy, setSessionTreeBusy] = useState(false);
+  const summarizingTreeRef = useRef(false);
+  const resumeHereRef = useRef<
+    (target: {
+      entryId: string;
+      role: "user" | "assistant";
+      text: string;
+      summarize: boolean;
+      customInstructions?: string;
+    }) => void
+  >(() => {});
+
   const nextComposerRestoreRequestIdRef = useRef(1);
   const timelineScrollToBottomRef = useRef<(() => void) | null>(null);
   const timelineScrollToQueryRef = useRef<
@@ -2166,6 +2184,18 @@ export function SessionPane({
     [sessionId, snapshot?.config, snapshot?.sessionId],
   );
 
+  const handleResumeHere = useCallback(
+    (target: {
+      entryId: string;
+      role: "user" | "assistant";
+      text: string;
+      summarize: boolean;
+      customInstructions?: string;
+    }) => {
+      resumeHereRef.current(target);
+    },
+    [],
+  );
   const rowContext = useMemo<ConversationRowRenderContext>(
     () => ({
       workspacePath,
@@ -2186,6 +2216,7 @@ export function SessionPane({
       toolGroupingTerminalEnabled,
       toolGroupingChangesEnabled,
       onNavigateToRow: handleNavigateToRow,
+      onResumeHere: readOnly || selectionSideChat || !sessionId ? undefined : handleResumeHere,
       onOpenBrowserUrl,
       onOpenAutomationsMain,
       onOpenCodeViewer,
@@ -2244,6 +2275,9 @@ export function SessionPane({
       toolGroupingTerminalEnabled,
       toolGroupingChangesEnabled,
       handleNavigateToRow,
+      readOnly,
+      selectionSideChat,
+      handleResumeHere,
       onOpenBrowserUrl,
       onOpenAutomationsMain,
       onOpenCodeViewer,
@@ -3605,7 +3639,7 @@ export function SessionPane({
   const handleStop = useCallback(
     (source: "button" | "escape") => {
       const current = snapshotRef.current;
-      if (!sessionId || !current?.control.canStop) {
+      if (!sessionId || !current || (!current.control.canStop && !summarizingTreeRef.current)) {
         logger.lifecycle.info("[v4-pane] stop 命令被跳过（无可停执行）", {
           source,
           sessionId: sessionId ?? "",
@@ -3629,6 +3663,100 @@ export function SessionPane({
       });
     },
     [dispatchCommand, sessionId],
+  );
+
+  const loadSessionTree = useCallback(() => {
+    if (!sessionId) return;
+    void dispatchCommand("readSessionTree", {}, sessionId).then((ack) => {
+      if (ack.result?.type === "sessionTree") {
+        setSessionTreeNodes(ack.result.tree);
+        return;
+      }
+      if (ack.status !== "accepted" && ack.status !== "duplicate") {
+        toast(ack.message || intl.formatMessage({ id: "chat.tree.failed" }));
+      }
+    });
+  }, [dispatchCommand, intl, sessionId]);
+
+  const submitSessionResume = useCallback(
+    (input: {
+      target: { entryId: string; role?: "user" | "assistant"; text?: string };
+      summarize: boolean;
+      customInstructions?: string;
+      label?: string;
+    }) => {
+      if (!sessionId) return;
+      if (input.summarize) summarizingTreeRef.current = true;
+      setSessionTreeBusy(true);
+      void dispatchCommand(
+        "navigateSessionTree",
+        {
+          entryId: input.target.entryId,
+          ...(input.target.text ? { text: input.target.text } : {}),
+          ...(input.target.role ? { role: input.target.role } : {}),
+          summarize: input.summarize,
+          ...(input.customInstructions ? { customInstructions: input.customInstructions } : {}),
+          ...(input.label ? { label: input.label } : {}),
+        },
+        sessionId,
+      )
+        .then((ack) => {
+          if (ack.result?.type === "navigateSessionTree" || ack.result?.type === "sessionTree") {
+            setSessionTreeNodes(ack.result.tree);
+          }
+          if (ack.status !== "accepted" && ack.status !== "duplicate") {
+            toast(ack.message || intl.formatMessage({ id: "chat.tree.failed" }));
+            return;
+          }
+          if (ack.result?.type === "navigateSessionTree" && ack.result.cancelled) {
+            toast(intl.formatMessage({ id: "chat.tree.cancelled" }));
+            return;
+          }
+          if (ack.result?.type === "navigateSessionTree" && ack.result.editorText) {
+            setComposerRestoreRequest({
+              requestId: nextComposerRestoreRequestIdRef.current++,
+              sessionId,
+              workspaceKey,
+              inputKind: "sendText",
+              text: ack.result.editorText,
+              attachments: [],
+            });
+          }
+        })
+        .catch((error: unknown) => {
+          toast(error instanceof Error ? error.message : intl.formatMessage({ id: "chat.tree.failed" }));
+        })
+        .finally(() => {
+          summarizingTreeRef.current = false;
+          setSessionTreeBusy(false);
+        });
+    },
+    [dispatchCommand, intl, sessionId, workspaceKey],
+  );
+
+  const labelSessionTreeEntry = useCallback(
+    (entryId: string, label: string) => {
+      if (!sessionId) return;
+      void dispatchCommand("labelSessionEntry", { entryId, label }, sessionId).then((ack) => {
+        if (ack.result?.type === "sessionTree") setSessionTreeNodes(ack.result.tree);
+        else if (ack.status !== "accepted") toast(ack.message || intl.formatMessage({ id: "chat.tree.failed" }));
+      });
+    },
+    [dispatchCommand, intl, sessionId],
+  );
+  const deleteSessionBranch = useCallback(
+    (entryId: string) => {
+      if (!sessionId) return;
+      void dispatchCommand("deleteSessionBranch", { entryId }, sessionId)
+        .then((ack) => {
+          if (ack.result?.type === "sessionTree") setSessionTreeNodes(ack.result.tree);
+          else if (ack.status !== "accepted") toast(ack.message || intl.formatMessage({ id: "chat.tree.failed" }));
+        })
+        .catch((error: unknown) => {
+          toast(error instanceof Error ? error.message : intl.formatMessage({ id: "chat.tree.failed" }));
+        });
+    },
+    [dispatchCommand, intl, sessionId],
   );
 
   const handlePauseGoal = useCallback(() => {
@@ -3748,6 +3876,50 @@ export function SessionPane({
   const retryActionsEnabled = !readOnly && !selectionSideChat && Boolean(sessionId);
   // fork 可用性完全由 row.actions.canFork（CLI stable resolver 投影）裁决；pane 只提供命令回调。
   const forkActionsEnabled = !readOnly && !selectionSideChat && Boolean(sessionId);
+  useEffect(() => {
+    resumeHereRef.current = (target) => {
+      const existing = sessionTreeNodes.find((node) => node.id === target.entryId)?.label;
+      const label = existing || target.text.replace(/\s+/gu, " ").trim().slice(0, 42);
+      submitSessionResume({
+        target,
+        summarize: target.summarize,
+        ...(target.customInstructions ? { customInstructions: target.customInstructions } : {}),
+        ...(label ? { label } : {}),
+      });
+    };
+  }, [sessionTreeNodes, submitSessionResume]);
+  useEffect(() => {
+    if (!focused || !forkActionsEnabled || !sessionId) return;
+    loadSessionTree();
+  }, [focused, forkActionsEnabled, loadSessionTree, sessionId]);
+  useEffect(() => {
+    if (!focused || !forkActionsEnabled || !sessionId) return;
+    const actions = {
+      sessionId,
+      nodes: sessionTreeNodes,
+      busy: sessionTreeBusy,
+      refresh: loadSessionTree,
+      switchTo: (entryId: string) => {
+        const tip = sessionTreeNodes.find((node) => node.id === entryId);
+        const label = tip?.label || tip?.preview.replace(/\s+/gu, " ").trim().slice(0, 42);
+        submitSessionResume({ target: { entryId }, summarize: false, ...(label ? { label } : {}) });
+      },
+      rename: labelSessionTreeEntry,
+      remove: deleteSessionBranch,
+    };
+    setSessionBranchActions(actions);
+    return () => clearSessionBranchActions(actions);
+  }, [
+    deleteSessionBranch,
+    focused,
+    forkActionsEnabled,
+    labelSessionTreeEntry,
+    loadSessionTree,
+    sessionId,
+    sessionTreeBusy,
+    sessionTreeNodes,
+    submitSessionResume,
+  ]);
   // editUserQuery 已由 command 层防御 latest real user query，并在 running
   // 提交时先 stop barrier 再 rewind/rerun；UI 不应再用 completed gate 把入口整轮隐藏。
   const editActionsEnabled = !readOnly && !selectionSideChat && Boolean(sessionId);

@@ -1,4 +1,4 @@
-import type { PiHostEvent, PiSessionPort } from "./types.js";
+import type { PiHostEvent, PiSessionPort, PiSessionTreeNode } from "./types.js";
 
 export class FakePiSession implements PiSessionPort {
   sessionId: string;
@@ -14,6 +14,11 @@ export class FakePiSession implements PiSessionPort {
   compacted = false;
   acceptPrompt = true;
   navigatedTo: string[] = [];
+  holdNavigate = false;
+  summaryAborted = false;
+  editorText?: string;
+  contextEventsList: PiHostEvent[] = [];
+  isCompacting = false;
 
   constructor(sessionId: string, sessionFile?: string) {
     this.sessionId = sessionId;
@@ -51,8 +56,28 @@ export class FakePiSession implements PiSessionPort {
     this.compacted = true;
   }
 
-  async navigateTree(targetId: string): Promise<void> {
+  async navigateTree(
+    targetId: string,
+    _options?: { summarize?: boolean; customInstructions?: string },
+  ): Promise<{ editorText?: string; cancelled?: boolean }> {
     this.navigatedTo.push(targetId);
+    if (this.holdNavigate) await new Promise((resolve) => setTimeout(resolve, 20));
+    return {
+      cancelled: this.summaryAborted,
+      ...(this.editorText ? { editorText: this.editorText } : {}),
+    };
+  }
+
+  abortBranchSummary(): void {
+    this.summaryAborted = true;
+  }
+
+  readTree(): PiSessionTreeNode[] {
+    return [];
+  }
+
+  contextEvents(): PiHostEvent[] {
+    return this.contextEventsList;
   }
 
   subscribe(listener: (event: PiHostEvent) => void): () => void {
