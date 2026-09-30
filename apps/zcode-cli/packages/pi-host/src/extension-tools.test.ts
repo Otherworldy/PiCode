@@ -99,7 +99,8 @@ test("extension tools are sent upstream with PiCode tools", async () => {
     const names = (payload.tools ?? []).map((tool) => tool.function?.name);
     assert.ok(names.includes("probe_extension_tool"), names.join(","));
     assert.ok(names.includes("read"));
-    assert.ok(names.includes("zcode_subagent"));
+    assert.ok(names.includes("picode_subagent"));
+    assert.ok(!names.includes("grep") && !names.includes("find") && !names.includes("ls"));
   } finally {
     server.close();
     await rm(dir, { recursive: true, force: true });

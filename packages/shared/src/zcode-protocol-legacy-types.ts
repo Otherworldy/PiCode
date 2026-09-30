@@ -474,17 +474,23 @@ export const zcodeSessionContextCacheUsageSchema = z
   .strict();
 export const zcodeContextUsageBreakdownSourceSchema = z.enum([
   "system_prompt",
+  "memory",
   "meta_user_context",
   "skills",
   "tool_prompt",
+  "tools",
   "system_tool_schemas",
   "mcp_tool_schemas",
+  "tool_results",
   "messages",
+  "other",
 ]);
 export const zcodeContextUsageBreakdownItemSchema = z
   .object({
     source: zcodeContextUsageBreakdownSourceSchema,
     chars: z.number().int().nonnegative(),
+    /** 缩放后的 token。旧快照只有 chars，弹层就只显示占比。 */
+    tokens: z.number().int().nonnegative().optional(),
   })
   .strict();
 export type ZCodeContextUsageBreakdownItem = z.infer<typeof zcodeContextUsageBreakdownItemSchema>;

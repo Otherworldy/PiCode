@@ -24,6 +24,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
   → idle startNow → session.prompt（图片读成本地文件，跟文字一起交给 Pi）
     正在跑的 turn + guide → session.steer（同样带图片）
     正在跑、或压缩中 → HostQueue.enqueue（只存路径）；压缩结束且不再 streaming 时 drain
+    入队、删除、改写、排序 → replaceQueue 把当前文本推给界面。没推出去就看不到，也取消不了
   → Pi 事件
   → Projector 写 ConversationDelta
   → ConversationTopicPublisher.ingestDeltas
@@ -31,6 +32,10 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 ```
 
 同一所有者，两套 flush。jsonl 为对话树真相；V4 snapshot 为 UI/远控派生缓存，可从 jsonl 重建。
+
+上下文环的总量来自 Pi `getContextUsage()`，不另算。`message_end`、`tool_execution_end`、`compaction_end`，以及非重试的 `agent_end` 立刻推。流式 `message_update` 最多 250ms 推一次，生成过程中按 Pi 的估算上涨，不等整轮结束。值和上次一样则不下发。
+
+分类和 pi-cc `/context` 同一口径，不新做扩展：System prompt、Memory（系统提示里的 `project_instructions`）、Skills、Tools definition、Tool results、Context。字符数除以 4 估算；System / Memory / Skills / Tools 保持原值，后两项缩放到总量。对不上的差额是 Other。`breakdown[].chars` 与 `tokens` 都写缩放后的 token，弹层用这个数。供应商用量比内容估算小一个数量级时，总量改用估算。
 
 ## 失败语义
 
@@ -40,7 +45,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 - 流中途失败：turn `failed`，已写出的 row 保留。
 - 模型失败只把一句摘要写进回复和 `lastError.message`；原始 JSON 放 `lastError.detail`。
 - Pi `auto_retry_start` 写入 `control.apiRetry.failures`。最终失败只进输入框上方的原错误横幅，摘要一行，历次失败和原文在「展开详情」。不写成助手正文。成功后清掉重试状态。同一次失败的后续 `agent_settled` 不清掉这条错误。
-- `/compact` 直接调用 Pi `session.compact()`，不进入输入队列。Pi 会先中断当前操作再压缩。完成后的摘要写在 compact marker 的 `summary` 上，界面可展开查看。失败原因写在 marker 的 `error` 上，并进入输入框上方的错误横幅。命令被拒绝时也要弹出原因，不能只写日志。重开会话时从 jsonl 的 compaction 条目还原同一条 marker。
+- `/compact` 直接调用 Pi `session.compact()`，不进入输入队列。Pi 会先中断当前操作再压缩。空闲时压缩也要打开停止：`canStop` 为真，Stop 中断这次摘要请求。跑着的轮次里发生的自动压缩不抢走该轮的停止权。完成后的摘要写在 compact marker 的 `summary` 上，界面可展开查看。失败原因写在 marker 的 `error` 上，并进入输入框上方的错误横幅。命令被拒绝时也要弹出原因，不能只写日志。重开会话时从 jsonl 的 compaction 条目还原同一条 marker。
 - 输入框模型左侧的圆环读 Pi `getContextUsage()`。一轮结束、压缩结束或切换模型后写入 `usage.contextWindow`。点击圆环发送 `/compact`。
 - 打开会话只下发尾部一窗。页面向上滚动再拉更早的一窗，不再在打开时把整段历史灌进时间线。下发的工具参数和输出只留 head+tail；宿主里的原文仍留给文件回滚。投影未到时时间线显示加载，不留白。
 - 冷恢复重放 jsonl 时，行先落完，actions 只算一次。不能每条事件都扫整窗，否则几万行的会话订阅一直不返回。
@@ -48,7 +53,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 - abort：turn `completedInterrupted`，运行中工具 `cancelled`。用户已经停止后，重试再发的 `agent_start` / `auto_retry_start` 不能把这次停止清掉，要再 abort。Stop 同时拆掉还在飞的代理请求，避免重试里的 CONNECT 不看 abort 信号。
 - `custom()` 无 adapter：降级 widget 文本，不卡循环。
 - 插件抛错：`extension_error` → notify，会话继续。
-- Pi extension 注册的工具和 PiCode 的 customTools 一起进上游 `tools`。`noTools: "builtin"` 只关掉同名内置工具，不传 `tools` 白名单。
+- 本地会话不把 `read` / `bash` / `edit` / `write` / `grep` / `find` / `ls` / `powershell` 注册成 customTools，也不关 Pi 内置工具。扩展可以按原名替换，例如 pi-fff 的 override。权限走 `tool_call`，不换工具实现。SSH 工作区仍用远端实现替换 `read` / `bash` / `edit` / `write`，否则这些工具打到本机盘。
 - PiCode 不再注册 `TodoRead` / `TodoWrite`，也不再提醒模型去调用它们。旧会话里的 todo 卡片和进程投影仍按工具名渲染。
 - 桌面和 CLI 同一份 `zcode.cjs` 把 Pi 打进 CJS。入口先设 `globalThis.PI_BUNDLED_NODE`，Pi 才用内嵌模块表加载 extension，而不是按 bundle 路径去找 `../dist/babel.cjs`。`import.meta.url` 不能改写成 `module.filename`：extension loader 同一个函数里有 `const module`，那个标识符在死区里，extension 会在 import 之前就失败。文件名改记在 `globalThis.__zcodeBundleFilename`。
 - 插件后台任务打到已失效的 extension ctx 时，app-server 只记一行并继续。这个拒绝不能把进程打退出。
@@ -91,7 +96,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 目录和只读侧栏仍用现有 V4 `subagents` 字段。子运行的 jsonl 写在父会话文件同名目录下，面板仍读这份文件。不读 PiCode `subagent_child` 会话库，也不依赖 `pi-subagents` 插件是否安装。
 
-设置页拥有代理定义：用户 `~/.PiCode/agents`，项目 `<workspace>/.PiCode/agents`，内置 `general-purpose` / `Explore`。Pi 会话挂一个 `zcode_subagent` 工具，按这份定义起子会话。子会话不再挂这个工具，也不挂 MCP。同名的 Pi 插件工具 `subagent` 在主会话上禁用，避免两套定义争用。
+设置页拥有代理定义：用户 `~/.PiCode/agents`，项目 `<workspace>/.PiCode/agents`，内置 `general-purpose` / `Explore`。Pi 会话挂一个 `picode_subagent` 工具，按这份定义起子会话。子会话不再挂这个工具，也不挂 MCP。同名的 Pi 插件工具 `subagent` 在主会话上禁用，避免两套定义争用。
 
 ## MCP
 
@@ -109,7 +114,7 @@ SDK 来源是 `AppSettings.piSdkSource`。缺省 `builtin`，用打进 `zcode.cj
 
 设置页的 HTTP 代理和「不使用代理的地址」仍写 `AppSettings`，由 Host 在拉起 agent 时注入 `ZCODE_HTTP_PROXY` / `ZCODE_NO_PROXY`。CLI 仍会清掉进程里的标准 `HTTP_PROXY` / `NO_PROXY`，避免用户 shell 代理泄漏。清完之后只把这两个 ZCODE 值写回标准变量，并用已有的 `createNetworkProxyFetch` 换掉 `globalThis.fetch`。Pi 模型请求走这层 fetch；Pi bash 继承进程环境，curl/git 因此读到同一套规则。绕过规则与旧模型出口相同（主机、前缀点、端口、`*`）。没配代理则不换 fetch。改设置后下次启动 agent 生效。MCP 仍走原来的 `McpPort` 网络配置，不另开一条代理。
 
-**目录所有者：** Pi `ModelRuntime.getAvailableSnapshot()`。CLI 在 `workspace/readPresentation` 上行目录；Host `IModelSelectionService` 只投影这份目录，不再用 PiCode Provider Registry 当聊天/设置页候选。投影必须把 `getView(input.selection)` 写成 `effectiveSelection`，否则 Composer 触发器拿不到当前草稿模型。Composer 与设置「模型设置」共用该视图。`switchModelConfig` 走 `session.setModel`。空闲时输入框里的模型属于下一次提交，在 `prompt` 或 steer 之前写入。会话已经在跑时，输入框一切模型或思考档位就立刻 `setModel`：已经发出的那次请求不中断，同一轮里的下一次模型请求用新的。排队项仍带着入队时的选择，出队再换。
+**目录所有者：** Pi `ModelRuntime.getAvailableSnapshot()`。CLI 在 `workspace/readPresentation` 上行目录；Host `IModelSelectionService` 只投影这份目录，不再用 PiCode Provider Registry 当聊天/设置页候选。投影必须把 `getView(input.selection)` 写成 `effectiveSelection`，否则 Composer 触发器拿不到当前草稿模型。Composer 与设置「模型设置」共用该视图。`switchModelConfig` 走 `session.setModel`。空闲时输入框里的模型属于下一次提交，在 `prompt`、steer 或手动 `/compact` 之前写入。压缩不读会话里的旧模型。会话已经在跑时，输入框一切模型或思考档位就立刻 `setModel`：已经发出的那次请求不中断，同一轮里的下一次模型请求用新的。排队项仍带着入队时的选择，出队再换。
 
 设置页通过 `pi/models` 读写 `~/.pi/agent/models.json`（apiKey 明文回读，输入框不脱敏；保存时空字符串清掉密钥，请求不带 `apiKey` 则保留原值）和 `settings.json` 默认模型；保存后 `registerProvider`/`unregisterProvider` 更新活着的 `ModelRuntime`。渠道的 `api` 是默认请求格式。模型项没写 `api` 时补成渠道的；写成另一种驱动时保留，运行时用模型项上的 `api`。壳不另写 PiCode 供应商库。PiCode 账号登录、升级套餐、Coding Plan 额度不再作为产品面。
 

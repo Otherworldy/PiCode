@@ -144,7 +144,10 @@ export const commandPayloadSchemas = {
   }),
   // compact 是输入型维护命令：idle 时立即执行，busy/held 时进入 FIFO。
   // 因为 admission 与当前 revision 无关，不走 CAS；sourceCommandId 提供幂等边界。
-  compact: z.object({}),
+  // 输入框里已经换过的模型必须带上，否则压缩仍用会话里的旧模型。
+  compact: z.object({
+    modelSelection: modelSelectionSchema.optional(),
+  }),
   // running 时对稳定 assistant row 可用。
   forkAssistant: z.object({ target: conversationRowTargetSchema }),
   applyFileRewind: z.object({ target: conversationRowTargetSchema }),

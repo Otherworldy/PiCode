@@ -2458,6 +2458,14 @@ export function SessionPane({
       switch (command.kind) {
         case "compact":
           type = "compact";
+          // 空闲换模型只写在草稿里。压缩前必须带上，否则仍用会话里的旧模型。
+          if (
+            submission?.modelSelection &&
+            draftConfigRef.current.provider &&
+            draftConfigRef.current.model
+          ) {
+            payload = { modelSelection: submission.modelSelection };
+          }
           break;
         case "sendGoalCommand":
           type = "sendGoalCommand";
@@ -2521,7 +2529,7 @@ export function SessionPane({
       }
       return true;
     },
-    [dispatchCommand, intl, settleCurrentQueueInputs],
+    [dispatchCommand, draftConfigRef, intl, settleCurrentQueueInputs],
   );
 
   const dispatchSendTextAfterConfig = useCallback(
@@ -3581,9 +3589,16 @@ export function SessionPane({
       if (!sessionId) return;
       const parsed = parseV4VisibleSlashCommand(command);
       if (!parsed) return;
-      void dispatchSlashCommand(parsed, sessionId, snapshotRef.current?.revision, undefined);
+      void dispatchSlashCommand(
+        parsed,
+        sessionId,
+        snapshotRef.current?.revision,
+        undefined,
+        undefined,
+        createSubmissionFromComposer() ?? undefined,
+      );
     },
-    [dispatchSlashCommand, sessionId],
+    [createSubmissionFromComposer, dispatchSlashCommand, sessionId],
   );
 
   // 误停排障需要区分按钮与 Esc；普通 info 在生产禁用，必须走生命周期日志。

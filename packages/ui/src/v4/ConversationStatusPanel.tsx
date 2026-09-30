@@ -1869,7 +1869,7 @@ function ConversationStatusPanelImpl({
 
   // `model.hasContent` 只认**活的**内容（模型手上的投影都是活状态），所以「只剩历史」的
   // 会话会连整个胶囊一起消失——而那正是重启后打开一条旧对话的样子，run 目录的入口于是又没了。
-  // 已结束的子代理同样不能靠 hasContent 留住面板：zcode_subagent 跑完后只剩目录计数。
+  // 已结束的子代理同样不能靠 hasContent 留住面板：picode_subagent 跑完后只剩目录计数。
   if (!model.hasContent && !canRenderEndedWorkflows && !canRenderEndedAgents) {
     return null;
   }

@@ -3,6 +3,7 @@ import { access, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { conversationDeltaSchema } from "@zcode/shared/zcode-protocol-v4";
 import { CommandBridge, sendDelivery } from "./command-bridge.js";
 import { ExtensionUiHost } from "./extension-ui-host.js";
 import { FakePiSession } from "./fake-session.js";
@@ -12,6 +13,7 @@ import { mapPiToolName } from "./presentation.js";
 import { PiToV4Projector } from "./projector.js";
 import { gateTool } from "./permission-gate.js";
 import { HostSessionRegistry } from "./session-registry.js";
+import { contextUsagePublish } from "./types.js";
 
 test("maps builtin pi tool names", () => {
   assert.equal(mapPiToolName("read"), "Read");
@@ -63,6 +65,25 @@ test("toolcall_start without a name does not throw", () => {
   });
   const tool = projector.getSnapshot().rows.window.find((row) => row.kind === "toolCall");
   assert.equal(tool && tool.kind === "toolCall" ? tool.toolName : "", "Bash");
+});
+
+test("context usage publishes while the turn is still running", () => {
+  assert.equal(
+    contextUsagePublish({
+      type: "message_update",
+      assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "a" },
+    }),
+    "soon",
+  );
+  assert.equal(contextUsagePublish({ type: "message_end", message: { role: "assistant" } }), "now");
+  assert.equal(
+    contextUsagePublish({ type: "tool_execution_end", toolCallId: "c1", toolName: "read" }),
+    "now",
+  );
+  assert.equal(contextUsagePublish({ type: "compaction_end" }), "now");
+  assert.equal(contextUsagePublish({ type: "agent_end" }), "now");
+  assert.equal(contextUsagePublish({ type: "agent_end", willRetry: true }), "no");
+  assert.equal(contextUsagePublish({ type: "agent_start" }), "no");
 });
 
 test("context usage is a ring input and ignores an unchanged value", () => {
@@ -120,6 +141,23 @@ test("projects text, tools, abort, compact", () => {
       ? compact.marker.summary
       : "",
     "kept the greeting",
+  );
+});
+
+test("idle compaction can be stopped and then clears the stop control", () => {
+  const projector = new PiToV4Projector("s1", "e1");
+  projector.apply({ type: "compaction_start" });
+  assert.equal(projector.getSnapshot().control.canStop, true);
+  assert.equal(projector.getSnapshot().control.stopTargetKind, "compact");
+  projector.apply({ type: "compaction_end", aborted: true });
+  assert.equal(projector.getSnapshot().control.canStop, false);
+  assert.equal(projector.getSnapshot().control.stopTargetKind, "unknown");
+  const compact = projector.getSnapshot().rows.window.find((row) => row.kind === "timelineMarker");
+  assert.equal(
+    compact && compact.kind === "timelineMarker" && compact.marker.type === "compact"
+      ? compact.marker.status
+      : "",
+    "cancelled",
   );
 });
 
@@ -443,6 +481,44 @@ test("queued text is sent after compaction finishes", async () => {
     fake.emit({ type: "compaction_end", result: { summary: "ok" } });
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(fake.prompts, ["later"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("queued text is visible and removable before it is sent", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async (input) => new FakePiSession(input.sessionId, input.sessionFile),
+  });
+  try {
+    const hosted = await registry.create({ workspacePath: root });
+    const queuedTexts: string[][] = [];
+    hosted.onDeltas((deltas) => {
+      for (const delta of deltas) {
+        const parsed = conversationDeltaSchema.safeParse(delta);
+        assert.equal(parsed.success, true);
+        if (!parsed.success || parsed.data.op !== "state.updated" || !parsed.data.patch.queue) continue;
+        queuedTexts.push(parsed.data.patch.queue.items.map((item) => item.text));
+      }
+    });
+    await hosted.bridge.admitSend({
+      text: "hold this",
+      clientId: "c",
+      commandId: "q1",
+      delivery: "queue",
+      streaming: true,
+    });
+    assert.deepEqual(queuedTexts, []);
+    hosted.projector.replaceQueue(hosted.queue.snapshot());
+    assert.deepEqual(queuedTexts.at(-1), ["hold this"]);
+    const id = hosted.queue.snapshot().items[0]?.queueItemId;
+    assert.equal(typeof id, "string");
+    assert.ok(hosted.queue.remove(id ?? ""));
+    hosted.projector.replaceQueue(hosted.queue.snapshot());
+    assert.deepEqual(queuedTexts.at(-1), []);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

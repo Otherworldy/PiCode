@@ -32,7 +32,8 @@ export class V4GoalCompactRejectedError extends Error {
       | "compactOperationLock"
       | "restoreWarning"
       | "guard.planGoalMutuallyExclusive"
-      | "emptyObjective",
+      | "emptyObjective"
+      | "modelUnavailable",
     message: string,
   ) {
     super(message);
@@ -76,7 +77,8 @@ async function compact(
     throw new V4GoalCompactRejectedError("restoreWarning", record.restoreWarning.message);
   }
 
-  await startManualCompact(host, record, envelope.commandId);
+  const payload = envelope.payload as CommandPayloadMap["compact"];
+  await startManualCompact(host, record, envelope.commandId, undefined, payload.modelSelection);
   return undefined;
 }
 
@@ -86,10 +88,12 @@ export async function startManualCompact(
   record: V4SessionRecordView,
   inputId: string,
   foregroundPromotionLeaseId?: string,
+  modelSelection?: CommandPayloadMap["compact"]["modelSelection"],
 ): Promise<void> {
   if (record.restoreWarning) {
     throw new V4GoalCompactRejectedError("restoreWarning", record.restoreWarning.message);
   }
+  await useCompactModel(record, modelSelection);
   // 冷恢复后用户可能直接触发 /compact（不先经 sendText），compact 的后台模型请求
   // 同样需要模型就绪检查——钩子（见 types.ts）。
   await host.ensureModelReady?.(record);
@@ -107,6 +111,26 @@ export async function startManualCompact(
   ).catch(() => {
     // 后台 compact 的错误经事件流（CompactStarted/终态 marker）降级上报；兜底防 unhandled rejection。
   });
+}
+
+async function useCompactModel(
+  record: V4SessionRecordView,
+  selection: CommandPayloadMap["compact"]["modelSelection"],
+): Promise<void> {
+  const provider = selection?.providerId?.trim();
+  const model = selection?.modelId?.trim();
+  if (!provider || !model) return;
+  const wanted = `${provider}/${model}`;
+  if (record.app.getModel() !== wanted) {
+    await record.app.setModel(wanted);
+  }
+  if (record.app.getModel() !== wanted) {
+    throw new V4GoalCompactRejectedError("modelUnavailable", `Model not available: ${wanted}`);
+  }
+  const thought = selection?.options?.reasoningLevel?.trim();
+  if (thought && record.app.listThoughtLevels().includes(thought) && record.app.getThoughtLevel() !== thought) {
+    await record.app.setThoughtLevel(thought);
+  }
 }
 
 async function runCompactTurnInBackground(

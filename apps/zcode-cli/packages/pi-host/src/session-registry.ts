@@ -17,13 +17,14 @@ import {
 import { mapThought } from "./model-delegate.js";
 import { PiToV4Projector } from "./projector.js";
 import type { ToolPermissionCheck } from "./permission-gate.js";
-import type {
-  CreatePiSession,
-  PiExtensionUiResponse,
-  PiHostEvent,
-  PiSessionPort,
-  PiSkillView,
-  PiSlashCommandView,
+import {
+  contextUsagePublish,
+  type CreatePiSession,
+  type PiExtensionUiResponse,
+  type PiHostEvent,
+  type PiSessionPort,
+  type PiSkillView,
+  type PiSlashCommandView,
 } from "./types.js";
 
 export interface HostedSession {
@@ -507,6 +508,8 @@ export class HostSessionRegistry {
       }
       for (const listener of deltaListeners) listener(deltas);
     };
+    // 入队、删除、改写都走 replaceQueue。不推出去，界面看不到，也取消不了。
+    projector.bindQueuePublish(emit);
     const applyModel = async (selection: SubmissionModel) => {
       const provider = selection.providerId.trim();
       const modelId = selection.modelId.trim();
@@ -536,7 +539,23 @@ export class HostSessionRegistry {
     const publishContext = () => {
       const usage = pi.contextUsage?.();
       if (!usage) return;
-      emit(projector.setContextUsage(usage.used, usage.max));
+      emit(projector.setContextUsage(usage.used, usage.max, usage.breakdown));
+    };
+    let contextTimer: ReturnType<typeof setTimeout> | undefined;
+    const publishContextNow = () => {
+      if (contextTimer) {
+        clearTimeout(contextTimer);
+        contextTimer = undefined;
+      }
+      publishContext();
+    };
+    // ponytail: 250ms。Pi 每帧重绘；再密也只是字符估算。
+    const publishContextSoon = () => {
+      if (contextTimer) return;
+      contextTimer = setTimeout(() => {
+        contextTimer = undefined;
+        publishContext();
+      }, 250);
     };
     const handleUi = (event: Extract<PiHostEvent, { type: "extension_ui_request" }>) => {
       const next = ui.handle(event);
@@ -611,14 +630,11 @@ export class HostSessionRegistry {
           abortInflightNetwork();
           void pi.abort();
         }
-        if (
-          event.type === "compaction_end" ||
-          (event.type === "agent_end" && !event.willRetry)
-        ) {
-          publishContext();
-        }
+        const usageWhen = contextUsagePublish(event);
+        if (usageWhen === "now") publishContextNow();
+        else if (usageWhen === "soon") publishContextSoon();
         scheduleSubagents();
-        // zcode_subagent 在工具里跑完才返回，这段时间父会话没有新事件，目录不会刷新。
+        // picode_subagent 在工具里跑完才返回，这段时间父会话没有新事件，目录不会刷新。
         if (event.type === "agent_start" && !subagentPoll) {
           subagentPoll = setInterval(() => {
             void publishSubagents();
@@ -634,7 +650,7 @@ export class HostSessionRegistry {
             void publishSubagents();
           }
           void bridge.drainNext().then((drained) => {
-            if (drained) emit(projector.replaceQueue(queue.snapshot()));
+            if (drained) projector.replaceQueue(queue.snapshot());
           });
         }
       } catch (error) {
@@ -738,6 +754,7 @@ export class HostSessionRegistry {
         return allowed;
       },
       dispose: () => {
+        if (contextTimer) clearTimeout(contextTimer);
         if (subagentTimer) clearTimeout(subagentTimer);
         stopSubagentPoll();
         unsubscribeProcesses();

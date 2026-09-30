@@ -225,7 +225,13 @@ async function sendQueuedNow(
       throw new V4QueueItemReservedError(payload.queueItemId);
     }
     if (queueItem.kind === "compact") {
-      await startManualCompact(host, record, queueItem.sourceCommandId, foregroundPromotionLeaseId);
+      await startManualCompact(
+        host,
+        record,
+        queueItem.sourceCommandId,
+        foregroundPromotionLeaseId,
+        queueItem.modelSelection,
+      );
       leaseReleaseOwnedByBackground = true;
     } else if (queueItem.kind === "sendGoalCommand") {
       const intent = inputIntentMetadataFromQueueItem(queueItem, objective ?? queueItem.text);

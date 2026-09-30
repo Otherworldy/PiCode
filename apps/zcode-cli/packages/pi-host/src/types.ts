@@ -1,5 +1,6 @@
 import type { BackgroundBashOutputResult } from "@zcode/shared";
 import type { BackgroundWorkSummary } from "@zcode/shared/zcode-protocol-v4";
+import type { PiContextUsage } from "./context-breakdown.js";
 import type { ToolPermissionCheck } from "./permission-gate.js";
 
 export type PiThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
@@ -160,8 +161,8 @@ export interface PiSessionPort {
   killManagedProcess?(id: string): Promise<boolean>;
   readManagedProcessOutput?(workId: string): Promise<BackgroundBashOutputResult>;
   compact(): Promise<void>;
-  /** Pi `getContextUsage()`。tokens 未知时 used 为 0。 */
-  contextUsage?(): { used: number; max: number } | null;
+  /** Pi `getContextUsage()`，外加按来源拆开的估算。 */
+  contextUsage?(): PiContextUsage | null;
   navigateTree?(targetId: string): Promise<unknown>;
   /** Pi `createBranchedSession`：新文件只含到该节点的路径。 */
   branchFrom?(entryId: string): { sessionId: string; sessionFile: string };
@@ -192,4 +193,18 @@ export type CreatePiSession = (input: CreatePiSessionInput) => Promise<PiSession
 export function asPiEvent(event: unknown): PiHostEvent | null {
   if (!event || typeof event !== "object" || !("type" in event)) return null;
   return event as PiHostEvent;
+}
+
+/** 上下文环跟着 Pi getContextUsage。流式合并，整轮结束才推就晚了。 */
+export function contextUsagePublish(event: PiHostEvent): "now" | "soon" | "no" {
+  if (event.type === "message_update") return "soon";
+  if (
+    event.type === "message_end" ||
+    event.type === "tool_execution_end" ||
+    event.type === "compaction_end" ||
+    (event.type === "agent_end" && !event.willRetry)
+  ) {
+    return "now";
+  }
+  return "no";
 }

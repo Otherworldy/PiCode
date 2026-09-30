@@ -85,7 +85,7 @@ export function createPiProcessBridge(): PiProcessBridge {
   return {
     factories: [
       {
-        name: "zcode-processes",
+        name: "picode-processes",
         hidden: true,
         factory(pi) {
           bus = pi.events;

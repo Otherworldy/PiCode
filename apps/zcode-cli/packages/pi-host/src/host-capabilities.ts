@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { CreateAgentSessionOptions } from "@earendil-works/pi-coding-agent";
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
-import { gateTool, type ToolPermissionCheck } from "./permission-gate.js";
+import { createPermissionExtension, gateTool, type ToolPermissionCheck } from "./permission-gate.js";
 
 export interface ZcodeSubagentProfile {
   name: string;
@@ -44,6 +44,8 @@ export interface PiCapabilityPorts {
   /** 代理：列服务器不连接；搜索、描述、调用才连接指定服务器。 */
   useMcp(input: PiMcpRequest): Promise<{ text: string; isError?: boolean }>;
 }
+
+const PI_BUILTIN_TOOL_NAMES = ["read", "bash", "powershell", "edit", "write", "grep", "find", "ls"];
 
 const PI_TOOL_ALIASES: Record<string, readonly string[]> = {
   read: ["read"],
@@ -127,16 +129,21 @@ export async function runZcodeSubagent(input: {
   model?: CreateAgentSessionOptions["model"];
   thinkingLevel?: CreateAgentSessionOptions["thinkingLevel"];
   agentDir: string;
-  codingTools: readonly CodingTool[];
+  check?: ToolPermissionCheck;
+  /** SSH 工作区才传入。本地子会话用 Pi 内置工具，好让扩展替换 grep/find。 */
+  sshTools?: readonly CodingTool[];
 }): Promise<string> {
   await ensurePiSdk();
   if (input.signal?.aborted) return "subagent cancelled";
   const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } = piCoding();
-  const allowed = new Set(piToolNamesForAgent(input.profile.tools, input.codingTools.map((tool) => tool.name)));
+  const allowed = piToolNamesForAgent(
+    input.profile.tools,
+    input.sshTools?.map((tool) => tool.name) ?? PI_BUILTIN_TOOL_NAMES,
+  );
   const childDir = join(
     dirname(input.parentSessionFile),
     basename(input.parentSessionFile, ".jsonl"),
-    "zcode-subagent",
+    "picode-subagent",
   );
   await mkdir(childDir, { recursive: true });
   const loader = new DefaultResourceLoader({
@@ -145,6 +152,7 @@ export async function runZcodeSubagent(input: {
     settingsManager: SettingsManager.inMemory({ retry: { enabled: false } }),
     noExtensions: true,
     noSkills: true,
+    extensionFactories: [createPermissionExtension(input.check)],
     appendSystemPrompt: [input.profile.systemPrompt || input.profile.description].filter(
       (line) => line.trim().length > 0,
     ),
@@ -156,8 +164,10 @@ export async function runZcodeSubagent(input: {
     modelRuntime: input.modelRuntime,
     ...(input.model ? { model: input.model } : {}),
     ...(input.thinkingLevel ? { thinkingLevel: input.thinkingLevel } : {}),
-    noTools: "builtin",
-    customTools: input.codingTools.filter((tool) => allowed.has(tool.name)) as never,
+    tools: allowed,
+    ...(input.sshTools
+      ? { customTools: input.sshTools.filter((tool) => allowed.includes(tool.name)) as never }
+      : {}),
     resourceLoader: loader,
     sessionManager: SessionManager.create(input.cwd, childDir),
     settingsManager: SettingsManager.inMemory({ retry: { enabled: false } }),
@@ -192,12 +202,12 @@ export async function createCapabilityTools(input: {
       ? agents.map((agent) => `- ${agent.name}: ${agent.description}`).join("\n")
       : "- general-purpose\n- Explore";
   const subagent = tool<{ agent?: string; task?: string }>({
-    name: "zcode_subagent",
+    name: "picode_subagent",
     label: "Subagent",
     description: `Run a PiCode subagent and return its final answer.\n${catalog}`,
     promptSnippet: "Delegate a task to a PiCode subagent",
     promptGuidelines: [
-      "Use zcode_subagent for work that should run in a separate agent. Pick a name from the tool description.",
+      "Use picode_subagent for work that should run in a separate agent. Pick a name from the tool description.",
     ],
     parameters: {
       type: "object",
@@ -210,7 +220,7 @@ export async function createCapabilityTools(input: {
     execute: async (_toolCallId, params, signal) => {
       const agent = String(params.agent ?? "").trim();
       const task = String(params.task ?? "").trim();
-      await gateTool(input.check, "zcode_subagent", params);
+      await gateTool(input.check, "picode_subagent", params);
       const profiles = await input.ports.listSubagents(input.cwd).catch(() => agents);
       const profile = profiles.find((item) => item.name === agent);
       if (!profile) {

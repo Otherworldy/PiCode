@@ -13,14 +13,15 @@ import {
   runZcodeSubagent,
   type PiCapabilityPorts,
 } from "./host-capabilities.js";
-import { gateTool, type ToolPermissionCheck } from "./permission-gate.js";
+import { readPiContextUsage } from "./context-breakdown.js";
+import { createPermissionExtension } from "./permission-gate.js";
 import {
   createDelegateProvider,
   mapThought,
   type DelegateProvider,
   type ZCodeModelStreamPort,
 } from "./model-delegate.js";
-import { readProcessSshRemoteSpec, sshCodingToolOptions, sshSearchText, sshWorkspacePrompt } from "./ssh-remote.js";
+import { readProcessSshRemoteSpec, sshCodingToolOptions, sshWorkspacePrompt } from "./ssh-remote.js";
 import { asPiEvent, type CreatePiSession, type PiSessionPort } from "./types.js";
 import {
   alignStoredModelApi,
@@ -36,48 +37,6 @@ import {
   type PiModelConfigView,
   type PiProviderDraft,
 } from "./model-config-file.js";
-
-function wrapCodingTools(cwd: string, check: ToolPermissionCheck | undefined) {
-  const ssh = readProcessSshRemoteSpec(cwd);
-  const raw = [
-    ...piCoding().createCodingTools(cwd, ssh ? sshCodingToolOptions(ssh) : undefined),
-    ...(ssh
-      ? []
-      : [
-          ...(process.platform === "win32" ? [piCoding().createPowerShellTool(cwd)] : []),
-          piCoding().createGrepTool(cwd),
-          piCoding().createFindTool(cwd),
-          piCoding().createLsTool(cwd),
-        ]),
-  ];
-  const seen = new Set<string>();
-  return raw
-    .filter((tool) => {
-      if (seen.has(tool.name)) return false;
-      seen.add(tool.name);
-      return true;
-    })
-    .map((tool) => ({
-      ...tool,
-      execute: async (
-        toolCallId: string,
-        params: never,
-        signal?: AbortSignal,
-        onUpdate?: never,
-      ) => {
-        await gateTool(check, tool.name, params);
-        if (ssh && (tool.name === "grep" || tool.name === "find")) {
-          return sshSearchText(
-            tool.name,
-            params as { pattern?: string; path?: string; glob?: string; limit?: number },
-            ssh,
-            signal,
-          );
-        }
-        return tool.execute(toolCallId, params, signal, onUpdate);
-      },
-    }));
-}
 
 async function createIsolatedRuntime(delegate: DelegateProvider): Promise<ModelRuntime> {
   const runtime = await piCoding().ModelRuntime.create({
@@ -244,12 +203,17 @@ export function createSdkSessionFactory(options: {
       agentDir,
       settingsManager,
       ...(pluginExtras?.loader ?? { additionalSkillPaths: options.skillPaths?.(input.cwd) ?? [] }),
-      ...(processes ? { extensionFactories: processes.factories } : {}),
+      extensionFactories: [
+        createPermissionExtension(input.checkPermission),
+        ...(processes?.factories ?? []),
+      ],
       ...(ssh ? { appendSystemPrompt: [sshWorkspacePrompt(ssh)] } : {}),
     });
     await resourceLoader.reload();
     if (pluginExtras) applyZcodePluginPlan(resourceLoader, pluginExtras.plan);
-    const customTools = wrapCodingTools(input.cwd, input.checkPermission);
+    // 本地不塞 read/bash/grep/find。Pi 自己有，扩展（pi-fff）才能按原名换掉。
+    // SSH 必须换成远端读写，否则这些工具打到本机盘。
+    const sshTools = ssh ? piCoding().createCodingTools(input.cwd, sshCodingToolOptions(ssh)) : [];
     let live:
       | {
           model?: CreateAgentSessionOptions["model"];
@@ -262,7 +226,7 @@ export function createSdkSessionFactory(options: {
           cwd: input.cwd,
           ports: options.capabilities,
           check: input.checkPermission,
-          reservedNames: customTools.map((tool) => tool.name),
+          reservedNames: ["read", "bash", "powershell", "edit", "write", "grep", "find", "ls"],
           sessionId: input.sessionId,
           runSubagent: (profile, task, signal) =>
             runZcodeSubagent({
@@ -273,11 +237,12 @@ export function createSdkSessionFactory(options: {
               profile,
               task,
               signal,
+              check: input.checkPermission,
               modelRuntime,
               model: live?.model,
               thinkingLevel: live?.thinkingLevel,
               agentDir,
-              codingTools: customTools,
+              ...(sshTools.length > 0 ? { sshTools } : {}),
             }),
         })
       : [];
@@ -286,10 +251,9 @@ export function createSdkSessionFactory(options: {
       agentDir,
       ...(isolated && delegate ? { model: delegate.model, thinkingLevel: "off" as const } : {}),
       modelRuntime,
-      customTools: [...customTools, ...capabilityTools] as never,
-      // noTools=builtin 关掉 Pi 同名工具。不传白名单，以免把 extension 工具全关掉。
+      customTools: [...sshTools, ...capabilityTools] as never,
+      // 不传 tools 白名单，也不关 builtin。插件工具保持启用，同名工具由插件替换。
       // 插件自带的 subagent 与 PiCode 代理定义冲突，主会话禁用它。
-      noTools: "builtin",
       ...(options.capabilities ? { excludeTools: ["subagent"] } : {}),
       resourceLoader,
       sessionManager: openOrCreateSession(input),
@@ -357,11 +321,7 @@ export function createSdkSessionFactory(options: {
       compact: async () => {
         await session.compact();
       },
-      contextUsage: () => {
-        const usage = session.getContextUsage();
-        if (!usage || usage.contextWindow <= 0) return null;
-        return { used: Math.max(0, usage.tokens ?? 0), max: usage.contextWindow };
-      },
+      contextUsage: () => readPiContextUsage(session, piCoding().formatSkillsForPrompt),
       navigateTree: (targetId) => session.navigateTree(targetId),
       branchFrom: (entryId) => {
         const file = session.sessionFile;

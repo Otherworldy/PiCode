@@ -70,6 +70,7 @@ interface ContextUsageBreakdownSegment {
   chars: number;
   percent: number;
   source: ContextUsageBreakdownSource;
+  tokens?: number;
 }
 
 const CONTEXT_PROGRESS_TONE_COLORS = [
@@ -144,34 +145,47 @@ function getBreakdownToneStyle(index: number): CSSProperties {
 }
 
 const BREAKDOWN_SOURCE_LABEL_ID: Record<ContextUsageBreakdownSource, string> = {
-  messages: "chat.contextUsage.breakdown.messages",
   system_prompt: "chat.contextUsage.breakdown.systemPrompt",
-  meta_user_context: "chat.contextUsage.breakdown.metaUserContext",
+  memory: "chat.contextUsage.breakdown.memory",
   skills: "chat.contextUsage.breakdown.skills",
+  tools: "chat.contextUsage.breakdown.tools",
+  tool_results: "chat.contextUsage.breakdown.toolResults",
+  messages: "chat.contextUsage.breakdown.messages",
+  other: "chat.contextUsage.breakdown.other",
+  meta_user_context: "chat.contextUsage.breakdown.metaUserContext",
   tool_prompt: "chat.contextUsage.breakdown.toolPrompt",
   system_tool_schemas: "chat.contextUsage.breakdown.systemTools",
   mcp_tool_schemas: "chat.contextUsage.breakdown.mcpTools",
 };
 
 const BREAKDOWN_SOURCE_ORDER: Record<ContextUsageBreakdownSource, number> = {
-  messages: 0,
-  system_prompt: 1,
-  meta_user_context: 2,
-  skills: 3,
-  tool_prompt: 4,
-  system_tool_schemas: 5,
-  mcp_tool_schemas: 6,
+  system_prompt: 0,
+  memory: 1,
+  skills: 2,
+  tools: 3,
+  system_tool_schemas: 4,
+  mcp_tool_schemas: 5,
+  tool_prompt: 6,
+  tool_results: 7,
+  messages: 8,
+  other: 9,
+  meta_user_context: 10,
 };
 
 function buildContextUsageBreakdownSegments(
   breakdown: readonly ZCodeContextUsageBreakdownItem[] | undefined,
 ): ContextUsageBreakdownSegment[] {
   const charsBySource = new Map<ContextUsageBreakdownSource, number>();
+  const tokensBySource = new Map<ContextUsageBreakdownSource, number>();
   for (const item of breakdown ?? []) {
-    if (!Number.isFinite(item.chars) || item.chars <= 0) {
+    const weight = item.tokens ?? item.chars;
+    if (!Number.isFinite(weight) || weight <= 0) {
       continue;
     }
-    charsBySource.set(item.source, (charsBySource.get(item.source) ?? 0) + item.chars);
+    charsBySource.set(item.source, (charsBySource.get(item.source) ?? 0) + weight);
+    if (item.tokens !== undefined) {
+      tokensBySource.set(item.source, (tokensBySource.get(item.source) ?? 0) + item.tokens);
+    }
   }
 
   const totalChars = [...charsBySource.values()].reduce((sum, chars) => sum + chars, 0);
@@ -184,10 +198,10 @@ function buildContextUsageBreakdownSegments(
       chars,
       percent: chars / totalChars,
       source,
+      ...(tokensBySource.has(source) ? { tokens: tokensBySource.get(source) } : {}),
     }))
     .sort(
       (left, right) =>
-        right.chars - left.chars ||
         BREAKDOWN_SOURCE_ORDER[left.source] - BREAKDOWN_SOURCE_ORDER[right.source],
     );
 }
@@ -971,8 +985,10 @@ export function ChatContextUsage({
                             id: BREAKDOWN_SOURCE_LABEL_ID[segment.source],
                           })}
                         </span>
-                        {/* breakdown 行只展示占比，分项 token 数会和顶部总量口径混在一起造成误读。*/}
                         <span className="ml-auto min-w-10 shrink-0 text-right font-mono text-ui-sm tabular-nums text-foreground">
+                          {segment.tokens !== undefined
+                            ? `${formatContextUsageTokenCount(segment.tokens, locale)} · `
+                            : null}
                           {percentageFormatter.format(segment.percent)}
                         </span>
                       </div>

@@ -57,7 +57,7 @@ test("capability tools call PiCode subagents and MCP", async () => {
   });
   assert.deepEqual(
     tools.map((tool) => tool.name),
-    ["zcode_subagent", "mcp", "mcp__docs__search"],
+    ["picode_subagent", "mcp", "mcp__docs__search"],
   );
   const subagent = tools[0]?.execute("1", { agent: "Explore", task: "find it" }, undefined, undefined, undefined as never);
   const proxy = tools[1]?.execute("2", {}, undefined, undefined, undefined as never);

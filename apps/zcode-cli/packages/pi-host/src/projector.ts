@@ -1,3 +1,4 @@
+import type { ZCodeContextUsageBreakdownItem } from "@zcode/shared";
 import {
   applyConversationDeltas,
   applyConversationDeltasMutable,
@@ -68,6 +69,20 @@ export interface ProjectorOptions {
   workId?: string;
 }
 
+function sameBreakdown(
+  left: ZCodeContextUsageBreakdownItem[] | undefined,
+  right: ZCodeContextUsageBreakdownItem[] | undefined,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right || left.length !== right.length) return false;
+  return left.every(
+    (item, index) =>
+      item.source === right[index]?.source &&
+      item.chars === right[index]?.chars &&
+      item.tokens === right[index]?.tokens,
+  );
+}
+
 export class PiToV4Projector {
   private snapshot: ConversationSnapshot;
   private nextRowId = 1;
@@ -85,6 +100,7 @@ export class PiToV4Projector {
   private pendingError?: string;
   private pendingUserAttachments?: Extract<ConversationRow, { kind: "userInput" }>["attachments"];
   private retryFailures: { attempt: number; message: string }[] = [];
+  private publishQueue: ((deltas: ConversationDelta[]) => void) | null = null;
   readonly profile: DeliveryProfileName;
   private readonly viaRegistry: boolean;
   private readonly workId?: string;
@@ -202,8 +218,14 @@ export class PiToV4Projector {
     return withSeq;
   }
 
+  bindQueuePublish(publish: (deltas: ConversationDelta[]) => void): void {
+    this.publishQueue = publish;
+  }
+
   replaceQueue(queue: QueueState): ConversationDelta[] {
-    return this.applyState({ queue, inputRouting: this.routing(queue) });
+    const deltas = this.applyState({ queue, inputRouting: this.routing(queue) });
+    this.publishQueue?.(deltas);
+    return deltas;
   }
 
   replaceInteractions(pendingInteractions: PendingInteraction[]): ConversationDelta[] {
@@ -247,16 +269,29 @@ export class PiToV4Projector {
     return this.applyState({ meta: { title, titleSource } });
   }
 
-  setContextUsage(usedTokens: number, maxTokens: number): ConversationDelta[] {
+  setContextUsage(
+    usedTokens: number,
+    maxTokens: number,
+    breakdown?: ZCodeContextUsageBreakdownItem[],
+  ): ConversationDelta[] {
     const current = this.snapshot.usage.contextWindow;
-    if (current?.usedTokens === usedTokens && current.maxTokens === maxTokens) return [];
+    const nextBreakdown = breakdown && breakdown.length > 0 ? breakdown : undefined;
+    if (
+      current?.usedTokens === usedTokens &&
+      current.maxTokens === maxTokens &&
+      sameBreakdown(current.breakdown, nextBreakdown)
+    ) {
+      return [];
+    }
     return this.applyState({
       usage: {
         ...this.snapshot.usage,
         contextWindow: {
           usedTokens,
           maxTokens,
-          autoCompactThresholdTokens: null,
+          autoCompactThresholdTokens: current?.autoCompactThresholdTokens ?? null,
+          ...(current?.cache ? { cache: current.cache } : {}),
+          ...(nextBreakdown ? { breakdown: nextBreakdown } : {}),
         },
       },
     });
@@ -660,7 +695,23 @@ export class PiToV4Projector {
       lane: "assistantWork",
       marker: { type: "compact", origin: "manual", status: "running" },
     };
-    return [{ op: "row.appended", row }];
+    const deltas: ConversationDelta[] = [{ op: "row.appended", row }];
+    // 空闲时压缩没有 running 轮次。不打开 canStop，停止键不会出现。
+    if (this.snapshot.control.phase !== "running") {
+      deltas.push({
+        op: "state.updated",
+        patch: {
+          control: {
+            ...this.snapshot.control,
+            canStop: true,
+            stopState: "stoppable",
+            stopTargetKind: "compact",
+            activeWorks: [{ kind: "compact", startedAt: Date.now() }],
+          },
+        },
+      });
+    }
+    return deltas;
   }
 
   private compactEnd(event: Extract<PiHostEvent, { type: "compaction_end" }>): ConversationDelta[] {
@@ -702,33 +753,36 @@ export class PiToV4Projector {
             },
           },
     ];
+    let control = this.snapshot.control;
+    if (control.phase !== "running") {
+      control = {
+        ...control,
+        canStop: false,
+        stopState: "idle",
+        stopTargetKind: "unknown",
+        activeWorks: [],
+      };
+    }
     if (status === "failed" && presented) {
-      deltas.push({
-        op: "state.updated",
-        patch: {
-          control: {
-            ...this.snapshot.control,
-            lastError: {
-              code: "fault.compact",
-              message: presented.message,
-              ...(presented.detail ? { detail: presented.detail } : {}),
-              recoverable: true,
-              at: Date.now(),
-              source: "runtime",
-            },
-          },
+      control = {
+        ...control,
+        lastError: {
+          code: "fault.compact",
+          message: presented.message,
+          ...(presented.detail ? { detail: presented.detail } : {}),
+          recoverable: true,
+          at: Date.now(),
+          source: "runtime",
         },
-      });
+      };
     } else if (
       (status === "success" || status === "cancelled") &&
-      this.snapshot.control.lastError?.code === "fault.compact"
+      control.lastError?.code === "fault.compact"
     ) {
-      deltas.push({
-        op: "state.updated",
-        patch: {
-          control: { ...this.snapshot.control, lastError: null },
-        },
-      });
+      control = { ...control, lastError: null };
+    }
+    if (control !== this.snapshot.control) {
+      deltas.push({ op: "state.updated", patch: { control } });
     }
     return deltas;
   }

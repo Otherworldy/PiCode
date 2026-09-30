@@ -187,25 +187,3 @@ export function sshCodingToolOptions(spec: SshRemoteSpec) {
   };
 }
 
-export async function sshSearchText(
-  kind: "grep" | "find",
-  params: { pattern?: string; path?: string; glob?: string; limit?: number },
-  spec: SshRemoteSpec,
-  signal?: AbortSignal,
-): Promise<{ content: Array<{ type: "text"; text: string }> }> {
-  const root = quotePosixArg(spec.remotePath);
-  const pattern = quotePosixArg(params.pattern ?? "");
-  const search = quotePosixArg(remotePosixPath(params.path || spec.remotePath, spec.remotePath));
-  const glob = params.glob ? ` --glob ${quotePosixArg(params.glob)}` : "";
-  const command =
-    kind === "find"
-      ? `cd ${root} && if command -v rg >/dev/null 2>&1; then rg --files -g ${pattern} ${search}; else find ${search} -name ${pattern}; fi`
-      : `cd ${root} && if command -v rg >/dev/null 2>&1; then rg -n --color never --hidden${glob} -- ${pattern} ${search}; else grep -R -n -I ${pattern} ${search}; fi`;
-  const result = await runSsh(spec, command, { signal });
-  const text = result.stdout.toString("utf8").trim();
-  if (result.code !== 0 && result.code !== 1) {
-    throw new Error(result.stderr.trim() || `ssh exited ${result.code ?? "null"}`);
-  }
-  const limited = params.limit && params.limit > 0 ? text.split("\n").slice(0, params.limit).join("\n") : text;
-  return { content: [{ type: "text", text: limited || "(no matches)" }] };
-}

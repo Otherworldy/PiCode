@@ -5,7 +5,7 @@ import { abortInflightNetworkFetches } from "@zcode/adapters/network";
 import { planTurnFileRewind, readProcessSshRemoteSpec, sendDelivery, setInflightNetworkAbort, sshReadText, sshRemoveFile, sshWriteText, summarizeTurnFileChanges, type HostedSession } from "@zcode/pi-host";
 import { remotePosixPath } from "@zcode/shared/node";
 import { RewindStrategy, type CollaborationMode, type ModelSelection, type SessionId, type TurnId } from "@zcode/contracts";
-import type { ZCodeApp, PromptInput, SendInputResult } from "./types.js";
+import type { PromptInput, SendInputResult, SubmitPromptOptions, ZCodeApp } from "./types.js";
 import { parseProviderQualifiedModelSelection } from "./provider-registry-selection.js";
 
 function textOf(input: PromptInput): string {
@@ -392,11 +392,24 @@ export function createPiHostedApp(
       hosted.bridge.syncFollowupMode(mode);
       hosted.projector.setConfig({ followupMode: mode });
     },
-    async submitPrompt(input: PromptInput) {
+    async submitPrompt(input: PromptInput, options?: SubmitPromptOptions) {
       const text = textOf(input).trim();
       if (text === "/compact") {
-        await hosted.compact();
-        return dummyCompletion("compact");
+        const signal = options?.abortSignal;
+        if (signal?.aborted) {
+          await hosted.abort();
+          throw new Error("Compaction cancelled");
+        }
+        const stop = () => {
+          void hosted.abort();
+        };
+        signal?.addEventListener("abort", stop, { once: true });
+        try {
+          await hosted.compact();
+          return dummyCompletion("compact");
+        } finally {
+          signal?.removeEventListener("abort", stop);
+        }
       }
       const started = await send(input, "startNow");
       if (started.kind === "started_turn") return started.completion;
