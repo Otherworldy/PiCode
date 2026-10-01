@@ -449,5 +449,18 @@ export async function preemptActiveTurnAndWait(
   return runtimeStop?.kind === "stopped";
 }
 
-export const sessionFlowHandlers = { sendText, stop };
+/** 模型失败后续跑：不重发原文，从失败前的上下文继续。 */
+async function continueAfterError(
+  host: V4CommandCoreHost,
+  envelope: CommandEnvelope,
+): Promise<CommandResult | undefined> {
+  const record = requireRecord(host, envelope.sessionId);
+  if (!record.app.continueAfterModelError) {
+    throw new Error("continueAfterModelError unsupported");
+  }
+  await record.app.continueAfterModelError();
+  return undefined;
+}
+
+export const sessionFlowHandlers = { sendText, stop, continueAfterError };
 import { resolveExecutionState } from "@zcode/shared";

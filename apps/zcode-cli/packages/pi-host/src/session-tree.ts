@@ -74,23 +74,33 @@ export function readSessionTree(source: Pick<SessionTreeSource, "getLeafId" | "g
   const leafId = source.getLeafId();
   const active = new Set(source.getBranch().map((entry) => entry.id));
   const out: PiSessionTreeNode[] = [];
-  const walk = (nodes: TreeNode[], depth: number) => {
-    for (const node of nodes) {
-      const entry = node.entry;
-      out.push({
-        id: entry.id,
-        parentId: typeof entry.parentId === "string" ? entry.parentId : null,
-        role: roleOf(entry),
-        preview: previewOf(entry),
-        ...(node.label ? { label: node.label } : {}),
-        depth,
-        active: active.has(entry.id),
-        leaf: entry.id === leafId,
-      });
-      walk(node.children, depth + 1);
+  // ponytail: 迭代压平。父链超过约 1 万层时递归会 Maximum call stack size exceeded。
+  const stack: Array<{ node: TreeNode; depth: number }> = [];
+  const roots = source.getTree();
+  for (let index = roots.length - 1; index >= 0; index -= 1) {
+    const node = roots[index];
+    if (node) stack.push({ node, depth: 0 });
+  }
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current) continue;
+    const entry = current.node.entry;
+    out.push({
+      id: entry.id,
+      parentId: typeof entry.parentId === "string" ? entry.parentId : null,
+      role: roleOf(entry),
+      preview: previewOf(entry),
+      ...(current.node.label ? { label: current.node.label } : {}),
+      depth: current.depth,
+      active: active.has(entry.id),
+      leaf: entry.id === leafId,
+    });
+    const children = current.node.children;
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      const child = children[index];
+      if (child) stack.push({ node: child, depth: current.depth + 1 });
     }
-  };
-  walk(source.getTree(), 0);
+  }
   return out;
 }
 

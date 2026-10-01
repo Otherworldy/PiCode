@@ -294,6 +294,8 @@ export interface ZCodeApp {
   readonly runtime: AgentRuntime;
   /** 编辑截断后重发失败时，用 jsonl 把画面行恢复回来。Pi host 才有。 */
   restoreRewoundConversation?(): Promise<void>;
+  /** 模型失败后从当前上下文接着跑。Pi host 才有。 */
+  continueAfterModelError?(): Promise<void>;
   respondWorkspaceHookReview(
     input: RespondWorkspaceHookReviewInput,
   ): Promise<WorkspaceHookReviewCommandResult>;

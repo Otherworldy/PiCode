@@ -442,6 +442,62 @@ test("image attachments are sent as bytes and shown on the user row", async () =
   }
 });
 
+test("dragged text files are included in the model prompt", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pi-file-"));
+  const file = join(dir, "note.txt");
+  await writeFile(file, "hello from the dropped file");
+  try {
+    const session = new FakePiSession("s");
+    const queue = new HostQueue();
+    const noted: string[][] = [];
+    const bridge = new CommandBridge(session, queue, undefined, (refs) => {
+      noted.push(refs.map((item) => item.ref));
+    });
+    const attachment = {
+      type: "file" as const,
+      path: file,
+      filename: "note.txt",
+      mimeType: "text/plain",
+      sizeBytes: 26,
+    };
+    await bridge.admitSend({
+      text: "look",
+      clientId: "c",
+      commandId: "1",
+      delivery: "startNow",
+      streaming: false,
+      attachments: [attachment],
+    });
+    assert.match(session.prompts[0] ?? "", /hello from the dropped file/);
+    assert.match(session.prompts[0] ?? "", /note\.txt/);
+    session.isStreaming = true;
+    await bridge.admitSend({
+      text: "later",
+      clientId: "c",
+      commandId: "2",
+      delivery: "queue",
+      streaming: true,
+      attachments: [attachment],
+    });
+    session.isStreaming = false;
+    assert.equal(await bridge.drainNext(), true);
+    assert.match(session.prompts[1] ?? "", /hello from the dropped file/);
+    assert.deepEqual(noted, [[file], [file]]);
+    const projector = new PiToV4Projector("s", "e1");
+    projector.noteUserAttachments([
+      { ref: file, fileName: "note.txt", mime: "text/plain", bytes: 26 },
+    ]);
+    projector.apply({
+      type: "message_start",
+      message: { role: "user", content: [{ type: "text", text: session.prompts[0] ?? "" }], id: "u1" },
+    });
+    const row = projector.getSnapshot().rows.window.find((item) => item.kind === "userInput");
+    assert.equal(row?.kind === "userInput" ? row.text : "", "look");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("busy or compacting sends join the queue instead of prompting", () => {
   assert.equal(sendDelivery({ guide: false, phaseRunning: false, idle: true }), "startNow");
   assert.equal(sendDelivery({ guide: false, phaseRunning: true, idle: false }), "queue");

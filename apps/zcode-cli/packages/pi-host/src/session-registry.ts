@@ -50,6 +50,7 @@ export interface HostedSession {
   prompt(text: string): Promise<boolean>;
   waitTurn(): Promise<void>;
   abort(): Promise<void>;
+  continueAfterError(): Promise<void>;
   cancelManagedProcess(workId: string): Promise<"killed" | "missing" | "unrelated">;
   readManagedProcessOutput(workId: string): Promise<import("@zcode/shared").BackgroundBashOutputResult>;
   compact(): Promise<void>;
@@ -704,6 +705,10 @@ export class HostSessionRegistry {
         projector.markAborted();
         abortInflightNetwork();
         await pi.abort();
+      },
+      continueAfterError: () => {
+        if (!pi.continueAfterError) return Promise.reject(new Error("continue unsupported"));
+        return pi.continueAfterError();
       },
       cancelManagedProcess: async (workId) => {
         const id = workId.startsWith("pi-process:") ? workId.slice("pi-process:".length) : "";

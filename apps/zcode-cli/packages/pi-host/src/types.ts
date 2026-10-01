@@ -183,6 +183,8 @@ export interface PiSessionPort {
     images?: Array<{ type: "image"; data: string; mimeType: string }>,
   ): Promise<void>;
   abort(): Promise<void>;
+  /** 模型失败后从当前上下文接着跑。命令在 agent_start 后返回。 */
+  continueAfterError?(): Promise<void>;
   /** pi-processes 列表变化。没装插件时列表一直是空的。 */
   subscribeManagedProcesses?(listener: (works: BackgroundWorkSummary[]) => void): () => void;
   killManagedProcess?(id: string): Promise<boolean>;

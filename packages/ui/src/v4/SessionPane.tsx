@@ -4202,6 +4202,25 @@ export function SessionPane({
   useEffect(() => {
     setSendSubmissionError(null);
   }, [sessionId]);
+  const [continuingAfterError, setContinuingAfterError] = useState(false);
+  const handleContinueAfterError = useCallback(() => {
+    if (!sessionId || continuingAfterError) return;
+    setContinuingAfterError(true);
+    void dispatchCommand("continueAfterError", {}, sessionId)
+      .then((ack) => {
+        if (ack.status !== "accepted" && ack.status !== "duplicate") {
+          logger.warn(`[v4-pane] continue 被拒绝: ${ack.status} ${ack.reasonCode ?? ""}`);
+        }
+      })
+      .catch((error: unknown) => {
+        logger.warn("[v4-pane] continue 提交失败", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      })
+      .finally(() => {
+        setContinuingAfterError(false);
+      });
+  }, [continuingAfterError, dispatchCommand, sessionId]);
   const handleDismissComposerError = useCallback(() => {
     if (draftModelReadinessError) {
       dismissDraftModelReadinessError();
@@ -4667,6 +4686,12 @@ export function SessionPane({
       onSendCompressionCommand={handleSendCompressionCommand}
       error={composerError}
       onDismissError={handleDismissComposerError}
+      onRetryError={
+        sessionId && snapshot?.control.phase !== "running" && composerError?.code === "fault.model"
+          ? handleContinueAfterError
+          : undefined
+      }
+      retryErrorDisabled={continuingAfterError}
       onOpenModelSettings={handleOpenModelSettings}
       onOpenModelUpgrade={handleOpenModelUpgrade}
       onOpenCodeViewer={onOpenCodeViewer}

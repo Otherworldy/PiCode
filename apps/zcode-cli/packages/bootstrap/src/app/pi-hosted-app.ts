@@ -430,6 +430,9 @@ export function createPiHostedApp(
       hosted.setThinkingLevel(level);
       return { thoughtLevel: level, traceId: "pi-host" };
     },
+    async continueAfterModelError() {
+      await hosted.continueAfterError();
+    },
     async close() {
       hosted.dispose();
     },

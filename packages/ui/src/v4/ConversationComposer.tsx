@@ -447,6 +447,9 @@ interface ConversationComposerProps {
   /** v4 会话级错误（snapshot.control.lastError），展示在输入框上方。 */
   error?: ZCodeUiError | null;
   onDismissError?: () => void;
+  /** 模型失败后续跑。没传就不显示重试。 */
+  onRetryError?: () => void;
+  retryErrorDisabled?: boolean;
   /** 无可用模型横幅的恢复动作；由 SessionPane 注入壳层导航，组件不直接操作 tab。 */
   onOpenModelSettings?: () => void;
   onOpenModelUpgrade?: () => void;
@@ -525,6 +528,8 @@ function ConversationComposerImpl({
   onSendCompressionCommand,
   error,
   onDismissError,
+  onRetryError,
+  retryErrorDisabled,
   onOpenModelSettings,
   onOpenModelUpgrade,
   onOpenCodeViewer,
@@ -2215,6 +2220,8 @@ function ConversationComposerImpl({
           <ChatErrorBanner
             error={visibleError}
             onDismiss={onDismissError}
+            onRetry={onRetryError}
+            retryDisabled={retryErrorDisabled}
             onOpenModelSettings={onOpenModelSettings}
             onOpenUpgrade={onOpenModelUpgrade}
           />

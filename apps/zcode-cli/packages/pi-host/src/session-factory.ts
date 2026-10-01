@@ -29,6 +29,10 @@ import {
   type ZCodeModelStreamPort,
 } from "./model-delegate.js";
 import { readProcessSshRemoteSpec, sshCodingToolOptions, sshWorkspacePrompt } from "./ssh-remote.js";
+import {
+  prepareContinueMessages,
+  runContinueAfterModelError,
+} from "./continue-after-error.js";
 import { asPiEvent, type CreatePiSession, type PiSessionPort } from "./types.js";
 import {
   alignStoredModelApi,
@@ -321,6 +325,39 @@ export function createSdkSessionFactory(options: {
       steer: (text, images) => session.steer(text, images),
       followUp: (text, images) => session.followUp(text, images),
       abort: () => session.abort(),
+      continueAfterError: () => {
+        if (session.isStreaming) return Promise.reject(new Error("still running"));
+        const prepared = prepareContinueMessages(session.agent.state.messages);
+        if (!prepared.ok) return Promise.reject(new Error("nothing to continue"));
+        session.agent.state.messages = prepared.messages;
+        return new Promise<void>((resolve, reject) => {
+          let settled = false;
+          const stop = session.subscribe((event) => {
+            if (event.type !== "agent_start" || settled) return;
+            settled = true;
+            stop();
+            resolve();
+          });
+          const done = runContinueAfterModelError(
+            session as unknown as Parameters<typeof runContinueAfterModelError>[0],
+          );
+          lastTurn = done;
+          void done.then(
+            () => {
+              if (settled) return;
+              settled = true;
+              stop();
+              reject(new Error("continue did not start"));
+            },
+            (error: unknown) => {
+              if (settled) return;
+              settled = true;
+              stop();
+              reject(error);
+            },
+          );
+        });
+      },
       subscribeManagedProcesses: (listener) => processes?.subscribe(listener) ?? (() => undefined),
       killManagedProcess: (id: string) => processes?.kill(id) ?? Promise.resolve(false),
       readManagedProcessOutput: (workId: string) =>

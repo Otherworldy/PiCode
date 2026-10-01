@@ -126,6 +126,42 @@ test("deleteSessionBranch rewrites the file and does not rebuild context", () =>
   );
 });
 
+test("readSessionTree walks a chain deeper than the call stack", () => {
+  const depth = 12_000;
+  let root: { entry: (typeof entries)[number]; children: unknown[]; label?: string } | undefined;
+  let parent: { children: unknown[] } | undefined;
+  const chain = [];
+  for (let index = 0; index < depth; index += 1) {
+    const entry = {
+      id: `n${index}`,
+      parentId: index === 0 ? null : `n${index - 1}`,
+      type: "message",
+      message: { role: "user" as const, content: "x" },
+    };
+    chain.push(entry);
+    const node = { entry, children: [] as unknown[] };
+    if (!root) root = node;
+    else parent?.children.push(node);
+    parent = node;
+  }
+  const nodes = readSessionTree({
+    getLeafId: () => `n${depth - 1}`,
+    getBranch: () => chain.map((entry) => ({ id: entry.id })),
+    getTree: () => [root!],
+    getEntry: () => undefined,
+    getEntries: () => chain,
+    buildContextEntries: () => [],
+    appendLabelChange: () => "",
+  });
+  assert.equal(nodes.length, depth);
+  assert.equal(nodes[0]?.depth, 0);
+  assert.equal(nodes[1]?.id, "n1");
+  assert.equal(nodes.at(-1)?.id, `n${depth - 1}`);
+  assert.equal(nodes.at(-1)?.depth, depth - 1);
+  assert.equal(nodes.at(-1)?.leaf, true);
+  assert.equal(nodes.at(-1)?.active, true);
+});
+
 test("readSessionTree marks the active path and leaf", () => {
   const nodes = readSessionTree(source("a1"));
   assert.deepEqual(

@@ -32,6 +32,11 @@ function messageText(content: unknown): string {
     .join("");
 }
 
+/** 附件正文只给模型。气泡留用户原文，文件名走附件芯片。 */
+function visibleUserText(text: string): string {
+  return text.replace(/\n*<zcode-file>[\s\S]*?<\/zcode-file>/gu, "").trimEnd();
+}
+
 function clipError(text: string | undefined): string | undefined {
   const flat = text?.replace(/\s+/g, " ").trim();
   if (!flat) return undefined;
@@ -534,6 +539,7 @@ export class PiToV4Projector {
   private appendUser(text: string, messageId?: string): ConversationDelta[] {
     const attachments = this.pendingUserAttachments;
     this.pendingUserAttachments = undefined;
+    text = visibleUserText(text);
     if (!text && !attachments?.length && this.snapshot.control.phase === "draft") return [];
     const row: ConversationRow = {
       ...this.base(this.turnId || `turn:${this.nextRowId}`),

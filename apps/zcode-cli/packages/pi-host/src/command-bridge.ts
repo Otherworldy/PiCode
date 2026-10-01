@@ -1,6 +1,11 @@
 import type { AttachmentRef } from "@zcode/shared/zcode-protocol-v4";
 import type { HostQueue } from "./host-queue.js";
-import { loadPromptImages, promptAttachmentRefs, type PiPromptAttachment } from "./prompt-images.js";
+import {
+  appendFileAttachments,
+  loadPromptImages,
+  promptAttachmentRefs,
+  type PiPromptAttachment,
+} from "./prompt-images.js";
 import type { PiSessionPort } from "./types.js";
 
 export type SendDelivery = "startNow" | "queue" | "guide";
@@ -101,14 +106,15 @@ export class CommandBridge {
     text: string,
     attachments: readonly PiPromptAttachment[] | undefined,
   ): Promise<void> {
+    const body = await appendFileAttachments(text, attachments);
     const images = await loadPromptImages(attachments);
     const refs = promptAttachmentRefs(attachments);
     if (refs.length > 0) this.noteAttachments?.(refs);
     if (kind === "steer") {
-      await this.session.steer(text, images.length > 0 ? images : undefined);
+      await this.session.steer(body, images.length > 0 ? images : undefined);
       return;
     }
-    const accepted = await this.session.prompt(text, images.length > 0 ? { images } : undefined);
+    const accepted = await this.session.prompt(body, images.length > 0 ? { images } : undefined);
     if (!accepted) {
       if (refs.length > 0) this.noteAttachments?.([]);
       throw new Error("pi prompt rejected");
