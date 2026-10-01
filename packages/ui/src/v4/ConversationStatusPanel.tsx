@@ -112,6 +112,7 @@ interface ConversationStatusPanelProps {
   goal?: GoalState | null;
   sessionPlans?: readonly ToolCallRow[];
   plan?: PlanState | null;
+  extensionWidgets?: ReadonlyArray<{ key: string; lines: readonly string[] }> | null;
   backgroundWorks?: readonly BackgroundWorkSummary[];
   runningSubagents?: readonly ZCodeSessionRunningSubagent[];
   /** 本会话 `snapshot.workflowRuns.runs`；与 backgroundWorks 在模型层按 workId ≡ runId 联接。 */
@@ -1730,6 +1731,7 @@ function ConversationStatusPanelImpl({
   goal,
   sessionPlans,
   plan,
+  extensionWidgets,
   backgroundWorks = EMPTY_BACKGROUND_WORKS,
   runningSubagents = EMPTY_RUNNING_SUBAGENTS,
   workflowRuns = EMPTY_WORKFLOW_RUNS,
@@ -1774,6 +1776,7 @@ function ConversationStatusPanelImpl({
         sessionPlans,
         workspacePath,
         plan,
+        extensionWidgets,
         backgroundWorks,
         runningSubagents,
         workflowRuns,
@@ -1781,6 +1784,7 @@ function ConversationStatusPanelImpl({
     [
       isOfficeMode,
       backgroundWorks,
+      extensionWidgets,
       gitDirtyFileCount,
       gitSummary,
       gitWorktreeChangeSummary,

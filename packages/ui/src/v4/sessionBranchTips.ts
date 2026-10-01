@@ -81,6 +81,8 @@ export function sessionBranchTips(nodes: readonly SessionTreeNodeView[]): Sessio
   const tips: SessionTreeNodeView[] = [];
   for (const node of content) {
     if ((childCount.get(node.id) ?? 0) !== 0 && node.id !== activeId) continue;
+    // 过滤幽灵分支：未命名、非当前活动分支的废弃末梢（如重试/中途取消丢下的无正文死节点）
+    if (node.id !== activeId && !node.label && !node.preview.trim()) continue;
     if (seen.has(node.id)) continue;
     seen.add(node.id);
     tips.push(node);

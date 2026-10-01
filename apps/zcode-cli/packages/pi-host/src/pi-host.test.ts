@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 import { conversationDeltaSchema } from "@zcode/shared/zcode-protocol-v4";
 import { CommandBridge, sendDelivery } from "./command-bridge.js";
+import { createHostExtensionUi } from "./extension-ui-bridge.js";
 import { ExtensionUiHost } from "./extension-ui-host.js";
 import { FakePiSession } from "./fake-session.js";
 import { HostQueue } from "./host-queue.js";
@@ -654,6 +655,22 @@ test("extension ui request/response and empty custom registry", async () => {
     pluginId: "unknown",
   });
   assert.equal(custom.widgets[0]?.lines[0], "(unsupported plugin view)");
+});
+
+test("host extension theme is plain text so plan progress can be listed", () => {
+  const ui = new ExtensionUiHost();
+  const extensionUi = createHostExtensionUi(ui, (event) => {
+    ui.handle(event);
+  });
+  extensionUi.setStatus("plannotator", extensionUi.theme.fg("warning", "⏸ plan"));
+  extensionUi.setWidget("plannotator-progress", [
+    extensionUi.theme.fg("success", "☑ ") +
+      extensionUi.theme.fg("muted", extensionUi.theme.strikethrough("done")),
+    `${extensionUi.theme.fg("muted", "☐ ")}next`,
+  ]);
+  const snap = ui.snapshot();
+  assert.equal(snap.statuses[0]?.text, "⏸ plan");
+  assert.deepEqual(snap.widgets[0]?.lines, ["☑ done", "☐ next"]);
 });
 
 test("full access skips confirms but still shows questions", async () => {

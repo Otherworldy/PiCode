@@ -78,3 +78,22 @@ test("only the fork tips are listed", () => {
   );
   assert.equal(switched[1]?.current, true);
 });
+
+test("dead-end nodes without label and without preview are excluded from tips", () => {
+  const tips = sessionBranchTips([
+    node({ id: "root", role: "user", preview: "hi" }),
+    node({ id: "main-leaf", parentId: "root", preview: "active work", leaf: true, active: true }),
+    // 重试/中途取消丢下的幽灵死分支
+    node({ id: "ghost-1", parentId: "root", role: "assistant", preview: "" }),
+    node({ id: "ghost-2", parentId: "root", role: "assistant", preview: "   " }),
+    // 有标签的即使空预览也保留
+    node({ id: "labeled-empty", parentId: "root", role: "assistant", preview: "", label: "bookmark" }),
+  ]);
+  assert.deepEqual(
+    tips.map((tip) => [tip.id, tip.current, tip.label]),
+    [
+      ["main-leaf", true, null],
+      ["labeled-empty", false, "bookmark"],
+    ],
+  );
+});

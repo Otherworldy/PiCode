@@ -4079,6 +4079,7 @@ export function SessionPane({
         goal: selectionSideChat ? null : (snapshot?.goal ?? null),
         sessionPlans: state.sessionPlans,
         plan: snapshot?.plan ?? null,
+        extensionWidgets: snapshot?.extensionWidgets,
         backgroundWorks: snapshot?.backgroundWorks ?? [],
         runningSubagents: subagents.running,
         workflowRuns: snapshot?.workflowRuns?.runs ?? [],
@@ -4090,6 +4091,7 @@ export function SessionPane({
       gitWorktreeChangeSummary,
       snapshot?.backgroundWorks,
       snapshot?.goal,
+      snapshot?.extensionWidgets,
       snapshot?.plan,
       snapshot?.workflowRuns,
       state.sessionPlans,
@@ -4925,6 +4927,7 @@ export function SessionPane({
             goal={selectionSideChat ? null : (snapshot?.goal ?? null)}
             sessionPlans={state.sessionPlans}
             plan={snapshot?.plan ?? null}
+            extensionWidgets={snapshot?.extensionWidgets}
             backgroundWorks={snapshot?.backgroundWorks ?? []}
             runningSubagents={subagents.running}
             workflowRuns={snapshot?.workflowRuns?.runs ?? []}

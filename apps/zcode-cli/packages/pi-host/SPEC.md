@@ -65,7 +65,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 消息上不再提供 `forkAssistant`。另走一条路只用 `navigateSessionTree`，仍在同一份会话里。
 
-`navigateSessionTree` 是 Pi `/tree`，不是分叉，也不是换会话。叶子仍在同一份 jsonl。助手节点停在该条；用户节点回到父节点，原文只在输入框为空时写回，不自动发送。界面不再弹会话树：标题旁只列分支末梢，点一条就切过去，不总结。选中哪条都不改列表顺序。被丢下的路径不删。命令仍可让 Pi `navigateTree` 总结，成功后追加 `branch_summary`，时间线用 `branchSummary` marker。导航后按内存里的 `getLeafId()` / `buildContextEntries()` 重放，不按文件最后一行，也不再用行号裁切。不总结且不带 `label` 时叶子只在内存里移动；带 `label` 时 Pi 会追加一条 label，重开仍停在该分支。切换和从此处继续不带 `label`，否则每切一次就多一条书签，列表里会冒出名叫 label 的假分支。分支入口是消息上的右键，不挂在正文下面。用户、助手和工具行都可以。工具行带的是 `toolCallId`：先对工具结果，没有结果再对上包含这次调用的助手消息。右键菜单或自定义提示词对话框开着时，这条消息用选中底色标出。改名只走 `labelSessionEntry`。列表忽略 label、压缩和工具这些书签，分支名用分叉后第一条真正的消息。压缩进行中拒绝。正在生成则先停掉当前回复。总结进行中 Stop 只调 `abortBranchSummary()`，叶子不动。不回滚工作区文件。`editUserQuery` 仍走原来的 `navigateTree` 裁切，不进这条命令。
+`navigateSessionTree` 是 Pi `/tree`，不是分叉，也不是换会话。叶子仍在同一份 jsonl。助手节点停在该条；用户节点回到父节点，原文只在输入框为空时写回，不自动发送。界面不再弹会话树：标题旁只列分支末梢，点一条就切过去，不总结。选中哪条都不改列表顺序。被丢下的路径不删。命令仍可让 Pi `navigateTree` 总结，成功后追加 `branch_summary`，时间线用 `branchSummary` marker。导航后按内存里的 `getLeafId()` / `buildContextEntries()` 重放，不按文件最后一行，也不再用行号裁切。不总结且不带 `label` 时叶子只在内存里移动；带 `label` 时 Pi 会追加一条 label，重开仍停在该分支。切换和从此处继续不带 `label`，否则每切一次就多一条书签，列表里会冒出名叫 label 的假分支。分支入口是消息上的右键，不挂在正文下面。用户、助手和工具行都可以。工具行带的是 `toolCallId`：先对工具结果，没有结果再对上包含这次调用的助手消息。右键菜单或自定义提示词对话框开着时，这条消息用选中底色标出。改名只走 `labelSessionEntry`。列表忽略 label、压缩和工具这些书签，以及非活动且无正文的未命名死末梢（如重试或中途停止丢下的废弃分支），分支名用分叉后第一条真正的消息。压缩进行中拒绝。正在生成则先停掉当前回复。总结进行中 Stop 只调 `abortBranchSummary()`，叶子不动。不回滚工作区文件。`editUserQuery` 仍走原来的 `navigateTree` 裁切，不进这条命令。
 
 `readSessionTree` 把 `getTree()` 压成平铺节点，放在命令回执里，不进每条快照。压平用循环：一条几万层的父链用递归，打开会话时会栈溢出。`labelSessionEntry` 写 Pi 的 label，再回一份树。
 
@@ -88,6 +88,8 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 壳上拆掉：PluginStore、SavedWorkflows、Automations/OffPeak、CUA、Goal、PiCode 子代理 profile、官方 plugin 商店。设置改为已加载 Pi extensions 列表。插件页用 Pi `PackageManager.checkForAvailableUpdates` / `update` 检查并更新 npm、git 包。本地 extension 文件和钉死版本不更新。装完后下次新建会话生效。
 
 壳上新增：输入框 Extension Widget 槽、会话 Status chips。
+
+宿主 UI 带上纯文本 `theme`（`fg` / `bg` / `bold` / `italic` / `underline` / `inverse` / `strikethrough` 原样返回文字，不发 ANSI）。缺 `theme` 时 Plannotator 在 `ctx.ui.theme.fg` 上抛错：批准计划后的 `plannotator_submit_plan` 和 `plannotator_mark_done` 都失败，`plannotator-progress` 清单也写不出去。清单仍由插件 `setWidget` 持有；没有 TodoWrite 的 `plan` 时，状态面板用这份 widget 列出 Todo，不另写一份 plan。
 
 ## 呈现
 

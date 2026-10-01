@@ -3,6 +3,47 @@ import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import type { ExtensionUiHost } from "./extension-ui-host.js";
 import type { PiExtensionUiEvent } from "./types.js";
 
+// Pi RPC 的 theme.fg 会写 ANSI。GUI 只存纯文本。
+// 缺 theme 时 Plannotator 读 ctx.ui.theme.fg 崩溃，清单和 mark_done 都出不去。
+const plainTheme = {
+  fg(_color: string, text: string) {
+    return text;
+  },
+  bg(_color: string, text: string) {
+    return text;
+  },
+  bold(text: string) {
+    return text;
+  },
+  italic(text: string) {
+    return text;
+  },
+  underline(text: string) {
+    return text;
+  },
+  inverse(text: string) {
+    return text;
+  },
+  strikethrough(text: string) {
+    return text;
+  },
+  getFgAnsi() {
+    return "";
+  },
+  getBgAnsi() {
+    return "";
+  },
+  getColorMode() {
+    return "truecolor" as const;
+  },
+  getThinkingBorderColor() {
+    return (text: string) => text;
+  },
+  getBashModeBorderColor() {
+    return (text: string) => text;
+  },
+};
+
 export function createHostExtensionUi(
   host: ExtensionUiHost,
   dispatch: (event: PiExtensionUiEvent) => void,
@@ -82,6 +123,7 @@ export function createHostExtensionUi(
     },
     addAutocompleteProvider() {},
     setEditor() {},
+    theme: plainTheme,
   };
   return ui as unknown as ExtensionUIContext;
 }

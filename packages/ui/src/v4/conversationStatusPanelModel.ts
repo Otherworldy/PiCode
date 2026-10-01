@@ -7,8 +7,8 @@ import type {
   ToolCallRow,
   WorkflowRunState,
 } from "@zcode/shared/zcode-protocol-v4";
-import { extractPlanToolCallContent, getPlanDirectoryTitle } from "@/lib/planToolCall.js";
-import { workflowRunStepCounts } from "@/v4/workflowRunCardJoin.js";
+import { extractPlanToolCallContent, getPlanDirectoryTitle } from "../lib/planToolCall.js";
+import { workflowRunStepCounts } from "./workflowRunCardJoin.js";
 
 export interface ConversationStatusPanelGitModel {
   branchName: string | null;
@@ -126,6 +126,7 @@ interface BuildConversationStatusPanelModelInput {
   sessionPlans?: readonly ToolCallRow[];
   workspacePath?: string;
   plan?: PlanState | null;
+  extensionWidgets?: ReadonlyArray<{ key: string; lines: readonly string[] }> | null;
   backgroundWorks?: readonly BackgroundWorkSummary[];
   runningSubagents?: readonly RunningSubagentSummary[];
   workflowRuns?: readonly WorkflowRunState[];
@@ -166,6 +167,30 @@ function buildGitModel({
     behind: gitSummary.behind,
     isClean,
   };
+}
+
+/** Plannotator 清单在 widget 上，不走 TodoWrite。没有 plan 时用它填 Todo。 */
+export function planFromPlannotatorProgress(
+  widgets: ReadonlyArray<{ key: string; lines: readonly string[] }> | null | undefined,
+): PlanState | null {
+  const widget = widgets?.find((item) => item.key === "plannotator-progress");
+  if (!widget) return null;
+  const items: PlanState["items"] = [];
+  let opened = false;
+  for (const [index, raw] of widget.lines.entries()) {
+    const matched = /^([☑☐])\s*(.*)$/u.exec(raw.trim());
+    const content = matched?.[2]?.trim();
+    if (!matched || !content) continue;
+    const done = matched[1] === "☑";
+    let status: PlanState["items"][number]["status"] = "pending";
+    if (done) status = "completed";
+    else if (!opened) {
+      status = "inProgress";
+      opened = true;
+    }
+    items.push({ id: `plannotator-${index + 1}`, content, status });
+  }
+  return items.length > 0 ? { items, updatedAt: 0 } : null;
 }
 
 function buildPlanModel(plan: PlanState | null | undefined) {
@@ -299,7 +324,11 @@ export function buildConversationStatusPanelModel(
   const git = input.isOfficeMode ? null : buildGitModel(input);
   const goal = input.goal ?? null;
   const sessionPlans = buildSessionPlansModel(input.sessionPlans, input.workspacePath);
-  const plan = buildPlanModel(input.plan);
+  const plan = buildPlanModel(
+    input.plan && input.plan.items.length > 0
+      ? input.plan
+      : planFromPlannotatorProgress(input.extensionWidgets),
+  );
   const runningBashWorks: BackgroundWorkSummary[] = [];
   const workflowWorkByWorkId = new Map<string, BackgroundWorkSummary>();
   const subagentControlByChildSessionId = new Map<string, BackgroundWorkSummary | null>();
