@@ -22,6 +22,15 @@ export type PiPluginView = {
   enabled: boolean;
 };
 
+/** 已启用的 `@plannotator/pi-extension`。计划模式只认这个插件。 */
+export function isPlannotatorPiExtension(
+  plugin: Pick<PiPluginView, "id" | "detail" | "name" | "enabled">,
+): boolean {
+  if (!plugin.enabled) return false;
+  const hay = `${plugin.id}\n${plugin.detail}\n${plugin.name}`.toLowerCase();
+  return hay.includes("@plannotator/pi-extension") || hay.includes("plannotator/pi-extension");
+}
+
 function sourceOf(pkg: PackageSource): string {
   return typeof pkg === "string" ? pkg : pkg.source;
 }

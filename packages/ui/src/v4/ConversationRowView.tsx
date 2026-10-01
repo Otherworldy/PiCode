@@ -1,7 +1,7 @@
 /* oxlint-disable eslint(max-lines) -- v4 逐行 row 渲染分发集中收口（每种 row 一个 memo 叶子 + timelineMarker 分隔线），拆分会打散行类型对照。 */
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { compactFailureText } from "@/v4/compactFailureText.js";
-import { ResumeHereMenu } from "@/v4/ResumeHereMenu.js";
+import { ResumeHereMenu, type ResumeHereChoice } from "@/v4/ResumeHereMenu.js";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArchiveIcon,
@@ -131,12 +131,14 @@ function RowShell({
   rowId,
   children,
   className = "",
+  onResume,
 }: {
   rowId: number;
   children: React.ReactNode;
   className?: string;
+  onResume?: (choice: ResumeHereChoice) => void;
 }) {
-  return (
+  const shell = (
     <div
       data-row-id={rowId}
       data-testid={testId(TID_V4_ROW, String(rowId))}
@@ -145,6 +147,8 @@ function RowShell({
       {children}
     </div>
   );
+  if (!onResume) return shell;
+  return <ResumeHereMenu onPick={onResume}>{shell}</ResumeHereMenu>;
 }
 
 const ArtifactRowView = memo(function ArtifactRowView({ row }: { row: ArtifactRow }) {
@@ -1189,7 +1193,21 @@ const UserInputRowView = memo(function UserInputRowView({
   }
 
   return (
-    <RowShell rowId={row.rowId} className="group/user-row flex flex-col items-end">
+    <RowShell
+      rowId={row.rowId}
+      className="group/user-row flex flex-col items-end"
+      onResume={
+        context.onResumeHere && (row.entityId || row.text.trim())
+          ? (choice) =>
+              context.onResumeHere?.({
+                entryId: row.entityId || row.text,
+                role: "user",
+                text: row.text,
+                ...choice,
+              })
+          : undefined
+      }
+    >
       {hasAttachmentArea ? (
         <div
           data-v4-user-input-attachments="true"
@@ -1299,18 +1317,6 @@ const UserInputRowView = memo(function UserInputRowView({
             <PencilIcon className="size-3.5" />
           </MessageAction>
         ) : null}
-        {context.onResumeHere && row.entityId ? (
-          <ResumeHereMenu
-            onPick={(choice) =>
-              context.onResumeHere?.({
-                entryId: row.entityId!,
-                role: "user",
-                text: row.text,
-                ...choice,
-              })
-            }
-          />
-        ) : null}
       </MessageActions>
     </RowShell>
   );
@@ -1326,7 +1332,6 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
   sessionId,
   turnId,
   onFork,
-  onResume,
   onFeedbackChange,
   className,
 }: {
@@ -1340,7 +1345,6 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
   turnId?: string;
   onFork?: (target: ConversationRowTarget) => void;
   onRetry?: (target: ConversationRowTarget) => void;
-  onResume?: (choice: { summarize: boolean; customInstructions?: string }) => void;
   onFeedbackChange?: AssistantFeedbackHandler;
   className?: string;
 }) {
@@ -1473,7 +1477,6 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
           <TrendingUpDownIcon className="size-3.5" />
         </MessageAction>
       ) : null}
-      {onResume && entityId ? <ResumeHereMenu onPick={onResume} /> : null}
       {turnId && hookInvocations ? (
         <ConversationHookDetailsAction rows={hookInvocations} turnId={turnId} />
       ) : null}
@@ -1527,7 +1530,21 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
   );
   const visiblePreviewCards = previewCards && previewCards.length > 0 ? previewCards : null;
   return (
-    <RowShell rowId={row.rowId} className="group/assistant-row">
+    <RowShell
+      rowId={row.rowId}
+      className="group/assistant-row"
+      onResume={
+        context.onResumeHere && row.state !== "streaming" && (row.entityId || row.text.trim())
+          ? (choice) =>
+              context.onResumeHere?.({
+                entryId: row.entityId || row.text,
+                role: "assistant",
+                text: row.text,
+                ...choice,
+              })
+          : undefined
+      }
+    >
       {/* assistant 文本走 streamdown（MessageResponse），
           markdown/代码块正式渲染；streaming 模式对未闭合 markdown 容错。 */}
       {/* MessageResponse 只消费自身声明的 props，不会把 data-* 透传到真实 DOM，
@@ -1580,21 +1597,7 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
       ) : null}
       {/* 完成态动作行悬停显现（对齐旧 MessageActions）：复制 + fork（图标 ghost）。
           一轮对用户是一个回复：action 只在轮尾段（hideActions 由 TurnGroup 裁决），
-          复制内容 = 整轮全部 text 段合并（copyText 覆盖）。 */}
-      {row.state === "complete" && hideActions && !deferActions && context.onResumeHere && row.entityId ? (
-        <MessageActions className="mt-1 opacity-0 transition-opacity group-hover/assistant-row:opacity-100 focus-within:opacity-100">
-          <ResumeHereMenu
-            onPick={(choice) =>
-              context.onResumeHere?.({
-                entryId: row.entityId!,
-                role: "assistant",
-                text: row.text,
-                ...choice,
-              })
-            }
-          />
-        </MessageActions>
-      ) : null}
+          复制内容 = 整轮全部 text 段合并（copyText 覆盖）。分支走右键，不放在正文下面。 */}
       {row.state === "complete" && !hideActions && !deferActions ? (
         <ConversationAssistantTextActions
           rowId={row.rowId}
@@ -1605,17 +1608,6 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
           sessionId={context.sessionId}
           onFork={onFork}
           onRetry={onRetry}
-          onResume={
-            context.onResumeHere && row.entityId
-              ? (choice) =>
-                  context.onResumeHere?.({
-                    entryId: row.entityId!,
-                    role: "assistant",
-                    text: row.text,
-                    ...choice,
-                  })
-              : undefined
-          }
           onFeedbackChange={onFeedbackChange}
           className={cn(
             "mt-1",
@@ -1965,6 +1957,16 @@ const ToolCallRowView = memo(function ToolCallRowView({
   // toolCall 行回接 ToolCallBlocks（execute/read/edit/... renderer 按
   // tool identity 分流）。适配 memo 按 row 引用：row.delta/upserted 换新对象才重建。
   const toolCallNode = useMemo(() => toolCallRowToLegacyNode(row), [row]);
+  const onResume =
+    context.onResumeHere && row.toolCallId
+      ? (choice: ResumeHereChoice) =>
+          context.onResumeHere?.({
+            entryId: row.toolCallId,
+            role: "tool",
+            text: row.toolName,
+            ...choice,
+          })
+      : undefined;
   // workflow run 详情入口的门控：run 身份走 workflowRuns 投影（schema 里 toolCallId 就是
   // 「工具卡 → 详情页的关联键」），不从工具输出里读——v4 行的 output 只剩一句散文。
   // 命中的摘要同时决定卡片形态：有 run 就是紧凑可点卡，没有就是可展开卡。
@@ -1986,7 +1988,7 @@ const ToolCallRowView = memo(function ToolCallRowView({
     const workflowName = readWorkflowName(row.input);
     const sessionId = context.sessionId;
     return (
-      <RowShell rowId={row.rowId} className="py-0">
+      <RowShell rowId={row.rowId} className="py-0" onResume={onResume}>
         <WorkflowToolSummary
           toolCallId={row.toolCallId}
           summary={workflowRun}
@@ -2009,7 +2011,7 @@ const ToolCallRowView = memo(function ToolCallRowView({
   // 工具行去掉纵向内边距（对齐旧版无 per-tool padding）；连续工具间距由
   // ConversationAssistantWorkItems 的 gap-4 组容器统一给。
   return (
-    <RowShell rowId={row.rowId} className="py-0">
+    <RowShell rowId={row.rowId} className="py-0" onResume={onResume}>
       <div data-conversation-selectable="true">
         <ToolCallBlock
           toolCallNode={toolCallNode}

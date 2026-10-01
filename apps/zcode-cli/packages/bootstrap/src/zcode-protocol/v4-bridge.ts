@@ -580,7 +580,7 @@ type SessionTreeHost = {
   resumeAt(input: {
     entryId: string;
     text?: string;
-    role?: "user" | "assistant";
+    role?: "user" | "assistant" | "tool";
     summarize: boolean;
     customInstructions?: string;
   }): Promise<{

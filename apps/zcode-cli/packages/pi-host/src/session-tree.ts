@@ -12,7 +12,13 @@ type TreeEntry = {
   parentId?: string | null;
   type?: string;
   summary?: unknown;
-  message?: { role?: string; content?: unknown; id?: string; toolName?: string };
+  message?: {
+    role?: string;
+    content?: unknown;
+    id?: string;
+    toolName?: string;
+    toolCallId?: string;
+  };
 };
 
 type TreeNode = {
@@ -108,18 +114,35 @@ export function contextEventsOf(source: Pick<SessionTreeSource, "buildContextEnt
   return readPiJsonl(source.buildContextEntries().map((entry) => JSON.stringify(entry)).join("\n")).events;
 }
 
+function contentHasToolCall(content: unknown, id: string): boolean {
+  if (!Array.isArray(content)) return false;
+  return content.some((part) => {
+    if (!part || typeof part !== "object") return false;
+    const record = part as { type?: unknown; id?: unknown };
+    return (record.type === "toolCall" || record.type === "tool_call") && record.id === id;
+  });
+}
+
 export function resolveSessionEntry(
   source: Pick<SessionTreeSource, "getEntry" | "getEntries">,
   id: string,
-  hint?: { text?: string; role?: "user" | "assistant" },
+  hint?: { text?: string; role?: "user" | "assistant" | "tool" },
 ): string | undefined {
   if (id && source.getEntry(id)) return id;
   const entries = source.getEntries();
   if (id) {
-    for (const entry of entries) {
-      if (entry.message?.id === id) return entry.id;
+    let callEntry: string | undefined;
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const entry = entries[index];
+      if (!entry?.message) continue;
+      if (entry.message.id === id) return entry.id;
+      // 工具卡的 id 是 toolCallId。结果条目比发出调用的助手消息更靠后，优先停在结果上。
+      if (entry.message.toolCallId === id) return entry.id;
+      if (!callEntry && contentHasToolCall(entry.message.content, id)) callEntry = entry.id;
     }
+    if (callEntry) return callEntry;
   }
+  if (hint?.role === "tool") return undefined;
   const wanted = hint?.text?.trim();
   if (!wanted) return undefined;
   for (let index = entries.length - 1; index >= 0; index -= 1) {

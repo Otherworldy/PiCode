@@ -52,6 +52,23 @@ interface SelectionSideSlashCommandParseOptions {
 
 const GOAL_COMMAND_RE = /^\/(?:goal|target)(?:\s|$)/i;
 const TERMINAL_ONLY_SLASH_EXEMPT = new Set(["compact", "plan"]);
+const PLANNOTATOR_PLAN_COMMAND = "plannotator-plan-mode";
+
+/** 斜杠目录里有插件命令时，输入框才显示计划开关。 */
+export function plannotatorPlanAvailable(
+  commands: readonly { name: string }[] | null | undefined,
+): boolean {
+  return (commands ?? []).some(
+    (command) => command.name.trim().replace(/^\/+/, "") === PLANNOTATOR_PLAN_COMMAND,
+  );
+}
+
+/** 插件 setStatus("plannotator") 表示正在计划或执行。 */
+export function plannotatorPlanActive(
+  statuses: readonly { key: string }[] | null | undefined,
+): boolean {
+  return (statuses ?? []).some((status) => status.key === "plannotator");
+}
 
 /** Pi 终端菜单里的命令。compact / plan 已有 GUI 行为，其余提交不能变成用户消息。 */
 export function isTerminalOnlySlashCommand(

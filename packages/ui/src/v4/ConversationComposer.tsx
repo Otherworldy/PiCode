@@ -152,6 +152,8 @@ import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import { useConversationSelectionReferences } from "@/v4/composer/useConversationSelectionReferences.js";
 import { ConversationBackgroundWorkTrigger } from "@/v4/composer/ConversationBackgroundWorkTrigger.js";
 import { ExtensionChrome } from "@/v4/ExtensionChrome.js";
+import { useSlashCommands } from "@/hooks/useSlashCommands.js";
+import { plannotatorPlanActive, plannotatorPlanAvailable } from "@/v4/slashCommands.js";
 import {
   V4ComposerModeSwitch,
   V4ComposerModelControls,
@@ -544,6 +546,11 @@ function ConversationComposerImpl({
 }: ConversationComposerProps) {
   const { intl, locale } = useZCodeIntl();
   const services = useOptionalServices();
+  const slashCommands = useSlashCommands(workspacePath, workspaceIdentity);
+  const planAvailable = plannotatorPlanAvailable(slashCommands);
+  const planActive = plannotatorPlanActive(snapshot?.extensionStatuses);
+  // 新建任务还没有会话，勾选只记在草稿上。已有会话以插件状态为准。
+  const planChecked = sessionId == null ? draftConfig?.planEnabled === true : planActive;
   const conversationTelemetry = useScopedConversationTelemetrySupervisor({
     workspacePath,
     ...(workspaceIdentity ? { workspaceIdentity } : {}),
@@ -2055,6 +2062,7 @@ function ConversationComposerImpl({
             provider={provider}
             draftMode={draftMode}
             draftConfig={draftConfig}
+            planActive={planChecked}
             usage={composerUsage}
             disabled={disabled}
             activeConfigPicker={activeConfigPicker}
@@ -2112,6 +2120,7 @@ function ConversationComposerImpl({
       draftConfig,
       draftMode,
       handleStopClick,
+      planChecked,
       handleSendButtonClick,
       handleConfigPickerOpenChange,
       mode,
@@ -2153,6 +2162,8 @@ function ConversationComposerImpl({
           activeConfigPicker={activeConfigPicker}
           onConfigPickerOpenChange={handleConfigPickerOpenChange}
           onSwitchMode={onSwitchMode}
+          planAvailable={planAvailable}
+          planActive={planChecked}
         />
         <ConversationBackgroundWorkTrigger
           backgroundWorks={snapshot?.backgroundWorks ?? []}
@@ -2168,6 +2179,8 @@ function ConversationComposerImpl({
       disabled,
       draftConfig,
       handleConfigPickerOpenChange,
+      planChecked,
+      planAvailable,
       backgroundWorkOpenTarget,
       onOpenRunningBackgroundWorks,
       onSwitchMode,

@@ -50,6 +50,12 @@ export async function bindHostedSession(
     },
   });
   const summary = summarizePiJsonl(await readFile(hosted.sessionFile, "utf8").catch(() => ""));
+  // jsonl 已有内容会标成 immediate，admission 就不再补 session 行。
+  // session_input 外键要求这行先在，否则打开旧会话后的第一条发送直接 FOREIGN KEY constraint failed。
+  if (summary && context.deps.sessionStore) {
+    const existing = await context.deps.sessionStore.getSession(sessionId);
+    if (!existing) await app.runtime.ensureSessionPersistedForExternalActivity(summary.title);
+  }
   const record: ZCodeProtocolSessionRecord = {
     app,
     memoryEnabled: false,

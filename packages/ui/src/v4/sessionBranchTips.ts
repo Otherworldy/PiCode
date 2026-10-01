@@ -32,14 +32,32 @@ function anchorOf(
   return cursor;
 }
 
+function visibleParent(
+  node: SessionTreeNodeView,
+  byId: ReadonlyMap<string, SessionTreeNodeView>,
+): string | null {
+  let parentId = node.parentId;
+  while (parentId) {
+    const parent = byId.get(parentId);
+    if (!parent) return null;
+    if (!isMarker(parent)) return parent.id;
+    parentId = parent.parentId;
+  }
+  return null;
+}
+
 function forkPreview(
   node: SessionTreeNodeView,
   byId: ReadonlyMap<string, SessionTreeNodeView>,
   childCount: ReadonlyMap<string, number>,
 ): string | null {
   let cursor: SessionTreeNodeView | undefined = node;
-  while (cursor?.parentId) {
-    const parent = byId.get(cursor.parentId);
+  const seen = new Set<string>();
+  while (cursor && !seen.has(cursor.id)) {
+    seen.add(cursor.id);
+    const parentId = visibleParent(cursor, byId);
+    if (!parentId) return null;
+    const parent = byId.get(parentId);
     if (!parent) return null;
     if ((childCount.get(parent.id) ?? 0) > 1) return clip(cursor.preview || parent.preview);
     cursor = parent;
@@ -47,32 +65,30 @@ function forkPreview(
   return null;
 }
 
-/** 一条分支只保留末梢。当前停在半路时，那个节点也算一条。 */
+/** 一条分支只保留末梢。当前停在半路时，那个节点也算一条。label 条目不是分支。 */
 export function sessionBranchTips(nodes: readonly SessionTreeNodeView[]): SessionBranchTip[] {
   const byId = new Map(nodes.map((node) => [node.id, node]));
+  const content = nodes.filter((node) => !isMarker(node));
   const childCount = new Map<string, number>();
-  for (const node of nodes) {
-    if (!node.parentId) continue;
-    childCount.set(node.parentId, (childCount.get(node.parentId) ?? 0) + 1);
+  for (const node of content) {
+    const parentId = visibleParent(node, byId);
+    if (!parentId) continue;
+    childCount.set(parentId, (childCount.get(parentId) ?? 0) + 1);
   }
-  const active = nodes.find((node) => node.leaf);
-  const activeId = active ? anchorOf(active, byId).id : undefined;
+  const leaf = nodes.find((node) => node.leaf);
+  const activeId = leaf ? anchorOf(leaf, byId).id : undefined;
   const seen = new Set<string>();
   const tips: SessionTreeNodeView[] = [];
-  for (const node of nodes) {
-    if ((childCount.get(node.id) ?? 0) !== 0 && !node.leaf) continue;
-    let tip = anchorOf(node, byId);
-    // 书签落在当前路径上时，删的是侧枝末梢，不是这条还在用的消息。
-    if (tip.active && tip.id !== activeId) tip = node;
-    if (seen.has(tip.id)) continue;
-    seen.add(tip.id);
-    tips.push(tip);
+  for (const node of content) {
+    if ((childCount.get(node.id) ?? 0) !== 0 && node.id !== activeId) continue;
+    if (seen.has(node.id)) continue;
+    seen.add(node.id);
+    tips.push(node);
   }
-  tips.sort((left, right) => Number(right.id === activeId) - Number(left.id === activeId));
   return tips.map((node) => ({
     id: node.id,
     current: node.id === activeId,
-    label: node.label ?? null,
+    label: node.label && node.label !== "label" ? node.label : null,
     preview: clip(node.preview),
     forkPreview: forkPreview(node, byId, childCount),
   }));

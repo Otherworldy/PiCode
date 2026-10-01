@@ -353,6 +353,10 @@ export interface V4ComposerToolbarProps {
   /** 选中思考深度；modelContext 固定本次用户操作的目标模型。 */
   onSelectThought: (thought: string, modelContext: { provider: string; model: string }) => void;
   onSwitchMode: (mode: string) => void;
+  /** 已启用 Plannotator 时才显示计划开关。 */
+  planAvailable?: boolean;
+  /** 插件正在计划或执行计划。 */
+  planActive?: boolean;
   /** prepare/configOptions 失败时，custom provider 选择走 workspace recovery 链。 */
   onRecoverCustomModelSelection?: (
     value: string,
@@ -372,6 +376,7 @@ function V4ComposerModelControlsImpl({
   isMobileViewport = false,
   draftMode = false,
   draftConfig,
+  planActive = false,
   usage,
   disabled,
   activeConfigPicker,
@@ -1005,7 +1010,7 @@ function V4ComposerModelControlsImpl({
             : ""
         }
         data-mode={draftConfig?.mode ?? ""}
-        data-plan-enabled={draftConfig?.planEnabled ?? false}
+        data-plan-enabled={planActive}
         data-usage-used={usage?.contextWindow?.usedTokens ?? ""}
         data-usage-max={usage?.contextWindow?.maxTokens ?? ""}
         className="hidden"

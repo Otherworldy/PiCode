@@ -74,10 +74,10 @@ export interface ConversationRowRenderContext {
    * 需保持引用稳定（rowContext 的 memo 依赖）。
    */
   onNavigateToRow?: (sessionId: string, rowId: number) => void;
-  /** Pi /tree：从这条消息继续。行上的菜单选总结方式。 */
+  /** Pi /tree：右键这条消息继续。菜单选总结方式。工具行的 entryId 是 toolCallId。 */
   onResumeHere?: (target: {
     entryId: string;
-    role: "user" | "assistant";
+    role: "user" | "assistant" | "tool";
     text: string;
     summarize: boolean;
     customInstructions?: string;

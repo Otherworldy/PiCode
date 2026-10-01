@@ -5,12 +5,43 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   applyZcodePluginPlan,
+  isPlannotatorPiExtension,
   listPiPlugins,
   piPluginPackageSource,
   setPiPluginEnabled,
   updatePiPlugin,
   zcodePluginSourceId,
 } from "./pi-plugins.js";
+
+test("plan mode matches only an enabled plannotator pi extension", () => {
+  assert.equal(
+    isPlannotatorPiExtension({
+      id: "pkg:user:npm:@plannotator/pi-extension",
+      detail: "npm:@plannotator/pi-extension",
+      name: "pi-extension",
+      enabled: true,
+    }),
+    true,
+  );
+  assert.equal(
+    isPlannotatorPiExtension({
+      id: "pkg:user:npm:@plannotator/pi-extension",
+      detail: "npm:@plannotator/pi-extension",
+      name: "pi-extension",
+      enabled: false,
+    }),
+    false,
+  );
+  assert.equal(
+    isPlannotatorPiExtension({
+      id: "pkg:user:npm:other",
+      detail: "npm:other",
+      name: "other",
+      enabled: true,
+    }),
+    false,
+  );
+});
 
 test("only package ids can be updated", async () => {
   assert.deepEqual(piPluginPackageSource("pkg:user:npm:@scope/pkg"), {

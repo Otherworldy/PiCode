@@ -34,6 +34,17 @@ function taskTitleBody(
   return formatMessage({ id: fallbackMessageId });
 }
 
+function notificationBody(
+  session: SessionSummary,
+  fallbackMessageId: string,
+  formatMessage: FormatMessage,
+): string {
+  // 提醒正文是最新回复，不是会话标题。标题只在还没有回复时兜底。
+  const latest = session.lastAssistantPreview?.trim();
+  if (latest) return latest;
+  return taskTitleBody(session.title, fallbackMessageId, formatMessage);
+}
+
 function terminalPayloadForSession(
   session: SessionSummary,
   status: Extract<TaskNotificationPayload["status"], "completed" | "failed">,
@@ -44,7 +55,7 @@ function terminalPayloadForSession(
       taskId: session.sessionId,
       status,
       title: formatMessage({ id: "notification.completed" }),
-      body: taskTitleBody(session.title, "notification.completedBody", formatMessage),
+      body: notificationBody(session, "notification.completedBody", formatMessage),
     };
   }
 
@@ -52,7 +63,7 @@ function terminalPayloadForSession(
     taskId: session.sessionId,
     status,
     title: formatMessage({ id: "notification.error" }),
-    body: taskTitleBody(session.title, "notification.error", formatMessage),
+    body: notificationBody(session, "notification.error", formatMessage),
   };
 }
 

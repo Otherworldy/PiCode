@@ -4220,7 +4220,7 @@ const enUS: Record<string, string> = {
   "chat.branch.current": "Current",
   "chat.branch.rename": "Rename",
   "chat.branch.empty": "No matching branch",
-  "chat.branch.hint": "Resume from a message to add a branch",
+  "chat.branch.hint": "Right-click a message to branch from it",
   "chat.branch.delete": "Delete",
   "chat.branch.deleteTitle": "Delete this branch?",
   "chat.branch.deleteBody": "{name} will be removed from the session. The current branch stays.",
@@ -4471,6 +4471,7 @@ const enUS: Record<string, string> = {
   "chat.goal.planModeBlocked": "Goal is unavailable in Plan mode. Switch modes to continue.",
   "chat.plan.attachmentsBlocked":
     "The /plan shortcut supports text only for now. Remove attachments or context and try again.",
+  "chat.plan.pluginRequired": "Plan mode needs the Plannotator plugin enabled.",
   "chat.compact.runningBlocked": "Compact context after the current task finishes.",
   "chat.compact.queued": "Compaction queued and will run in order.",
   "chat.compact.duplicateBlocked": "A compaction is already running or queued.",

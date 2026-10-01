@@ -34,18 +34,20 @@ test("a label bookmark stays on its message", () => {
   assert.deepEqual(tips.map((tip) => [tip.id, tip.current, tip.label]), [["a", true, "main"]]);
 });
 
-test("a side note on the current path stays deletable", () => {
+test("label bookmarks are not extra branches and do not name the path", () => {
   const tips = sessionBranchTips([
-    node({ id: "u", role: "user", preview: "hi", active: true }),
-    node({ id: "a", parentId: "u", preview: "main", active: true }),
-    node({ id: "leaf", parentId: "a", preview: "now", leaf: true, active: true }),
-    node({ id: "side", parentId: "u", role: "other", preview: "note" }),
+    node({ id: "root", role: "user", preview: "hi" }),
+    node({ id: "label-a", parentId: "root", role: "other", preview: "label" }),
+    node({ id: "main", parentId: "label-a", preview: "目录", leaf: true, active: true, label: "label" }),
+    node({ id: "label-b", parentId: "root", role: "other", preview: "label" }),
+    node({ id: "side", parentId: "root", preview: "文件夹下有什么" }),
+    node({ id: "side-leaf", parentId: "side", preview: "packages/ui" }),
   ]);
   assert.deepEqual(
-    tips.map((tip) => [tip.id, tip.current]),
+    tips.map((tip) => [tip.id, tip.current, tip.forkPreview, tip.label]),
     [
-      ["leaf", true],
-      ["side", false],
+      ["main", true, "目录", null],
+      ["side-leaf", false, "文件夹下有什么", null],
     ],
   );
 });
@@ -64,4 +66,15 @@ test("only the fork tips are listed", () => {
       ["side-leaf", false, "文件夹下有什么"],
     ],
   );
+  const switched = sessionBranchTips([
+    node({ id: "root", role: "user", preview: "hi", active: true }),
+    node({ id: "main-leaf", parentId: "root", preview: "目录", active: true }),
+    node({ id: "side", parentId: "root", preview: "文件夹下有什么", active: true }),
+    node({ id: "side-leaf", parentId: "side", preview: "packages/ui", leaf: true, active: true }),
+  ]);
+  assert.deepEqual(
+    switched.map((tip) => tip.id),
+    ["main-leaf", "side-leaf"],
+  );
+  assert.equal(switched[1]?.current, true);
 });

@@ -231,6 +231,8 @@ import {
   isTerminalOnlySlashCommand,
   parseV4VisibleSlashCommand,
   parseSelectionSideSlashCommand,
+  plannotatorPlanActive,
+  plannotatorPlanAvailable,
   v4QueuedCommandText,
   type V4VisibleSlashCommand,
 } from "@/v4/slashCommands.js";
@@ -1109,7 +1111,7 @@ export function SessionPane({
   const resumeHereRef = useRef<
     (target: {
       entryId: string;
-      role: "user" | "assistant";
+      role: "user" | "assistant" | "tool";
       text: string;
       summarize: boolean;
       customInstructions?: string;
@@ -2187,7 +2189,7 @@ export function SessionPane({
   const handleResumeHere = useCallback(
     (target: {
       entryId: string;
-      role: "user" | "assistant";
+      role: "user" | "assistant" | "tool";
       text: string;
       summarize: boolean;
       customInstructions?: string;
@@ -2598,11 +2600,22 @@ export function SessionPane({
         return "blocked" as const;
       }
 
-      // 空 /plan 与模式菜单相同，只编辑当前 Composer，不提前改写 Agent 执行状态。
+      // 计划模式是 Plannotator 的 /plannotator-plan-mode。没装或没启用插件就拒绝。
+      // 空 /plan 和新建任务上的勾选都不创建会话。
+      let enterPlannotatorPlan = false;
       if (slashCommand?.kind === "planShortcut") {
-        handleDraftSwitchMode("plan");
-        if (submission) submission = { ...submission, planEnabled: true };
-        if (!slashCommand.task) return "sent" as const;
+        if (!plannotatorPlanAvailable(slashCommands)) {
+          toast(intl.formatMessage({ id: "chat.plan.pluginRequired" }));
+          return "blocked" as const;
+        }
+        if (!slashCommand.task) {
+          handleDraftSwitchMode("plan");
+          return "sent" as const;
+        }
+        enterPlannotatorPlan = true;
+      }
+      if (sessionId === null && draftConfigRef.current.planEnabled) {
+        enterPlannotatorPlan = true;
       }
 
       if (!(await ensureDraftModelReadyForSend())) {
@@ -2611,9 +2624,7 @@ export function SessionPane({
 
       let effectiveText = text;
       if (slashCommand?.kind === "planShortcut") {
-        // 命令显式指定本次 Submission 的模式，不能靠另一条 CAS 的先后顺序保证。
         effectiveText = slashCommand.task;
-        // 命令只负责配置 shortcut；后续必须走普通 sendText，不能进入 goal/compact command 分支。
         slashCommand = null;
       }
       if (!slashCommand && isTerminalOnlySlashCommand(text, slashCommands ?? [])) {
@@ -2642,7 +2653,7 @@ export function SessionPane({
         return created ? ("sent" as const) : ("blocked" as const);
       }
       if (
-        submission?.planEnabled &&
+        plannotatorPlanActive(snapshotRef.current?.extensionStatuses) &&
         slashCommand !== null &&
         (slashCommand.kind === "sendGoalCommand" ||
           slashCommand.kind === "resumeGoal" ||
@@ -2658,6 +2669,23 @@ export function SessionPane({
         logger.warn("[v4-pane] Submission 缺少完整模型或模式配置");
         return "blocked" as const;
       }
+      const submitted = submission;
+      const ensurePlannotatorPlan = async (targetSessionId: string) => {
+        if (
+          !enterPlannotatorPlan ||
+          plannotatorPlanActive(snapshotRef.current?.extensionStatuses)
+        ) {
+          return;
+        }
+        const ack = await dispatchSubmissionCommand(
+          "sendText",
+          { text: "/plannotator-plan-mode", ...submitted },
+          targetSessionId,
+        );
+        if (ack.status !== "accepted") {
+          throw new Error(ack.reasonCode ?? "sendText 被拒绝");
+        }
+      };
       const currentRoutingMode = snapshotRef.current?.inputRouting.mode;
       if (
         currentRoutingMode === "choice" &&
@@ -2792,6 +2820,7 @@ export function SessionPane({
         const prewarm = prewarmBindingRef.current;
         if (prewarm?.beginPromotion()) {
           try {
+            await ensurePlannotatorPlan(prewarm.sessionId);
             const ack = await dispatchSubmissionCommand(
               "sendText",
               {
@@ -2842,7 +2871,7 @@ export function SessionPane({
           { ...draftConfigRef.current, modelSelection: submission.modelSelection },
           appFollowupMode,
         );
-        if (readyAttachments.length === 0 && !sharedContextRefs?.length) {
+        if (readyAttachments.length === 0 && !sharedContextRefs?.length && !enterPlannotatorPlan) {
           const ack = await dispatchSubmissionCommand(
             "createSession",
             {
@@ -2888,6 +2917,7 @@ export function SessionPane({
           throw new Error("createSession 缺少 sessionId");
         }
         const newSessionId = createResult.sessionId;
+        await ensurePlannotatorPlan(newSessionId);
         const sendAck = await dispatchSubmissionCommand(
           "sendText",
           {
@@ -2913,6 +2943,7 @@ export function SessionPane({
         return;
       }
       // 附件 ref 已在 composer 预传状态机中收口。
+      await ensurePlannotatorPlan(sessionId);
       const ack = await dispatchSubmissionCommand(
         "sendText",
         {
@@ -2959,6 +2990,7 @@ export function SessionPane({
       reportDraftCreated,
       handleDraftSwitchMode,
       handleOpenSelectionSideConversationWithPrompt,
+      draftConfigRef,
       intl,
       slashCommands,
       lease,
@@ -3072,31 +3104,6 @@ export function SessionPane({
       clearQueueEditOperation();
     },
     [clearQueueEditOperation],
-  );
-
-  const handleFork = useCallback(
-    (target: ConversationRowTarget) => {
-      const current = snapshotRef.current;
-      if (!sessionId || current === null) return;
-      // forkAssistant 是 CAS 命令：baseRevision 取当前投影 revision。
-      void dispatchCommand(
-        "forkAssistant",
-        { target },
-        sessionId,
-        current.revision,
-        current.logEpoch,
-      ).then((ack) => {
-        if (ack.status !== "accepted" && ack.status !== "duplicate") {
-          logger.warn(`[v4-pane] fork 被拒绝: ${ack.status} ${ack.reasonCode ?? ""}`);
-          return;
-        }
-        if (ack.result?.type === "forkAssistant") {
-          // 原地切到 child session（与新建会话同一选择路径）。
-          onSessionCreated?.(ack.result.sessionId);
-        }
-      });
-    },
-    [dispatchCommand, onSessionCreated, sessionId],
   );
 
   const handleEdit = useCallback(
@@ -3609,12 +3616,19 @@ export function SessionPane({
     ],
   );
 
-  // 模式与模型一样属于下一次 Submission；选择时只更新 Composer。
+  // 新建任务只改草稿。已有会话才发插件命令，避免每点一次就多出一个任务。
   const handleSwitchMode = useCallback(
     (mode: string) => {
+      if (mode === "plan" || mode === "plan-off") {
+        if (!plannotatorPlanAvailable(slashCommands)) return;
+        handleDraftSwitchMode(mode);
+        if (sessionId == null) return;
+        void handleSendText("/plannotator-plan-mode").catch(() => undefined);
+        return;
+      }
       handleDraftSwitchMode(mode);
     },
-    [handleDraftSwitchMode],
+    [handleDraftSwitchMode, handleSendText, sessionId, slashCommands],
   );
 
   // context usage 面板的压缩入口（命令文本 = "/compact"，复用 slash 解析路径）。
@@ -3680,7 +3694,7 @@ export function SessionPane({
 
   const submitSessionResume = useCallback(
     (input: {
-      target: { entryId: string; role?: "user" | "assistant"; text?: string };
+      target: { entryId: string; role?: "user" | "assistant" | "tool"; text?: string };
       summarize: boolean;
       customInstructions?: string;
       label?: string;
@@ -3874,20 +3888,17 @@ export function SessionPane({
   // retry 的产品裁决属于行级权威投影。这里仅提供命令能力，入口是否展示
   // 完全读取 row.actions.canRetry，禁止再用 pane phase 形成第二套 guard。
   const retryActionsEnabled = !readOnly && !selectionSideChat && Boolean(sessionId);
-  // fork 可用性完全由 row.actions.canFork（CLI stable resolver 投影）裁决；pane 只提供命令回调。
+  // 会话内分支：从此处继续、标题旁切换。不是复制成新会话。
   const forkActionsEnabled = !readOnly && !selectionSideChat && Boolean(sessionId);
   useEffect(() => {
     resumeHereRef.current = (target) => {
-      const existing = sessionTreeNodes.find((node) => node.id === target.entryId)?.label;
-      const label = existing || target.text.replace(/\s+/gu, " ").trim().slice(0, 42);
       submitSessionResume({
         target,
         summarize: target.summarize,
         ...(target.customInstructions ? { customInstructions: target.customInstructions } : {}),
-        ...(label ? { label } : {}),
       });
     };
-  }, [sessionTreeNodes, submitSessionResume]);
+  }, [submitSessionResume]);
   useEffect(() => {
     if (!focused || !forkActionsEnabled || !sessionId) return;
     loadSessionTree();
@@ -3900,9 +3911,7 @@ export function SessionPane({
       busy: sessionTreeBusy,
       refresh: loadSessionTree,
       switchTo: (entryId: string) => {
-        const tip = sessionTreeNodes.find((node) => node.id === entryId);
-        const label = tip?.label || tip?.preview.replace(/\s+/gu, " ").trim().slice(0, 42);
-        submitSessionResume({ target: { entryId }, summarize: false, ...(label ? { label } : {}) });
+        submitSessionResume({ target: { entryId }, summarize: false });
       },
       rename: labelSessionTreeEntry,
       remove: deleteSessionBranch,
@@ -5009,7 +5018,6 @@ export function SessionPane({
               sessionKey={sessionId ?? "draft"}
               scrollMemoryKey={timelineScrollMemoryKey}
               rowContext={rowContext}
-              onFork={forkActionsEnabled ? handleFork : undefined}
               onRetry={retryActionsEnabled ? handleRetry : undefined}
               onFeedbackChange={
                 !readOnly && !selectionSideChat && sessionId ? handleAssistantFeedback : undefined

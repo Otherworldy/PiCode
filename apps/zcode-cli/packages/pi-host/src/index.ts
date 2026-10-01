@@ -37,6 +37,7 @@ export { listPiSkills } from "./pi-skills.js";
 export { listPiSlashCommands, listSessionSlashCommands } from "./pi-slash-commands.js";
 export {
   checkPiPluginUpdates,
+  isPlannotatorPiExtension,
   listPiPlugins,
   setPiPluginEnabled,
   updatePiPlugin,

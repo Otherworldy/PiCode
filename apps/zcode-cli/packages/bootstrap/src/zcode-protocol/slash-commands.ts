@@ -1,4 +1,9 @@
-import { listPiSlashCommands, type PiSlashCommandView } from "@zcode/pi-host";
+import {
+  isPlannotatorPiExtension,
+  listPiPlugins,
+  listPiSlashCommands,
+  type PiSlashCommandView,
+} from "@zcode/pi-host";
 import type { ZCodeSlashCommand } from "@zcode/shared";
 import type { ListZCodeCustomCommandsOptions } from "../custom-commands.js";
 import { APP_PROTOCOL_APP_ONLY_BUILTIN_SLASH_COMMANDS } from "../slash-command-surface.js";
@@ -22,6 +27,18 @@ export async function listProtocolSlashCommands(
   const commands = discovered.map(toProtocolSlashCommand);
   for (const command of APP_PROTOCOL_APP_ONLY_BUILTIN_SLASH_COMMANDS) {
     if (!commands.some((existing) => existing.name === command.name)) commands.push(command);
+  }
+  // 没有活会话时扩展命令还没注册。已启用的 Plannotator 仍要让计划开关出现。
+  // 已打开的会话只认它自己注册的命令；旧会话要新建后才加载插件。
+  if (!options.piCommands && !commands.some((command) => command.name === "plannotator-plan-mode")) {
+    const plugins = await listPiPlugins(options.workingDirectory ?? process.cwd()).catch(() => []);
+    if (plugins.some(isPlannotatorPiExtension)) {
+      commands.push({
+        name: "plannotator-plan-mode",
+        description: "Toggle plannotator planning mode",
+        source: "extension",
+      });
+    }
   }
   return commands;
 }

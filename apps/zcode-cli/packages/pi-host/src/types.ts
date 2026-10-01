@@ -145,7 +145,7 @@ export type PiSessionTreeNode = {
 export type SessionResumeRequest = {
   entryId: string;
   text?: string;
-  role?: "user" | "assistant";
+  role?: "user" | "assistant" | "tool";
   summarize: boolean;
   customInstructions?: string;
   label?: string;
@@ -209,7 +209,7 @@ export interface PiSessionPort {
   contextEvents?(): PiHostEvent[];
   resolveEntry?(
     id: string,
-    hint?: { text?: string; role?: "user" | "assistant" },
+    hint?: { text?: string; role?: "user" | "assistant" | "tool" },
   ): string | undefined;
   /** Pi `createBranchedSession`：新文件只含到该节点的路径。 */
   branchFrom?(entryId: string): { sessionId: string; sessionFile: string };

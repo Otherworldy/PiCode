@@ -37,7 +37,7 @@ import type { V4ComposerToolbarProps } from "@/v4/composer/V4ComposerToolbar.js"
 
 function noop(): void {}
 
-/** Plan 是独立勾选项，三种权限仍为单选；只编辑草稿，不向 Runtime 发切换命令。 */
+/** 权限是单选。计划开关只在 Plannotator 已启用时出现，点击交给插件命令。 */
 function V4ComposerModeSwitchImpl({
   provider,
   draftConfig,
@@ -45,6 +45,8 @@ function V4ComposerModeSwitchImpl({
   activeConfigPicker,
   onConfigPickerOpenChange,
   onSwitchMode,
+  planAvailable = false,
+  planActive = false,
 }: Pick<
   V4ComposerToolbarProps,
   | "workspacePath"
@@ -55,6 +57,8 @@ function V4ComposerModeSwitchImpl({
   | "activeConfigPicker"
   | "onConfigPickerOpenChange"
   | "onSwitchMode"
+  | "planAvailable"
+  | "planActive"
 >) {
   const { intl } = useZCodeIntl();
   const displayProvider = provider ?? ZCODE_AGENT_PROVIDER;
@@ -64,10 +68,12 @@ function V4ComposerModeSwitchImpl({
   const selected = permissions.find((mode) => mode.id === draftConfig?.mode);
   const label = (mode: (typeof modes)[number]) =>
     getModeOptionDisplayLabel(intl, displayProvider, { value: mode.id, name: mode.name });
-  const plan = modes.find((mode) => mode.id === "plan")!;
-  const planLabel = label(plan);
-  // Plan 拆成独立勾选项后仍需保留原菜单说明，复用相同的国际化映射。
-  const planDescriptionId = getModeOptionDescriptionMessageId(displayProvider, { value: plan.id });
+  const plan = modes.find((mode) => mode.id === "plan");
+  const planLabel = plan ? label(plan) : "";
+  const planDescriptionId = plan
+    ? getModeOptionDescriptionMessageId(displayProvider, { value: plan.id })
+    : undefined;
+  const showPlan = planAvailable && plan !== undefined;
   const modeOption = useMemo<ZCodeConfigOption>(
     () => ({
       id: "mode",
@@ -140,8 +146,10 @@ function V4ComposerModeSwitchImpl({
                 ?.focus();
           }}
         >
+          {showPlan ? (
+          <>
           <DropdownMenuCheckboxItem
-            checked={draftConfig?.planEnabled ?? false}
+            checked={planActive}
             onCheckedChange={(checked) => onSwitchMode(checked ? "plan" : "plan-off")}
             data-testid={testId(TID_CHAT_MODE_SELECT_ITEM, "plan")}
             className="min-h-13 items-start gap-3 py-2"
@@ -157,6 +165,8 @@ function V4ComposerModeSwitchImpl({
             </span>
           </DropdownMenuCheckboxItem>
           <DropdownMenuSeparator />
+          </>
+          ) : null}
           <DropdownMenuRadioGroup value={selected.id} onValueChange={onSwitchMode}>
             {permissions.map((mode) => {
               const ModeIcon = resolveModeOptionIcon(mode.id);
@@ -185,7 +195,7 @@ function V4ComposerModeSwitchImpl({
           </DropdownMenuRadioGroup>
         </DropdownMenuContent>
       </DropdownMenu>
-      {draftConfig?.planEnabled && (
+      {showPlan && planActive && (
         <span data-testid="v4-composer-plan-marker" className="flex items-center gap-1">
           <span
             role="separator"

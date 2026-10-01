@@ -173,7 +173,7 @@ export const commandPayloadSchemas = {
   navigateSessionTree: z.object({
     entryId: z.string().min(1),
     text: z.string().optional(),
-    role: z.enum(["user", "assistant"]).optional(),
+    role: z.enum(["user", "assistant", "tool"]).optional(),
     summarize: z.boolean(),
     customInstructions: z.string().max(8000).optional(),
     // 不总结时 Pi 只改内存叶子。带上标签才会追加一条记录，重开还停在这条分支。

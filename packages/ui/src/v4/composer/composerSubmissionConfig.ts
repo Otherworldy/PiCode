@@ -1,4 +1,4 @@
-import { resolveExecutionState, type ModelSelection } from "@zcode/shared";
+import type { ModelSelection } from "@zcode/shared";
 import { submissionModeSchema, type SubmissionMode } from "@zcode/shared/zcode-protocol-v4";
 import type { ModelSelectionView } from "@zcode/services";
 import { validateModelSelectionOptions } from "@zcode/provider";
@@ -35,7 +35,8 @@ export function createComposerSubmissionConfig(
     if (!selection || !model || !validateModelSelectionOptions(model, selection).ok) return null;
     return Object.freeze({
       mode: mode.data === "plan" ? "build" : mode.data,
-      planEnabled: resolveExecutionState(composer).planEnabled,
+      // 计划模式由 Plannotator 命令切换，不再把旧 planEnabled 发给 Host。
+      planEnabled: false,
       modelSelection: Object.freeze({
         providerId: selection.providerId,
         modelId: selection.modelId,
@@ -46,7 +47,7 @@ export function createComposerSubmissionConfig(
   // Pi Host：PiCode registry 为空时不再挡发送。Host 用 Pi ModelRuntime 当前/默认模型。
   return Object.freeze({
     mode: mode.data === "plan" ? "build" : mode.data,
-    planEnabled: resolveExecutionState(composer).planEnabled,
+    planEnabled: false,
     modelSelection: Object.freeze({
       providerId: selection?.providerId || "pi",
       modelId: selection?.modelId || "default",

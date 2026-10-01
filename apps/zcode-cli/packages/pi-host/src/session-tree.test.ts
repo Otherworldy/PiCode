@@ -183,6 +183,40 @@ test("resolveSessionEntry matches entry id, message id, then text", () => {
   assert.equal(resolveSessionEntry(tree, "missing", { text: "nope" }), undefined);
 });
 
+test("resolveSessionEntry maps a tool call id to the result, else the call", () => {
+  const entries = [
+    {
+      id: "a",
+      type: "message",
+      message: {
+        role: "assistant",
+        content: [{ type: "toolCall", id: "call-1", name: "read" }],
+      },
+    },
+    {
+      id: "t",
+      type: "message",
+      message: { role: "toolResult", toolCallId: "call-1", toolName: "read" },
+    },
+    {
+      id: "b",
+      type: "message",
+      message: {
+        role: "assistant",
+        content: [{ type: "toolCall", id: "call-2", name: "bash" }],
+      },
+    },
+  ];
+  const tree: SessionTreeSource = {
+    ...source("a"),
+    getEntry: (id) => entries.find((entry) => entry.id === id),
+    getEntries: () => entries,
+  };
+  assert.equal(resolveSessionEntry(tree, "call-1", { role: "tool" }), "t");
+  assert.equal(resolveSessionEntry(tree, "call-2", { role: "tool" }), "b");
+  assert.equal(resolveSessionEntry(tree, "missing", { role: "tool" }), undefined);
+});
+
 test("context events keep a branch summary on the active path", () => {
   const events = contextEventsOf(source("a1"));
   assert.ok(events.some((event) => event.type === "branch_summary"));
