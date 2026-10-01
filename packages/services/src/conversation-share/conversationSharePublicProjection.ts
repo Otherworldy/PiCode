@@ -242,6 +242,8 @@ function projectTimelineMarker(
       return { ...row.marker };
     case "retryNotice":
       return { ...row.marker };
+    case "branchSummary":
+      return { ...row.marker };
     case "forkNotice":
     case "forkCreated":
     case "checkpointRestored":

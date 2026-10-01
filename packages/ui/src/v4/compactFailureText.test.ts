@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { compactFailureText } from "./compactFailureText.ts";
+import { compactFailureText } from "./compactFailureText.js";
 
 const format = (id: string) => id;
 
