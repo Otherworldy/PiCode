@@ -6,6 +6,7 @@ import type {
   GitChangeKind,
   GitDiffResult,
   GitHeadRefType,
+  GitWorktreeInfo,
 } from "@zcode/shared";
 import {
   GIT_UNTRACKED_STAT_CHUNK_BYTES,
@@ -714,4 +715,51 @@ export function ensureRepositoryAvailable(
   }
 
   return resolution;
+}
+
+export function parseWorktreeList(stdout: string): GitWorktreeInfo[] {
+  const lines = stdout.split(/\r?\n/);
+  const worktrees: GitWorktreeInfo[] = [];
+  let current: Partial<GitWorktreeInfo> | null = null;
+
+  const flush = () => {
+    if (current && current.path && current.head) {
+      worktrees.push({
+        path: current.path,
+        head: current.head,
+        branch: current.branch ?? null,
+        bare: current.bare ?? false,
+        locked: current.locked,
+        prunable: current.prunable,
+      });
+    }
+    current = null;
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flush();
+      continue;
+    }
+    if (trimmed.startsWith("worktree ")) {
+      flush();
+      current = { path: trimmed.slice(9).trim() };
+    } else if (current) {
+      if (trimmed.startsWith("HEAD ")) {
+        current.head = trimmed.slice(5).trim();
+      } else if (trimmed.startsWith("branch ")) {
+        const rawRef = trimmed.slice(7).trim();
+        current.branch = rawRef.startsWith("refs/heads/") ? rawRef.slice(11) : rawRef;
+      } else if (trimmed === "bare") {
+        current.bare = true;
+      } else if (trimmed.startsWith("locked")) {
+        current.locked = true;
+      } else if (trimmed.startsWith("prunable")) {
+        current.prunable = true;
+      }
+    }
+  }
+  flush();
+  return worktrees;
 }

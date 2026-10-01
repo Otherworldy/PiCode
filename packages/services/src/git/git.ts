@@ -25,6 +25,10 @@ import type {
   GitWorkspaceRepositoryInfo,
   GitFileChange,
   GitSwitchBranchRequest,
+  GitCreateWorktreeRequest,
+  GitRemoveWorktreeRequest,
+  GitWorktreeInfo,
+  GitWorktreeMutationResult,
 } from "@zcode/shared";
 import { ServiceChannels } from "@zcode/shared";
 import { createServiceDescriptor } from "../descriptors.js";
@@ -48,6 +52,9 @@ export interface IGitService {
   ): Promise<GitGenerateCommitMessageResult>;
   commit(params: GitCommitRequest): Promise<GitCommitResult>;
   push(params: GitPushRequest): Promise<GitPushResult>;
+  listWorktrees(params: GitRepositoryRequest): Promise<GitWorktreeInfo[]>;
+  createWorktree(params: GitCreateWorktreeRequest): Promise<GitWorktreeMutationResult>;
+  removeWorktree(params: GitRemoveWorktreeRequest): Promise<void>;
   getIdentity(params: GitRepositoryRequest): Promise<GitIdentity>;
   refresh(params: GitRefreshRequest): Promise<GitRefreshResult>;
 }

@@ -1,0 +1,37 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { parseWorktreeList } from "../src/git/repo/gitCliHelpers.js";
+
+test("parseWorktreeList parses porcelain worktree output correctly", () => {
+  const sample = `
+worktree /home/user/project
+HEAD 268809a4c47459774d55259aa248c3d04b7f9df1
+branch refs/heads/main
+
+worktree /home/user/project/.worktrees/feature-x
+HEAD 8a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b
+branch refs/heads/feature-x
+locked
+
+worktree /home/user/project/.worktrees/detached-branch
+HEAD 11223344556677889900aabbccddeeff11223344
+detached
+prunable gitdir file points to non-existent location
+`;
+
+  const worktrees = parseWorktreeList(sample);
+  assert.equal(worktrees.length, 3);
+
+  assert.equal(worktrees[0]?.path, "/home/user/project");
+  assert.equal(worktrees[0]?.head, "268809a4c47459774d55259aa248c3d04b7f9df1");
+  assert.equal(worktrees[0]?.branch, "main");
+  assert.equal(worktrees[0]?.bare, false);
+
+  assert.equal(worktrees[1]?.path, "/home/user/project/.worktrees/feature-x");
+  assert.equal(worktrees[1]?.branch, "feature-x");
+  assert.equal(worktrees[1]?.locked, true);
+
+  assert.equal(worktrees[2]?.path, "/home/user/project/.worktrees/detached-branch");
+  assert.equal(worktrees[2]?.branch, null);
+  assert.equal(worktrees[2]?.prunable, true);
+});

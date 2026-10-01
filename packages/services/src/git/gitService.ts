@@ -211,6 +211,21 @@ export function createGitService(options?: {
       );
     },
 
+    async listWorktrees(params) {
+      return await repo.listWorktrees(params.workspacePath);
+    },
+
+    async createWorktree(params) {
+      return await repo.createWorktree(params.workspacePath, params.branchName, {
+        worktreePath: params.worktreePath,
+        startPoint: params.startPoint,
+      });
+    },
+
+    async removeWorktree(params) {
+      await repo.removeWorktree(params.workspacePath, params.worktreePath, params.force);
+    },
+
     async getChanges(params) {
       const status = await repo.getStatus(params.workspacePath);
 

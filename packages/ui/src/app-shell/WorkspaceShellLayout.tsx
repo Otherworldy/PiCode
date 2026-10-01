@@ -1200,6 +1200,9 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
             gitSummary={gitState.summary}
             dirtyFileCount={gitDirtyFileCount}
             onRefreshGit={handleRefreshGit}
+            onOpenWorktree={(worktreePath) => {
+              handleStartDraftInWorkspaceInChat(worktreePath, undefined, "project");
+            }}
             className="px-0 pt-0"
             popoverClassName="w-72"
             branchListClassName="max-h-48"

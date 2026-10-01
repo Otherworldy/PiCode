@@ -33,6 +33,7 @@ interface GitBranchSwitcherProps {
   gitSummary: GitRepositorySummary;
   dirtyFileCount: number;
   onRefreshGit: () => void;
+  onOpenWorktree?: (worktreePath: string) => void;
   className?: string;
   triggerClassName?: string;
   popoverClassName?: string;
@@ -48,6 +49,7 @@ export function GitBranchSwitcher({
   gitSummary,
   dirtyFileCount,
   onRefreshGit,
+  onOpenWorktree,
   className,
   triggerClassName,
   popoverClassName,
@@ -68,6 +70,8 @@ export function GitBranchSwitcher({
     setCreateDialogOpen,
     createBranchName,
     setCreateBranchName,
+    inWorktree,
+    setInWorktree,
     commitMessage,
     setCommitMessage,
     commitError,
@@ -86,6 +90,7 @@ export function GitBranchSwitcher({
     currentBranchName: gitSummary.branchName,
     headRefType: gitSummary.headRefType,
     onRefreshGit,
+    onOpenWorktree,
   });
 
   const isVisible = gitSummary.isGitAvailable && gitSummary.isRepository;
@@ -338,16 +343,20 @@ export function GitBranchSwitcher({
         open={createDialogOpen}
         branchName={createBranchName}
         mutationPending={mutationPending}
+        inWorktree={inWorktree}
+        onInWorktreeChange={setInWorktree}
         onOpenChange={(nextOpen) => {
           setCreateDialogOpen(nextOpen);
           if (!nextOpen) {
             setCreateBranchName("");
+            setInWorktree(false);
           }
         }}
         onBranchNameChange={setCreateBranchName}
         onCancel={() => {
           setCreateDialogOpen(false);
           setCreateBranchName("");
+          setInWorktree(false);
         }}
         onSubmit={() => {
           void createBranchAndSwitch();

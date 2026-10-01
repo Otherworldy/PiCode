@@ -23,6 +23,8 @@ interface GitBranchCreateDialogProps {
   open: boolean;
   branchName: string;
   mutationPending: boolean;
+  inWorktree?: boolean;
+  onInWorktreeChange?: (value: boolean) => void;
   onOpenChange: (nextOpen: boolean) => void;
   onBranchNameChange: (nextValue: string) => void;
   onCancel: () => void;
@@ -33,6 +35,8 @@ export function GitBranchCreateDialog({
   open,
   branchName,
   mutationPending,
+  inWorktree = false,
+  onInWorktreeChange,
   onOpenChange,
   onBranchNameChange,
   onCancel,
@@ -91,6 +95,32 @@ export function GitBranchCreateDialog({
                 id: "git.branchSwitcher.createDialog.helper",
               })}
             </p>
+          </div>
+
+          <div className="flex items-start gap-2.5 rounded-lg border border-border bg-surface-subtle p-3">
+            <input
+              type="checkbox"
+              id="git-branch-switcher-create-worktree"
+              checked={inWorktree}
+              disabled={mutationPending}
+              onChange={(e) => onInWorktreeChange?.(e.target.checked)}
+              className="mt-0.5 size-4 rounded border-border cursor-pointer accent-primary"
+            />
+            <div className="space-y-0.5 text-ui-sm">
+              <label
+                htmlFor="git-branch-switcher-create-worktree"
+                className="font-medium text-foreground cursor-pointer"
+              >
+                {intl.formatMessage({
+                  id: "git.branchSwitcher.createDialog.inWorktreeLabel",
+                })}
+              </label>
+              <p className="text-ui-xs text-foreground-subtle">
+                {intl.formatMessage({
+                  id: "git.branchSwitcher.createDialog.inWorktreeHelper",
+                })}
+              </p>
+            </div>
           </div>
 
           <DialogFooter className="gap-2 pt-4">

@@ -21,7 +21,7 @@ export type GitChangeSectionId =
 
 export type GitDiffAvailability = "patch" | "binary" | "truncated" | "unavailable";
 
-export type GitBranchMutationAction = "switch" | "create-and-switch";
+export type GitBranchMutationAction = "switch" | "create-and-switch" | "create-worktree";
 
 export type GitBranchMutationIssueCode =
   | "invalid-branch-name"
@@ -308,6 +308,34 @@ export interface GitCheckpointConflict {
   repoRelativePath: string;
   workspaceRelativePath: string;
   reason: GitCheckpointConflictReason;
+}
+
+export interface GitWorktreeInfo {
+  path: string;
+  head: string;
+  branch: string | null;
+  bare: boolean;
+  locked?: boolean;
+  prunable?: boolean;
+}
+
+export interface GitCreateWorktreeRequest extends GitRepositoryRequest {
+  branchName: string;
+  worktreePath?: string;
+  startPoint?: string;
+  createBranch?: boolean;
+}
+
+export interface GitRemoveWorktreeRequest extends GitRepositoryRequest {
+  worktreePath: string;
+  force?: boolean;
+}
+
+export interface GitWorktreeMutationResult {
+  success: boolean;
+  worktreePath: string | null;
+  branchName: string | null;
+  issues: GitBranchMutationIssue[];
 }
 
 export interface GitCheckpointRestoreResult {

@@ -87,9 +87,9 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 壳上拆掉：PluginStore、SavedWorkflows、Automations/OffPeak、CUA、Goal、PiCode 子代理 profile、官方 plugin 商店。设置改为已加载 Pi extensions 列表。插件页用 Pi `PackageManager.checkForAvailableUpdates` / `update` 检查并更新 npm、git 包。本地 extension 文件和钉死版本不更新。装完后下次新建会话生效。
 
-壳上新增：输入框 Extension Widget 槽、会话 Status chips。
+壳上新增：输入框 Extension Widget 槽。非计划插件的 status 收成输入框上方一个 popup，不再平铺 chips。
 
-宿主 UI 带上纯文本 `theme`（`fg` / `bg` / `bold` / `italic` / `underline` / `inverse` / `strikethrough` 原样返回文字，不发 ANSI）。缺 `theme` 时 Plannotator 在 `ctx.ui.theme.fg` 上抛错：批准计划后的 `plannotator_submit_plan` 和 `plannotator_mark_done` 都失败，`plannotator-progress` 清单也写不出去。清单仍由插件 `setWidget` 持有；没有 TodoWrite 的 `plan` 时，状态面板用这份 widget 列出 Todo，不另写一份 plan。
+宿主 UI 带上纯文本 `theme`（`fg` / `bg` / `bold` / `italic` / `underline` / `inverse` / `strikethrough` 原样返回文字，不发 ANSI）。缺 `theme` 时 Plannotator 在 `ctx.ui.theme.fg` 上抛错：批准计划后的 `plannotator_submit_plan` 和 `plannotator_mark_done` 都失败，`plannotator-progress` 清单也写不出去。清单仍由插件 `setWidget` 持有，输入框下不平铺这份原文。没有 TodoWrite 的 `plan` 时，状态面板的原 Todo 段用这份 widget 列出进度，不另写一份 plan。
 
 ## 呈现
 

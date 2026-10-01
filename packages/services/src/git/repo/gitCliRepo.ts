@@ -14,6 +14,8 @@ import type {
   GitLocalBranch,
   GitLocalBranchListResult,
   GitWorkspaceRepositoryInfo,
+  GitWorktreeInfo,
+  GitWorktreeMutationResult,
   GitPushResult,
 } from "@zcode/shared";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
@@ -46,6 +48,7 @@ import {
   parseGitConfigValue,
   parseNumstat,
   parseStatusPorcelain,
+  parseWorktreeList,
   toInvalidBranchNameIssue,
   toDiffResult,
 } from "./gitCliHelpers.js";
@@ -1246,6 +1249,132 @@ export function createGitCliRepo(options?: { commandProvider?: GitCommandProvide
         didChange: true,
         created: true,
         summary: nextStatus.summary,
+      });
+    },
+
+    async listWorktrees(workspacePath: string): Promise<GitWorktreeInfo[]> {
+      const resolution = await this.resolveRepository(workspacePath);
+      if (!resolution.isGitAvailable || !resolution.isRepository) {
+        return [];
+      }
+      const result = await commandProvider.run({
+        cwd: resolution.repoRoot,
+        args: ["worktree", "list", "--porcelain"],
+        timeoutMs: DEFAULT_GIT_COMMAND_TIMEOUT_MS,
+        maxOutputBytes: DEFAULT_GIT_OUTPUT_BYTES,
+      });
+      if (result.exitCode !== 0) {
+        return [];
+      }
+      return parseWorktreeList(result.stdout);
+    },
+
+    async createWorktree(
+      workspacePath: string,
+      branchName: string,
+      options?: { worktreePath?: string; startPoint?: string },
+    ): Promise<GitWorktreeMutationResult> {
+      const status = await this.getStatus(workspacePath);
+      const resolution = ensureRepositoryAvailable(status.resolution, "create worktree");
+      const normalizedBranchName = branchName.trim();
+      if (normalizedBranchName.length === 0) {
+        return {
+          success: false,
+          worktreePath: null,
+          branchName: null,
+          issues: [toInvalidBranchNameIssue()],
+        };
+      }
+
+      const invalidBranchIssue = await validateBranchName(resolution, normalizedBranchName);
+      if (invalidBranchIssue && invalidBranchIssue.code !== "branch-already-exists") {
+        return {
+          success: false,
+          worktreePath: null,
+          branchName: normalizedBranchName,
+          issues: [invalidBranchIssue],
+        };
+      }
+
+      const sanitizedSegment = normalizedBranchName.replace(/[/\\:*?"<>|]/g, "-");
+      const targetWorktreePath = options?.worktreePath
+        ? (isAbsolute(options.worktreePath)
+            ? options.worktreePath
+            : resolve(resolution.repoRoot, options.worktreePath))
+        : resolve(resolution.repoRoot, ".worktrees", sanitizedSegment);
+
+      const localBranches = await this.listLocalBranches(workspacePath);
+      const branchExists = localBranches.branches.some((b) => b.name === normalizedBranchName);
+
+      const args = ["worktree", "add", targetWorktreePath];
+      if (!branchExists) {
+        args.push("-b", normalizedBranchName);
+        if (options?.startPoint?.trim()) {
+          args.push("--", options.startPoint.trim());
+        }
+      } else {
+        args.push(normalizedBranchName);
+      }
+
+      const result = await commandProvider.run({
+        cwd: resolution.repoRoot,
+        args,
+        timeoutMs: DEFAULT_GIT_COMMAND_TIMEOUT_MS,
+        maxOutputBytes: DEFAULT_GIT_OUTPUT_BYTES,
+      });
+
+      if (result.exitCode !== 0) {
+        const issues = parseGitBranchMutationIssues(result);
+        return {
+          success: false,
+          worktreePath: null,
+          branchName: normalizedBranchName,
+          issues:
+            issues.length > 0
+              ? issues
+              : [
+                  {
+                    code: "unknown",
+                    message:
+                      result.stderr.trim() ||
+                      result.stdout.trim() ||
+                      "Failed to create Git worktree",
+                  },
+                ],
+        };
+      }
+
+      return {
+        success: true,
+        worktreePath: targetWorktreePath,
+        branchName: normalizedBranchName,
+        issues: [],
+      };
+    },
+
+    async removeWorktree(
+      workspacePath: string,
+      worktreePath: string,
+      force?: boolean,
+    ): Promise<void> {
+      const resolution = await this.resolveRepository(workspacePath);
+      if (!resolution.isGitAvailable || !resolution.isRepository) {
+        return;
+      }
+      const args = ["worktree", "remove"];
+      if (force) args.push("--force");
+      args.push(worktreePath);
+      await commandProvider.run({
+        cwd: resolution.repoRoot,
+        args,
+        timeoutMs: DEFAULT_GIT_COMMAND_TIMEOUT_MS,
+        maxOutputBytes: DEFAULT_GIT_OUTPUT_BYTES,
+      });
+      await commandProvider.run({
+        cwd: resolution.repoRoot,
+        args: ["worktree", "prune"],
+        timeoutMs: DEFAULT_GIT_COMMAND_TIMEOUT_MS,
+        maxOutputBytes: DEFAULT_GIT_OUTPUT_BYTES,
       });
     },
 

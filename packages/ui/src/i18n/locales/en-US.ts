@@ -920,6 +920,9 @@ const enUS: Record<string, string> = {
   "git.branchSwitcher.createDialog.placeholder": "For example, feature/git-branch-switcher",
   "git.branchSwitcher.createDialog.helper":
     "Support creating and switching from the current HEAD only.",
+  "git.branchSwitcher.createDialog.inWorktreeLabel": "Open in an isolated worktree",
+  "git.branchSwitcher.createDialog.inWorktreeHelper":
+    "Check out this branch in an isolated folder (.worktrees/) without modifying current workspace code, preventing session conflicts.",
   "git.branchSwitcher.createDialog.confirm": "Create and switch",
   "git.branchSwitcher.blockedDialog.title": "Commit changes to switch branches",
   "git.branchSwitcher.blockedDialog.description.tracked":
@@ -948,6 +951,8 @@ const enUS: Record<string, string> = {
   "git.branchSwitcher.commitDialog.error.requestFailed": "Commit failed: {error}",
   "git.branchSwitcher.toast.switchSuccess": "Switched to branch {branchName}",
   "git.branchSwitcher.toast.createSuccess": "Created and switched to branch {branchName}",
+  "git.branchSwitcher.toast.createWorktreeSuccess":
+    "Created and checked out branch {branchName} in an isolated worktree",
   "git.branchSwitcher.error.invalidBranchName":
     "The branch name is invalid. Enter a different name.",
   "git.branchSwitcher.error.branchAlreadyExists":
@@ -4436,6 +4441,7 @@ const enUS: Record<string, string> = {
   "chat.statusPanel.sessionPlans": "Plans",
   "chat.statusPanel.planFallback": "Plan",
   "chat.statusPanel.openPlan": "Open plan: {title}",
+  "chat.extensionStatus.label": "Plugin status ({count})",
   "chat.statusPanel.todo": "Progress",
   "chat.statusPanel.todoCompletedExpanded": "Hide {count} completed",
   "chat.statusPanel.todoCompletedFold": "{count} completed",

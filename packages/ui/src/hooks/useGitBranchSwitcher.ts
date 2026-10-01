@@ -31,6 +31,7 @@ interface UseGitBranchSwitcherOptions {
   currentBranchName: string | null;
   headRefType: GitRepositorySummary["headRefType"];
   onRefreshGit: () => void;
+  onOpenWorktree?: (worktreePath: string) => void;
 }
 
 export function useGitBranchSwitcher({
@@ -38,6 +39,7 @@ export function useGitBranchSwitcher({
   currentBranchName,
   headRefType,
   onRefreshGit,
+  onOpenWorktree,
 }: UseGitBranchSwitcherOptions) {
   const { gitService } = useServices();
   const { intl, locale } = useZCodeIntl();
@@ -45,6 +47,7 @@ export function useGitBranchSwitcher({
   const [open, setOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createBranchName, setCreateBranchName] = useState("");
+  const [inWorktree, setInWorktree] = useState(false);
   const [commitMessage, setCommitMessage] = useState("");
   const [commitError, setCommitError] = useState<string | null>(null);
   const [switchAssistStep, setSwitchAssistStep] = useState<GitBranchSwitchAssistDialogStep | null>(
@@ -280,6 +283,48 @@ export function useGitBranchSwitcher({
 
     setMutationPending(true);
 
+    if (inWorktree) {
+      try {
+        const result = await gitService.createWorktree({
+          workspacePath,
+          branchName,
+        });
+        if (result.success && result.worktreePath) {
+          setOpen(false);
+          setCreateDialogOpen(false);
+          setCreateBranchName("");
+          resetSwitchAssistState();
+          onRefreshGit();
+          toast(
+            intl.formatMessage(
+              { id: "git.branchSwitcher.toast.createWorktreeSuccess" },
+              { branchName },
+            ),
+          );
+          onOpenWorktree?.(result.worktreePath);
+          return;
+        }
+        if (result.issues.length > 0) {
+          const first = result.issues[0];
+          toast(first?.message ?? "创建 Worktree 失败");
+          return;
+        }
+      } catch (error: unknown) {
+        const message = getErrorMessage(error);
+        logger.warn("[GitBranchSwitcher] 创建 Worktree 失败", {
+          workspacePath,
+          branchName,
+          error: message,
+        });
+        toast(
+          intl.formatMessage({ id: "git.branchSwitcher.error.requestFailed" }, { error: message }),
+        );
+      } finally {
+        setMutationPending(false);
+      }
+      return;
+    }
+
     try {
       const result = await gitService.createBranchAndSwitch({
         workspacePath,
@@ -299,7 +344,17 @@ export function useGitBranchSwitcher({
     } finally {
       setMutationPending(false);
     }
-  }, [createBranchName, gitService, handleMutationResult, intl, workspacePath]);
+  }, [
+    createBranchName,
+    gitService,
+    handleMutationResult,
+    inWorktree,
+    intl,
+    onOpenWorktree,
+    onRefreshGit,
+    resetSwitchAssistState,
+    workspacePath,
+  ]);
 
   const openSwitchCommitDialog = useCallback(() => {
     setCommitError(null);
@@ -387,6 +442,8 @@ export function useGitBranchSwitcher({
     setCreateDialogOpen,
     createBranchName,
     setCreateBranchName,
+    inWorktree,
+    setInWorktree,
     commitMessage,
     setCommitMessage,
     commitError,
