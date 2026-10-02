@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import { copyFile, mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import type { ConversationDelta, DeliveryProfileName } from "@zcode/shared/zcode-protocol-v4";
 import { CommandBridge, type SubmissionModel } from "./command-bridge.js";
@@ -56,6 +58,7 @@ export interface HostedSession {
   compact(): Promise<void>;
   navigateTree(targetId: string): Promise<void>;
   resumeAt(request: SessionResumeRequest): Promise<SessionResumeResult>;
+  noteBranchSummary(active: boolean): void;
   readSessionTree(): PiSessionTreeNode[];
   labelSessionEntry(entryId: string, label?: string): PiSessionTreeNode[];
   deleteSessionBranch(entryId: string): PiSessionTreeNode[];
@@ -80,6 +83,7 @@ export type PiStoredSummary = {
   createdAt: number;
   lastActivityAt: number;
   lastAssistantPreview?: string;
+  cwd?: string;
 };
 
 let abortInflightNetwork = (): void => undefined;
@@ -104,6 +108,34 @@ export interface RegistryOptions {
   createToolPermission?: (hosted: HostedSession) => ToolPermissionCheck;
   /** Pi 原生会话根目录，缺省 `~/.pi/agent/sessions`。测试可注入。 */
   nativeSessionsRoot?: string;
+}
+
+const execFileAsync = promisify(execFile);
+
+/** 只接受本仓库已注册的 worktree。其它路径回落到 workspace，避免会话 cwd 被指到仓库外。 */
+export async function acceptedWorkingDirectory(
+  workspacePath: string,
+  workingDirectory?: string,
+): Promise<string> {
+  const home = resolve(workspacePath);
+  if (!workingDirectory) return home;
+  const wanted = resolve(workingDirectory);
+  if (wanted === home) return home;
+  try {
+    const { stdout } = await execFileAsync("git", ["worktree", "list", "--porcelain"], {
+      cwd: home,
+      timeout: 5000,
+      windowsHide: true,
+    });
+    const listed = stdout
+      .split(/\r?\n/u)
+      .filter((line) => line.startsWith("worktree "))
+      .map((line) => resolve(line.slice("worktree ".length).trim()));
+    if (listed.includes(wanted)) return wanted;
+  } catch {
+    // git 不可用或不是仓库：不接受覆盖。
+  }
+  return home;
 }
 
 function encodeKey(identity: string): string {
@@ -150,6 +182,7 @@ export class HostSessionRegistry {
   async create(input: {
     workspaceIdentity?: string | null;
     workspacePath: string;
+    workingDirectory?: string;
     sessionId?: string;
     parentSessionId?: string;
     viaRegistry?: boolean;
@@ -162,7 +195,8 @@ export class HostSessionRegistry {
         return this.openFile({
           sessionId: stored.sessionId,
           identity: stored.identity,
-          workspacePath: stored.workspacePath,
+          workspacePath: input.workspacePath,
+          cwd: stored.workspacePath,
           sessionFile: stored.sessionFile,
           parentSessionId: input.parentSessionId,
           viaRegistry: input.viaRegistry,
@@ -173,10 +207,12 @@ export class HostSessionRegistry {
     const sessionId = input.sessionId ?? randomUUID();
     const dir = nativeSessionDir(identity, nativeSessionsRoot(this.options.nativeSessionsRoot));
     await mkdir(dir, { recursive: true });
+    const cwd = await acceptedWorkingDirectory(input.workspacePath, input.workingDirectory);
     return this.openFile({
       sessionId,
       identity,
       workspacePath: input.workspacePath,
+      cwd,
       sessionFile: join(dir, piSessionFileName(sessionId)),
       parentSessionId: input.parentSessionId,
       viaRegistry: input.viaRegistry,
@@ -225,6 +261,54 @@ export class HostSessionRegistry {
     });
     await hosted.navigateTree(entryId);
     return hosted;
+  }
+
+  /** 从此处继续：复制到当前叶子，再只在新会话上导航。原会话叶子不动。 */
+  async resumeIntoNewSession(
+    parentId: string,
+    request: SessionResumeRequest,
+  ): Promise<
+    | { cancelled: true }
+    | {
+        cancelled: false;
+        sessionId: string;
+        hosted: HostedSession;
+        editorText?: string;
+        tree: SessionResumeResult["tree"];
+      }
+  > {
+    const parent = this.sessions.get(parentId);
+    if (!parent) throw new Error(`pi-host parent not found: ${parentId}`);
+    const leaf = parent.readSessionTree().find((node) => node.leaf);
+    if (!leaf) {
+      throw Object.assign(new Error("Entry not found"), {
+        reasonCode: "guard.sessionTreeEntryMissing",
+      });
+    }
+    const child = await this.fork(parentId, leaf.id);
+    const previousAbort = parent.abort;
+    parent.abort = () => child.abort();
+    if (request.summarize) parent.noteBranchSummary(true);
+    try {
+      const result = await child.resumeAt(request);
+      if (result.cancelled) {
+        await this.delete(child.sessionId);
+        return { cancelled: true };
+      }
+      return {
+        cancelled: false,
+        sessionId: child.sessionId,
+        hosted: child,
+        ...(result.editorText ? { editorText: result.editorText } : {}),
+        tree: result.tree,
+      };
+    } catch (error) {
+      await this.delete(child.sessionId).catch(() => undefined);
+      throw error;
+    } finally {
+      parent.abort = previousAbort;
+      if (request.summarize) parent.noteBranchSummary(false);
+    }
   }
 
   async abort(workId: string): Promise<boolean> {
@@ -312,6 +396,7 @@ export class HostSessionRegistry {
     sessionId: string;
     identity: string;
     workspacePath: string;
+    cwd?: string;
     sessionFile: string;
     parentSessionId?: string;
     viaRegistry?: boolean;
@@ -320,7 +405,7 @@ export class HostSessionRegistry {
     if (live) return live;
     const pi = await this.options.createSession({
       sessionId: input.sessionId,
-      cwd: input.workspacePath,
+      cwd: input.cwd ?? input.workspacePath,
       sessionFile: input.sessionFile,
       parentSessionId: input.parentSessionId,
       loadExtensions: this.options.loadExtensions ?? true,
@@ -370,6 +455,7 @@ export class HostSessionRegistry {
         ...(summary.lastAssistantPreview
           ? { lastAssistantPreview: summary.lastAssistantPreview }
           : {}),
+        ...(summary.cwd ? { cwd: summary.cwd } : {}),
       });
     }
     return summaries;
@@ -727,6 +813,9 @@ export class HostSessionRegistry {
         pi.setThinkingLevel?.(mapThought(level));
       },
       branchFrom: pi.branchFrom,
+      noteBranchSummary: (active) => {
+        emit(projector.noteBranchSummary(active));
+      },
       resumeAt: (request) =>
         runSessionResume({
           pi,

@@ -120,6 +120,7 @@ function summariesEqual(a: SessionSummary, b: SessionSummary): boolean {
     a.goalStatus === b.goalStatus &&
     a.lastActivityAt === b.lastActivityAt &&
     a.lastAssistantPreview === b.lastAssistantPreview &&
+    a.workingDirectory === b.workingDirectory &&
     a.createdAt === b.createdAt
   );
 }
@@ -172,6 +173,9 @@ export class SessionsIndexProjection {
       }
       if (!summary.lastAssistantPreview && prev.lastAssistantPreview) {
         summary.lastAssistantPreview = prev.lastAssistantPreview;
+      }
+      if (!summary.workingDirectory && prev.workingDirectory) {
+        summary.workingDirectory = prev.workingDirectory;
       }
       // 冷恢复的 live 投影在 hydration 完成前 phase 是初始 draft。
       // 会话一旦有过真实内容就不可能退回 draft；若用它覆盖非 draft 基线，

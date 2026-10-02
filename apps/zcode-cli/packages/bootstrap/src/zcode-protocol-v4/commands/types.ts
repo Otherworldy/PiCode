@@ -250,6 +250,7 @@ export interface V4CommandCoreHost {
      * 缺省回落到进程级 workspace 结论，仍是 fail-closed。
      */
     dynamicWorkflowEnabled?: boolean;
+    workingDirectory?: string;
   }): Promise<{ sessionId: string }>;
   /** 从父会话稳定落盘边界创建隐藏 selection_side_chat child。 */
   createSelectionSideSession?(

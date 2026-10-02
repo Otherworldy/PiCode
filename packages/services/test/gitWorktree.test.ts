@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseWorktreeList } from "../src/git/repo/gitCliHelpers.js";
+import {
+  mergeWorktreeBranches,
+  parseWorktreeList,
+  rewriteUnbornWorktreeBranchMiss,
+} from "../src/git/repo/gitCliHelpers.js";
 
 test("parseWorktreeList parses porcelain worktree output correctly", () => {
   const sample = `
@@ -34,4 +38,49 @@ prunable gitdir file points to non-existent location
   assert.equal(worktrees[2]?.path, "/home/user/project/.worktrees/detached-branch");
   assert.equal(worktrees[2]?.branch, null);
   assert.equal(worktrees[2]?.prunable, true);
+});
+
+test("unborn worktree branches still appear in the branch list", () => {
+  const branches = mergeWorktreeBranches(
+    [],
+    [
+      {
+        path: "D:/Study/Code/Demo/test",
+        head: "0000000000000000000000000000000000000000",
+        branch: "master",
+        bare: false,
+      },
+      {
+        path: "D:/Study/Code/Demo/test/.worktrees/feature-hello",
+        head: "0000000000000000000000000000000000000000",
+        branch: "feature/hello",
+        bare: false,
+      },
+    ],
+    "master",
+  );
+  assert.deepEqual(
+    branches.map((branch) => [branch.name, branch.isCurrent]),
+    [
+      ["master", true],
+      ["feature/hello", false],
+    ],
+  );
+});
+
+test("unborn worktree branch is not reported as missing", () => {
+  const issues = rewriteUnbornWorktreeBranchMiss(
+    [{ code: "target-branch-not-found", message: "Target branch was not found." }],
+    [
+      {
+        path: "D:/repo/.worktrees/feature-hello",
+        head: "0000000000000000000000000000000000000000",
+        branch: "feature/hello",
+        bare: false,
+      },
+    ],
+    "feature/hello",
+  );
+  assert.equal(issues[0]?.code, "branch-in-other-worktree");
+  assert.equal(issues[0]?.detail, "D:/repo/.worktrees/feature-hello");
 });

@@ -6,6 +6,7 @@ import type {
   GitChangeKind,
   GitDiffResult,
   GitHeadRefType,
+  GitLocalBranch,
   GitWorktreeInfo,
 } from "@zcode/shared";
 import {
@@ -715,6 +716,75 @@ export function ensureRepositoryAvailable(
   }
 
   return resolution;
+}
+
+const UNBORN_HEAD = "0000000000000000000000000000000000000000";
+
+function compareLocalBranches(left: GitLocalBranch, right: GitLocalBranch): number {
+  if (left.isCurrent !== right.isCurrent) return left.isCurrent ? -1 : 1;
+  const leftTimestamp = left.commitTimestampMs ?? Number.NEGATIVE_INFINITY;
+  const rightTimestamp = right.commitTimestampMs ?? Number.NEGATIVE_INFINITY;
+  if (leftTimestamp !== rightTimestamp) return rightTimestamp - leftTimestamp;
+  return left.name.localeCompare(right.name);
+}
+
+/**
+ * 还没有任何提交时，分支只存在于 worktree HEAD（refs/heads 下没有对象）。
+ * for-each-ref 会漏掉它们，分支菜单就变成空的。
+ */
+export function mergeWorktreeBranches(
+  branches: readonly GitLocalBranch[],
+  worktrees: readonly GitWorktreeInfo[],
+  currentBranchName: string | null,
+): GitLocalBranch[] {
+  const seen = new Set(branches.map((branch) => branch.name));
+  const merged = [...branches];
+  const add = (name: string, head: string | null) => {
+    const branchName = name.trim();
+    if (!branchName || seen.has(branchName)) return;
+    seen.add(branchName);
+    const commitHash = head && head !== UNBORN_HEAD ? head : null;
+    merged.push({
+      name: branchName,
+      isCurrent: branchName === currentBranchName,
+      upstreamName: null,
+      commitHash,
+      commitTimestampMs: null,
+    });
+  };
+  for (const worktree of worktrees) {
+    if (worktree.bare || !worktree.branch) continue;
+    add(worktree.branch, worktree.head);
+  }
+  if (currentBranchName) add(currentBranchName, null);
+  return merged.sort(compareLocalBranches);
+}
+
+export function branchCheckedOutInWorktree(
+  worktrees: readonly GitWorktreeInfo[],
+  branchName: string,
+): GitWorktreeInfo | null {
+  const name = branchName.trim();
+  if (!name) return null;
+  return worktrees.find((item) => !item.bare && item.branch === name) ?? null;
+}
+
+/** 无提交的分支不在 refs/heads 里，git switch 会说 invalid reference。它其实在别的 worktree。 */
+export function rewriteUnbornWorktreeBranchMiss(
+  issues: readonly GitBranchMutationIssue[],
+  worktrees: readonly GitWorktreeInfo[],
+  branchName: string,
+): GitBranchMutationIssue[] {
+  if (!issues.some((issue) => issue.code === "target-branch-not-found")) return [...issues];
+  const occupied = branchCheckedOutInWorktree(worktrees, branchName);
+  if (!occupied) return [...issues];
+  return [
+    {
+      code: "branch-in-other-worktree",
+      message: "Branch is already checked out in another worktree.",
+      detail: occupied.path,
+    },
+  ];
 }
 
 export function parseWorktreeList(stdout: string): GitWorktreeInfo[] {

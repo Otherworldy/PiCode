@@ -11,6 +11,7 @@ import { ResizableHandle, ResizablePanel } from "@/components/ui/resizable.js";
 export function AnimatedTerminalPanel({
   services,
   workspaceAbsPath,
+  executionCwd,
   workspaceIdentity,
   openWorkspaceKeys,
   isVisible,
@@ -23,6 +24,8 @@ export function AnimatedTerminalPanel({
 }: {
   services: IServiceAccessor;
   workspaceAbsPath: string;
+  /** Git worktree 目录。缺省时终端仍在主工作区。 */
+  executionCwd?: string;
   workspaceIdentity?: string;
   openWorkspaceKeys?: string[];
   isVisible: boolean;
@@ -38,6 +41,7 @@ export function AnimatedTerminalPanel({
   const isDragCollapsible = !isVisible;
   const isResizeDisabled = !isVisible;
   const workspaceKey = workspaceIdentity?.trim() || workspaceAbsPath;
+  const terminalCwd = executionCwd ?? workspaceAbsPath;
 
   const finishTerminalPanelResize = useCallback(() => {
     setIsTerminalPanelResizing(false);
@@ -135,8 +139,8 @@ export function AnimatedTerminalPanel({
               >
                 <Terminal
                   services={services}
-                  cwd={workspaceAbsPath}
-                  workspaceIdentity={workspaceIdentity}
+                  cwd={terminalCwd}
+                  workspaceIdentity={executionCwd ? undefined : workspaceIdentity}
                   openWorkspaceKeys={openWorkspaceKeys}
                   isVisible={isVisible}
                   isPanelResizing={isTerminalPanelResizing}

@@ -8,6 +8,7 @@ import {
   attachTaskListRowActivity,
   type TaskListMetaWithActivity,
 } from "@/v4/taskListRowActivity.js";
+import { bindSessionWorktree } from "@/v4/sessionWorktree.js";
 
 /** phase → 侧栏持久化状态（running/completed/error）；draft 无结果状态。 */
 function phaseToStatus(phase: SessionSummary["phase"]): ZCodeTaskMeta["status"] {
@@ -40,6 +41,7 @@ export function mapSessionSummaryToTaskMeta(
   summary: SessionSummary,
   options: MapSessionSummaryOptions,
 ): TaskListMetaWithActivity {
+  if (summary.workingDirectory) bindSessionWorktree(summary.sessionId, summary.workingDirectory);
   const previous = options.previous;
   const status = phaseToStatus(summary.phase);
   const summaryTitleIsCustom = summary.titleSource === "custom";

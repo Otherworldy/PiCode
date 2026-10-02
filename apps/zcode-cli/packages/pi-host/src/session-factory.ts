@@ -153,6 +153,24 @@ export async function mutatePiCatalog(input: {
 
 export { branchPiSessionFile };
 
+const BUILTIN_SEARCH_TOOLS = ["grep", "find", "ls"] as const;
+
+/** Pi 默认不激活这些工具。扩展卸掉后，只要定义还在就补上。 */
+export function withBuiltinSearchTools(
+  active: readonly string[],
+  available: readonly string[],
+): string[] {
+  const present = new Set(available);
+  const next = [...active];
+  const seen = new Set(active);
+  for (const name of BUILTIN_SEARCH_TOOLS) {
+    if (seen.has(name) || !present.has(name)) continue;
+    seen.add(name);
+    next.push(name);
+  }
+  return next;
+}
+
 export function createSdkSessionFactory(options: {
   delegate?: DelegateProvider;
   stream?: ZCodeModelStreamPort["stream"];
@@ -272,6 +290,16 @@ export function createSdkSessionFactory(options: {
     });
     live = created.session;
     const session = created.session;
+    if (!ssh) {
+      // Pi 默认不激活 grep/find/ls。fff 这类扩展按原名注册时它们才出现；
+      // 扩展卸掉后内置定义还在，这里把没被占用的补进激活列表。
+      const active = session.getActiveToolNames();
+      const next = withBuiltinSearchTools(
+        active,
+        ["grep", "find", "ls"].filter((name) => session.getToolDefinition(name)),
+      );
+      if (next.length !== active.length) session.setActiveToolsByName(next);
+    }
     if (ssh) {
       // createAgentSession 会 path.resolve。Windows 上 /root/app 变成 C:\root\app，
       // 系统提示和会话头都跟着错。建完再改回远端路径，并重建提示。

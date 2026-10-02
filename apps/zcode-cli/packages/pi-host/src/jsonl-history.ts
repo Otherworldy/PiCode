@@ -52,6 +52,11 @@ function messageText(content: unknown): string {
     .join("");
 }
 
+/** 单独一条斜杠命令是控制动作，不是用户要办的事。 */
+export function isControlCommandTitle(text: string): boolean {
+  return /^\/\S+$/u.test(text.trim());
+}
+
 function clip(text: string, max: number): string {
   const compact = text.trim().replace(/\s+/gu, " ");
   if (compact.length <= max) return compact;
@@ -153,7 +158,7 @@ export function readPiJsonl(content: string): {
       continue;
     }
     if (type === "session_info" && typeof entry.name === "string" && entry.name.trim()) {
-      namedTitle = clip(entry.name, 60);
+      if (!isControlCommandTitle(entry.name)) namedTitle = clip(entry.name, 60);
       continue;
     }
     if (type === "branch_summary" && typeof entry.summary === "string" && entry.summary.trim()) {
@@ -215,7 +220,7 @@ export function readPiJsonl(content: string): {
     }
     if (isUserRole(role)) {
       const text = messageText(message.content);
-      if (!firstUser && text.trim()) firstUser = text;
+      if (!firstUser && text.trim() && !isControlCommandTitle(text)) firstUser = text;
       endTurn();
       beginTurn();
       events.push({

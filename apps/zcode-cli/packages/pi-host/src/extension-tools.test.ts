@@ -5,7 +5,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { createSdkSessionFactory } from "./session-factory.js";
+import { createSdkSessionFactory, withBuiltinSearchTools } from "./session-factory.js";
+
+test("unloading an override extension still leaves builtin search tools", () => {
+  assert.deepEqual(withBuiltinSearchTools(["read", "bash", "edit", "write"], ["grep", "find", "ls"]), [
+    "read",
+    "bash",
+    "edit",
+    "write",
+    "grep",
+    "find",
+    "ls",
+  ]);
+  assert.deepEqual(withBuiltinSearchTools(["read", "grep"], ["grep"]), ["read", "grep"]);
+});
 
 test("extension tools are sent upstream with PiCode tools", async () => {
   const dir = await mkdtemp(join(tmpdir(), "zcode-ext-tools-"));
@@ -100,7 +113,7 @@ test("extension tools are sent upstream with PiCode tools", async () => {
     assert.ok(names.includes("probe_extension_tool"), names.join(","));
     assert.ok(names.includes("read"));
     assert.ok(names.includes("picode_subagent"));
-    assert.ok(!names.includes("grep") && !names.includes("find") && !names.includes("ls"));
+    assert.ok(names.includes("grep") && names.includes("find") && names.includes("ls"));
   } finally {
     server.close();
     await rm(dir, { recursive: true, force: true });

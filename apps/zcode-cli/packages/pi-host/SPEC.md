@@ -53,7 +53,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 - abort：turn `completedInterrupted`，运行中工具 `cancelled`。用户已经停止后，重试再发的 `agent_start` / `auto_retry_start` 不能把这次停止清掉，要再 abort。Stop 同时拆掉还在飞的代理请求，避免重试里的 CONNECT 不看 abort 信号。
 - `custom()` 无 adapter：降级 widget 文本，不卡循环。
 - 插件抛错：`extension_error` → notify，会话继续。
-- 本地会话不把 `read` / `bash` / `edit` / `write` / `grep` / `find` / `ls` / `powershell` 注册成 customTools，也不关 Pi 内置工具。扩展可以按原名替换，例如 pi-fff 的 override。权限走 `tool_call`，不换工具实现。SSH 工作区仍用远端实现替换 `read` / `bash` / `edit` / `write`，否则这些工具打到本机盘。
+- 本地会话不把 `read` / `bash` / `edit` / `write` / `grep` / `find` / `ls` / `powershell` 注册成 customTools，也不关 Pi 内置工具。Pi 默认只激活 `read` / `bash` / `edit` / `write`；Host 在本地会话里补上已注册的 `grep` / `find` / `ls`。扩展仍可按原名替换，例如 pi-fff。卸掉替换扩展后，内置实现还在。权限走 `tool_call`，不换工具实现。SSH 工作区仍用远端实现替换 `read` / `bash` / `edit` / `write`，不把本机的 `grep` / `find` / `ls` 打开，否则这些工具打到本机盘。
 - PiCode 不再注册 `TodoRead` / `TodoWrite`，也不再提醒模型去调用它们。旧会话里的 todo 卡片和进程投影仍按工具名渲染。
 - 桌面和 CLI 同一份 `zcode.cjs` 把 Pi 打进 CJS。入口先设 `globalThis.PI_BUNDLED_NODE`，Pi 才用内嵌模块表加载 extension，而不是按 bundle 路径去找 `../dist/babel.cjs`。`import.meta.url` 不能改写成 `module.filename`：extension loader 同一个函数里有 `const module`，那个标识符在死区里，extension 会在 import 之前就失败。文件名改记在 `globalThis.__zcodeBundleFilename`。
 - 插件后台任务打到已失效的 extension ctx 时，app-server 只记一行并继续。这个拒绝不能把进程打退出。
@@ -63,9 +63,9 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 保留：`createSession`、`createSelectionSideSession`、`sendText`、`stop`、`continueAfterError`、`compact`、`forkAssistant`、`editUserQuery`、`retryTurn`、队列五件套、`setFollowupMode`、`switchModelConfig`、`resolveInteraction`、`snoozeInteractionAutoResolution`、`cancelBackgroundWork`、`renameSession`、`deleteSession`、`setAssistantFeedback`、`applyFileRewind`、`readSessionTree`、`navigateSessionTree`、`labelSessionEntry`。
 
-消息上不再提供 `forkAssistant`。另走一条路只用 `navigateSessionTree`，仍在同一份会话里。
+消息上不再提供 `forkAssistant`。从此处继续走 `navigateSessionTree`，结果是左侧列表里的新会话，不是同一份 jsonl 里换叶子。标题旁不再切分支。
 
-`navigateSessionTree` 是 Pi `/tree`，不是分叉，也不是换会话。叶子仍在同一份 jsonl。助手节点停在该条；用户节点回到父节点，原文只在输入框为空时写回，不自动发送。界面不再弹会话树：标题旁只列分支末梢，点一条就切过去，不总结。选中哪条都不改列表顺序。被丢下的路径不删。命令仍可让 Pi `navigateTree` 总结，成功后追加 `branch_summary`，时间线用 `branchSummary` marker。导航后按内存里的 `getLeafId()` / `buildContextEntries()` 重放，不按文件最后一行，也不再用行号裁切。不总结且不带 `label` 时叶子只在内存里移动；带 `label` 时 Pi 会追加一条 label，重开仍停在该分支。切换和从此处继续不带 `label`，否则每切一次就多一条书签，列表里会冒出名叫 label 的假分支。分支入口是消息上的右键，不挂在正文下面。用户、助手和工具行都可以。工具行带的是 `toolCallId`：先对工具结果，没有结果再对上包含这次调用的助手消息。右键菜单或自定义提示词对话框开着时，这条消息用选中底色标出。改名只走 `labelSessionEntry`。列表忽略 label、压缩和工具这些书签，以及非活动且无正文的未命名死末梢（如重试或中途停止丢下的废弃分支），分支名用分叉后第一条真正的消息。压缩进行中拒绝。正在生成则先停掉当前回复。总结进行中 Stop 只调 `abortBranchSummary()`，叶子不动。不回滚工作区文件。`editUserQuery` 仍走原来的 `navigateTree` 裁切，不进这条命令。
+`navigateSessionTree` 先按当前叶子 `createBranchedSession` 复制出新文件，再只在新会话上走 Pi `navigateTree`。原会话叶子不动。不总结、总结、自定义提示词仍传给这次导航。助手节点停在该条；用户节点回到父节点，原文只在新会话输入框为空时写回，不自动发送。成功后回执带新 `sessionId`，界面切过去。总结成功后在新文件追加 `branch_summary`。导航后按内存里的 `getLeafId()` / `buildContextEntries()` 重放。不带 `label`。入口是消息上的右键。用户、助手和工具行都可以。工具行带的是 `toolCallId`。右键菜单或自定义提示词对话框开着时，这条消息用选中底色标出。压缩进行中拒绝。正在生成不打断原会话。总结进行中 Stop 打到原会话，转给新会话的 `abortBranchSummary()`，不切过去，新文件删掉。不回滚工作区文件。`editUserQuery` 仍走原来的 `navigateTree` 裁切，不进这条命令。
 
 `readSessionTree` 把 `getTree()` 压成平铺节点，放在命令回执里，不进每条快照。压平用循环：一条几万层的父链用递归，打开会话时会栈溢出。`labelSessionEntry` 写 Pi 的 label，再回一份树。
 
@@ -140,7 +140,7 @@ SDK 来源是 `AppSettings.piSdkSource`。缺省 `builtin`，用打进 `zcode.cj
 
 插件自己的设置不进 `settings.json`。能改的只有已经存在的 `~/.pi/agent/extensions/<名字>/config.json`。`list` 顺带这些文件里的顶层开关、数字和文本；`writeConfig` 只覆盖同名且同类型的顶层项，嵌套对象、数组和没出现过的键保持原样。不新建配置文件，也不执行插件代码去猜它的设置项。设置页不把这些表单铺在列表下面：能对上配置文件的插件，行内一个「设置」按钮，弹窗里改。改完同样从下一次新建会话生效。
 
-技能设置读写 Pi 会加载的目录：用户 `~/.pi/agent/skills`，工作区 `<cwd>/.pi/skills`，仍列出 Pi 同样会读的 `.agents/skills`。斜杠菜单不另扫一套：已打开的会话用 Pi 已经加载的技能（含用户目录、沿 git 根的 `.agents/skills`、已启用的包技能）；没有会话时走 Pi 的包解析，不加载扩展。命令区只留 GUI 能用的：`/compact`、提示词命令，以及扩展注册的命令。扩展命令单独一组，不和原生命令混在一起。终端专属内置命令（`/copy`、`/new`、`/resume`、设置、模型选择、退出等）不展示，打出来也不发给模型。Pi 把技能注册成 `skill:` 命令；GUI 不收录，技能仍在原来的技能区。`/side` 仍是 GUI 自己的。计划模式只跟已启用的 `@plannotator/pi-extension`。没装或没启用时，输入框不显示计划开关，`/plan` 直接拒绝。新建任务里的开关和空 `/plan` 只记在草稿上，不创建会话。真正发出第一条消息时才先发送 `/plannotator-plan-mode`。已有会话的开关直接发送该命令。带正文的 `/plan` 先进入计划模式，再把正文发给模型。PiCode 自己的 `planEnabled` 不再发给 Host。命令设置读写 Pi 提示词目录：用户 `~/.pi/agent/prompts`，工作区 `<cwd>/.pi/prompts`。钩子不进入 Pi 会话，设置页不再单独列出。
+技能设置读写 Pi 会加载的目录：用户 `~/.pi/agent/skills`，工作区 `<cwd>/.pi/skills`，仍列出 Pi 同样会读的 `.agents/skills`。斜杠菜单不另扫一套：已打开的会话用 Pi 已经加载的技能（含用户目录、沿 git 根的 `.agents/skills`、已启用的包技能）；没有会话时走 Pi 的包解析，不加载扩展。命令区只留 GUI 能用的：`/compact`、提示词命令，以及扩展注册的命令。扩展命令单独一组，不和原生命令混在一起。终端专属内置命令（`/copy`、`/new`、`/resume`、设置、模型选择、退出等）不展示，打出来也不发给模型。Pi 把技能注册成 `skill:` 命令；GUI 不收录，技能仍在原来的技能区。`/side` 仍是 GUI 自己的。计划模式只跟已启用的 `@plannotator/pi-extension`。没装或没启用时，输入框不显示计划开关，`/plan` 直接拒绝。新建任务里的开关和空 `/plan` 只记在草稿上，不创建会话。真正发出第一条消息时才先发送 `/plannotator-plan-mode`。这条命令和其他单独的斜杠命令不当会话标题，标题仍取之后第一条真正的用户消息。已有会话的开关直接发送该命令。带正文的 `/plan` 先进入计划模式，再把正文发给模型。PiCode 自己的 `planEnabled` 不再发给 Host。命令设置读写 Pi 提示词目录：用户 `~/.pi/agent/prompts`，工作区 `<cwd>/.pi/prompts`。钩子不进入 Pi 会话，设置页不再单独列出。
 
 内置浏览器是宿主能力，不是可安装插件。会话创建时直接连上打包好的 `node_repl`，并把 `control-browser` 技能交给 Pi。工具名仍是 `mcp__node_repl__js`。direct 调用带上当前会话 id，browser broker 才能回到 `BrowserControlPort`，再调 Electron `interaction/browserExecute`。不写进用户 MCP 配置。开关在 `~/.PiCode/v2/setting.json` 的 `browserHostEnabled`，缺省开启，只影响之后新建的会话。子会话不带这个工具。
 

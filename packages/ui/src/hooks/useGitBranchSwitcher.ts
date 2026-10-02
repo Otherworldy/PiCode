@@ -1,3 +1,4 @@
+/* eslint-disable max-lines */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   GitBranchMutationResult,
@@ -31,7 +32,8 @@ interface UseGitBranchSwitcherOptions {
   currentBranchName: string | null;
   headRefType: GitRepositorySummary["headRefType"];
   onRefreshGit: () => void;
-  onOpenWorktree?: (worktreePath: string) => void;
+  /** 把新 worktree 绑到当前项目的草稿会话，不新开左侧项目。 */
+  onBindDraftWorktree?: (worktreePath: string) => void;
 }
 
 export function useGitBranchSwitcher({
@@ -39,7 +41,7 @@ export function useGitBranchSwitcher({
   currentBranchName,
   headRefType,
   onRefreshGit,
-  onOpenWorktree,
+  onBindDraftWorktree,
 }: UseGitBranchSwitcherOptions) {
   const { gitService } = useServices();
   const { intl, locale } = useZCodeIntl();
@@ -248,13 +250,33 @@ export function useGitBranchSwitcher({
 
   const switchBranch = useCallback(
     async (targetBranchName: string) => {
+      const branchName = targetBranchName.trim();
       setOpen(false);
+      if (!branchName || branchName === currentBranchName) return;
       setMutationPending(true);
 
       try {
+        // 无提交的分支只挂在 worktree HEAD 上，git switch 会说它不存在。
+        // 草稿改绑到那个目录，主工作区 HEAD 不动。
+        if (onBindDraftWorktree) {
+          const occupied = (await gitService.listWorktrees({ workspacePath })).find(
+            (item) => !item.bare && item.branch === branchName,
+          );
+          if (occupied) {
+            onBindDraftWorktree(occupied.path);
+            onRefreshGit();
+            toast(
+              intl.formatMessage(
+                { id: "git.branchSwitcher.toast.switchSuccess" },
+                { branchName },
+              ),
+            );
+            return;
+          }
+        }
         const result = await gitService.switchBranch({
           workspacePath,
-          targetBranchName,
+          targetBranchName: branchName,
         });
         await handleMutationResult(result, "切换分支");
       } catch (error: unknown) {
@@ -271,7 +293,15 @@ export function useGitBranchSwitcher({
         setMutationPending(false);
       }
     },
-    [gitService, handleMutationResult, intl, workspacePath],
+    [
+      currentBranchName,
+      gitService,
+      handleMutationResult,
+      intl,
+      onBindDraftWorktree,
+      onRefreshGit,
+      workspacePath,
+    ],
   );
 
   const createBranchAndSwitch = useCallback(async () => {
@@ -301,7 +331,7 @@ export function useGitBranchSwitcher({
               { branchName },
             ),
           );
-          onOpenWorktree?.(result.worktreePath);
+          onBindDraftWorktree?.(result.worktreePath);
           return;
         }
         if (result.issues.length > 0) {
@@ -350,7 +380,7 @@ export function useGitBranchSwitcher({
     handleMutationResult,
     inWorktree,
     intl,
-    onOpenWorktree,
+    onBindDraftWorktree,
     onRefreshGit,
     resetSwitchAssistState,
     workspacePath,

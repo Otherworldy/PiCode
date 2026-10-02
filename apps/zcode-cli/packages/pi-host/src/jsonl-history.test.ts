@@ -36,6 +36,16 @@ test("summarize skips header-only jsonl", () => {
   assert.equal(parsed.events.length, 0);
 });
 
+test("summarize skips a bare slash command and a command session name", () => {
+  const content = [
+    '{"type":"session","id":"s1","timestamp":"2026-01-02T03:04:05.000Z","cwd":"C:\\\\work"}',
+    '{"type":"session_info","name":"/plannotator-plan-mode"}',
+    '{"type":"message","id":"u0","timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"user","content":[{"type":"text","text":"/plannotator-plan-mode"}]}}',
+    '{"type":"message","id":"u1","timestamp":"2026-01-02T03:04:07.000Z","message":{"role":"user","content":[{"type":"text","text":"修登录"}]}}',
+  ].join("\n");
+  assert.equal(readPiJsonl(content).summary?.title, "修登录");
+});
+
 test("summarize uses first user text and last assistant preview", () => {
   const { summary } = readPiJsonl(sample);
   assert.ok(summary);

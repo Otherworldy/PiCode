@@ -19,6 +19,8 @@ export class FakePiSession implements PiSessionPort {
   editorText?: string;
   contextEventsList: PiHostEvent[] = [];
   isCompacting = false;
+  tree: PiSessionTreeNode[] = [];
+  branchFrom?: (entryId: string) => { sessionId: string; sessionFile: string };
 
   constructor(sessionId: string, sessionFile?: string) {
     this.sessionId = sessionId;
@@ -73,7 +75,7 @@ export class FakePiSession implements PiSessionPort {
   }
 
   readTree(): PiSessionTreeNode[] {
-    return [];
+    return this.tree;
   }
 
   contextEvents(): PiHostEvent[] {

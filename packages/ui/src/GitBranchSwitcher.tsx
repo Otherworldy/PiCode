@@ -33,7 +33,7 @@ interface GitBranchSwitcherProps {
   gitSummary: GitRepositorySummary;
   dirtyFileCount: number;
   onRefreshGit: () => void;
-  onOpenWorktree?: (worktreePath: string) => void;
+  onBindDraftWorktree?: (worktreePath: string) => void;
   className?: string;
   triggerClassName?: string;
   popoverClassName?: string;
@@ -49,7 +49,7 @@ export function GitBranchSwitcher({
   gitSummary,
   dirtyFileCount,
   onRefreshGit,
-  onOpenWorktree,
+  onBindDraftWorktree,
   className,
   triggerClassName,
   popoverClassName,
@@ -90,7 +90,7 @@ export function GitBranchSwitcher({
     currentBranchName: gitSummary.branchName,
     headRefType: gitSummary.headRefType,
     onRefreshGit,
-    onOpenWorktree,
+    onBindDraftWorktree,
   });
 
   const isVisible = gitSummary.isGitAvailable && gitSummary.isRepository;

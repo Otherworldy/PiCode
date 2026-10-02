@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- workspace shell 当前集中编排 sidebar、chat、terminal 和 browser pane 的布局联动，先保持单文件收口，避免为满足行数限制打散关键布局状态。*/
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
@@ -36,6 +36,12 @@ import { DesktopWindowFrame } from "@/DesktopWindowFrame.js";
 import { WorkspacePluginPreview } from "@/WorkspacePluginPreview.js";
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { GitBranchSwitcher } from "@/GitBranchSwitcher.js";
+import {
+  bindDraftWorktree,
+  isWorkspaceWorktree,
+  subscribeSessionWorktrees,
+  workingDirectoryFor,
+} from "@/v4/sessionWorktree.js";
 import { ScopedErrorBoundary } from "@/ErrorBoundary.js";
 
 import { AUTOMATIONS_TOAST_ANCHOR_ID, AutomationsSection } from "@/settings/AutomationsSection.js";
@@ -357,6 +363,15 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   );
   const [isSidebarFileTreeOpen, setIsSidebarFileTreeOpen] = useState(false);
   const workspaceKey = workspaceIdentity?.trim() || workspaceAbsPath;
+  const sessionWorkingDirectory = useSyncExternalStore(
+    subscribeSessionWorktrees,
+    () => workingDirectoryFor(workspaceKey, activeTaskId),
+    () => null,
+  );
+  const executionCwd =
+    sessionWorkingDirectory && isWorkspaceWorktree(workspaceAbsPath, sessionWorkingDirectory)
+      ? sessionWorkingDirectory
+      : undefined;
   const screenshotSurfaceRequest = useBrowserScreenshotSurfaceRequest(sidePaneState?.tabs ?? []);
   const screenshotSurfaceTab = screenshotSurfaceRequest
     ? findScreenshotSurfaceTabForRender(sidePaneState?.tabs ?? [], screenshotSurfaceRequest)
@@ -1196,10 +1211,13 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
           />
         ) : !isOfficeMode && activeWorkspacePurpose === "project" ? (
           <GitBranchSwitcher
-            workspacePath={workspaceAbsPath}
+            workspacePath={executionCwd ?? workspaceAbsPath}
             gitSummary={gitState.summary}
             dirtyFileCount={gitDirtyFileCount}
             onRefreshGit={handleRefreshGit}
+            onBindDraftWorktree={(worktreePath) => {
+              bindDraftWorktree(workspaceIdentity?.trim() || workspaceAbsPath, worktreePath);
+            }}
             className="px-0 pt-0"
             popoverClassName="w-72"
             branchListClassName="max-h-48"
@@ -1219,6 +1237,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
       allowRemoteWorkspace,
       activeWorkspacePurpose,
       gitDirtyFileCount,
+      executionCwd,
       gitState.summary,
       handleRefreshGit,
       handleSelectConversationWorkspace,
@@ -1884,6 +1903,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                     )}
                     services={services}
                     workspaceAbsPath={workspaceAbsPath}
+                    executionCwd={executionCwd}
                     workspaceIdentity={workspaceIdentity}
                     openWorkspaceKeys={openWorkspaceKeys}
                     isVisible={isTerminalVisible}

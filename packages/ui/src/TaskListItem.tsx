@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- task item 同时承载默认列表和 timeline 两行布局的共享交互，先保持动作链路集中避免归档/置顶回归。 */
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   Archive,
   Clock,
@@ -17,6 +17,11 @@ import { Button } from "@/components/ui/button.js";
 import { cn } from "@/components/lib/utils.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { getPathLeaf } from "@/lib/path.js";
+import {
+  sessionWorktreePath,
+  subscribeSessionWorktrees,
+  worktreeBranchLabel,
+} from "@/v4/sessionWorktree.js";
 import { formatTaskTitleWithChanges, getTaskChangeSummary } from "@/lib/taskChangeSummary.js";
 import {
   deriveTaskLeadingIndicator,
@@ -247,6 +252,12 @@ export const MemoTaskItem = memo(function TaskListItem({
     intl.formatMessage({
       id: task.forkedFromTaskId ? "taskList.forkedUntitled" : "taskList.untitled",
     });
+  const worktreePath = useSyncExternalStore(
+    subscribeSessionWorktrees,
+    () => sessionWorktreePath(task.taskId),
+    () => null,
+  );
+  const worktreeLabel = worktreePath ? worktreeBranchLabel(worktreePath) : null;
   const handleSelect = useCallback(() => {
     runUserAction({
       input: { featureId: "task.lifecycle", action: "open", trigger: "button" },
@@ -627,6 +638,11 @@ export const MemoTaskItem = memo(function TaskListItem({
                       grouped task 已改为右侧渐隐。这里统一 task 列表标题溢出策略，避免同一侧栏里出现两种截断语义。 */}
               {taskTitle}
             </TaskTitleOverflowText>
+            {worktreeLabel ? (
+              <span className="shrink-0 rounded bg-muted px-1.5 text-ui-xs text-muted-foreground">
+                {worktreeLabel}
+              </span>
+            ) : null}
             {task.pendingInteraction ? (
               <TaskInteractionBadge
                 interaction={task.pendingInteraction}
@@ -719,6 +735,11 @@ export const MemoTaskItem = memo(function TaskListItem({
                         使用 mask 渐隐而不是省略号，和 grouped task row 保持一致。 */}
                 {taskTitle}
               </TaskTitleOverflowText>
+              {worktreeLabel ? (
+                <span className="shrink-0 rounded bg-muted px-1.5 text-ui-xs text-muted-foreground">
+                  {worktreeLabel}
+                </span>
+              ) : null}
               {changeSummaryNode ? (
                 <span
                   className={cn(

@@ -16,6 +16,7 @@ import { summarizeTurnFileChanges } from "./file-rewind.js";
 import { PI_PROCESS_WORK_PREFIX } from "./pi-process-bridge.js";
 import { bashDisplay, editDisplay, mapPiToolName, toolResultText } from "./presentation.js";
 import { createEmptySnapshot, emptyAvailability } from "./snapshot.js";
+import { isControlCommandTitle } from "./jsonl-history.js";
 import type { PiAssistantDelta, PiHostEvent } from "./types.js";
 
 function messageText(content: unknown): string {
@@ -301,6 +302,7 @@ export class PiToV4Projector {
   }
 
   setTitle(title: string, titleSource: ConversationSnapshot["meta"]["titleSource"] = "custom"): ConversationDelta[] {
+    if (titleSource !== "custom" && isControlCommandTitle(title)) return [];
     return this.applyState({ meta: { title, titleSource } });
   }
 
@@ -550,9 +552,15 @@ export class PiToV4Projector {
     };
     if (messageId) row.entityId = messageId;
     const deltas: ConversationDelta[] = [{ op: "row.appended", row }];
-    const title = text.trim();
-    if (title && (this.snapshot.meta.titleSource === "default" || !this.snapshot.meta.title)) {
-      const compact = title.replace(/\s+/gu, " ");
+    const compact = text.trim().replace(/\s+/gu, " ");
+    const current = this.snapshot.meta;
+    const replaceCommandTitle =
+      current.titleSource === "generated" && isControlCommandTitle(current.title);
+    if (
+      compact &&
+      !isControlCommandTitle(compact) &&
+      (current.titleSource === "default" || !current.title || replaceCommandTitle)
+    ) {
       deltas.push({
         op: "state.updated",
         patch: {

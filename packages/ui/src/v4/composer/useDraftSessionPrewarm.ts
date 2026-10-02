@@ -44,8 +44,17 @@ function startDraftSessionPrewarm(params: {
   onSettled?: () => void;
   /** 预热会话初始 config（全局「上次选择」，同步解析）；让投影首帧即全局、不闪。 */
   resolveInitialConfig?: () => Partial<SessionConfigState> | undefined;
+  /** 父仓库下的 worktree 副本。缺省时 cwd 仍是 workspace。 */
+  resolveWorkingDirectory?: () => string | undefined;
 }): DraftPrewarmController {
-  const { workspaceKey, dispatchCommand, onReady, onSettled, resolveInitialConfig } = params;
+  const {
+    workspaceKey,
+    dispatchCommand,
+    onReady,
+    onSettled,
+    resolveInitialConfig,
+    resolveWorkingDirectory,
+  } = params;
   let disposed = false;
   let promotionState: "draft" | "pending" | "promoted" | "discarded" = "draft";
   let createdSessionId: string | null = null;
@@ -73,6 +82,8 @@ function startDraftSessionPrewarm(params: {
       // 预热会话首帧即用全局模型（CLI 归并 createSession.config），不闪 workspace 缺省。
       createPayload.config = initialConfig;
     }
+    const workingDirectory = resolveWorkingDirectory?.();
+    if (workingDirectory) createPayload.workingDirectory = workingDirectory;
     return createPayload;
   };
   const dispatchCreateSession = () => {
@@ -201,23 +212,28 @@ class DraftSessionPrewarmCoordinator {
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private dispatchCommand: DispatchCommand;
   private resolveInitialConfig: (() => Partial<SessionConfigState> | undefined) | undefined;
+  private resolveWorkingDirectory: (() => string | undefined) | undefined;
 
   constructor(
     private readonly workspaceKey: string,
     dispatchCommand: DispatchCommand,
     resolveInitialConfig: (() => Partial<SessionConfigState> | undefined) | undefined,
+    resolveWorkingDirectory: (() => string | undefined) | undefined,
     private readonly onEmpty: () => void,
   ) {
     this.dispatchCommand = dispatchCommand;
     this.resolveInitialConfig = resolveInitialConfig;
+    this.resolveWorkingDirectory = resolveWorkingDirectory;
   }
 
   update(
     dispatchCommand: DispatchCommand,
     resolveInitialConfig: (() => Partial<SessionConfigState> | undefined) | undefined,
+    resolveWorkingDirectory: (() => string | undefined) | undefined,
   ): void {
     this.dispatchCommand = dispatchCommand;
     this.resolveInitialConfig = resolveInitialConfig;
+    this.resolveWorkingDirectory = resolveWorkingDirectory;
   }
 
   acquire(params: {
@@ -323,6 +339,7 @@ class DraftSessionPrewarmCoordinator {
       dispatchCommand: (type, payload, targetSessionId) =>
         this.dispatchCommand(type, payload, targetSessionId),
       resolveInitialConfig: () => this.resolveInitialConfig?.(),
+      resolveWorkingDirectory: () => this.resolveWorkingDirectory?.(),
       onReady: (sessionId) => {
         if (this.current !== current || current.retiring) {
           return;
@@ -431,6 +448,7 @@ function getDraftSessionPrewarmCoordinator(params: {
   transportIdentity: unknown;
   dispatchCommand: DispatchCommand;
   resolveInitialConfig: (() => Partial<SessionConfigState> | undefined) | undefined;
+  resolveWorkingDirectory: (() => string | undefined) | undefined;
 }): DraftSessionPrewarmCoordinator {
   let transportCoordinators = draftPrewarmCoordinatorsByTransport.get(params.transportIdentity);
   if (!transportCoordinators) {
@@ -444,6 +462,7 @@ function getDraftSessionPrewarmCoordinator(params: {
       params.workspaceKey,
       params.dispatchCommand,
       params.resolveInitialConfig,
+      params.resolveWorkingDirectory,
       () => {
         if (transportCoordinators?.get(ownerKey) !== coordinator) {
           return;
@@ -472,6 +491,7 @@ export function useDraftSessionPrewarm(params: {
   dispatchCommand: DispatchCommand;
   /** 预热会话初始 config（全局「上次选择」，同步解析）；让投影首帧即全局、不闪。 */
   resolveInitialConfig?: () => Partial<SessionConfigState> | undefined;
+  resolveWorkingDirectory?: () => string | undefined;
 }): DraftSessionPrewarm {
   const {
     enabled,
@@ -481,6 +501,7 @@ export function useDraftSessionPrewarm(params: {
     invalidationVersion = 0,
     dispatchCommand,
     resolveInitialConfig,
+    resolveWorkingDirectory,
   } = params;
   // workspace/pane/transport 共同定义逻辑 owner：同 owner 重挂复用 single-flight，transport
   // 换代仍生成新 coordinator，确保旧 session 的清理不会误走新 transport。
@@ -496,12 +517,13 @@ export function useDraftSessionPrewarm(params: {
         transportIdentity,
         dispatchCommand,
         resolveInitialConfig,
+        resolveWorkingDirectory,
       }),
     [owner],
   );
   useLayoutEffect(() => {
-    coordinator.update(dispatchCommand, resolveInitialConfig);
-  }, [coordinator, dispatchCommand, resolveInitialConfig]);
+    coordinator.update(dispatchCommand, resolveInitialConfig, resolveWorkingDirectory);
+  }, [coordinator, dispatchCommand, resolveInitialConfig, resolveWorkingDirectory]);
   const generation = useMemo(() => ({ owner }), [enabled, invalidationVersion, owner]);
   const [ready, setReady] = useState<{
     generation: typeof generation;

@@ -30,6 +30,22 @@ test("maps builtin pi tool names", () => {
   assert.equal(mapPiToolName(undefined), "Tool");
 });
 
+test("a bare slash command does not name the session", () => {
+  const projector = new PiToV4Projector("s1", "e1");
+  projector.apply({
+    type: "message_start",
+    message: { role: "user", content: "/plannotator-plan-mode", id: "u0" },
+  });
+  assert.equal(projector.getSnapshot().meta.title, "");
+  projector.apply({
+    type: "message_start",
+    message: { role: "user", content: "修登录", id: "u1" },
+  });
+  assert.equal(projector.getSnapshot().meta.title, "修登录");
+  assert.equal(projector.setTitle("/plannotator-plan-mode", "generated").length, 0);
+  assert.equal(projector.getSnapshot().meta.title, "修登录");
+});
+
 test("first user message names the session and reload replaces rows", () => {
   const projector = new PiToV4Projector("s1", "e1");
   projector.apply({ type: "agent_start" });
@@ -847,6 +863,66 @@ test("resumeAt replays the live leaf and stop only cancels the summary", async (
     true,
   );
   assert.equal(parent.projector.getSnapshot().control.canStop, false);
+  await rm(root, { recursive: true, force: true });
+});
+
+test("resumeIntoNewSession keeps the parent and cancels on its stop", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const fakes = new Map<string, FakePiSession>();
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async (input) => {
+      const fake = new FakePiSession(input.sessionId, input.sessionFile);
+      if (fakes.size === 0) {
+        fake.tree = [
+          {
+            id: "leaf",
+            parentId: null,
+            role: "assistant",
+            preview: "yo",
+            depth: 0,
+            active: true,
+            leaf: true,
+          },
+        ];
+        fake.branchFrom = () => ({
+          sessionId: "child-1",
+          sessionFile: join(root, "child-1.jsonl"),
+        });
+      }
+      if (input.sessionId === "child-1" && !fakes.has("child-1")) fake.holdNavigate = true;
+      fakes.set(input.sessionId, fake);
+      return fake;
+    },
+  });
+  const parent = await registry.create({ workspacePath: root });
+  const pending = registry.resumeIntoNewSession(parent.sessionId, {
+    entryId: "u1",
+    role: "user",
+    text: "later",
+    summarize: true,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(parent.projector.getSnapshot().control.canStop, true);
+  assert.equal(fakes.get(parent.sessionId)?.navigatedTo.length, 0);
+  await parent.abort();
+  const cancelled = await pending;
+  assert.equal(cancelled.cancelled, true);
+  assert.equal(registry.get("child-1"), undefined);
+  assert.equal(fakes.get("child-1")?.summaryAborted, true);
+  assert.equal(parent.projector.getSnapshot().control.canStop, false);
+
+  const again = await registry.resumeIntoNewSession(parent.sessionId, {
+    entryId: "u1",
+    summarize: false,
+  });
+  assert.equal(again.cancelled, false);
+  if (again.cancelled) throw new Error("expected a new session");
+  assert.equal(again.sessionId, "child-1");
+  assert.equal(again.editorText, undefined);
+  assert.deepEqual(fakes.get("child-1")?.navigatedTo, ["u1"]);
+  assert.equal(fakes.get(parent.sessionId)?.navigatedTo.length, 0);
   await rm(root, { recursive: true, force: true });
 });
 

@@ -52,6 +52,8 @@ export const sessionSummarySchema = z.object({
   // ≤120 字符。
   lastAssistantPreview: z.string().optional(),
   createdAt: timestampSchema,
+  // 会话执行目录。缺省 = workspace。worktree 会话指向 .worktrees/ 下的副本，列表仍挂在父仓库。
+  workingDirectory: z.string().optional(),
 });
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 

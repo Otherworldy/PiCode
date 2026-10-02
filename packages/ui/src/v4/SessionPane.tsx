@@ -39,7 +39,6 @@ import type {
   ConversationSnapshot,
   ConversationRowTarget,
   SessionErrorInfo,
-  SessionTreeNodeView,
   SessionModelTransition,
   V4ConversationFileChangesResult,
 } from "@zcode/shared/zcode-protocol-v4";
@@ -100,6 +99,12 @@ import {
   type ComposerSubmissionConfig,
 } from "@/v4/composer/composerSubmissionConfig.js";
 import { useDraftSessionPrewarm } from "@/v4/composer/useDraftSessionPrewarm.js";
+import {
+  bindSessionWorktree,
+  draftWorktree,
+  draftWorktreeEpoch,
+  subscribeSessionWorktrees,
+} from "@/v4/sessionWorktree.js";
 import { projectSessionConfigToTaskConfigOptions } from "@/v4/composer/sessionConfigTaskCache.js";
 import { useDraftRuntimeRebuildGate } from "@/v4/composer/useDraftRuntimeRebuildGate.js";
 import { useDraftModelReadinessGate } from "@/v4/composer/useDraftModelReadinessGate.js";
@@ -127,10 +132,6 @@ import { shouldIgnoreEscapeForStopGeneration } from "@/v4/composer/escapeStop.js
 import { ConversationDraftEmptyState } from "@/v4/ConversationDraftEmptyState.js";
 import { ConversationDraftSuggestedPromptsContainer } from "@/v4/ConversationDraftSuggestedPromptsContainer.js";
 import { ConversationHeader, type PaneWorkspaceBadge } from "@/v4/ConversationHeader.js";
-import {
-  clearSessionBranchActions,
-  setSessionBranchActions,
-} from "@/v4/sessionBranchStore.js";
 import { ConversationQueuePanel } from "@/v4/ConversationQueuePanel.js";
 import { projectPendingGuideQueue } from "@/v4/pendingGuideProjection.js";
 import { ConversationQuotaBanner } from "@/v4/ConversationQuotaBanner.js";
@@ -1105,8 +1106,6 @@ export function SessionPane({
   queueEditOperationRef.current = queueEditOperation;
   const [composerRestoreRequest, setComposerRestoreRequest] =
     useState<ComposerRestoreRequest | null>(null);
-  const [sessionTreeNodes, setSessionTreeNodes] = useState<SessionTreeNodeView[]>([]);
-  const [sessionTreeBusy, setSessionTreeBusy] = useState(false);
   const summarizingTreeRef = useRef(false);
   const resumeHereRef = useRef<
     (target: {
@@ -1356,6 +1355,8 @@ export function SessionPane({
       // 因而把数小时闲置时间误记为 total/react。创建边界先标记本 pane 的首次绑定；离开后
       // 再次显式打开同一 Session 时标记会清除，恢复正常的已有 Session 打开测量。
       newlyCreatedSessionIdRef.current = createdSessionId;
+      const boundWorktree = draftWorktree(workspaceKey);
+      if (boundWorktree) bindSessionWorktree(createdSessionId, boundWorktree);
       promoteComposerDraft(createdSessionId);
       // 只有 draft create/promote 的 accepted 边界能继承 grouped placement。
       // fork 和普通任务导航仍复用 onSessionCreated，但不会污染已有 task 的分组排序。
@@ -2321,11 +2322,17 @@ export function SessionPane({
   // ── 草稿态 v4 draft session 预热（m5）──
   // pane 未绑定会话时后台建 phase=draft 会话作预热载体：配置写 CAS 直达、首发复用。
   // 对外绑定语义不变（shell activeTaskId 仍 null），预热会话只是 pane 内部 effective 订阅目标。
+  const worktreeEpoch = useSyncExternalStore(
+    subscribeSessionWorktrees,
+    () => draftWorktreeEpoch(workspaceKey),
+    () => 0,
+  );
   const { binding: prewarmBinding } = useDraftSessionPrewarm({
     enabled: sessionId === null && draftAgentStartupAllowed,
     workspaceKey,
     paneId,
-    invalidationVersion: draftRuntimeInvalidationVersion,
+    invalidationVersion: draftRuntimeInvalidationVersion + worktreeEpoch,
+    resolveWorkingDirectory: () => draftWorktree(workspaceKey) ?? undefined,
     // SessionDataLayer 来自 workspace connection registry：同 transport generation 的 pane/remount
     // 共享 identity；provider wrapper 重建产生的新 sendCommand 函数不能误判为 transport 换代。
     transportIdentity: layer,
@@ -2791,7 +2798,13 @@ export function SessionPane({
         );
         const createAck = await dispatchSubmissionCommand(
           "createSession",
-          { workspaceId: workspaceKey, ...draftConfigPayload },
+          {
+            workspaceId: workspaceKey,
+            ...draftConfigPayload,
+            ...(draftWorktree(workspaceKey)
+              ? { workingDirectory: draftWorktree(workspaceKey) }
+              : {}),
+          },
           null,
         );
         if (createAck.status !== "accepted") {
@@ -2878,6 +2891,9 @@ export function SessionPane({
               workspaceId: workspaceKey,
               firstInput: { text: effectiveText, ...submission },
               ...draftConfigPayload,
+              ...(draftWorktree(workspaceKey)
+                ? { workingDirectory: draftWorktree(workspaceKey) }
+                : {}),
             },
             null,
             undefined,
@@ -2906,7 +2922,13 @@ export function SessionPane({
         // 不做任何附件上传，也不会让非 ready 附件绕过 composer 门禁。
         const createAck = await dispatchSubmissionCommand(
           "createSession",
-          { workspaceId: workspaceKey, ...draftConfigPayload },
+          {
+            workspaceId: workspaceKey,
+            ...draftConfigPayload,
+            ...(draftWorktree(workspaceKey)
+              ? { workingDirectory: draftWorktree(workspaceKey) }
+              : {}),
+          },
           null,
         );
         if (createAck.status !== "accepted") {
@@ -3679,19 +3701,6 @@ export function SessionPane({
     [dispatchCommand, sessionId],
   );
 
-  const loadSessionTree = useCallback(() => {
-    if (!sessionId) return;
-    void dispatchCommand("readSessionTree", {}, sessionId).then((ack) => {
-      if (ack.result?.type === "sessionTree") {
-        setSessionTreeNodes(ack.result.tree);
-        return;
-      }
-      if (ack.status !== "accepted" && ack.status !== "duplicate") {
-        toast(ack.message || intl.formatMessage({ id: "chat.tree.failed" }));
-      }
-    });
-  }, [dispatchCommand, intl, sessionId]);
-
   const submitSessionResume = useCallback(
     (input: {
       target: { entryId: string; role?: "user" | "assistant" | "tool"; text?: string };
@@ -3701,7 +3710,6 @@ export function SessionPane({
     }) => {
       if (!sessionId) return;
       if (input.summarize) summarizingTreeRef.current = true;
-      setSessionTreeBusy(true);
       void dispatchCommand(
         "navigateSessionTree",
         {
@@ -3715,62 +3723,37 @@ export function SessionPane({
         sessionId,
       )
         .then((ack) => {
-          if (ack.result?.type === "navigateSessionTree" || ack.result?.type === "sessionTree") {
-            setSessionTreeNodes(ack.result.tree);
-          }
           if (ack.status !== "accepted" && ack.status !== "duplicate") {
             toast(ack.message || intl.formatMessage({ id: "chat.tree.failed" }));
             return;
           }
-          if (ack.result?.type === "navigateSessionTree" && ack.result.cancelled) {
-            toast(intl.formatMessage({ id: "chat.tree.cancelled" }));
+          if (ack.result?.type !== "navigateSessionTree" || ack.result.cancelled || !ack.result.sessionId) {
+            if (ack.result?.type === "navigateSessionTree" && ack.result.cancelled) {
+              toast(intl.formatMessage({ id: "chat.tree.cancelled" }));
+            }
             return;
           }
-          if (ack.result?.type === "navigateSessionTree" && ack.result.editorText) {
+          const createdSessionId = ack.result.sessionId;
+          if (ack.result.editorText) {
             setComposerRestoreRequest({
               requestId: nextComposerRestoreRequestIdRef.current++,
-              sessionId,
+              sessionId: createdSessionId,
               workspaceKey,
               inputKind: "sendText",
               text: ack.result.editorText,
               attachments: [],
             });
           }
+          onSessionCreated?.(createdSessionId);
         })
         .catch((error: unknown) => {
           toast(error instanceof Error ? error.message : intl.formatMessage({ id: "chat.tree.failed" }));
         })
         .finally(() => {
           summarizingTreeRef.current = false;
-          setSessionTreeBusy(false);
         });
     },
-    [dispatchCommand, intl, sessionId, workspaceKey],
-  );
-
-  const labelSessionTreeEntry = useCallback(
-    (entryId: string, label: string) => {
-      if (!sessionId) return;
-      void dispatchCommand("labelSessionEntry", { entryId, label }, sessionId).then((ack) => {
-        if (ack.result?.type === "sessionTree") setSessionTreeNodes(ack.result.tree);
-        else if (ack.status !== "accepted") toast(ack.message || intl.formatMessage({ id: "chat.tree.failed" }));
-      });
-    },
-    [dispatchCommand, intl, sessionId],
-  );
-  const deleteSessionBranch = useCallback(
-    (entryId: string) => {
-      if (!sessionId) return;
-      void dispatchCommand("deleteSessionBranch", { entryId }, sessionId)
-        .then((ack) => {
-          if (ack.result?.type === "sessionTree") setSessionTreeNodes(ack.result.tree);
-          else if (ack.status !== "accepted") toast(ack.message || intl.formatMessage({ id: "chat.tree.failed" }));
-        })
-        .catch((error: unknown) => {
-          toast(error instanceof Error ? error.message : intl.formatMessage({ id: "chat.tree.failed" }));
-        });
-    },
-    [dispatchCommand, intl, sessionId],
+    [dispatchCommand, intl, onSessionCreated, sessionId, workspaceKey],
   );
 
   const handlePauseGoal = useCallback(() => {
@@ -3888,8 +3871,6 @@ export function SessionPane({
   // retry 的产品裁决属于行级权威投影。这里仅提供命令能力，入口是否展示
   // 完全读取 row.actions.canRetry，禁止再用 pane phase 形成第二套 guard。
   const retryActionsEnabled = !readOnly && !selectionSideChat && Boolean(sessionId);
-  // 会话内分支：从此处继续、标题旁切换。不是复制成新会话。
-  const forkActionsEnabled = !readOnly && !selectionSideChat && Boolean(sessionId);
   useEffect(() => {
     resumeHereRef.current = (target) => {
       submitSessionResume({
@@ -3899,36 +3880,6 @@ export function SessionPane({
       });
     };
   }, [submitSessionResume]);
-  useEffect(() => {
-    if (!focused || !forkActionsEnabled || !sessionId) return;
-    loadSessionTree();
-  }, [focused, forkActionsEnabled, loadSessionTree, sessionId]);
-  useEffect(() => {
-    if (!focused || !forkActionsEnabled || !sessionId) return;
-    const actions = {
-      sessionId,
-      nodes: sessionTreeNodes,
-      busy: sessionTreeBusy,
-      refresh: loadSessionTree,
-      switchTo: (entryId: string) => {
-        submitSessionResume({ target: { entryId }, summarize: false });
-      },
-      rename: labelSessionTreeEntry,
-      remove: deleteSessionBranch,
-    };
-    setSessionBranchActions(actions);
-    return () => clearSessionBranchActions(actions);
-  }, [
-    deleteSessionBranch,
-    focused,
-    forkActionsEnabled,
-    labelSessionTreeEntry,
-    loadSessionTree,
-    sessionId,
-    sessionTreeBusy,
-    sessionTreeNodes,
-    submitSessionResume,
-  ]);
   // editUserQuery 已由 command 层防御 latest real user query，并在 running
   // 提交时先 stop barrier 再 rewind/rerun；UI 不应再用 completed gate 把入口整轮隐藏。
   const editActionsEnabled = !readOnly && !selectionSideChat && Boolean(sessionId);

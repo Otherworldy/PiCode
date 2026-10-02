@@ -47,7 +47,9 @@ import {
   parseGitBranchMutationIssues,
   parseGitConfigValue,
   parseNumstat,
+  mergeWorktreeBranches,
   parseStatusPorcelain,
+  rewriteUnbornWorktreeBranchMiss,
   parseWorktreeList,
   toInvalidBranchNameIssue,
   toDiffResult,
@@ -999,13 +1001,14 @@ export function createGitCliRepo(options?: { commandProvider?: GitCommandProvide
       });
       ensureGitCommandSucceeded("git for-each-ref refs/heads", result);
 
+      const currentBranchName =
+        status.summary.headRefType === "branch" ? status.summary.branchName : null;
+      const listed = parseBranchRefRecords(result.stdout, currentBranchName);
+      const worktrees = await this.listWorktrees(workspacePath);
       return {
         headRefType: status.summary.headRefType,
         currentBranchName: status.summary.branchName,
-        branches: parseBranchRefRecords(
-          result.stdout,
-          status.summary.headRefType === "branch" ? status.summary.branchName : null,
-        ),
+        branches: mergeWorktreeBranches(listed, worktrees, currentBranchName),
       };
     },
 
@@ -1146,11 +1149,19 @@ export function createGitCliRepo(options?: { commandProvider?: GitCommandProvide
         maxOutputBytes: DEFAULT_GIT_OUTPUT_BYTES,
       });
       if (result.exitCode !== 0) {
+        const parsedIssues = parseGitBranchMutationIssues(result);
+        const issues = parsedIssues.some((issue) => issue.code === "target-branch-not-found")
+          ? rewriteUnbornWorktreeBranchMiss(
+              parsedIssues,
+              await this.listWorktrees(workspacePath),
+              normalizedBranchName,
+            )
+          : parsedIssues;
         return toBranchMutationFailure({
           action: "switch",
           branchName: normalizedBranchName,
           summary: status.summary,
-          issues: parseGitBranchMutationIssues(result),
+          issues,
         });
       }
 

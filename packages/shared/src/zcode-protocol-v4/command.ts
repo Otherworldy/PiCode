@@ -1,3 +1,4 @@
+/* eslint-disable max-lines */
 import { localTtftContextSchema, localTtftClockSchema } from "../localTtft.js";
 // Command 层：信封 / ACK / 命令全集 payload。
 // conversation rewind 无独立命令（裁决：= editUserQuery 的 UI 入口）；
@@ -62,6 +63,8 @@ export const commandPayloadSchemas = {
     offPeakToolEnabled: z.boolean().optional(),
     // 动态工作流灰度 flag，与 offPeakToolEnabled 同一模式。
     dynamicWorkflowEnabled: z.boolean().optional(),
+    // 会话仍归当前 workspace。仅当该路径是本仓库已注册的 worktree 时，Agent cwd 才用它。
+    workingDirectory: z.string().trim().min(1).optional(),
   }),
   // 父会话由 envelope.sessionId 指定；服务端从父 record 派生完整运行配置。
   // firstInput 存在时，child 创建完成后立即启动首条普通输入；缺省则保持空副屏。
@@ -407,6 +410,7 @@ export const commandResultSchema = z.discriminatedUnion("type", [
     type: z.literal("navigateSessionTree"),
     cancelled: z.boolean(),
     editorText: z.string().optional(),
+    sessionId: z.string().min(1).optional(),
     tree: z.array(sessionTreeNodeSchema),
   }),
   z.object({

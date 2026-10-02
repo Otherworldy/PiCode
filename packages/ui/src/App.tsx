@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- App 当前集中编排 workspace 级状态、导航、Git 派生数据和 shell wiring；已将新增 side pane memory 桥接抽出，剩余拆分需要按 shell 边界单独重构。 */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { GitChangeSourceId, WorkspacePurpose } from "@zcode/shared";
 import { useZCodeStore } from "@/store/StoreProvider.js";
@@ -8,6 +8,11 @@ import { useTaskQueryCacheStore } from "@/store/taskQueryCacheStore.js";
 import { useAppPanels } from "@/hooks/useAppPanels.js";
 import { useGitAutoRefresh } from "@/hooks/useGitAutoRefresh.js";
 import { useGitRepository } from "@/hooks/useGitRepository.js";
+import {
+  isWorkspaceWorktree,
+  subscribeSessionWorktrees,
+  workingDirectoryFor,
+} from "@/v4/sessionWorktree.js";
 import { useAppKeyboard } from "@/hooks/useAppKeyboard.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useWorkspaceActiveTaskState } from "@/hooks/useWorkspaceActiveTaskState.js";
@@ -409,8 +414,17 @@ export function App({
     setGitRefreshVersion((value) => value + 1);
   }, []);
   const openSettingsTab = useTabStore((state) => state.openSettingsTab);
+  const sessionWorkingDirectory = useSyncExternalStore(
+    subscribeSessionWorktrees,
+    () => workingDirectoryFor(workspaceKey, activeTaskId),
+    () => null,
+  );
+  const gitWorkspacePath =
+    sessionWorkingDirectory && isWorkspaceWorktree(workspaceAbsPath, sessionWorkingDirectory)
+      ? sessionWorkingDirectory
+      : workspaceAbsPath;
   const gitState = useGitRepository({
-    workspacePath: workspaceAbsPath,
+    workspacePath: gitWorkspacePath,
     activeTaskId,
     includeExtendedData: hasGitTab,
     // 关键逻辑：真实 Git 只在 workspace 变化、Git pane 打开、或用户显式点刷新时重拉。

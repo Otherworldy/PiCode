@@ -74,7 +74,7 @@ export interface ConversationRowRenderContext {
    * 需保持引用稳定（rowContext 的 memo 依赖）。
    */
   onNavigateToRow?: (sessionId: string, rowId: number) => void;
-  /** Pi /tree：右键这条消息继续。菜单选总结方式。工具行的 entryId 是 toolCallId。 */
+  /** 右键这条消息，按总结方式建成左侧新会话。工具行的 entryId 是 toolCallId。 */
   onResumeHere?: (target: {
     entryId: string;
     role: "user" | "assistant" | "tool";

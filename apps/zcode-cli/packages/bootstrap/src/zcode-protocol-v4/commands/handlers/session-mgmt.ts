@@ -53,6 +53,7 @@ async function createSession(
     mcpServers: payload.mcpServers,
     offPeakToolEnabled: payload.offPeakToolEnabled,
     dynamicWorkflowEnabled: payload.dynamicWorkflowEnabled,
+    workingDirectory: payload.workingDirectory,
   });
   // createSession.config 消费——草稿态 UI 的先行选择（模型/思考深度/
   // 模式）在首发之前应用并补发事件，首条 turn 即用所选配置。必须在 firstInput 之前。

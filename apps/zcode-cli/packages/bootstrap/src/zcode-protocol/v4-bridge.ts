@@ -1074,9 +1074,28 @@ export function createConversationV4Gateway(
       return { type: "sessionTree" as const, tree: hosted.readSessionTree() };
     },
     navigateSessionTree: async (sessionId, input) => {
-      const hosted = sessionTreeHost(context, sessionId);
-      const result = await hosted.resumeAt(input);
-      return { type: "navigateSessionTree" as const, ...result };
+      const record = context.sessions.get(sessionId);
+      if (!record || !context.piHost) throw new Error("proto.sessionNotFound");
+      const outcome = await context.piHost.resumeIntoNewSession(sessionId, input);
+      if (outcome.cancelled) {
+        return {
+          type: "navigateSessionTree" as const,
+          cancelled: true,
+          tree: sessionTreeHost(context, sessionId).readSessionTree(),
+        };
+      }
+      const childRecord = await bindHostedSession(context, outcome.hosted, record.workspace);
+      context.sessions.set(childRecord.app.sessionId, childRecord);
+      await childRecord.app.runtime.ensureSessionPersistedForExternalActivity(
+        outcome.hosted.projector.getSnapshot().meta.title,
+      );
+      return {
+        type: "navigateSessionTree" as const,
+        cancelled: false,
+        tree: outcome.tree,
+        sessionId: outcome.sessionId,
+        ...(outcome.editorText ? { editorText: outcome.editorText } : {}),
+      };
     },
     labelSessionEntry: async (sessionId, input) => {
       const hosted = sessionTreeHost(context, sessionId);
@@ -1135,6 +1154,7 @@ export function createConversationV4Gateway(
       mcpServers,
       offPeakToolEnabled,
       dynamicWorkflowEnabled,
+      workingDirectory,
     }) => {
       // workspaceId 双形态（Workspace Identity 约束）：
       // - 本地工作区 = workspacePath（identity 缺省时的 fallback）；
@@ -1148,7 +1168,11 @@ export function createConversationV4Gateway(
       void offPeakToolEnabled;
       void dynamicWorkflowEnabled;
       const workspace = resolveWorkspaceRefFromId(workspaceId);
-      const record = await createPiSessionRecord(context, { workspace, mcpServers });
+      const record = await createPiSessionRecord(context, {
+        workspace,
+        mcpServers,
+        workingDirectory,
+      });
       context.sessions.set(record.app.sessionId, record);
       return { sessionId: record.app.sessionId };
     },

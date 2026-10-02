@@ -93,6 +93,7 @@ export async function createPiSessionRecord(
     sessionId?: string;
     parentSessionId?: string;
     mcpServers?: ZCodeProtocolMcpServer[];
+    workingDirectory?: string;
   },
 ): Promise<ZCodeProtocolSessionRecord> {
   const registry = context.piHost;
@@ -104,6 +105,7 @@ export async function createPiSessionRecord(
   const hosted = await registry.create({
     workspaceIdentity: params.workspace.workspaceIdentity,
     workspacePath: params.workspace.workspacePath,
+    workingDirectory: params.workingDirectory,
     sessionId: params.sessionId ?? createSessionId(),
     parentSessionId: params.parentSessionId,
   });
@@ -126,5 +128,6 @@ export async function listPiStoredSummaries(
     lastActivityAt: item.lastActivityAt,
     createdAt: item.createdAt,
     ...(item.lastAssistantPreview ? { lastAssistantPreview: item.lastAssistantPreview } : {}),
+    ...(item.cwd && item.cwd !== workspaceId ? { workingDirectory: item.cwd } : {}),
   }));
 }
