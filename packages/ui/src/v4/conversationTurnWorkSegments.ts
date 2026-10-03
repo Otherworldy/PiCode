@@ -27,6 +27,14 @@ export interface ConversationTurnWorkSegment {
   workStatus?: ConversationTurnWorkStatus;
 }
 
+/** 只有还在跑才展开。中断、失败、做完都收起工具和思考。 */
+export function assistantHistoryDefaultsOpen(input: {
+  timelineOnly: boolean;
+  running: boolean;
+}): boolean {
+  return !input.timelineOnly && input.running;
+}
+
 export function resolveConversationTurnWorkStatus(
   header: TurnHeaderRow | undefined,
   workRows: readonly AssistantWorkRow[],
@@ -140,7 +148,6 @@ export function buildConversationTurnWorkSegments(options: {
   isRunning: boolean;
   isLastTurn: boolean;
   isInterrupted: boolean;
-  forceOpenHistory: boolean;
   timelineOnly: boolean;
   nowMs?: number;
 }): ConversationTurnWorkSegment[] {
@@ -213,13 +220,10 @@ export function buildConversationTurnWorkSegments(options: {
       assistantWorkRows: segmentAssistantRows,
       assistantHistoryRows: segmentHistoryRows,
       assistantFollowingRows: segmentFollowingRows,
-      assistantHistoryDefaultOpen:
-        !options.timelineOnly &&
-        (options.forceOpenHistory ||
-          (options.isLastTurn && segmentWorkStatus?.state === "running") ||
-          (visualDrafts.length === 1 &&
-            visibleAssistantTextRow === undefined &&
-            segmentFlowRows.length > 0)),
+      assistantHistoryDefaultOpen: assistantHistoryDefaultsOpen({
+        timelineOnly: options.timelineOnly,
+        running: options.isLastTurn && segmentWorkStatus?.state === "running",
+      }),
       ...(segmentWorkStatus ? { workStatus: segmentWorkStatus } : {}),
     };
   });

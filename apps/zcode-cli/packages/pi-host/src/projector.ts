@@ -14,7 +14,7 @@ import {
 } from "@zcode/shared/zcode-protocol-v4";
 import { summarizeTurnFileChanges } from "./file-rewind.js";
 import { PI_PROCESS_WORK_PREFIX } from "./pi-process-bridge.js";
-import { bashDisplay, editDisplay, mapPiToolName, toolResultText } from "./presentation.js";
+import { bashDisplay, editDisplay, mapPiToolName, toolInputPath, toolResultText } from "./presentation.js";
 import { createEmptySnapshot, emptyAvailability } from "./snapshot.js";
 import { isControlCommandTitle } from "./jsonl-history.js";
 import type { PiAssistantDelta, PiHostEvent } from "./types.js";
@@ -96,6 +96,7 @@ export class PiToV4Projector {
   private productTurnId = "";
   private streamingTextRowId: number | null = null;
   private streamingReasoningRowId: number | null = null;
+  private streamingToolId: string | null = null;
   private readonly toolRowId = new Map<string, number>();
   private readonly toolArgs = new Map<string, string>();
   private readonly rowIndexById = new Map<number, number>();
@@ -173,6 +174,7 @@ export class PiToV4Projector {
     this.productTurnId = "";
     this.streamingTextRowId = null;
     this.streamingReasoningRowId = null;
+    this.streamingToolId = null;
     this.assistantMessageId = undefined;
     this.pendingError = undefined;
     this.toolRowId.clear();
@@ -591,19 +593,21 @@ export class PiToV4Projector {
     }
     if (delta.type === "toolcall_start") {
       if (!delta.id) return [];
+      this.streamingToolId = delta.id;
       this.toolArgs.set(delta.id, "");
       if (!delta.toolName) return [];
       return this.ensureToolRow(delta.id, delta.toolName, "inputStreaming", "");
     }
     if (delta.type === "toolcall_delta") {
-      const id = [...this.toolArgs.keys()].at(-1);
+      // 片段没有 id。追加到最后一个 key 会把这次 edit 拼进上一个工具。
+      const id = this.streamingToolId;
       if (!id) return [];
-      const next = (this.toolArgs.get(id) ?? "") + delta.delta;
+      const next = (this.toolArgs.get(id) ?? "") + (delta.delta ?? "");
       this.toolArgs.set(id, next);
       const rowId = this.toolRowId.get(id);
       if (rowId == null) return [];
       if (DELIVERY_PROFILES[this.profile].streamPaths.inputText) {
-        return [{ op: "row.delta", rowId, path: "inputText", append: delta.delta }];
+        return [{ op: "row.delta", rowId, path: "inputText", append: delta.delta ?? "" }];
       }
       return [];
     }
@@ -612,6 +616,7 @@ export class PiToV4Projector {
         typeof delta.toolCall.arguments === "string"
           ? delta.toolCall.arguments
           : JSON.stringify(delta.toolCall.arguments ?? {});
+      this.streamingToolId = null;
       this.toolArgs.set(delta.toolCall.id, inputText);
       return this.ensureToolRow(delta.toolCall.id, delta.toolCall.name, "inputStreaming", inputText, true);
     }
@@ -671,14 +676,46 @@ export class PiToV4Projector {
     return replace || existing != null ? [{ op: "row.upserted", row: { ...row, rowId: existing } }] : [];
   }
 
+  /** 流式 id 是 `fc_…`，执行 id 是 `call-…|fc_…`。对到同一行，否则完整参数会留在还没 success 的那行。 */
+  private canonicalToolId(toolCallId: string): string {
+    if (this.toolRowId.has(toolCallId) || this.toolArgs.has(toolCallId)) return toolCallId;
+    const leaf = toolCallId.slice(toolCallId.lastIndexOf("|") + 1);
+    if (!leaf) return toolCallId;
+    for (const id of this.toolRowId.keys()) {
+      if (id === leaf || id.endsWith(`|${leaf}`) || toolCallId.endsWith(`|${id}`)) return id;
+    }
+    for (const id of this.toolArgs.keys()) {
+      if (id === leaf || id.endsWith(`|${leaf}`) || toolCallId.endsWith(`|${id}`)) return id;
+    }
+    return toolCallId;
+  }
+
+  private aliasToolId(toolCallId: string, canonicalId: string): void {
+    const rowId = this.toolRowId.get(canonicalId);
+    if (rowId != null) this.toolRowId.set(toolCallId, rowId);
+  }
+
+  /** 执行事件的 args 可能比流式参数短。短的那份会把完整 edit 盖掉，底部就只剩最后一小段。 */
+  private rememberArgs(id: string, incoming: unknown): string {
+    const previous = this.toolArgs.get(id) ?? "";
+    if (incoming === undefined) return previous;
+    const next = typeof incoming === "string" ? incoming : JSON.stringify(incoming);
+    const chosen = next.length >= previous.length ? next : previous;
+    if (chosen) this.toolArgs.set(id, chosen);
+    return this.toolArgs.get(id) ?? "";
+  }
+
   private toolStart(event: Extract<PiHostEvent, { type: "tool_execution_start" }>): ConversationDelta[] {
-    if (event.args !== undefined) this.toolArgs.set(event.toolCallId, JSON.stringify(event.args));
-    const inputText = this.toolArgs.get(event.toolCallId) ?? "";
-    return this.ensureToolRow(event.toolCallId, event.toolName, "running", inputText, true);
+    // 执行 id 常是 `call-…|fc_…`，流式 id 只是后半。对不上就会另起一行，完整 edit 留在还没 success 的那行里，汇总就只看到最后一小段。
+    const id = this.canonicalToolId(event.toolCallId);
+    const inputText = this.rememberArgs(id, event.args);
+    const deltas = this.ensureToolRow(id, event.toolName, "running", inputText, true);
+    this.aliasToolId(event.toolCallId, id);
+    return deltas;
   }
 
   private toolUpdate(event: Extract<PiHostEvent, { type: "tool_execution_update" }>): ConversationDelta[] {
-    const rowId = this.toolRowId.get(event.toolCallId);
+    const rowId = this.toolRowId.get(this.canonicalToolId(event.toolCallId));
     if (rowId == null) return [];
     const row = this.snapshot.rows.window.find((item) => item.rowId === rowId);
     if (!row || row.kind !== "toolCall") return [];
@@ -704,18 +741,15 @@ export class PiToV4Projector {
   }
 
   private toolEnd(event: Extract<PiHostEvent, { type: "tool_execution_end" }>): ConversationDelta[] {
-    const rowId = this.toolRowId.get(event.toolCallId);
+    const id = this.canonicalToolId(event.toolCallId);
+    const rowId = this.toolRowId.get(id);
     const existing = this.snapshot.rows.window.find((item) => item.rowId === rowId);
     const inputText =
-      this.toolArgs.get(event.toolCallId) ||
+      this.toolArgs.get(id) ||
       (existing && existing.kind === "toolCall" ? existing.inputText : "");
+    this.aliasToolId(event.toolCallId, id);
     if (rowId == null) {
-      return this.ensureToolRow(
-        event.toolCallId,
-        event.toolName,
-        event.isError ? "error" : "success",
-        inputText,
-      );
+      return this.ensureToolRow(id, event.toolName, event.isError ? "error" : "success", inputText);
     }
     const row = this.snapshot.rows.window.find((item) => item.rowId === rowId);
     if (!row || row.kind !== "toolCall") return [];
@@ -723,8 +757,8 @@ export class PiToV4Projector {
     const details = event.result?.details;
     const mapped = mapPiToolName(event.toolName, this.viaRegistry);
     const display =
-      mapped === "Edit"
-        ? editDisplay(details)
+      mapped === "Edit" || mapped === "Write"
+        ? editDisplay(details, toolInputPath(inputText))
         : mapped === "Bash"
           ? bashDisplay(text, details)
           : undefined;

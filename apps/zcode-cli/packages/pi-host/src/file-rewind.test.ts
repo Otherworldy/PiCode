@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
-import { planTurnFileRewind, undoEdits } from "./file-rewind.js";
+import { planTurnFileRewind, summarizeTurnFileChanges, undoEdits } from "./file-rewind.js";
 import { PiToV4Projector } from "./projector.js";
 
 test("undoEdits restores each unique replacement", () => {
@@ -15,6 +15,23 @@ test("undoEdits restores each unique replacement", () => {
 test("undoEdits refuses a missing or repeated replacement", () => {
   assert.equal(undoEdits("same same", [{ oldText: "a", newText: "same" }]), null);
   assert.equal(undoEdits("gone", [{ oldText: "old", newText: "" }]), null);
+});
+
+test("summarizeTurnFileChanges keeps review patches", () => {
+  const summary = summarizeTurnFileChanges(
+    [
+      tool("turn:1", "Edit", { path: "a.ts", edits: [{ oldText: "old", newText: "new" }] }),
+      tool("turn:1", "Write", { path: "b.ts", content: "all\n" }),
+    ],
+    "turn:1",
+  );
+  assert.deepEqual(
+    summary?.items.map((item) => [item.path, item.patches[0]?.lines]),
+    [
+      ["a.ts", ["-old", "+new"]],
+      ["b.ts", ["+all"]],
+    ],
+  );
 });
 
 test("planTurnFileRewind restores edits and deletes a matching write", async () => {
@@ -65,6 +82,82 @@ test("projector counts a write on the turn header", () => {
   const header = projector.getSnapshot().rows.window.find((row) => row.kind === "turnHeader");
   assert.equal(header && header.kind === "turnHeader" ? header.fileChanges?.files : 0, 1);
   assert.equal(header && header.kind === "turnHeader" ? header.actions?.canRewindFiles : false, true);
+});
+
+test("short execution args do not drop earlier edits from the file count", () => {
+  const projector = new PiToV4Projector("s1", "e1");
+  projector.apply({ type: "agent_start" });
+  projector.apply({
+    type: "message_update",
+    assistantMessageEvent: {
+      type: "toolcall_end",
+      contentIndex: 0,
+      toolCall: {
+        id: "fc_1",
+        name: "edit",
+        arguments: { path: "a.ts", edits: [{ oldText: "a", newText: "a\nb\nc" }] },
+      },
+    },
+  });
+  projector.apply({
+    type: "tool_execution_start",
+    toolCallId: "call|fc_1",
+    toolName: "edit",
+    args: { path: "a.ts" },
+  });
+  projector.apply({
+    type: "tool_execution_end",
+    toolCallId: "call|fc_1",
+    toolName: "edit",
+    result: { content: [{ type: "text", text: "ok" }] },
+  });
+  projector.apply({
+    type: "tool_execution_start",
+    toolCallId: "c2",
+    toolName: "edit",
+    args: { path: "b.ts", edits: [{ oldText: "x", newText: "y" }] },
+  });
+  projector.apply({
+    type: "tool_execution_end",
+    toolCallId: "c2",
+    toolName: "edit",
+    result: { content: [{ type: "text", text: "ok" }] },
+  });
+  const header = projector.getSnapshot().rows.window.find((row) => row.kind === "turnHeader");
+  const summary = summarizeTurnFileChanges(
+    projector.getSnapshot().rows.window,
+    header && header.kind === "turnHeader" ? header.turnId : "",
+  );
+  assert.equal(summary?.files, 2);
+  assert.equal(summary?.items.find((item) => item.path === "a.ts")?.additions, 2);
+  assert.equal(header && header.kind === "turnHeader" ? header.fileChanges?.files : 0, 2);
+});
+
+test("summarizeTurnFileChanges uses the tool diff when the edit input is empty", () => {
+  const row = tool("turn:1", "Edit", { path: "a.ts" });
+  const summary = summarizeTurnFileChanges(
+    [
+      {
+        ...row,
+        output: {
+          text: "ok",
+          display: {
+            kind: "file_diff",
+            filePath: "a.ts",
+            additions: 39,
+            deletions: 3,
+            structuredPatch: [
+              { oldStart: 1, oldLines: 3, newStart: 1, newLines: 39, lines: ["-old", "+new"] },
+            ],
+          },
+        },
+      },
+    ],
+    "turn:1",
+  );
+  assert.equal(summary?.files, 1);
+  assert.equal(summary?.additions, 39);
+  assert.equal(summary?.deletions, 3);
 });
 
 test("projector exposes file rewind on a settled edit turn", () => {

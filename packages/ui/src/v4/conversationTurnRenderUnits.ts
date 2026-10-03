@@ -14,6 +14,7 @@ import {
   resolveWorkflowLaunchMeta,
 } from "@/v4/workflowLaunchTurn.js";
 import {
+  assistantHistoryDefaultsOpen,
   buildConversationTurnWorkSegments,
   resolveConversationTurnWorkDurationMs,
   resolveConversationTurnWorkStatus,
@@ -219,16 +220,6 @@ function resolveTurnRunning(
   return draft.assistantWorkRows.some(isCompletionBlockingWorkRowRunning);
 }
 
-function shouldForceOpenAbnormalHistory(
-  header: TurnHeaderRow | undefined,
-  sessionPhase: SessionPhase | undefined,
-): boolean {
-  if (header) {
-    return header.state === "completedInterrupted" || header.state === "failed";
-  }
-  return sessionPhase === "completedInterrupted" || sessionPhase === "error";
-}
-
 function materializeDraftUnit(
   draft: DraftTurnRenderUnit,
   index: number,
@@ -281,10 +272,6 @@ function materializeDraftUnit(
   const isInterrupted = draft.header
     ? draft.header.state === "completedInterrupted"
     : options.sessionPhase === "completedInterrupted";
-  // 旧展开规则只看 running 和最终正文，异常终态一旦保留 partial assistant text
-  // 就会被当作正常完成而收起，隐藏中断/失败上下文。终态必须以 header 为权威；冷恢复
-  // 尾窗缺 header 时才回退 session phase，desktop continuous 与 mobile replayable 共用此边界。
-  const forceOpenHistory = shouldForceOpenAbnormalHistory(draft.header, options.sessionPhase);
 
   // product turn 的最终正文仍是唯一 action target；视觉工作段只改变折叠边界。
   const assistantTextRows = flowRows.filter(isAssistantTextRow);
@@ -318,7 +305,6 @@ function materializeDraftUnit(
     isRunning,
     isLastTurn,
     isInterrupted,
-    forceOpenHistory,
     timelineOnly,
     nowMs: options.nowMs,
   });
@@ -389,33 +375,21 @@ function normalizeRenderUnitPosition(
   unit: ConversationTurnRenderUnit,
   index: number,
   total: number,
-  options: BuildConversationTurnRenderUnitsOptions,
 ): ConversationTurnRenderUnit {
   const isLastTurn = index === total - 1;
-  const forceOpenHistory = shouldForceOpenAbnormalHistory(unit.header, options.sessionPhase);
-  const assistantHistoryDefaultOpen =
-    unit.workSegments && unit.workSegments.length > 0
-      ? !unit.timelineOnly &&
-        (forceOpenHistory ||
-          (isLastTurn && unit.workSegments.at(-1)?.workStatus?.state === "running") ||
-          (unit.workSegments.length === 1 &&
-            unit.latestAssistantTextRow === undefined &&
-            unit.assistantWorkRows.length > 0))
-      : !unit.timelineOnly &&
-        (forceOpenHistory ||
-          (isLastTurn && unit.workStatus?.state === "running") ||
-          (unit.latestAssistantTextRow === undefined && unit.assistantWorkRows.length > 0));
+  const lastSegment = unit.workSegments?.at(-1);
+  const assistantHistoryDefaultOpen = assistantHistoryDefaultsOpen({
+    timelineOnly: unit.timelineOnly,
+    running: isLastTurn && (lastSegment?.workStatus ?? unit.workStatus)?.state === "running",
+  });
   const workSegments = unit.workSegments?.map((segment, segmentIndex, segments) =>
     segmentIndex === segments.length - 1
       ? {
           ...segment,
-          assistantHistoryDefaultOpen:
-            !unit.timelineOnly &&
-            (forceOpenHistory ||
-              (isLastTurn && segment.workStatus?.state === "running") ||
-              (segments.length === 1 &&
-                unit.latestAssistantTextRow === undefined &&
-                segment.assistantWorkRows.length > 0)),
+          assistantHistoryDefaultOpen: assistantHistoryDefaultsOpen({
+            timelineOnly: unit.timelineOnly,
+            running: isLastTurn && segment.workStatus?.state === "running",
+          }),
         }
       : segment,
   );
@@ -476,6 +450,6 @@ export function buildConversationTurnRenderUnits(
   );
   const keptUnits = materializedUnits.filter(shouldKeepRenderUnit);
   return keptUnits.map((unit, index) =>
-    normalizeRenderUnitPosition(unit, index, keptUnits.length, options),
+    normalizeRenderUnitPosition(unit, index, keptUnits.length),
   );
 }

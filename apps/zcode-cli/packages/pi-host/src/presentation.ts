@@ -29,9 +29,32 @@ export function toolResultText(result: { content?: Array<{ text?: string }> } | 
     .join("");
 }
 
-export function editDisplay(details: Record<string, unknown> | undefined): unknown {
+export function toolInputPath(inputText: string): string {
+  if (!inputText) return "";
+  try {
+    const parsed = JSON.parse(inputText) as { path?: unknown };
+    if (parsed && typeof parsed.path === "string") return parsed.path;
+  } catch {
+    // 截断的 JSON 仍然可能带着开头的 path。
+    const matched = /"path"\s*:\s*"((?:\\.|[^"\\])*)"/.exec(inputText);
+    if (matched?.[1]) {
+      try {
+        return JSON.parse(`"${matched[1]}"`) as string;
+      } catch {
+        return matched[1];
+      }
+    }
+  }
+  return "";
+}
+
+export function editDisplay(
+  details: Record<string, unknown> | undefined,
+  pathHint?: string,
+): unknown {
   if (!details) return undefined;
-  const filePath = typeof details.path === "string" ? details.path : undefined;
+  const filePath =
+    typeof details.path === "string" && details.path ? details.path : pathHint || undefined;
   const patch = typeof details.patch === "string" ? details.patch : undefined;
   const diff = typeof details.diff === "string" ? details.diff : patch;
   if (!filePath || !diff) return undefined;

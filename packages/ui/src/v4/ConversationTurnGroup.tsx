@@ -801,12 +801,17 @@ function ConversationWorkSegmentFlow({
             />
           );
         } else {
+          // 跟在正文后的工具和思考也要进同一层折叠。中断或结束后不能继续摊在「已工作」外面。
+          const chunkKey =
+            historyChunkIndex === 0 ? segment.key : `${segment.key}:chunk-${historyChunkIndex}`;
+          historyChunkIndex += 1;
           content = (
             <ConversationAssistantWorkItems
               rows={item.rows}
               context={context}
               stageTailIsRunning={stageTailIsRunning}
               assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
+              historyContainer={{ chunkKey, open }}
             />
           );
         }

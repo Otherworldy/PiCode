@@ -1,6 +1,15 @@
 import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
+import { toolInputPath } from "./presentation.js";
 
-export interface TurnFileChangeSummary {
+interface DiffHunk {
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  lines: string[];
+}
+
+interface TurnFileChangeSummary {
   additions: number;
   deletions: number;
   files: number;
@@ -10,7 +19,7 @@ export interface TurnFileChangeSummary {
     deletions: number;
     writeCount: number;
     toolNames: string[];
-    patches: [];
+    patches: DiffHunk[];
   }>;
 }
 
@@ -44,8 +53,9 @@ export interface FileRewindPlan {
 }
 
 type TextEdit = { oldText: string; newText: string };
+type FileDiffStat = { additions: number; deletions: number; lines: string[] };
 type FileOp =
-  | { kind: "edit"; path: string; edits: TextEdit[] }
+  | { kind: "edit"; path: string; edits: TextEdit[]; diff?: FileDiffStat }
   | { kind: "write"; path: string; content: string };
 type UnsafeReason = FileRewindPreview["unsafeFiles"][number]["reason"];
 
@@ -78,6 +88,17 @@ function editsOf(value: unknown): TextEdit[] | null {
   return edits;
 }
 
+function fileDiffStat(row: Extract<ConversationRow, { kind: "toolCall" }>): FileDiffStat | undefined {
+  const display = row.output?.display;
+  if (!display || display.kind !== "file_diff") return undefined;
+  const lines = display.structuredPatch[0]?.lines;
+  return {
+    additions: display.additions,
+    deletions: display.deletions,
+    lines: lines ? [...lines] : [],
+  };
+}
+
 function parseTurn(rows: readonly ConversationRow[], turnId: string): ParsedTurn {
   const files = new Map<string, FileOp[]>();
   let bashCount = 0;
@@ -89,18 +110,41 @@ function parseTurn(rows: readonly ConversationRow[], turnId: string): ParsedTurn
     }
     if (row.toolName !== "Edit" && row.toolName !== "Write") continue;
     const args = parseArgs(row.inputText);
-    const path = typeof args?.path === "string" ? args.path : "";
+    const display = row.output?.display;
+    const diff = fileDiffStat(row);
+    const path =
+      toolInputPath(row.inputText) || (display?.kind === "file_diff" ? display.filePath : "");
     const op: FileOp | null =
       row.toolName === "Write"
         ? typeof args?.content === "string"
           ? { kind: "write", path, content: args.content }
           : { kind: "write", path, content: "" }
-        : { kind: "edit", path, edits: editsOf(args?.edits) ?? [] };
+        : { kind: "edit", path, edits: editsOf(args?.edits) ?? [], ...(diff ? { diff } : {}) };
     const list = files.get(path) ?? [];
     list.push(op);
     files.set(path, list);
   }
   return { files, bashCount };
+}
+
+function splitDiffLines(text: string): string[] {
+  if (text.length === 0) return [];
+  const lines = text.replaceAll("\r\n", "\n").split("\n");
+  if (lines.at(-1) === "") lines.pop();
+  return lines;
+}
+
+function fragmentHunk(before: string, after: string): DiffHunk | null {
+  if (before === after) return null;
+  const oldLines = splitDiffLines(before);
+  const newLines = splitDiffLines(after);
+  return {
+    oldStart: oldLines.length === 0 ? 0 : 1,
+    oldLines: oldLines.length,
+    newStart: newLines.length === 0 ? 0 : 1,
+    newLines: newLines.length,
+    lines: [...oldLines.map((line) => `-${line}`), ...newLines.map((line) => `+${line}`)],
+  };
 }
 
 function lineDelta(before: string, after: string): { additions: number; deletions: number } {
@@ -166,16 +210,43 @@ export function summarizeTurnFileChanges(
     let additions = 0;
     let deletions = 0;
     const toolNames = new Set<string>();
+    // 审查按钮只在 patches 非空时可点。这里以前把 patches 固定成空数组，
+    // 加减行有了按钮也一直是灰的。用同一次 edit/write 入参拼 hunk。
+    // ponytail: write 覆盖没有旧内容，只能当成全部新增；要对比旧文件得走 checkpoint diff。
+    const patches: DiffHunk[] = [];
     for (const op of ops) {
       toolNames.add(op.kind === "edit" ? "Edit" : "Write");
       if (op.kind === "write") {
         additions += op.content.length === 0 ? 0 : op.content.split("\n").length;
+        const hunk = fragmentHunk("", op.content);
+        if (hunk) patches.push(hunk);
         continue;
       }
+      let fragAdd = 0;
+      let fragDel = 0;
       for (const edit of op.edits) {
         const delta = lineDelta(edit.oldText, edit.newText);
-        additions += delta.additions;
-        deletions += delta.deletions;
+        fragAdd += delta.additions;
+        fragDel += delta.deletions;
+        const hunk = fragmentHunk(edit.oldText, edit.newText);
+        if (hunk) patches.push(hunk);
+      }
+      // 入参被截短时片段是 0。工具结果上的 diff 才是这次调用真正改了多少行。
+      if (fragAdd + fragDel === 0 && op.diff && op.diff.additions + op.diff.deletions > 0) {
+        additions += op.diff.additions;
+        deletions += op.diff.deletions;
+        if (op.diff.lines.length > 0) {
+          patches.push({
+            oldStart: 1,
+            oldLines: op.diff.deletions,
+            newStart: 1,
+            newLines: op.diff.additions,
+            lines: op.diff.lines,
+          });
+        }
+      } else {
+        additions += fragAdd;
+        deletions += fragDel;
       }
     }
     items.push({
@@ -184,7 +255,7 @@ export function summarizeTurnFileChanges(
       deletions,
       writeCount: ops.length,
       toolNames: [...toolNames],
-      patches: [] as [],
+      patches,
     });
   }
   if (items.length === 0) return null;
