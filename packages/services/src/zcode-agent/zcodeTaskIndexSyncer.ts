@@ -174,6 +174,8 @@ export interface ZCodeTaskIndexSyncer {
 interface CreateZCodeTaskIndexSyncerOptions {
   agentService: IZCodeAgentService;
   taskIndexRepo: TaskIndexRepo;
+  /** 会话终态时通知 To-Dos。没有对应行时由接收方空操作。 */
+  onTurnSettled?: (sessionId: string, failed: boolean) => void;
 }
 
 /** phase 终态集合（sessions-index 的 conflated 最新态里判定迁移用）。 */
@@ -553,6 +555,7 @@ export function createZCodeTaskIndexSyncer(
     const phase = summary.phase;
     const failed = phase === "error";
     // 顺序保持旧协议语义：先 turn 终态（收口当前 input），再 prompt ready（放行下一条）。
+    options.onTurnSettled?.(target.sessionId, failed);
     terminalEventEmitter.fire({
       target,
       kind: failed ? "turn.failed" : "turn.completed",

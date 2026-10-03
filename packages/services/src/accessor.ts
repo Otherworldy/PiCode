@@ -1,4 +1,5 @@
 import { IOffPeakTaskService } from "./session/offPeakTask.js";
+import type { ITodoService } from "./todos/todo.js";
 import type { IFileService } from "./file/file.js";
 import type { IMediaPreviewService } from "./media-preview/mediaPreview.js";
 import type { IGitService } from "./git/git.js";
@@ -72,6 +73,8 @@ export interface IServiceAccessor {
   readonly clientScenesService: IClientScenesService;
   /** 闲时任务管理（独立服务面）。 */
   readonly offPeakTaskService: IOffPeakTaskService;
+  /** To-Dos 队列。旧 host 未注册时 UI 不展示入口。 */
+  readonly todoService?: ITodoService;
   readonly skillsService: ISkillsService;
   readonly skillSyncService: ISkillSyncService;
   readonly mcpSyncService: IMcpSyncService;

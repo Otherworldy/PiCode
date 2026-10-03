@@ -226,6 +226,47 @@ export function createGitService(options?: {
       await repo.removeWorktree(params.workspacePath, params.worktreePath, params.force);
     },
 
+    async countCommitsAhead(params) {
+      return await repo.countCommitsAhead(
+        params.workspacePath,
+        params.baseCommit,
+        params.branchName,
+      );
+    },
+
+    async mergeBranch(params) {
+      const status = await repo.getStatus(params.workspacePath);
+      if (!status.resolution.isRepository) {
+        return { success: false, code: "not-repo", message: "不是 Git 仓库" };
+      }
+      if (status.summary.isDirty) {
+        return { success: false, code: "dirty", message: "主工作区有未提交改动" };
+      }
+      if (status.summary.branchName !== params.expectedBaseBranch) {
+        return {
+          success: false,
+          code: "wrong-branch",
+          message: `主工作区不在 ${params.expectedBaseBranch}`,
+        };
+      }
+      const ahead = await repo.countCommitsAhead(
+        params.workspacePath,
+        params.baseCommit,
+        params.branchName,
+      );
+      if (ahead === 0) {
+        return { success: false, code: "nothing-to-merge", message: "相对基线没有提交" };
+      }
+      const merged = await repo.mergeBranch(params.workspacePath, params.branchName);
+      if (merged.ok) return { success: true };
+      const conflict = /conflict/i.test(merged.message);
+      return {
+        success: false,
+        code: conflict ? "conflict" : "failed",
+        message: merged.message,
+      };
+    },
+
     async getChanges(params) {
       const status = await repo.getStatus(params.workspacePath);
 

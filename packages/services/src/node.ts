@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- host process 服务注册和启动装配需要集中维护，拆散后会更难追踪依赖注入顺序 */
 // Node.js service implementations — NOT safe to import in browser code
 import { ensureAppDataDir } from "@zcode/shared/node";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -257,6 +257,8 @@ export { OffPeakTaskRepo, OFF_PEAK_CLAIM_STALE_MS } from "./session/offPeakTaskR
 export { buildTaskChangeSummary } from "./session/taskChangeSummary.js";
 export { OffPeakTaskService } from "./session/offPeakTaskService.js";
 export { IOffPeakTaskService } from "./session/offPeakTask.js";
+export { TodoService } from "./todos/todoService.js";
+export { ITodoService } from "./todos/todo.js";
 export { createOffPeakServerClient, OffPeakServerError } from "./session/offPeakServerClient.js";
 export { isOffPeakMockEnabled, startOffPeakMockGateway } from "./session/offPeakMockGateway.js";
 export {
@@ -436,6 +438,9 @@ import { buildHelperOpenArgs, isCuaLocalDevelopmentRuntime } from "@zcode/zcode-
 import { createServiceLogger, type ServiceLogger } from "#src/logger/serviceLogger.js";
 import { IOffPeakTaskService } from "./session/offPeakTask.js";
 import { OffPeakTaskService } from "./session/offPeakTaskService.js";
+import { ITodoService } from "./todos/todo.js";
+import { TodoRepo } from "./todos/todoRepo.js";
+import { TodoService } from "./todos/todoService.js";
 import { OffPeakTaskRepo } from "./session/offPeakTaskRepo.js";
 import { createOffPeakServerClient } from "./session/offPeakServerClient.js";
 import {
@@ -2273,9 +2278,11 @@ export function createLocalServices(options: {
   // 在 services 层装配一个共享的 taskIndexRepo + syncer，session 任意入口都会唤醒
   // shadow 订阅，把 runtime 终态收敛进 sqlite。
   const taskIndexRepo = new TaskIndexRepo();
+  let settleTodo: ((sessionId: string, failed: boolean) => void) | undefined;
   const zcodeTaskIndexSyncer = createZCodeTaskIndexSyncer({
     agentService: zcodeAgentService,
     taskIndexRepo,
+    onTurnSettled: (sessionId, failed) => settleTodo?.(sessionId, failed),
   });
   // The plugin can be toggled at runtime. Do not let a previously created resolver continue
   // health-checking/restarting Helper after disable, and create it lazily after enable.
@@ -2632,6 +2639,59 @@ export function createLocalServices(options: {
 
   // 见 sharedSqliteRepos 声明处注释：登记全部 tasks-index sqlite 句柄，dispose 链统一关闭
   sqliteReposToClose.push(taskIndexRepo);
+  const todoRepo = new TodoRepo();
+  sqliteReposToClose.push(todoRepo);
+  const todoService = new TodoService(todoRepo, gitService, {
+    async create(input) {
+      const ack = await zcodeAgentService.sendConversationCommandV4({
+        workspacePath: input.workspacePath,
+        ...(input.workspaceIdentity ? { workspaceIdentity: input.workspaceIdentity } : {}),
+        clientMode: "desktop-continuous",
+        envelope: {
+          commandId: randomUUID(),
+          clientId: "todos",
+          sessionId: null,
+          type: "createSession",
+          issuedAt: Date.now(),
+          payload: {
+            workspaceId: input.workspaceIdentity?.trim() || input.workspacePath,
+            workingDirectory: input.workingDirectory,
+            firstInput: {
+              text: input.text,
+              ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+            },
+          },
+        },
+      });
+      if (ack.status !== "accepted" || ack.result?.type !== "createSession") {
+        throw new Error(ack.message || ack.reasonCode || ack.status);
+      }
+      return { sessionId: ack.result.sessionId };
+    },
+    async continue(input) {
+      const ack = await zcodeAgentService.sendConversationCommandV4({
+        workspacePath: input.workspacePath,
+        ...(input.workspaceIdentity ? { workspaceIdentity: input.workspaceIdentity } : {}),
+        clientMode: "desktop-continuous",
+        envelope: {
+          commandId: randomUUID(),
+          clientId: "todos",
+          sessionId: input.sessionId,
+          type: "sendText",
+          issuedAt: Date.now(),
+          payload: { text: input.text },
+        },
+      });
+      if (ack.status !== "accepted" && ack.status !== "duplicate") {
+        throw new Error(ack.message || ack.reasonCode || ack.status);
+      }
+    },
+  });
+  settleTodo = (sessionId, failed) => {
+    void todoService.settle(sessionId, failed ? "failed" : "completed");
+  };
+  void todoService.recoverInterrupted();
+  services.register(ITodoService, todoService);
   sharedSqliteRepos.set(services, sqliteReposToClose);
   return services;
 }

@@ -48,5 +48,7 @@ export function buildRemoteWorkspaceSessionServices(
     // 无法读取远端待审 Hook。
     // hooks 读写（loadHooks/saveHooks）与 grantWorkspaceHookTrust 授权都必须打到远端 host。
     hooksService: remoteServices.hooksService,
+    // To-Dos 的 Git 和会话都在项目所在 Host 上。
+    todoService: remoteServices.todoService,
   };
 }

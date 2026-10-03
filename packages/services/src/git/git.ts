@@ -26,6 +26,9 @@ import type {
   GitFileChange,
   GitSwitchBranchRequest,
   GitCreateWorktreeRequest,
+  GitMergeBranchRequest,
+  GitMergeBranchResult,
+  GitCommitCountRequest,
   GitRemoveWorktreeRequest,
   GitWorktreeInfo,
   GitWorktreeMutationResult,
@@ -55,6 +58,8 @@ export interface IGitService {
   listWorktrees(params: GitRepositoryRequest): Promise<GitWorktreeInfo[]>;
   createWorktree(params: GitCreateWorktreeRequest): Promise<GitWorktreeMutationResult>;
   removeWorktree(params: GitRemoveWorktreeRequest): Promise<void>;
+  countCommitsAhead(params: GitCommitCountRequest): Promise<number>;
+  mergeBranch(params: GitMergeBranchRequest): Promise<GitMergeBranchResult>;
   getIdentity(params: GitRepositoryRequest): Promise<GitIdentity>;
   refresh(params: GitRefreshRequest): Promise<GitRefreshResult>;
 }

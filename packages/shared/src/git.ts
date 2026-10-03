@@ -338,6 +338,31 @@ export interface GitWorktreeMutationResult {
   issues: GitBranchMutationIssue[];
 }
 
+export type GitMergeBranchCode =
+  | "dirty"
+  | "wrong-branch"
+  | "conflict"
+  | "nothing-to-merge"
+  | "not-repo"
+  | "failed";
+
+export interface GitMergeBranchRequest extends GitRepositoryRequest {
+  branchName: string;
+  expectedBaseBranch: string;
+  baseCommit: string;
+}
+
+export interface GitMergeBranchResult {
+  success: boolean;
+  code?: GitMergeBranchCode;
+  message?: string;
+}
+
+export interface GitCommitCountRequest extends GitRepositoryRequest {
+  baseCommit: string;
+  branchName: string;
+}
+
 export interface GitCheckpointRestoreResult {
   success: boolean;
   conflicts?: GitCheckpointConflict[];

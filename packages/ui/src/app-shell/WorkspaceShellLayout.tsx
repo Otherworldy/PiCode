@@ -32,7 +32,9 @@ import { usePaneSessionPersistence } from "@/v4/usePaneSessionPersistence.js";
 import { requestV4ComposerDraftWorkspaceTransfer } from "@/v4/composer/composerDraftWorkspaceTransfer.js";
 import { ChatEmptyWorkspacePreviewMenu } from "@/ChatEmptyState.js";
 import { DesktopTopOverlay } from "@/DesktopTopOverlay.js";
+import { DesktopWindowControls } from "@/DesktopWindowControls.js";
 import { DesktopWindowFrame } from "@/DesktopWindowFrame.js";
+import { TodoListPane } from "@/todos/TodoListPane.js";
 import { WorkspacePluginPreview } from "@/WorkspacePluginPreview.js";
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { GitBranchSwitcher } from "@/GitBranchSwitcher.js";
@@ -1503,7 +1505,9 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   // 与 Task Header 分叉。桌面端统一复用 WorkspaceHeader，只由 variant 裁剪 task 专属内容；
   // 手机远控无 active task 时仍不渲染桌面 chrome，继续遵守 replayable overlay 边界。
   const shouldRenderMainViewHeader =
-    workspaceMainView !== "automations" && workspaceMainView !== "plugin-store";
+    workspaceMainView !== "automations" &&
+    workspaceMainView !== "plugin-store" &&
+    workspaceMainView !== "todos";
   const shouldRenderWorkspaceHeader =
     shouldRenderMainViewHeader && (activeTaskId !== null || isDesktop);
   // ErrorBoundary resetKeys 的数组如果每次 render 都重新创建，
@@ -1608,6 +1612,8 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                     goForwardShortcutLabel={goForwardShortcutLabel}
                     onOpenCommandCenter={handleOpenCommandCenter}
                     onOpenAutomations={handleOpenAutomations}
+                    onOpenTodos={() => onWorkspaceMainViewChange("todos")}
+                    todosActive={workspaceMainView === "todos"}
                     automationsActive={workspaceMainView === "automations"}
                     onOpenPluginStore={handleOpenPluginStore}
                     pluginStoreActive={workspaceMainView === "plugin-store"}
@@ -1754,7 +1760,16 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                       </ScopedErrorBoundary>
                     ) : null}
                     <div className="min-h-0 flex-1 overflow-hidden">
-                      {workspaceMainView === "automations" ? (
+                      {workspaceMainView === "todos" ? (
+                      <main className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
+                        {isDesktop ? (
+                          <div className="flex h-12 shrink-0 items-center justify-end px-1 [app-region:drag]">
+                            {usesInlineWindowControls ? <DesktopWindowControls /> : null}
+                          </div>
+                        ) : null}
+                        <TodoListPane onOpenSession={handleSelectTaskInChat} />
+                      </main>
+                    ) : workspaceMainView === "automations" ? (
                         <main
                           id={AUTOMATIONS_TOAST_ANCHOR_ID}
                           className="flex h-full min-h-0 flex-1 flex-col bg-background"
@@ -1885,7 +1900,9 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                     </div>
                   </section>
                 </ResizablePanel>
-                {workspaceMainView !== "automations" && workspaceMainView !== "plugin-store" ? (
+                {workspaceMainView !== "automations" &&
+                workspaceMainView !== "plugin-store" &&
+                workspaceMainView !== "todos" ? (
                   <AnimatedTerminalPanel
                     frameClassName={cn(
                       isSidePaneVisible

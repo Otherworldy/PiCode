@@ -99,6 +99,11 @@ export interface GitCliRepo {
     worktreePath: string,
     force?: boolean,
   ): Promise<void>;
+  countCommitsAhead(workspacePath: string, baseCommit: string, branchName: string): Promise<number>;
+  mergeBranch(
+    workspacePath: string,
+    branchName: string,
+  ): Promise<{ ok: true } | { ok: false; message: string }>;
   getDiff(params: GitDiffQuery): Promise<GitDiffResult>;
   getBranchComparison(workspacePath: string): Promise<GitBranchComparisonSnapshot>;
   stage(workspacePath: string, paths: string[]): Promise<void>;

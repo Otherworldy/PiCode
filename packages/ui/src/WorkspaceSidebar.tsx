@@ -19,6 +19,7 @@ import {
   FolderOpen,
   Hash,
   ListFilter,
+  ListTodo,
   Maximize2,
   MessageCircleCheck,
   MessageCirclePlus,
@@ -254,6 +255,8 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
   goForwardShortcutLabel: _goForwardShortcutLabel,
   onOpenCommandCenter,
   onOpenAutomations,
+  onOpenTodos,
+  todosActive = false,
   onOpenPluginStore: _onOpenPluginStore,
   automationsActive: _automationsActive = false,
   pluginStoreActive: _pluginStoreActive = false,
@@ -306,6 +309,8 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
   goForwardShortcutLabel?: string;
   onOpenCommandCenter: () => void;
   onOpenAutomations?: () => void;
+  onOpenTodos?: () => void;
+  todosActive?: boolean;
   onOpenPluginStore?: () => void;
   automationsActive?: boolean;
   pluginStoreActive?: boolean;
@@ -1276,6 +1281,17 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
                 }}
               />
             </WorkspaceNewTaskTooltip>
+            <button
+              type="button"
+              onClick={() => onOpenTodos?.()}
+              className={cn(
+                "inline-flex h-8 w-full shrink-0 cursor-pointer items-center gap-2 overflow-hidden rounded-lg pl-2.5 pr-2.5 text-ui-base hover:bg-surface-hover hover:text-foreground",
+                todosActive && "bg-surface-hover text-foreground",
+              )}
+            >
+              <ListTodo className="h-4 w-4 shrink-0" />
+              <span className="truncate">To-Dos</span>
+            </button>
             <Button
               variant="ghost"
               onClick={onOpenCommandCenter}

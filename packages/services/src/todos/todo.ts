@@ -1,0 +1,48 @@
+import type { TodoCreateParams, TodoItem, TodoStatus } from "@zcode/shared";
+import { ServiceChannels } from "@zcode/shared";
+import { createServiceDescriptor } from "../descriptors.js";
+
+export interface ITodoService {
+  create(params: TodoCreateParams): Promise<TodoItem>;
+  list(workspaceKey?: string): Promise<TodoItem[]>;
+  start(id: string): Promise<TodoItem>;
+  settle(sessionId: string, outcome: "completed" | "failed"): Promise<TodoItem | null>;
+  merge(id: string): Promise<TodoItem>;
+  complete(id: string): Promise<TodoItem>;
+  abandon(id: string, removeWorktree?: boolean): Promise<TodoItem>;
+  /** 已放弃的行回到待开始，工作树和会话保留。 */
+  restore(id: string): Promise<TodoItem>;
+  delete(id: string): Promise<void>;
+  /** 启动时把残留 running 标为失败。 */
+  recoverInterrupted(): Promise<number>;
+}
+
+export const ITodoService = createServiceDescriptor<ITodoService>(ServiceChannels.Todo);
+
+export function workspaceKeyOf(params: {
+  workspacePath: string;
+  workspaceIdentity?: string;
+}): string {
+  return params.workspaceIdentity?.trim() || params.workspacePath;
+}
+
+export class TodoStateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TodoStateError";
+  }
+}
+
+export function assertStatus(status: string): TodoStatus {
+  if (
+    status === "todo" ||
+    status === "running" ||
+    status === "needs_review" ||
+    status === "done" ||
+    status === "failed" ||
+    status === "canceled"
+  ) {
+    return status;
+  }
+  throw new TodoStateError(`unknown status ${status}`);
+}

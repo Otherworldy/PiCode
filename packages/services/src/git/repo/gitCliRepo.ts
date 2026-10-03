@@ -1389,6 +1389,42 @@ export function createGitCliRepo(options?: { commandProvider?: GitCommandProvide
       });
     },
 
+    async countCommitsAhead(workspacePath: string, baseCommit: string, branchName: string) {
+      const resolution = await this.resolveRepository(workspacePath);
+      if (!resolution.isGitAvailable || !resolution.isRepository) return 0;
+      const result = await commandProvider.run({
+        cwd: resolution.repoRoot,
+        args: ["rev-list", "--count", `${baseCommit}..${branchName}`],
+        timeoutMs: DEFAULT_GIT_COMMAND_TIMEOUT_MS,
+        maxOutputBytes: DEFAULT_GIT_OUTPUT_BYTES,
+      });
+      if (result.exitCode !== 0) return 0;
+      const count = Number.parseInt(result.stdout.trim(), 10);
+      return Number.isFinite(count) ? count : 0;
+    },
+
+    async mergeBranch(workspacePath: string, branchName: string) {
+      const resolution = await this.resolveRepository(workspacePath);
+      if (!resolution.isGitAvailable || !resolution.isRepository) {
+        return { ok: false as const, message: "not a git repository" };
+      }
+      const merged = await commandProvider.run({
+        cwd: resolution.repoRoot,
+        args: ["merge", "--no-ff", "--no-edit", branchName],
+        timeoutMs: DEFAULT_GIT_COMMAND_TIMEOUT_MS,
+        maxOutputBytes: DEFAULT_GIT_OUTPUT_BYTES,
+      });
+      if (merged.exitCode === 0) return { ok: true as const };
+      const message = `${merged.stdout}\n${merged.stderr}`.trim();
+      await commandProvider.run({
+        cwd: resolution.repoRoot,
+        args: ["merge", "--abort"],
+        timeoutMs: DEFAULT_GIT_COMMAND_TIMEOUT_MS,
+        maxOutputBytes: DEFAULT_GIT_OUTPUT_BYTES,
+      });
+      return { ok: false as const, message: message || "merge failed" };
+    },
+
     async getDiff(params: GitDiffQuery): Promise<GitDiffResult> {
       const resolution = await this.resolveRepository(params.workspacePath);
       const absolutePath = isAbsolute(params.path)
