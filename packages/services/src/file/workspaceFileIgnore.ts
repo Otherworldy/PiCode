@@ -1,4 +1,4 @@
-import { open, readFile, rename, rm } from "node:fs/promises";
+import { open, readFile, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import ignoreFactory from "ignore";
 import type { Ignore } from "ignore";
@@ -7,8 +7,9 @@ import type { ServiceLogger } from "../logger/serviceLogger.js";
 /**
  * workspace 文件搜索忽略的单一真相源。
  *
- * `.zcodeignore`（workspace root，gitignore 语法）是搜索索引的唯一规则文件：
+ * `.picodeignore`（workspace root，gitignore 语法）是搜索索引的唯一规则文件：
  * 首次需要规则而文件不存在时自动创建，内容为 root `.gitignore` 的拷贝（无则默认模板）；
+ * 仅当新文件不存在且旧名 `.zcodeignore` 存在时改名，避免自定义规则被新模板盖掉。
  * 之后 `.gitignore` 的变化不再影响搜索，用户通过设置页编辑或「从 .gitignore 重新同步」。
  *
  * 规则解析交给 `ignore` npm 包（gitignore spec 2.22 参考实现，ESLint 同款）：
@@ -16,7 +17,9 @@ import type { ServiceLogger } from "../logger/serviceLogger.js";
  * `**` 跨层、目录后缀 `/`、字符类与转义。禁止在本仓库手写 gitignore 解析。
  */
 
-export const WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME = ".zcodeignore";
+export const WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME = ".picodeignore";
+/** 旧产品名。新文件不存在时才改名迁移，两者都在则不动旧文件。 */
+export const LEGACY_WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME = ".zcodeignore";
 const GITIGNORE_FILE_NAME = ".gitignore";
 
 type WorkspaceFileIgnoreLogger = Pick<ServiceLogger, "info" | "warn">;
@@ -35,7 +38,7 @@ interface WorkspaceFileSearchIgnoreRules {
 
 interface WorkspaceFileSearchIgnoreContent {
   content: string;
-  /** file：.zcodeignore 已存在；template：尚未创建，content 是保存后将落盘的初始内容预览。 */
+  /** file：.picodeignore 已存在；template：尚未创建，content 是保存后将落盘的初始内容预览。 */
   source: "file" | "template";
 }
 
@@ -76,7 +79,7 @@ const BUILTIN_IGNORE_LINES = [
 ];
 
 const TEMPLATE_HEADER = [
-  "# PiCode 工作区文件搜索忽略规则（.zcodeignore）",
+  "# PiCode 工作区文件搜索忽略规则（.picodeignore）",
   "# 语法与 .gitignore 一致，只影响 PiCode 的 @ 文件候选 / Command Center / 文件树搜索，",
   "# 不影响文件树浏览、上传或 Agent 文件访问。",
   "# 修改 .gitignore 不会自动同步到本文件；可在设置页「从 .gitignore 同步」。",
@@ -122,7 +125,7 @@ function buildBuiltinDefaultsSection(gitignoreContent: string | null): string {
 }
 
 /**
- * 构建 `.zcodeignore` 初始内容：.gitignore 规则拷贝 + 双标记分区（默认排除段 / 自定义区）。
+ * 构建 `.picodeignore` 初始内容：.gitignore 规则拷贝 + 双标记分区（默认排除段 / 自定义区）。
  * 附加默认段是行为兼容要求：.gitignore 未声明 node_modules 等目录的仓库若仅严格拷贝，
  * 依赖目录会被整棵放开扫描（再次出现全仓扫描的性能问题）；默认段随文件
  * 交给用户编辑，删除即放开，维持"单一真相源、无代码级并集"的承诺。
@@ -256,6 +259,54 @@ async function readOptionalFile(path: string): Promise<string | null> {
   }
 }
 
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+/**
+ * 解析规则文件路径。新名优先；只有旧名时改名。
+ * 改名失败则仍返回旧路径，调用方继续读旧规则，不再写一份模板。
+ */
+export async function resolveWorkspaceFileSearchIgnorePath(
+  rootPath: string,
+  logger?: WorkspaceFileIgnoreLogger,
+): Promise<string> {
+  const nextPath = resolve(rootPath, WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME);
+  if (await pathExists(nextPath)) {
+    return nextPath;
+  }
+  const legacyPath = resolve(rootPath, LEGACY_WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME);
+  if (!(await pathExists(legacyPath))) {
+    return nextPath;
+  }
+  try {
+    await rename(legacyPath, nextPath);
+  } catch (error) {
+    if (await pathExists(nextPath)) {
+      return nextPath;
+    }
+    logger?.warn(
+      undefined,
+      `[workspace-file-ignore] 将 ${LEGACY_WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME} 改名为 ${WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME} 失败，继续读旧文件`,
+      error,
+    );
+    return legacyPath;
+  }
+  logger?.info(
+    undefined,
+    `[workspace-file-ignore] 已将 ${LEGACY_WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME} 改名为 ${WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME}`,
+  );
+  return nextPath;
+}
+
 /**
  * 原子写：目标目录内写临时文件（flush + close）后 rename 替换，参照
  * workspace-hook-mutation.ts 的模式，保证 Runtime/设置页不会观察到半截规则文件。
@@ -282,7 +333,7 @@ async function atomicWriteIgnoreFile(path: string, content: string): Promise<voi
 }
 
 /**
- * 扫描前加载 `.zcodeignore` 规则；含自动创建与 fail-open 降级链：
+ * 扫描前加载 `.picodeignore` 规则；含旧名迁移、自动创建与 fail-open 降级链：
  * 文件不存在 → 原子创建（.gitignore 拷贝 / 默认模板）；
  * 创建或读取失败（只读 fs、权限）→ 内存使用 .gitignore 内容 → 再失败用内置默认规则。
  * 任何降级只 warn 一次，绝不让 @ 面板因规则文件不可用而扫描失败。
@@ -291,8 +342,6 @@ export async function loadWorkspaceFileSearchIgnoreRules(
   rootPath: string,
   logger?: WorkspaceFileIgnoreLogger,
 ): Promise<WorkspaceFileSearchIgnoreRules> {
-  const ignorePath = resolve(rootPath, WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME);
-
   const degradeToInMemory = async (
     reason: string,
     error: unknown,
@@ -319,8 +368,10 @@ export async function loadWorkspaceFileSearchIgnoreRules(
     };
   };
 
+  let ignorePath: string;
   let existing: string | null;
   try {
+    ignorePath = await resolveWorkspaceFileSearchIgnorePath(rootPath, logger);
     existing = await readOptionalFile(ignorePath);
   } catch (error) {
     return degradeToInMemory(`读取 ${WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME} 失败`, error);
@@ -380,7 +431,7 @@ export function isWorkspaceFileSearchPathIgnored(
 export async function readWorkspaceFileSearchIgnore(
   rootPath: string,
 ): Promise<WorkspaceFileSearchIgnoreContent> {
-  const ignorePath = resolve(rootPath, WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME);
+  const ignorePath = await resolveWorkspaceFileSearchIgnorePath(rootPath);
   const existing = await readOptionalFile(ignorePath);
   if (existing !== null) {
     return { content: existing, source: "file" };
@@ -405,7 +456,7 @@ export async function transformWorkspaceFileSearchIgnore(
   rootPath: string,
   transform: WorkspaceFileSearchIgnoreTransform,
 ): Promise<{ content: string }> {
-  const ignorePath = resolve(rootPath, WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME);
+  const ignorePath = await resolveWorkspaceFileSearchIgnorePath(rootPath);
   const existing = await readOptionalFile(ignorePath).catch(() => null);
   const gitignoreContent = await readOptionalFile(resolve(rootPath, GITIGNORE_FILE_NAME)).catch(
     () => null,
@@ -423,6 +474,6 @@ export async function writeWorkspaceFileSearchIgnore(
   rootPath: string,
   content: string,
 ): Promise<void> {
-  const ignorePath = resolve(rootPath, WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME);
+  const ignorePath = await resolveWorkspaceFileSearchIgnorePath(rootPath);
   await atomicWriteIgnoreFile(ignorePath, content);
 }

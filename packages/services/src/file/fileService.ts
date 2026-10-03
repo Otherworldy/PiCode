@@ -20,10 +20,12 @@ import {
   type WorkspaceFileSearchFilter,
 } from "./workspaceFileMentionFilter.js";
 import {
+  LEGACY_WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME,
   WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME,
   isWorkspaceFileSearchPathIgnored,
   loadWorkspaceFileSearchIgnoreRules,
   readWorkspaceFileSearchIgnore,
+  resolveWorkspaceFileSearchIgnorePath,
   transformWorkspaceFileSearchIgnore,
   writeWorkspaceFileSearchIgnore,
 } from "./workspaceFileIgnore.js";
@@ -203,7 +205,7 @@ export interface CreateFileServiceOptions {
  * 37 万文件 workspace 的全仓扫描即使并发化也要数秒，同一 workspace 的
  * 反复打开（@ 面板关闭即清理的 renderer 语义、Command Center、文件树）
  * 不应每次都重扫。服务内按 workspaceIdentity（缺省为 rootPath）隔离，
- * 校验 rootPath + .zcodeignore 的 mtime/size 指纹；规则编辑后缓存失效，
+ * 校验 rootPath + .picodeignore 的 mtime/size 指纹；规则编辑后缓存失效，
  * 保持"编辑规则后下次使用生效"的契约。
  */
 const WORKSPACE_FILE_LIST_CACHE_TTL_MS = 60_000;
@@ -218,7 +220,7 @@ interface WorkspaceFileIndex {
 
 async function statWorkspaceFileSearchIgnoreFingerprint(rootPath: string): Promise<string> {
   try {
-    const fileStat = await stat(join(rootPath, WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME));
+    const fileStat = await stat(await resolveWorkspaceFileSearchIgnorePath(rootPath));
     return `${fileStat.mtimeMs}:${fileStat.size}`;
   } catch {
     return "none";
@@ -261,7 +263,7 @@ export function createFileService(options: CreateFileServiceOptions = {}): IFile
     return check;
   };
 
-  // 全量扫描 + 打包（带 60s TTL / .zcodeignore 指纹缓存）。分块 RPC 共享同一份 packed。
+  // 全量扫描 + 打包（带 60s TTL / .picodeignore 指纹缓存）。分块 RPC 共享同一份 packed。
   const workspaceFileListScanning = new Map<
     string,
     { signature: string; promise: Promise<WorkspaceFileIndex> }
@@ -311,7 +313,10 @@ export function createFileService(options: CreateFileServiceOptions = {}): IFile
           for (const entry of children) {
             const entryPath = join(currentPath, entry.name);
             const relativePath = normalizeRelativePath(rootPath, entryPath);
-            if (relativePath === WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME) {
+            if (
+              relativePath === WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME ||
+              relativePath === LEGACY_WORKSPACE_FILE_SEARCH_IGNORE_FILE_NAME
+            ) {
               continue;
             }
             const type = await resolveReaddirEntryType(
