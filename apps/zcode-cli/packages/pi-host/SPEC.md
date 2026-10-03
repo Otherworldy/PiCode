@@ -31,7 +31,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
   → desktop-continuous 30ms / web-remote-replayable 150ms
 ```
 
-同一所有者，两套 flush。jsonl 为对话树真相；V4 snapshot 为 UI/远控派生缓存，可从 jsonl 重建。
+同一所有者，两套 flush。jsonl 为对话树真相；V4 snapshot 为 UI/远控派生缓存，可从 jsonl 重建。打开时若 publisher 还没有行，订阅前用 jsonl 再画一次；否则会交出空快照，加载结束后只剩输入框。
 
 上下文环的总量来自 Pi `getContextUsage()`，不另算。`message_end`、`tool_execution_end`、`compaction_end`，以及非重试的 `agent_end` 立刻推。流式 `message_update` 最多 250ms 推一次，生成过程中按 Pi 的估算上涨，不等整轮结束。值和上次一样则不下发。
 
@@ -42,6 +42,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 - Pi 拒 prompt（preflight false）：ACK 失败，不造假 turn。rewind 之后、重发完成之前的任何失败，都用 jsonl 把原对话行画回去。
 - `getModel()` 返回 `provider/model`。旧 snapshot 把裸模型 id 当成非法选择，会在截断之后把编辑打失败。
 - 新建会话的 Pi 投影增量写入 sessions-index。只跳过纯文本流式 delta。第一条用户消息同时成为侧栏标题。
+- 打开中的会话，侧栏转圈以该 pane 的 conversation snapshot `control.phase` 为准。sessions-index 还停在上一轮 completed 时，正在跑的这一行仍要转。未读点只在没有这份实时 phase 时盖过转圈。
 - 流中途失败：turn `failed`，已写出的 row 保留。
 - 模型失败只把一句摘要写进回复和 `lastError.message`；原始 JSON 放 `lastError.detail`。
 - Pi `auto_retry_start` 写入 `control.apiRetry.failures`。最终失败只进输入框上方的原错误横幅，摘要一行，历次失败和原文在「展开详情」。不写成助手正文。成功后清掉重试状态。同一次失败的后续 `agent_settled` 不清掉这条错误。
@@ -65,7 +66,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 消息上不再提供 `forkAssistant`。从此处继续走 `navigateSessionTree`，结果是左侧列表里的新会话，不是同一份 jsonl 里换叶子。标题旁不再切分支。
 
-`navigateSessionTree` 先按当前叶子 `createBranchedSession` 复制出新文件，再只在新会话上走 Pi `navigateTree`。原会话叶子不动。不总结、总结、自定义提示词仍传给这次导航。助手节点停在该条；用户节点回到父节点，原文只在新会话输入框为空时写回，不自动发送。成功后回执带新 `sessionId`，界面切过去。总结成功后在新文件追加 `branch_summary`。导航后按内存里的 `getLeafId()` / `buildContextEntries()` 重放。不带 `label`。入口是消息上的右键。用户、助手和工具行都可以。工具行带的是 `toolCallId`。右键菜单或自定义提示词对话框开着时，这条消息用选中底色标出。压缩进行中拒绝。正在生成不打断原会话。总结进行中 Stop 打到原会话，转给新会话的 `abortBranchSummary()`，不切过去，新文件删掉。不回滚工作区文件。`editUserQuery` 仍走原来的 `navigateTree` 裁切，不进这条命令。
+`navigateSessionTree` 先按当前叶子 `createBranchedSession` 复制出新文件，再只在新会话上走 Pi `navigateTree`。原会话叶子不动。不总结、总结、自定义提示词仍传给这次导航。助手节点停在该条；用户节点回到父节点，原文只在新会话输入框为空时写回，不自动发送。成功后回执带新 `sessionId`，界面切过去，并立刻把新会话补进当前 sessions-index，不等重启重扫 jsonl。新会话沿用原会话的协作模式和已允许的工具：完全访问不再重新弹权限。总结成功后在新文件追加 `branch_summary`。导航后按内存里的 `getLeafId()` / `buildContextEntries()` 重放。不带 `label`。入口是消息上的右键。用户、助手和工具行都可以。工具行带的是 `toolCallId`。右键菜单或自定义提示词对话框开着时，这条消息用选中底色标出。压缩进行中拒绝。正在生成不打断原会话。总结进行中 Stop 打到原会话，转给新会话的 `abortBranchSummary()`，不切过去，新文件删掉。不回滚工作区文件。`editUserQuery` 仍走原来的 `navigateTree` 裁切，不进这条命令。
 
 `readSessionTree` 把 `getTree()` 压成平铺节点，放在命令回执里，不进每条快照。压平用循环：一条几万层的父链用递归，打开会话时会栈溢出。`labelSessionEntry` 写 Pi 的 label，再回一份树。
 
@@ -81,7 +82,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 `applyFileRewind` 只退这一轮的文件，不截断聊天。真相是这一轮成功的 Pi 工具参数，不是旧 checkpoint。`edit` 要当前文件仍能唯一匹配 `newText` 才写回 `oldText`。`write` 要当前内容仍等于写入内容才删除该文件；覆盖掉的旧内容找不回来。对不上就整批不写。`bash` 只记为忽略，不阻止文件摘要上的撤销；编辑消息并选了回滚文件时，有忽略项仍拒绝。成功后把该轮 `fileChanges.state` 改成 `reverted`。SSH 工作区走和工具同一条远端读写。
 
-`switchCollaborationMode` 不恢复为 PiCode 协作模式机。危险工具仍走 PiCode `PermissionService`（Pi 无权限面）：allow 放行、deny 拒绝、ask 投影 `kind: permission` 给壳 PermissionDialog（Allow once / Allow for session / Block）。session allow 由 HostedSession 记忆。`mode=yolo` 直接放行全部工具，不再弹权限窗。插件 `confirm` 视为同意。`select` / `input` / `editor` 仍进底栏等人答，完全访问也不代答。`select` 把 `1. 标签 — 说明` 拆成问卷选项，回答仍回传原行。其它模式的 `confirm/select` 同样走底栏 userInput，不用 viewport overlay。
+`switchCollaborationMode` 不恢复为 PiCode 协作模式机。危险工具仍走 PiCode `PermissionService`（Pi 无权限面）：allow 放行、deny 拒绝、ask 投影 `kind: permission` 给壳 PermissionDialog（Allow once / Allow for session / Block）。session allow 由 HostedSession 记忆。`mode=yolo` 直接放行全部工具，不再弹权限窗。输入框切换权限立刻写到这个会话，不等下一条消息。切到完全访问时，正在等的工具权限按允许关掉。插件 `confirm` 视为同意。`select` / `input` / `editor` 仍进底栏等人答，完全访问也不代答。`select` 把 `1. 标签 — 说明` 拆成问卷选项，回答仍回传原行。其它模式的 `confirm/select` 同样走底栏 userInput，不用 viewport overlay。
 
 ## 死面
 

@@ -201,6 +201,18 @@ export class SessionsIndexProjection {
   }
 
   /**
+   * 新文件已经在磁盘上，但当前订阅还没扫到。缺行或仍是 draft 时补一条，
+   * 已有真实摘要不动，避免打开旧会话把列表刷一遍。
+   */
+  reveal(summary: SessionSummary): SessionsIndexDelta[] {
+    const prev = this.summaries.get(summary.sessionId);
+    if (prev && prev.phase !== "draft") return [];
+    if (prev && summariesEqual(prev, summary)) return [];
+    this.summaries.set(summary.sessionId, summary);
+    return [{ op: "session.upserted", session: summary }];
+  }
+
+  /**
    * 兼容迁移后的 store 重读只补齐缺失摘要；已有 live/seed 状态不能被冷存储默认态覆盖。
    * 返回 delta 供 publisher 推进 seq，并通知已经在线的列表订阅者。
    */

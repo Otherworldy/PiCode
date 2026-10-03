@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- grouped row 同时承载 drag overlay 与常规交互，状态徽标需共用同一渲染语义。 */
-import { memo, useState } from "react";
+import { memo, useState, useSyncExternalStore } from "react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import type { UniqueIdentifier } from "@dnd-kit/core";
@@ -26,6 +26,7 @@ import { buildTaskFeedbackDescription } from "@/lib/taskFeedbackDraft.js";
 import { useDeleteSessionAction } from "@/lib/deleteSessionTask.js";
 import { useTaskListItemContextActions } from "@/useTaskListItemContextActions.js";
 import { useFeedbackStore } from "@/feedback/feedbackStore.js";
+import { getSessionLivePhase, subscribeSessionLivePhase } from "@/v4/sessionLivePhase.js";
 import { getTaskListAttention, getTaskListRowActivity } from "@/v4/taskListRowActivity.js";
 import { GroupedTaskContextMenuContent } from "@/workspace-grouped-tasks/task-context-menu-content.js";
 import { TaskRowActionButton } from "@/workspace-grouped-tasks/task-row-action-button.js";
@@ -121,7 +122,12 @@ function GroupedTaskRowComponent({
           { label: taskAttentionLabel, count: String(taskAttention.count) },
         )
       : taskAttentionLabel;
-  const leadingIndicator = deriveTaskLeadingIndicator(task, taskActivity);
+  const livePhase = useSyncExternalStore(
+    subscribeSessionLivePhase,
+    () => getSessionLivePhase(task.taskId),
+    () => null,
+  );
+  const leadingIndicator = deriveTaskLeadingIndicator(task, taskActivity, livePhase);
   const taskTitle =
     task.title ||
     intl.formatMessage({

@@ -4,24 +4,33 @@ import type { TaskListRowActivity } from "@/v4/taskListRowActivity.js";
 export function deriveTaskLeadingIndicator(
   task: ZCodeTaskMeta,
   activity: TaskListRowActivity | null,
+  livePhase?: TaskListRowActivity["phase"] | null,
 ): "error" | "unread" | "loading" | "none" {
-  if (activity?.phase === "error") {
+  // 打开中的 pane 有 snapshot phase 时，它比 sessions-index 更新。
+  // 缺省则仍只信 index，避免历史 status=running 一直转圈。
+  const phase = livePhase ?? activity?.phase;
+  if (phase === "error") {
     return "error";
   }
 
   // 搜索结果或 sessions-index 尚未水合时可能没有 activity sidecar。
   // 这种情况仅回退持久化 error；一旦有 sessions-index，phase 就是实时权威。
-  if (!activity && task.status === "error") {
+  if (livePhase == null && !activity && task.status === "error") {
     return "error";
   }
 
   // unread 是 tasks-index membership 字段，蓝点必须直接读取当前
   // query-cache row；不再回退旧 Zustand map，避免两个未读权威互相打架。
-  if (typeof task.unreadAt === "number") {
+  // 打开中且正在跑的会话不能被旧未读盖掉转圈。
+  if (
+    livePhase !== "running" &&
+    livePhase !== "prewarming" &&
+    typeof task.unreadAt === "number"
+  ) {
     return "unread";
   }
 
-  if (activity?.phase === "prewarming" || activity?.phase === "running") {
+  if (phase === "prewarming" || phase === "running") {
     return "loading";
   }
 

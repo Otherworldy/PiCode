@@ -143,6 +143,13 @@ export class ExtensionUiHost {
     return this.deliver(response);
   }
 
+  /** 切到完全访问时，已经弹出的工具授权和 confirm 按允许关掉。提问不动。 */
+  allowPendingApprovals(): boolean {
+    const ids = this.pending.flatMap((item) => (isApproval(item) ? [item.interactionId] : []));
+    for (const id of ids) this.respond({ id, confirmed: true });
+    return ids.length > 0;
+  }
+
   private deliver(response: PiExtensionUiResponse): boolean {
     const dialog = this.dialogs.get(response.id);
     if (!dialog) {
@@ -206,6 +213,13 @@ export class ExtensionUiHost {
       },
     };
   }
+}
+
+function isApproval(item: PendingInteraction): boolean {
+  if (item.kind === "permission") return true;
+  if (item.payload.kind !== "userInput" || item.payload.freeText || item.payload.questions) return false;
+  const ids = new Set((item.payload.options ?? []).map((option) => option.optionId));
+  return ids.has("yes") && ids.has("no");
 }
 
 const CUSTOM_OPTION = /^\d+\.\s+(?:自己输入|Type something\.)$/;

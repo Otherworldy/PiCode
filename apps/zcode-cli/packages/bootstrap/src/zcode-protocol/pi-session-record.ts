@@ -6,7 +6,12 @@ import {
   type SessionId,
   type WorkspaceId,
 } from "@zcode/contracts";
-import { summarizePiJsonl, type HostedSession, type HostSessionRegistry } from "@zcode/pi-host";
+import {
+  readPiJsonl,
+  summarizePiJsonl,
+  type HostedSession,
+  type HostSessionRegistry,
+} from "@zcode/pi-host";
 import type { ZCodeWorkspaceRef } from "@zcode/shared";
 import { projectIdFromDirectory } from "../app/paths.js";
 import { createPiHostedApp } from "../app/pi-hosted-app.js";
@@ -16,6 +21,14 @@ import type {
   ZCodeProtocolAgentServerContext,
   ZCodeProtocolSessionRecord,
 } from "./server-types.js";
+
+/** publisher 还是空的时，按 jsonl 重画。生成中不重画，避免冲掉还没落盘的这一轮。 */
+export async function restoreHostedProjection(hosted: HostedSession): Promise<void> {
+  if (!hosted.isIdle) return;
+  const content = await readFile(hosted.sessionFile, "utf8").catch(() => "");
+  if (readPiJsonl(content).events.length === 0) return;
+  hosted.reloadHistory(content);
+}
 
 export async function bindHostedSession(
   context: ZCodeProtocolAgentServerContext,
@@ -83,6 +96,30 @@ export async function bindHostedSession(
     unsubscribeDeltas();
     hosted.dispose();
   };
+  const snapshot = hosted.projector.getSnapshot();
+  const title = snapshot.meta.title.trim() || summary?.title || "";
+  // 分支文件已经在磁盘上。增量如果被 draft 过滤掉，当前列表要到重启重扫才看得到。
+  if (title) {
+    record.persistence = "immediate";
+    context.v4Gateway?.revealStoredSession(workspace.workspaceKey, {
+      sessionId,
+      workspaceId: workspace.workspaceKey,
+      ...(hosted.parentSessionId ? { parentSessionId: hosted.parentSessionId } : {}),
+      title,
+      titleSource: snapshot.meta.titleSource === "default" ? "generated" : snapshot.meta.titleSource,
+      phase: snapshot.control.phase === "draft" ? "completedSuccess" : snapshot.control.phase,
+      sessionEnded: snapshot.control.sessionEnded,
+      hasBackgroundWork: snapshot.backgroundWorks.some((work) => work.status === "running"),
+      lastActivityAt: summary?.lastActivityAt ?? Date.now(),
+      createdAt: summary?.createdAt ?? record.createdAt,
+      ...(summary?.lastAssistantPreview
+        ? { lastAssistantPreview: summary.lastAssistantPreview }
+        : {}),
+      ...(summary?.cwd && summary.cwd !== workspace.workspacePath
+        ? { workingDirectory: summary.cwd }
+        : {}),
+    });
+  }
   return record;
 }
 

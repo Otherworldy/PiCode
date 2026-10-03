@@ -66,6 +66,11 @@ export class SessionsIndexPublisher {
     this.projection.seed(summary);
   }
 
+  /** 已落盘的新会话补进当前列表。已有非 draft 摘要时不产生 delta。 */
+  revealStoredSummary(summary: Parameters<SessionsIndexProjection["seed"]>[0]): boolean {
+    return this.record(this.projection.reveal(summary));
+  }
+
   /** 迁移重读：补齐首次冷种子缺失的 store 摘要，并为在线订阅产生正常 delta。 */
   mergeMissingStoredSummaries(
     summaries: readonly Parameters<SessionsIndexProjection["seed"]>[0][],

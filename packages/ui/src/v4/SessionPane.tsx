@@ -58,6 +58,7 @@ import type {
 import { toast } from "@/components/ui/toast.js";
 import { ChatLoading } from "@/components/ai-elements/chat-loading.js";
 import { compactFailureText } from "@/v4/compactFailureText.js";
+import { setSessionLivePhase } from "@/v4/sessionLivePhase.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { DEFAULT_CODE_PREVIEW_SETTINGS } from "@/lib/codePreviewSettings.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
@@ -607,6 +608,13 @@ export function SessionPane({
   const [lease, setLease] = useState<SessionLease | null>(null);
   const state = useConversationProjection(lease);
   const snapshot = state.snapshot;
+  useEffect(() => {
+    if (!sessionId) return;
+    // 侧栏转圈读这份 phase。sessions-index 晚到时，打开中的行仍要转。
+    const phase = snapshot?.sessionId === sessionId ? snapshot.control.phase : null;
+    setSessionLivePhase(sessionId, phase);
+    return () => setSessionLivePhase(sessionId, null);
+  }, [sessionId, snapshot?.control.phase, snapshot?.sessionId]);
   const newlyCreatedSessionIdRef = useRef<string | null>(null);
   const shareDraft = useConversationShareSelectionStore((storeState) =>
     sessionId ? storeState.drafts[sessionId] : undefined,
@@ -3649,8 +3657,12 @@ export function SessionPane({
         return;
       }
       handleDraftSwitchMode(mode);
+      // 草稿要等下一条消息才进 Host。正在跑的新会话切权限必须马上生效。
+      if (sessionId != null && (mode === "build" || mode === "edit" || mode === "yolo")) {
+        void dispatchCommand("switchCollaborationMode", { mode }, sessionId).catch(() => undefined);
+      }
     },
-    [handleDraftSwitchMode, handleSendText, sessionId, slashCommands],
+    [dispatchCommand, handleDraftSwitchMode, handleSendText, sessionId, slashCommands],
   );
 
   // context usage 面板的压缩入口（命令文本 = "/compact"，复用 slash 解析路径）。

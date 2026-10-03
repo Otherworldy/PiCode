@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -733,6 +733,28 @@ test("tool permission ask projects PermissionDialog payload", async () => {
   assert.equal((await waiting).id, "perm:1");
 });
 
+test("switching the session to full access allows the waiting tool", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async (input) => new FakePiSession(input.sessionId, input.sessionFile),
+  });
+  const session = await registry.create({ workspacePath: root });
+  const pending = session.requestConfirm("Bash", "run");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(session.ui.snapshot().pending.length, 1);
+  session.setCollaborationMode("yolo");
+  assert.equal(await pending, true);
+  assert.equal(session.ui.snapshot().pending.length, 0);
+  assert.equal(session.projector.getSnapshot().config.mode, "yolo");
+  assert.equal(session.ui.autoConfirm, true);
+  session.setCollaborationMode("build");
+  assert.equal(session.ui.autoConfirm, false);
+  assert.equal(session.projector.getSnapshot().config.mode, "build");
+  await rm(root, { recursive: true, force: true });
+});
+
 test("gateTool denies", async () => {
   await assert.rejects(
     () => gateTool(async () => "deny", "bash", {}),
@@ -913,12 +935,18 @@ test("resumeIntoNewSession keeps the parent and cancels on its stop", async () =
   assert.equal(fakes.get("child-1")?.summaryAborted, true);
   assert.equal(parent.projector.getSnapshot().control.canStop, false);
 
+  parent.projector.setConfig({ mode: "yolo" });
+  parent.sessionAllows.add("bash");
   const again = await registry.resumeIntoNewSession(parent.sessionId, {
     entryId: "u1",
     summarize: false,
   });
   assert.equal(again.cancelled, false);
   if (again.cancelled) throw new Error("expected a new session");
+  assert.equal(again.hosted.projector.getSnapshot().config.mode, "yolo");
+  assert.equal(again.hosted.ui.autoConfirm, true);
+  assert.equal(await again.hosted.requestConfirm("bash", "run"), true);
+  assert.equal(again.hosted.ui.snapshot().pending.length, 0);
   assert.equal(again.sessionId, "child-1");
   assert.equal(again.editorText, undefined);
   assert.deepEqual(fakes.get("child-1")?.navigatedTo, ["u1"]);
@@ -983,6 +1011,18 @@ test("list skips empty jsonl and hydrateHistory rebuilds rows", async () => {
   const kinds = opened.projector.getSnapshot().rows.window.map((row) => row.kind);
   assert.ok(kinds.includes("userInput"));
   assert.ok(kinds.includes("assistantText"));
+  opened.onDeltas(() => undefined);
+  const redrawn: Array<{ op: string; kind?: string }> = [];
+  opened.onDeltas((deltas) => {
+    for (const delta of deltas) {
+      redrawn.push({
+        op: delta.op,
+        ...(delta.op === "row.appended" ? { kind: delta.row.kind } : {}),
+      });
+    }
+  });
+  opened.reloadHistory(await readFile(opened.sessionFile, "utf8"));
+  assert.ok(redrawn.some((delta) => delta.op === "row.appended" && delta.kind === "userInput"));
   await rm(root, { recursive: true, force: true });
 });
 

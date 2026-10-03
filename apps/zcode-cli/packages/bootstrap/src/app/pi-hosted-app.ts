@@ -245,8 +245,7 @@ export function createPiHostedApp(
     },
     setExecutionState: async (input?: { mode?: string; planEnabled?: boolean }) => {
       if (!input?.mode) return;
-      hosted.projector.setConfig({ mode: input.mode });
-      hosted.ui.autoConfirm = input.mode === "yolo";
+      hosted.setCollaborationMode(input.mode);
     },
     getProjection: async () => ({
       id: sessionId,
@@ -310,8 +309,7 @@ export function createPiHostedApp(
     async setMode(mode: CollaborationMode) {
       const previousMode =
         (hosted.projector.getSnapshot().config.mode as CollaborationMode) || ("build" as CollaborationMode);
-      hosted.ui.autoConfirm = mode === "yolo";
-      hosted.projector.setConfig({ mode });
+      hosted.setCollaborationMode(mode);
       return { mode, previousMode, traceId: "pi-host" };
     },
     getModel: () => {

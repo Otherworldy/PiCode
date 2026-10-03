@@ -69,6 +69,12 @@ export interface HostedSession {
   setFeedback(entityId: string, feedback: "like" | "dislike" | null): void;
   markTurnFilesReverted(turnId: string): void;
   requestConfirm(toolName: string, reason: string, args?: unknown): Promise<boolean>;
+  /** 本会话里点过「允许本会话」的工具。 */
+  readonly sessionAllows: Set<string>;
+  /** 从此处继续：新会话沿用原会话的模式和已允许工具。 */
+  applyAccessFrom(source: HostedSession): void;
+  /** 立刻改这个会话的权限。完全访问会放掉正在等的工具授权。 */
+  setCollaborationMode(mode: string): void;
   publishUi(): void;
   dispose(): void;
   hydrateHistory(content: string): void;
@@ -286,6 +292,7 @@ export class HostSessionRegistry {
       });
     }
     const child = await this.fork(parentId, leaf.id);
+    child.applyAccessFrom(parent);
     const previousAbort = parent.abort;
     parent.abort = () => child.abort();
     if (request.summarize) parent.noteBranchSummary(true);
@@ -595,6 +602,14 @@ export class HostSessionRegistry {
     const notifyListeners = new Set<(message: string, notifyType: "info" | "warning" | "error") => void>();
     const pendingDeltas: ConversationDelta[] = [];
     const sessionAllowed = new Set<string>();
+    const setCollaborationMode = (mode: string) => {
+      ui.autoConfirm = mode === "yolo";
+      const released = mode === "yolo" && ui.allowPendingApprovals();
+      if (mode && mode !== projector.getSnapshot().config.mode) {
+        emit(projector.setConfig({ mode }));
+      }
+      if (released) emit(projector.replaceInteractions(ui.snapshot().pending));
+    };
     const emit = (deltas: ConversationDelta[]) => {
       if (deltas.length === 0) return;
       if (deltaListeners.size === 0) {
@@ -876,6 +891,13 @@ export class HostSessionRegistry {
         emit(projector.replaceWidgets(snap.widgets));
         emit(projector.replaceStatuses(snap.statuses));
       },
+      sessionAllows: sessionAllowed,
+      applyAccessFrom: (source) => {
+        for (const name of source.sessionAllows) sessionAllowed.add(name);
+        const mode = source.projector.getSnapshot().config.mode;
+        if (mode) setCollaborationMode(mode);
+      },
+      setCollaborationMode,
       requestConfirm: async (toolName, reason, args) => {
         if (sessionAllowed.has(toolName)) return true;
         const id = `perm:${randomUUID()}`;

@@ -37,7 +37,12 @@ import {
   mergeColdConversationEvents,
 } from "../zcode-protocol-v4/cold-event-merge.js";
 import { lookupGlobalCreateSessionCommand } from "../zcode-protocol-v4/create-session-command-fact.js";
-import { bindHostedSession, createPiSessionRecord, listPiStoredSummaries } from "./pi-session-record.js";
+import {
+  bindHostedSession,
+  createPiSessionRecord,
+  listPiStoredSummaries,
+  restoreHostedProjection,
+} from "./pi-session-record.js";
 import type { V4CommandCoreHost } from "../zcode-protocol-v4/commands/types.js";
 import type {
   ConversationRowTargetResolution,
@@ -1696,6 +1701,11 @@ export function createConversationV4Gateway(
     // 冷订阅不再在 eventStore / transcript 之间 XOR。message/part
     // 是已完成正文权威，session_entry 只补 legacy goal，内存事件只补
     // 未持久 in-flight 和 queue/permission/control 等 ephemeral 状态。
+    restoreEmptyPiProjection: async (sessionId) => {
+      const hosted = context.piHost?.get(sessionId);
+      if (!hosted) return;
+      await restoreHostedProjection(hosted);
+    },
     loadPersistedEvents: async (sessionId, persistedMessages) => {
       if (context.piHost?.get(sessionId)) {
         return { events: [], synthesized: false, sourceEventSeq: 0 };

@@ -426,6 +426,8 @@ export interface V4GatewayHost {
     sessionId: string,
     persistedMessages?: MessageWithParts[],
   ): Promise<PersistedEventsLoadResult>;
+  /** Pi jsonl 已在，但当前 publisher 没有行。订阅前重画，避免交出空快照。 */
+  restoreEmptyPiProjection?(sessionId: string): Promise<void>;
   /** 仅用于低频生命周期和恢复裁决；高频 event/stream trace 禁止走生产日志。 */
   onDebug?(message: string): void;
   onError?(scope: string, error: unknown, context?: V4GatewayErrorContext): void;
@@ -1075,6 +1077,17 @@ export class ConversationV4Gateway {
   private fanOutToIndex(sessionId: string, event: SessionEvent): void {
     if (event.type === SessionEventType.ModelStreaming) return;
     this.publishCurrentSummaryToIndex(sessionId);
+  }
+
+  /** 已经写好的会话补进当前列表。已有非 draft 摘要时不发 delta。 */
+  revealStoredSession(workspaceId: string, summary: SessionSummary): void {
+    const indexPublisher = this.indexPublishers.get(workspaceId);
+    if (!indexPublisher) return;
+    try {
+      if (indexPublisher.revealStoredSummary(summary)) this.flushIndex(workspaceId);
+    } catch (error) {
+      this.host.onError?.("v4.sessionsIndex.reveal", error);
+    }
   }
 
   /**
@@ -3014,6 +3027,16 @@ export class ConversationV4Gateway {
       !forceRebuild &&
       !existingDroppedContent
     ) {
+      // 空 publisher 不能当成已恢复的历史。Pi 会话的 jsonl 仍在时先补画，
+      // 否则首帧是空窗口，加载圈结束后只剩输入框。
+      if (latestPublisher.getSnapshot().rows.window.length === 0) {
+        await this.host.restoreEmptyPiProjection?.(sessionId).catch((error) => {
+          this.host.onError?.("v4.hydrate.restoreEmptyPiProjection", error, {
+            phase: "restoreEmptyPiProjection",
+            sessionId,
+          });
+        });
+      }
       // 创建时种子可能落空（record 尚未入册），首次订阅补一次（幂等、事件优先）。
       this.hydrationBuffers.delete(sessionId);
       this.seedPublisherConfig(sessionId, latestPublisher);

@@ -27,6 +27,7 @@ import {
   deriveTaskLeadingIndicator,
   formatTaskRelativeTime,
 } from "@/lib/taskListItemPresentation.js";
+import { getSessionLivePhase, subscribeSessionLivePhase } from "@/v4/sessionLivePhase.js";
 import { getTaskListAttention, getTaskListRowActivity } from "@/v4/taskListRowActivity.js";
 import { TaskListItemContextMenu } from "@/TaskListItemContextMenu.js";
 import { TaskInteractionBadge } from "@/TaskInteractionBadge.js";
@@ -369,9 +370,14 @@ export const MemoTaskItem = memo(function TaskListItem({
     // 如果同步取消确认，用户移动鼠标稍微离开任务行后确认按钮会消失，导致二次确认无法稳定完成。
   }, []);
 
+  const livePhase = useSyncExternalStore(
+    subscribeSessionLivePhase,
+    () => getSessionLivePhase(task.taskId),
+    () => null,
+  );
   const leadingIndicator = useMemo(
-    () => deriveTaskLeadingIndicator(task, taskActivity),
-    [task, taskActivity],
+    () => deriveTaskLeadingIndicator(task, taskActivity, livePhase),
+    [livePhase, task, taskActivity],
   );
   const isTaskCron = isCronTask(task);
   // 月亮身份改为持久 meta 标记判断；off-peak store 反查在任务被删除后会丢失
