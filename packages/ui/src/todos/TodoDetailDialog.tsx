@@ -2,6 +2,7 @@ import { CircleAlert, Loader2, Play } from "lucide-react";
 import type { ITodoService } from "@zcode/services";
 import type { TodoItem } from "@zcode/shared";
 import { Button } from "@/components/ui/button.js";
+import { useAlertDialog } from "@/hooks/useAlertDialog.js";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +14,12 @@ import { Input } from "@/components/ui/input.js";
 import { Textarea } from "@/components/ui/textarea.js";
 import { StatusChip, projectLeaf } from "@/todos/todoBoard.js";
 import { TodoTagField } from "@/todos/TodoTagField.js";
+
+function isDirtyMergeError(error: unknown): boolean {
+  return (
+    typeof error === "object" && error !== null && (error as { code?: unknown }).code === "dirty"
+  );
+}
 
 export function TodoDetailDialog({
   detail,
@@ -37,6 +44,7 @@ export function TodoDetailDialog({
   onStart: (id: string) => void;
   onOpenSession: (workspacePath: string, taskId: string, workspaceIdentity?: string) => void;
 }) {
+  const requestAlert = useAlertDialog();
   const editable = detail?.status === "todo";
   return (
     <Dialog open={detail != null} onOpenChange={(open) => !open && onClose()}>
@@ -86,7 +94,9 @@ export function TodoDetailDialog({
               {editable ? (
                 <Button
                   size="sm"
-                  disabled={!draft.title.trim() || (!draft.prompt.trim() && detail.attachments.length === 0)}
+                  disabled={
+                    !draft.title.trim() || (!draft.prompt.trim() && detail.attachments.length === 0)
+                  }
                   onClick={() => void onRun(() => todoService.update(detail.id, draft))}
                 >
                   保存
@@ -94,7 +104,11 @@ export function TodoDetailDialog({
               ) : null}
               {detail.status === "todo" || detail.status === "failed" ? (
                 <Button size="sm" disabled={starting} onClick={() => onStart(detail.id)}>
-                  {starting ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
+                  {starting ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Play className="size-3.5" />
+                  )}
                   开始
                 </Button>
               ) : null}
@@ -117,20 +131,51 @@ export function TodoDetailDialog({
               ) : null}
               {detail.status === "needs_review" ? (
                 <>
-                  <Button size="sm" onClick={() => void onRun(() => todoService.merge(detail.id))}>
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      void onRun(async () => {
+                        try {
+                          await todoService.merge(detail.id);
+                        } catch (error) {
+                          if (!isDirtyMergeError(error)) throw error;
+                          const confirmed = await requestAlert({
+                            title: "主工作区有未提交改动",
+                            description:
+                              "将用模型为这些改动写提交说明，提交到基线分支，然后再合并这条 To-Do。冲突会停在待审。",
+                            actionLabel: "提交并合并",
+                          });
+                          if (!confirmed) return;
+                          await todoService.merge(detail.id, { commitDirty: true });
+                        }
+                      })
+                    }
+                  >
                     合并
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => void onRun(() => todoService.complete(detail.id))}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void onRun(() => todoService.complete(detail.id))}
+                  >
                     完成
                   </Button>
                 </>
               ) : null}
               {detail.status === "canceled" ? (
-                <Button size="sm" variant="outline" onClick={() => void onRun(() => todoService.restore(detail.id))}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void onRun(() => todoService.restore(detail.id))}
+                >
                   恢复
                 </Button>
               ) : detail.status !== "done" ? (
-                <Button size="sm" variant="ghost" onClick={() => void onRun(() => todoService.abandon(detail.id))}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => void onRun(() => todoService.abandon(detail.id))}
+                >
                   放弃
                 </Button>
               ) : null}

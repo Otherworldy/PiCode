@@ -21,7 +21,8 @@ export interface ITodoService {
   settle(sessionId: string, outcome: "completed" | "failed"): Promise<TodoItem | null>;
   /** 会话已删除。没有对应行则不动。 */
   noteSessionRemoved(sessionId: string): Promise<TodoItem | null>;
-  merge(id: string): Promise<TodoItem>;
+  /** 脏工作区且未传 commitDirty 时抛 code dirty，不写 error。 */
+  merge(id: string, options?: { commitDirty?: boolean }): Promise<TodoItem>;
   complete(id: string): Promise<TodoItem>;
   abandon(id: string, removeWorktree?: boolean): Promise<TodoItem>;
   /** 已放弃的行回到待开始，工作树和会话保留。 */
@@ -41,7 +42,10 @@ export function workspaceKeyOf(params: {
 }
 
 export class TodoStateError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly code?: string,
+  ) {
     super(message);
     this.name = "TodoStateError";
   }
