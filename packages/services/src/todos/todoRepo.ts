@@ -1,9 +1,15 @@
 import { mkdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import { normalizeTodoTags, type TodoCreateParams, type TodoItem, type TodoUpdateParams } from "@zcode/shared";
+import {
+  normalizeTodoTags,
+  type TodoCreateParams,
+  type TodoItem,
+  type TodoUpdateParams,
+} from "@zcode/shared";
 import { getTasksIndexDatabasePath } from "#src/paths.js";
 import { runTasksDatabaseMigrations } from "#src/session/tasksDatabase/migrations.js";
+import { storedAttachments, usableAttachments } from "#src/todos/todoAttachments.js";
 import { TodoStateError, workspaceKeyOf } from "#src/todos/todo.js";
 
 const require = createRequire(import.meta.url);
@@ -74,21 +80,13 @@ interface TodoRow {
   updated_at: number;
 }
 
-function parseAttachments(raw: string | null): TodoItem["attachments"] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw) as TodoItem["attachments"];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
 function parseTags(raw: string | null): string[] {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((tag): tag is string => typeof tag === "string") : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((tag): tag is string => typeof tag === "string")
+      : [];
   } catch {
     return [];
   }
@@ -122,7 +120,7 @@ function toItem(row: TodoRow): TodoItem {
     sessionId: row.session_id,
     status: row.status as TodoItem["status"],
     error: row.error,
-    attachments: parseAttachments(row.attachments),
+    attachments: storedAttachments(row.attachments),
     tags: parseTags(row.tags),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -168,9 +166,7 @@ export class TodoRepo {
     const workspacePath = params.workspacePath.trim();
     const title = params.title.trim();
     const prompt = params.prompt.trim();
-    const attachments = (params.attachments ?? []).filter(
-      (file) => file.fileName && (file.localPath || file.dataBase64),
-    );
+    const attachments = usableAttachments(params.attachments);
     const tags = tagsOf(params.tags);
     if (!workspacePath || !title || (!prompt && attachments.length === 0)) {
       throw new TodoStateError("标题、说明和项目都必填");
@@ -210,22 +206,33 @@ export class TodoRepo {
     return (await this.get(id))!;
   }
 
-  // ponytail: 只改标题和说明。附件要重传时再加。
   async update(id: string, params: TodoUpdateParams): Promise<TodoItem> {
     const current = await this.get(id);
     if (!current) throw new TodoStateError("To-Do 不存在");
+    if (current.status !== "todo") throw new TodoStateError("只有未开始的 To-Do 可以修改");
     const title = params.title.trim();
     const prompt = params.prompt.trim();
-    if (!title || (!prompt && current.attachments.length === 0)) {
+    const submitted = params as TodoUpdateParams & { attachments?: TodoItem["attachments"] };
+    const attachments =
+      submitted.attachments === undefined
+        ? current.attachments
+        : usableAttachments(submitted.attachments);
+    if (!title || (!prompt && attachments.length === 0)) {
       throw new TodoStateError("标题和说明都必填");
     }
     const db = await this.ensure();
     const result = db
       .prepare(
-        `UPDATE todos SET title = ?, prompt = ?, updated_at = ?
+        `UPDATE todos SET title = ?, prompt = ?, attachments = ?, updated_at = ?
          WHERE id = ? AND status = 'todo'`,
       )
-      .run(title, prompt || "见附件。", Date.now(), id);
+      .run(
+        title,
+        prompt || "见附件。",
+        attachments.length > 0 ? JSON.stringify(attachments) : null,
+        Date.now(),
+        id,
+      );
     if (result.changes !== 1) throw new TodoStateError("只有未开始的 To-Do 可以修改");
     return (await this.get(id))!;
   }
@@ -246,7 +253,9 @@ export class TodoRepo {
 
   async listTags(): Promise<string[]> {
     const db = await this.ensure();
-    const rows = db.prepare("SELECT name FROM todo_tag_catalog ORDER BY name COLLATE NOCASE").all() as {
+    const rows = db
+      .prepare("SELECT name FROM todo_tag_catalog ORDER BY name COLLATE NOCASE")
+      .all() as {
       name: string;
     }[];
     return rows.map((row) => row.name);
@@ -256,9 +265,7 @@ export class TodoRepo {
     const db = await this.ensure();
     const rows = workspaceKey
       ? db
-          .prepare(
-            "SELECT * FROM todos WHERE workspace_key = ? ORDER BY updated_at DESC",
-          )
+          .prepare("SELECT * FROM todos WHERE workspace_key = ? ORDER BY updated_at DESC")
           .all(workspaceKey)
       : db.prepare("SELECT * FROM todos ORDER BY updated_at DESC").all();
     return (rows as unknown as TodoRow[]).map(toItem);
@@ -272,9 +279,9 @@ export class TodoRepo {
 
   async getBySession(sessionId: string): Promise<TodoItem | null> {
     const db = await this.ensure();
-    const row = db
-      .prepare("SELECT * FROM todos WHERE session_id = ?")
-      .get(sessionId) as TodoRow | undefined;
+    const row = db.prepare("SELECT * FROM todos WHERE session_id = ?").get(sessionId) as
+      | TodoRow
+      | undefined;
     return row ? toItem(row) : null;
   }
 
@@ -330,10 +337,7 @@ export class TodoRepo {
     return this.get(id);
   }
 
-  async settle(
-    sessionId: string,
-    outcome: "completed" | "failed",
-  ): Promise<TodoItem | null> {
+  async settle(sessionId: string, outcome: "completed" | "failed"): Promise<TodoItem | null> {
     const db = await this.ensure();
     const next = outcome === "failed" ? "failed" : "needs_review";
     const error = outcome === "failed" ? "会话失败" : null;

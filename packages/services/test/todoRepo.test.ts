@@ -21,7 +21,10 @@ async function withRepo(run: (repo: TodoRepo) => Promise<void>) {
 
 test("create requires a project and lists stay split by project", async () => {
   await withRepo(async (repo) => {
-    await assert.rejects(() => repo.create({ title: "a", prompt: "b", workspacePath: "  " }), TodoStateError);
+    await assert.rejects(
+      () => repo.create({ title: "a", prompt: "b", workspacePath: "  " }),
+      TodoStateError,
+    );
     const alpha = await repo.create({
       title: "a",
       prompt: "do a",
@@ -29,7 +32,10 @@ test("create requires a project and lists stay split by project", async () => {
     });
     await repo.create({ title: "b", prompt: "do b", workspacePath: "/proj/b" });
     const listed = await repo.list(alpha.workspaceKey);
-    assert.deepEqual(listed.map((item) => item.title), ["a"]);
+    assert.deepEqual(
+      listed.map((item) => item.title),
+      ["a"],
+    );
     assert.equal(alpha.id, "todo-1");
     await repo.delete(alpha.id);
     const next = await repo.create({ title: "c", prompt: "do c", workspacePath: "/proj/a" });
@@ -231,14 +237,18 @@ test("tags stay in the catalog after the todo is deleted", async () => {
     await repo.delete(created.id);
     assert.deepEqual(await repo.listTags(), ["Bug", "Feature"]);
     await repo.claim(
-      (await repo.create({ title: "b", prompt: "p", workspacePath: "/proj/a", tags: ["feature"] })).id,
+      (await repo.create({ title: "b", prompt: "p", workspacePath: "/proj/a", tags: ["feature"] }))
+        .id,
     );
     const running = await repo.list("/proj/a");
     const tagged = await repo.setTags(running[0]!.id, ["x"]);
     assert.equal(tagged.status, "running");
     assert.deepEqual(tagged.tags, ["x"]);
     assert.deepEqual(await repo.listTags(), ["Bug", "Feature", "x"]);
-    await assert.rejects(() => repo.setTags(tagged.id, ["1", "2", "3", "4", "5", "6", "7", "8", "9"]), TodoStateError);
+    await assert.rejects(
+      () => repo.setTags(tagged.id, ["1", "2", "3", "4", "5", "6", "7", "8", "9"]),
+      TodoStateError,
+    );
   });
 });
 
@@ -256,35 +266,85 @@ test("retry sends the chosen model on the existing session", async () => {
     await repo.markFailed(created.id, "中断");
     const selection = { providerId: "p", modelId: "m", options: { reasoningLevel: "high" } };
     let seen: unknown;
-    const service = new TodoService(repo, {
-      async getRepositorySummary() {
-        throw new Error("unused");
+    const service = new TodoService(
+      repo,
+      {
+        async getRepositorySummary() {
+          throw new Error("unused");
+        },
+        async listWorktrees() {
+          return [];
+        },
+        async createWorktree() {
+          throw new Error("unused");
+        },
+        async removeWorktree() {},
+        async countCommitsAhead() {
+          return 0;
+        },
+        async mergeBranch() {
+          throw new Error("unused");
+        },
       },
-      async listWorktrees() {
-        return [];
+      {
+        async create() {
+          throw new Error("unused");
+        },
+        async continue(input) {
+          seen = input.modelSelection;
+        },
       },
-      async createWorktree() {
-        throw new Error("unused");
-      },
-      async removeWorktree() {},
-      async countCommitsAhead() {
-        return 0;
-      },
-      async mergeBranch() {
-        throw new Error("unused");
-      },
-    }, {
-      async create() {
-        throw new Error("unused");
-      },
-      async continue(input) {
-        seen = input.modelSelection;
-      },
-    });
+    );
     const next = await service.start(created.id, selection);
     assert.deepEqual(seen, selection);
     assert.equal(next.sessionId, "session-1");
     assert.equal("modelSelection" in next, false);
+  });
+});
+
+test("a pasted image is still there when the editor reopens", async () => {
+  await withRepo(async (repo) => {
+    const created = await repo.create({
+      title: "a",
+      prompt: "see image",
+      workspacePath: "/proj/a",
+      attachments: [
+        {
+          fileName: "image.png",
+          mime: "image/png",
+          bytes: 5,
+          localPath: "C:/Temp/clipboard.png",
+          dataBase64: "aGVsbG8=",
+        },
+      ],
+    });
+    assert.equal((await repo.get(created.id))?.attachments[0]?.dataBase64, "aGVsbG8=");
+    const updated = await repo.update(created.id, {
+      title: "a",
+      prompt: "see image",
+      attachments: [
+        {
+          fileName: "next.png",
+          mime: "image/png",
+          bytes: 3,
+          localPath: "C:/Temp/gone.png",
+          dataBase64: "bmV4",
+        },
+      ],
+    });
+    assert.equal(updated.attachments[0]?.fileName, "next.png");
+    assert.equal(updated.attachments[0]?.dataBase64, "bmV4");
+    assert.equal(updated.attachments[0]?.localPath, undefined);
+    const kept = await repo.update(created.id, { title: "b", prompt: "see image" });
+    assert.equal(kept.attachments[0]?.dataBase64, "bmV4");
+    await repo.claim(created.id);
+    await assert.rejects(
+      () => repo.update(created.id, { title: "c", prompt: "d", attachments: [] }),
+      TodoStateError,
+    );
+    const still = await repo.get(created.id);
+    assert.equal(still?.title, "b");
+    assert.equal(still?.attachments[0]?.dataBase64, "bmV4");
   });
 });
 
@@ -296,7 +356,10 @@ test("only an unstarted todo can change its text", async () => {
     assert.equal(updated.prompt, "q");
     assert.equal(updated.status, "todo");
     await repo.claim(created.id);
-    await assert.rejects(() => repo.update(created.id, { title: "c", prompt: "d" }), TodoStateError);
+    await assert.rejects(
+      () => repo.update(created.id, { title: "c", prompt: "d" }),
+      TodoStateError,
+    );
     const kept = await repo.get(created.id);
     assert.equal(kept?.title, "b");
   });

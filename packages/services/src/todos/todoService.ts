@@ -39,7 +39,8 @@ async function materializeAttachments(
 ): Promise<AttachmentRef[]> {
   const refs: AttachmentRef[] = [];
   for (const [index, file] of attachments.entries()) {
-    let ref = file.localPath;
+    // 正文优先。剪贴板留下的 localPath 往往已经没了，不能拿它盖住图片。
+    let ref = file.dataBase64 ? undefined : file.localPath;
     if (!ref && file.dataBase64) {
       const dir = join(tmpdir(), "zcode-todos", id);
       await mkdir(dir, { recursive: true });
@@ -54,7 +55,8 @@ async function materializeAttachments(
 }
 
 function samePath(left: string, right: string): boolean {
-  const norm = (value: string) => resolve(value).replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  const norm = (value: string) =>
+    resolve(value).replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
   return norm(left) === norm(right);
 }
 
@@ -189,7 +191,12 @@ export class TodoService implements ITodoService {
 
   async merge(id: string): Promise<TodoItem> {
     const item = await this.require(id);
-    if (item.status !== "needs_review" || !item.branchName || !item.baseBranch || !item.baseCommit) {
+    if (
+      item.status !== "needs_review" ||
+      !item.branchName ||
+      !item.baseBranch ||
+      !item.baseCommit
+    ) {
       throw new TodoStateError("只有待审且已有分支的 To-Do 可以合并");
     }
     const merged = await this.git.mergeBranch({
@@ -200,7 +207,8 @@ export class TodoService implements ITodoService {
     });
     if (!merged.success) {
       await this.repo.setError(id, merged.message ?? merged.code ?? "合并失败");
-      if (merged.code === "nothing-to-merge") throw new TodoStateError("相对基线没有提交，请改用完成");
+      if (merged.code === "nothing-to-merge")
+        throw new TodoStateError("相对基线没有提交，请改用完成");
       throw new TodoStateError(merged.message ?? "合并失败");
     }
     return (await this.repo.markDone(id))!;

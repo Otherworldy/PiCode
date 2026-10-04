@@ -10,7 +10,7 @@ import { createServiceDescriptor } from "../descriptors.js";
 
 export interface ITodoService {
   create(params: TodoCreateParams): Promise<TodoItem>;
-  /** 只有未开始（status todo）可以改标题和说明。 */
+  /** 只有未开始（status todo）可以改标题、说明和附件。 */
   update(id: string, params: TodoUpdateParams): Promise<TodoItem>;
   list(workspaceKey?: string): Promise<TodoItem[]>;
   /** 任何状态都能改。用过的标签留在目录里。 */
