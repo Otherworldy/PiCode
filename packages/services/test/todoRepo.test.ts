@@ -21,7 +21,10 @@ async function withRepo(run: (repo: TodoRepo) => Promise<void>) {
 
 test("create requires a project and lists stay split by project", async () => {
   await withRepo(async (repo) => {
-    await assert.rejects(() => repo.create({ title: "a", prompt: "b", workspacePath: "  " }), TodoStateError);
+    await assert.rejects(
+      () => repo.create({ title: "a", prompt: "b", workspacePath: "  " }),
+      TodoStateError,
+    );
     const alpha = await repo.create({
       title: "a",
       prompt: "do a",
@@ -29,7 +32,10 @@ test("create requires a project and lists stay split by project", async () => {
     });
     await repo.create({ title: "b", prompt: "do b", workspacePath: "/proj/b" });
     const listed = await repo.list(alpha.workspaceKey);
-    assert.deepEqual(listed.map((item) => item.title), ["a"]);
+    assert.deepEqual(
+      listed.map((item) => item.title),
+      ["a"],
+    );
     assert.equal(alpha.id, "todo-1");
     await repo.delete(alpha.id);
     const next = await repo.create({ title: "c", prompt: "do c", workspacePath: "/proj/a" });
@@ -102,6 +108,98 @@ test("nothing to merge cannot complete the merge path", async () => {
     assert.equal(merges, 1);
     const done = await service.complete(created.id);
     assert.equal(done.status, "done");
+  });
+});
+
+test("dirty baseline commits only after commitDirty and only on the base branch", async () => {
+  await withRepo(async (repo) => {
+    const created = await repo.create({ title: "a", prompt: "p", workspacePath: "/proj/a" });
+    await repo.claim(created.id);
+    await repo.attachRun(created.id, {
+      baseBranch: "main",
+      baseCommit: "abc",
+      branchName: "todo-1",
+      worktreePath: "/proj/a/.worktrees/todo-1",
+      sessionId: "session-1",
+    });
+    await repo.settle("session-1", "completed");
+    let branch = "main";
+    let commits = 0;
+    let staged: string[] = [];
+    let failGenerate = false;
+    const service = new TodoService(
+      repo,
+      {
+        async getRepositorySummary() {
+          return { branchName: branch } as Awaited<ReturnType<IGitService["getRepositorySummary"]>>;
+        },
+        async listWorktrees() {
+          return [];
+        },
+        async createWorktree() {
+          throw new Error("unused");
+        },
+        async removeWorktree() {},
+        async countCommitsAhead() {
+          return 1;
+        },
+        async getChanges() {
+          return [{ path: "/proj/a/a.txt" }] as Awaited<ReturnType<IGitService["getChanges"]>>;
+        },
+        async generateCommitMessage() {
+          if (failGenerate) throw new Error("model down");
+          return { message: "wip", providerId: "p", model: "m" };
+        },
+        async stagePaths(params) {
+          staged = params.paths;
+        },
+        async commit(params) {
+          commits += 1;
+          assert.equal(params.message, "wip");
+          return { commitHash: "def" } as Awaited<ReturnType<IGitService["commit"]>>;
+        },
+        async mergeBranch() {
+          if (commits === 0) {
+            return { success: false, code: "dirty", message: "主工作区有未提交改动" };
+          }
+          return { success: true };
+        },
+      },
+      {
+        async create() {
+          return { sessionId: "session-1" };
+        },
+        async continue() {},
+      },
+    );
+
+    await assert.rejects(
+      () => service.merge(created.id),
+      (error: unknown) => {
+        assert.equal(error instanceof TodoStateError && error.code, "dirty");
+        return true;
+      },
+    );
+    assert.equal(commits, 0);
+    assert.equal((await repo.get(created.id))?.error, null);
+
+    branch = "other";
+    await assert.rejects(() => service.merge(created.id, { commitDirty: true }), /不在 main/);
+    assert.equal(commits, 0);
+    assert.equal((await repo.get(created.id))?.status, "needs_review");
+
+    branch = "main";
+    failGenerate = true;
+    await assert.rejects(() => service.merge(created.id, { commitDirty: true }), /model down/);
+    assert.equal((await repo.get(created.id))?.error, "model down");
+    assert.equal(commits, 0);
+
+    failGenerate = false;
+    const done = await service.merge(created.id, { commitDirty: true });
+    assert.deepEqual(staged, ["/proj/a/a.txt"]);
+    assert.equal(commits, 1);
+    assert.equal(done.status, "done");
+    assert.equal(done.error, null);
   });
 });
 
@@ -231,14 +329,18 @@ test("tags stay in the catalog after the todo is deleted", async () => {
     await repo.delete(created.id);
     assert.deepEqual(await repo.listTags(), ["Bug", "Feature"]);
     await repo.claim(
-      (await repo.create({ title: "b", prompt: "p", workspacePath: "/proj/a", tags: ["feature"] })).id,
+      (await repo.create({ title: "b", prompt: "p", workspacePath: "/proj/a", tags: ["feature"] }))
+        .id,
     );
     const running = await repo.list("/proj/a");
     const tagged = await repo.setTags(running[0]!.id, ["x"]);
     assert.equal(tagged.status, "running");
     assert.deepEqual(tagged.tags, ["x"]);
     assert.deepEqual(await repo.listTags(), ["Bug", "Feature", "x"]);
-    await assert.rejects(() => repo.setTags(tagged.id, ["1", "2", "3", "4", "5", "6", "7", "8", "9"]), TodoStateError);
+    await assert.rejects(
+      () => repo.setTags(tagged.id, ["1", "2", "3", "4", "5", "6", "7", "8", "9"]),
+      TodoStateError,
+    );
   });
 });
 
@@ -256,31 +358,35 @@ test("retry sends the chosen model on the existing session", async () => {
     await repo.markFailed(created.id, "中断");
     const selection = { providerId: "p", modelId: "m", options: { reasoningLevel: "high" } };
     let seen: unknown;
-    const service = new TodoService(repo, {
-      async getRepositorySummary() {
-        throw new Error("unused");
+    const service = new TodoService(
+      repo,
+      {
+        async getRepositorySummary() {
+          throw new Error("unused");
+        },
+        async listWorktrees() {
+          return [];
+        },
+        async createWorktree() {
+          throw new Error("unused");
+        },
+        async removeWorktree() {},
+        async countCommitsAhead() {
+          return 0;
+        },
+        async mergeBranch() {
+          throw new Error("unused");
+        },
       },
-      async listWorktrees() {
-        return [];
+      {
+        async create() {
+          throw new Error("unused");
+        },
+        async continue(input) {
+          seen = input.modelSelection;
+        },
       },
-      async createWorktree() {
-        throw new Error("unused");
-      },
-      async removeWorktree() {},
-      async countCommitsAhead() {
-        return 0;
-      },
-      async mergeBranch() {
-        throw new Error("unused");
-      },
-    }, {
-      async create() {
-        throw new Error("unused");
-      },
-      async continue(input) {
-        seen = input.modelSelection;
-      },
-    });
+    );
     const next = await service.start(created.id, selection);
     assert.deepEqual(seen, selection);
     assert.equal(next.sessionId, "session-1");
@@ -296,7 +402,10 @@ test("only an unstarted todo can change its text", async () => {
     assert.equal(updated.prompt, "q");
     assert.equal(updated.status, "todo");
     await repo.claim(created.id);
-    await assert.rejects(() => repo.update(created.id, { title: "c", prompt: "d" }), TodoStateError);
+    await assert.rejects(
+      () => repo.update(created.id, { title: "c", prompt: "d" }),
+      TodoStateError,
+    );
     const kept = await repo.get(created.id);
     assert.equal(kept?.title, "b");
   });

@@ -54,7 +54,8 @@ async function materializeAttachments(
 }
 
 function samePath(left: string, right: string): boolean {
-  const norm = (value: string) => resolve(value).replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  const norm = (value: string) =>
+    resolve(value).replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
   return norm(left) === norm(right);
 }
 
@@ -69,7 +70,8 @@ export class TodoService implements ITodoService {
       | "removeWorktree"
       | "countCommitsAhead"
       | "mergeBranch"
-    >,
+    > &
+      Partial<Pick<IGitService, "getChanges" | "generateCommitMessage" | "stagePaths" | "commit">>,
     private readonly sessions: TodoSessionPort,
   ) {}
 
@@ -187,23 +189,73 @@ export class TodoService implements ITodoService {
     return this.repo.noteSessionRemoved(sessionId);
   }
 
-  async merge(id: string): Promise<TodoItem> {
+  async merge(id: string, options?: { commitDirty?: boolean }): Promise<TodoItem> {
     const item = await this.require(id);
-    if (item.status !== "needs_review" || !item.branchName || !item.baseBranch || !item.baseCommit) {
+    if (
+      item.status !== "needs_review" ||
+      !item.branchName ||
+      !item.baseBranch ||
+      !item.baseCommit
+    ) {
       throw new TodoStateError("只有待审且已有分支的 To-Do 可以合并");
     }
-    const merged = await this.git.mergeBranch({
+    const request = {
       workspacePath: item.workspacePath,
       branchName: item.branchName,
       expectedBaseBranch: item.baseBranch,
       baseCommit: item.baseCommit,
-    });
+    };
+    let merged = await this.git.mergeBranch(request);
+    if (!merged.success && merged.code === "dirty") {
+      // mergeBranch 先报脏。提交前再对一次分支，避免把未提交改动写到非基线分支。
+      const summary = await this.git.getRepositorySummary({ workspacePath: item.workspacePath });
+      if (summary.branchName !== item.baseBranch) {
+        merged = {
+          success: false,
+          code: "wrong-branch",
+          message: `主工作区不在 ${item.baseBranch}`,
+        };
+      } else if (!options?.commitDirty) {
+        throw new TodoStateError(merged.message ?? "主工作区有未提交改动", "dirty");
+      } else {
+        try {
+          await this.commitBaseline(item);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          await this.repo.setError(id, message);
+          throw new TodoStateError(message);
+        }
+        merged = await this.git.mergeBranch(request);
+      }
+    }
     if (!merged.success) {
       await this.repo.setError(id, merged.message ?? merged.code ?? "合并失败");
-      if (merged.code === "nothing-to-merge") throw new TodoStateError("相对基线没有提交，请改用完成");
+      if (merged.code === "nothing-to-merge")
+        throw new TodoStateError("相对基线没有提交，请改用完成");
       throw new TodoStateError(merged.message ?? "合并失败");
     }
     return (await this.repo.markDone(id))!;
+  }
+
+  private async commitBaseline(item: TodoItem): Promise<void> {
+    const { getChanges, generateCommitMessage, stagePaths, commit } = this.git;
+    if (!getChanges || !generateCommitMessage || !stagePaths || !commit) {
+      throw new TodoStateError("Commit message generation is not available.");
+    }
+    const [unstaged, staged] = await Promise.all([
+      getChanges({ workspacePath: item.workspacePath, sourceId: "unstaged" }),
+      getChanges({ workspacePath: item.workspacePath, sourceId: "staged" }),
+    ]);
+    const paths = [...new Set([...unstaged, ...staged].map((file) => file.path))];
+    // ponytail: 只提交变更列表里的文件。空未跟踪文件仍会让工作区保持脏，合并会停下。
+    if (paths.length === 0) throw new TodoStateError("没有可提交的改动");
+    const generated = await generateCommitMessage({
+      workspacePath: item.workspacePath,
+      includeUnstaged: true,
+      ...(item.workspaceIdentity ? { workspaceIdentity: item.workspaceIdentity } : {}),
+    });
+    await stagePaths({ workspacePath: item.workspacePath, paths });
+    await commit({ workspacePath: item.workspacePath, message: generated.message });
   }
 
   async complete(id: string): Promise<TodoItem> {

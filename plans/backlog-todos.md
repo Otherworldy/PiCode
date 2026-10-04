@@ -23,7 +23,7 @@
 
 会话结束：在现有 `turn.completed` / `turn.failed` 收口处调一次 `todos.settle(sessionId)`。没有对应行就返回。`turn.failed` → `failed`；`turn.completed` → `needs_review`。不新开事件总线，UI 关掉也能落状态。进程重启时若仍是 `running`，标 `failed`（中断），工作树保留，重试在同一会话再发一轮。
 
-审阅用现有 Git diff，对比该项目的 `baseCommit...worktree`。合并不让 Agent 做：该项目主工作区必须在 `baseBranch` 上且无暂存/未提交；To-Do 分支有提交则 `git merge` 进该项目主工作区（新增一个 Git 方法，现有接口只有 commit 没有 merge）。有冲突则停在 `needs_review` 并写下原因，不自动解。工作区有未提交改动则拒绝合并，让用户先在该会话里提交。相对基线没有提交时只提供「完成」，不制造空合并。
+审阅用现有 Git diff，对比该项目的 `baseCommit...worktree`。合并不让 Agent 改基线：主工作区必须在 `baseBranch` 上。有未提交改动则先确认，再用模型写提交说明并提交到基线，然后 `git merge`。有冲突则停在 `needs_review` 并写下原因，不自动解。相对基线没有提交时只提供「完成」，不制造空合并。
 
 放弃：`canceled`。可选删除 worktree（已有 `removeWorktree`）。默认留着。
 
@@ -61,7 +61,7 @@
 ## Verification
 
 - 服务测试：状态只允许图上的边；不带项目不能创建；两个项目的行不串；`settle` 对未知 `sessionId` 无操作；同一项目可以同时占多条 `running`，同一行不能占两次；无提交不能 merge，只能 complete。
-- 现有 worktree 测试仍绿。手动：`pnpm dev:desktop`，新建时选一个脏工作区作为项目并开始，列表上看得到该项目。主目录 HEAD 不动，会话出现在所选项目而不是新项目，Agent cwd 在 `.worktrees/todo-*`。结束后行变为待审。主工作区脏时合并被拒；干净且在基线分支时合并成功并标完成。放弃不改主工作区。
+- 现有 worktree 测试仍绿。手动：`pnpm dev:desktop`，新建时选一个脏工作区作为项目并开始，列表上看得到该项目。主目录 HEAD 不动，会话出现在所选项目而不是新项目，Agent cwd 在 `.worktrees/todo-*`。结束后行变为待审。主工作区脏时先确认，确认后提交基线再合并；干净且在基线分支时直接合并并标完成。放弃不改主工作区。
 
 ## 不做
 
