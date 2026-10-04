@@ -13,9 +13,9 @@ export interface TodoAttachment {
   fileName: string;
   mime: string;
   bytes: number;
-  /** 桌面本地路径。有它就不存正文。 */
+  /** 桌面上还在的本地文件。剪贴板不要填，临时路径下次打开就没了。 */
   localPath?: string;
-  /** 剪贴板图片等没有路径时的正文。 */
+  /** 剪贴板图片等没有稳定路径时的正文。 */
   dataBase64?: string;
 }
 
@@ -48,10 +48,11 @@ export interface TodoCreateParams {
   tags?: string[];
 }
 
-/** 只改未开始行的标题和说明。附件和标签不在这里。 */
+/** 只改未开始行的标题、说明和附件。不传附件则保持原附件。标签不在这里。 */
 export interface TodoUpdateParams {
   title: string;
   prompt: string;
+  attachments?: TodoAttachment[];
 }
 
 export const MAX_TODO_TAGS = 8;

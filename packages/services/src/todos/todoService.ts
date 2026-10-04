@@ -39,7 +39,8 @@ async function materializeAttachments(
 ): Promise<AttachmentRef[]> {
   const refs: AttachmentRef[] = [];
   for (const [index, file] of attachments.entries()) {
-    let ref = file.localPath;
+    // 正文优先。剪贴板留下的 localPath 往往已经没了，不能拿它盖住图片。
+    let ref = file.dataBase64 ? undefined : file.localPath;
     if (!ref && file.dataBase64) {
       const dir = join(tmpdir(), "zcode-todos", id);
       await mkdir(dir, { recursive: true });

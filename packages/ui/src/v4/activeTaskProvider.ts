@@ -1,7 +1,7 @@
 import type { ZCodeProvider } from "@zcode/shared";
 import { selectWorkspaceZCodeState, useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
 import type { WorkspaceZCodeUIState } from "@/store/zcodeSessionStoreTypes.js";
-import { useTabStore } from "@/store/TabStoreProvider.js";
+import { useOptionalTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceTab } from "@/store/tabStore.js";
 
 function resolveChatViewActiveTaskProvider(
@@ -33,7 +33,8 @@ export function useChatViewActiveTaskProvider(
   workspacePath: string,
   workspaceIdentity?: string,
 ) {
-  const activeTabWorkspaceIdentity = useTabStore((state) => {
+  // 输入壳会在 TabStore context 对不上的渲染里出现。缺省退回调用方传入的 identity，不能把整个会话打崩。
+  const activeTabWorkspaceIdentity = useOptionalTabStore((state) => {
     if (!state.activeTabId) {
       return undefined;
     }
