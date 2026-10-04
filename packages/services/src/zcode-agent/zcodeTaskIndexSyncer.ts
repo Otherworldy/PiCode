@@ -176,6 +176,8 @@ interface CreateZCodeTaskIndexSyncerOptions {
   taskIndexRepo: TaskIndexRepo;
   /** 会话终态时通知 To-Dos。没有对应行时由接收方空操作。 */
   onTurnSettled?: (sessionId: string, failed: boolean) => void;
+  /** sessions-index 的 session.removed。侧栏删除也会再调一次，接收方要能重复调用。 */
+  onSessionRemoved?: (sessionId: string) => void;
 }
 
 /** phase 终态集合（sessions-index 的 conflated 最新态里判定迁移用）。 */
@@ -1078,7 +1080,8 @@ export function createZCodeTaskIndexSyncer(
         continue;
       }
       // session.removed：会话删除的 sqlite 收口走 task 删除操作（adapter deleteTask /
-      // v4 deleteSession 命令的 host 侧收尾），这里只维护基线。
+      // v4 deleteSession 命令的 host 侧收尾），这里只维护基线。To-Do 另记一笔，不删行。
+      options.onSessionRemoved?.(delta.sessionId);
       state.summaries.delete(delta.sessionId);
     }
     state.indexSeq = frame.toSeq;

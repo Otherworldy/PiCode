@@ -268,6 +268,30 @@ export class TodoRepo {
     return this.getBySession(sessionId);
   }
 
+  /** 会话没了。进行中改失败；待审只记一笔。工作树不动。 */
+  async noteSessionRemoved(sessionId: string): Promise<TodoItem | null> {
+    const current = await this.getBySession(sessionId);
+    if (!current) return null;
+    const db = await this.ensure();
+    const now = Date.now();
+    if (current.status === "running") {
+      db.prepare(
+        `UPDATE todos SET status = 'failed', error = '会话已删除', session_id = NULL, updated_at = ?
+         WHERE id = ? AND session_id = ? AND status = 'running'`,
+      ).run(now, current.id, sessionId);
+    } else if (current.status === "needs_review") {
+      db.prepare(
+        `UPDATE todos SET error = '会话已删除', session_id = NULL, updated_at = ?
+         WHERE id = ? AND session_id = ? AND status = 'needs_review'`,
+      ).run(now, current.id, sessionId);
+    } else {
+      db.prepare(
+        `UPDATE todos SET session_id = NULL, updated_at = ? WHERE id = ? AND session_id = ?`,
+      ).run(now, current.id, sessionId);
+    }
+    return this.get(current.id);
+  }
+
   async markDone(id: string): Promise<TodoItem | null> {
     const db = await this.ensure();
     const result = db

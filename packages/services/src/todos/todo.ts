@@ -7,6 +7,8 @@ export interface ITodoService {
   list(workspaceKey?: string): Promise<TodoItem[]>;
   start(id: string): Promise<TodoItem>;
   settle(sessionId: string, outcome: "completed" | "failed"): Promise<TodoItem | null>;
+  /** 会话已删除。没有对应行则不动。 */
+  noteSessionRemoved(sessionId: string): Promise<TodoItem | null>;
   merge(id: string): Promise<TodoItem>;
   complete(id: string): Promise<TodoItem>;
   abandon(id: string, removeWorktree?: boolean): Promise<TodoItem>;

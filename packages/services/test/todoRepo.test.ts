@@ -105,6 +105,118 @@ test("nothing to merge cannot complete the merge path", async () => {
   });
 });
 
+test("deleting a session fails a running todo and keeps review mergeable", async () => {
+  await withRepo(async (repo) => {
+    assert.equal(await repo.noteSessionRemoved("missing"), null);
+    const running = await repo.create({ title: "run", prompt: "p", workspacePath: "/proj/a" });
+    const review = await repo.create({ title: "review", prompt: "p", workspacePath: "/proj/a" });
+    const done = await repo.create({ title: "done", prompt: "p", workspacePath: "/proj/a" });
+    await repo.claim(running.id);
+    await repo.attachRun(running.id, {
+      baseBranch: "main",
+      baseCommit: "abc",
+      branchName: "todo-1",
+      worktreePath: "/proj/a/.worktrees/todo-1",
+      sessionId: "session-run",
+    });
+    await repo.claim(review.id);
+    await repo.attachRun(review.id, {
+      baseBranch: "main",
+      baseCommit: "abc",
+      branchName: "todo-2",
+      worktreePath: "/proj/a/.worktrees/todo-2",
+      sessionId: "session-review",
+    });
+    await repo.settle("session-review", "completed");
+    await repo.claim(done.id);
+    await repo.attachRun(done.id, {
+      baseBranch: "main",
+      baseCommit: "abc",
+      branchName: "todo-3",
+      worktreePath: "/proj/a/.worktrees/todo-3",
+      sessionId: "session-done",
+    });
+    await repo.settle("session-done", "completed");
+    await repo.markDone(done.id);
+
+    const failed = await repo.noteSessionRemoved("session-run");
+    assert.equal(failed?.status, "failed");
+    assert.equal(failed?.error, "会话已删除");
+    assert.equal(failed?.sessionId, null);
+    assert.equal(failed?.worktreePath, "/proj/a/.worktrees/todo-1");
+    assert.equal(await repo.noteSessionRemoved("session-run"), null);
+
+    const stillReview = await repo.noteSessionRemoved("session-review");
+    assert.equal(stillReview?.status, "needs_review");
+    assert.equal(stillReview?.error, "会话已删除");
+    assert.equal(stillReview?.sessionId, null);
+    assert.equal(stillReview?.worktreePath, "/proj/a/.worktrees/todo-2");
+
+    const stillDone = await repo.noteSessionRemoved("session-done");
+    assert.equal(stillDone?.status, "done");
+    assert.equal(stillDone?.sessionId, null);
+    assert.equal(stillDone?.error, null);
+  });
+});
+
+test("a removed session starts again on the same worktree", async () => {
+  await withRepo(async (repo) => {
+    const created = await repo.create({ title: "a", prompt: "p", workspacePath: "/proj/a" });
+    await repo.claim(created.id);
+    await repo.attachRun(created.id, {
+      baseBranch: "main",
+      baseCommit: "abc",
+      branchName: "todo-1",
+      worktreePath: "/proj/a/.worktrees/todo-1",
+      sessionId: "session-1",
+    });
+    await repo.noteSessionRemoved("session-1");
+    let worktrees = 0;
+    let continued = 0;
+    const git: Pick<
+      IGitService,
+      | "getRepositorySummary"
+      | "listWorktrees"
+      | "createWorktree"
+      | "removeWorktree"
+      | "countCommitsAhead"
+      | "mergeBranch"
+    > = {
+      async getRepositorySummary() {
+        throw new Error("unused");
+      },
+      async listWorktrees() {
+        return [];
+      },
+      async createWorktree() {
+        worktrees += 1;
+        throw new Error("unused");
+      },
+      async removeWorktree() {},
+      async countCommitsAhead() {
+        return 0;
+      },
+      async mergeBranch() {
+        throw new Error("unused");
+      },
+    };
+    const service = new TodoService(repo, git, {
+      async create() {
+        return { sessionId: "session-2" };
+      },
+      async continue() {
+        continued += 1;
+      },
+    });
+    const next = await service.start(created.id);
+    assert.equal(worktrees, 0);
+    assert.equal(continued, 0);
+    assert.equal(next.status, "running");
+    assert.equal(next.sessionId, "session-2");
+    assert.equal(next.worktreePath, "/proj/a/.worktrees/todo-1");
+  });
+});
+
 test("restore puts an abandoned todo back in the queue", async () => {
   await withRepo(async (repo) => {
     const created = await repo.create({ title: "a", prompt: "p", workspacePath: "/proj/a" });

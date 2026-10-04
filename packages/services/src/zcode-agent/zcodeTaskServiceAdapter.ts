@@ -182,6 +182,8 @@ interface CreateZCodeTaskServiceAdapterOptions {
   taskIndexSyncer: ZCodeTaskIndexSyncer;
   settingService?: Pick<ISettingService, "get">;
   cuaProductMcpServerResolver?: CuaProductMcpServerResolver;
+  /** 会话文件已经删掉之后通知 To-Dos。失败不能把删除打回去。 */
+  onSessionDeleted?: (sessionId: string) => Promise<void> | void;
 }
 
 interface TaskTarget {
@@ -273,6 +275,14 @@ export function createZCodeTaskServiceAdapter(
   }));
   const taskIndexRepo = options.taskIndexRepo ?? new TaskIndexRepo();
   const taskIndexSyncer = options.taskIndexSyncer;
+  // 先改 To-Do 再广播 task_deleted，打开着的列表刷新时才能看到失败或「会话已删除」。
+  async function noteTodoSessionDeleted(sessionId: string): Promise<void> {
+    try {
+      await options.onSessionDeleted?.(sessionId);
+    } catch (error) {
+      logger.warn(undefined, "To-Do 未跟上会话删除", error);
+    }
+  }
 
   // 之前 adapter 自带 notifySyncerSession 时把 syncer 视为可选；现在 syncer 是构造必填项，
   // 简化为直接调用，避免每个 callsite 都做空判断。
@@ -2805,11 +2815,12 @@ export function createZCodeTaskServiceAdapter(
     },
 
     async deleteTask(params): Promise<void> {
-      await options.zcodeAgentService.deleteSession({
+      const deleted = await options.zcodeAgentService.deleteSession({
         sessionId: params.taskId,
         workspacePath: params.workspacePath,
         ...(params.workspaceIdentity ? { workspaceIdentity: params.workspaceIdentity } : {}),
       });
+      if (deleted) await noteTodoSessionDeleted(params.taskId);
       setOverlay(params, { deleted: true });
       const meta = await updateIndexedTaskState(params, { deleted: true });
       // 会话文件已经删掉。task_deleted 仍要换代 tombstone，否则只存在于 tasks-index 的行会留在列表里。
@@ -2818,11 +2829,12 @@ export function createZCodeTaskServiceAdapter(
     },
 
     async deleteArchivedTask(params): Promise<boolean> {
-      await options.zcodeAgentService.deleteSession({
+      const deleted = await options.zcodeAgentService.deleteSession({
         sessionId: params.taskId,
         workspacePath: params.workspacePath,
         ...(params.workspaceIdentity ? { workspaceIdentity: params.workspaceIdentity } : {}),
       });
+      if (deleted) await noteTodoSessionDeleted(params.taskId);
       const meta = await taskIndexRepo.deleteArchivedTask(params);
       if (!meta) return false;
       // 先持久化成功再写 overlay；否则失败项会被内存 deleted 标记提前隐藏。

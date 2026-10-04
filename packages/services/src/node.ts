@@ -2279,10 +2279,22 @@ export function createLocalServices(options: {
   // shadow 订阅，把 runtime 终态收敛进 sqlite。
   const taskIndexRepo = new TaskIndexRepo();
   let settleTodo: ((sessionId: string, failed: boolean) => void) | undefined;
+  const pendingRemovedSessionIds: string[] = [];
+  let noteTodoSessionRemoved: ((sessionId: string) => Promise<void>) | undefined;
+  const rememberTodoSessionRemoved = (sessionId: string): Promise<void> => {
+    if (!noteTodoSessionRemoved) {
+      pendingRemovedSessionIds.push(sessionId);
+      return Promise.resolve();
+    }
+    return noteTodoSessionRemoved(sessionId);
+  };
   const zcodeTaskIndexSyncer = createZCodeTaskIndexSyncer({
     agentService: zcodeAgentService,
     taskIndexRepo,
     onTurnSettled: (sessionId, failed) => settleTodo?.(sessionId, failed),
+    onSessionRemoved: (sessionId) => {
+      void rememberTodoSessionRemoved(sessionId);
+    },
   });
   // The plugin can be toggled at runtime. Do not let a previously created resolver continue
   // health-checking/restarting Helper after disable, and create it lazily after enable.
@@ -2337,6 +2349,7 @@ export function createLocalServices(options: {
     taskIndexSyncer: zcodeTaskIndexSyncer,
     settingService,
     cuaProductMcpServerResolver,
+    onSessionDeleted: rememberTodoSessionRemoved,
   });
   const oauthService = createOAuthService(credentialService, {
     apiClient,
@@ -2692,6 +2705,8 @@ export function createLocalServices(options: {
   settleTodo = (sessionId, failed) => {
     void todoService.settle(sessionId, failed ? "failed" : "completed");
   };
+  noteTodoSessionRemoved = (sessionId) => todoService.noteSessionRemoved(sessionId).then(() => undefined);
+  for (const sessionId of pendingRemovedSessionIds.splice(0)) void noteTodoSessionRemoved(sessionId);
   void todoService.recoverInterrupted();
   services.register(ITodoService, todoService);
   sharedSqliteRepos.set(services, sqliteReposToClose);

@@ -20,6 +20,7 @@ import { cn } from "@/components/lib/utils.js";
 import { useServices } from "@/hooks/useServices.js";
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceTab } from "@/store/tabStore.js";
+import { useTaskListMembershipVersion } from "@/v4/taskListMembershipVersion.js";
 import {
   StatusChip,
   TODO_COLUMNS,
@@ -50,6 +51,7 @@ export function TodoListPane({
   const [editorOpen, setEditorOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const membershipVersion = useTaskListMembershipVersion();
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 60_000);
@@ -63,10 +65,11 @@ export function TodoListPane({
   }, [filter, showCanceled, todoService]);
 
   useEffect(() => {
+    // 删会话会先改行再 bump 这个版本。重拉才能在当前页看到失败或「会话已删除」。
     void refresh().catch((cause: unknown) => {
       setError(cause instanceof Error ? cause.message : String(cause));
     });
-  }, [refresh]);
+  }, [refresh, membershipVersion]);
 
   const detail = items.find((item) => item.id === detailId) ?? null;
 
@@ -190,7 +193,12 @@ export function TodoListPane({
                   className="grid w-full grid-cols-[7rem_1fr_10rem_6rem] items-center gap-2 rounded-xl border border-foreground/15 bg-card px-3 py-3 text-left hover:border-brand"
                 >
                   <StatusChip status={item.status} />
-                  <span className="truncate text-ui-sm font-medium">{item.title}</span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-ui-sm font-medium">{item.title}</span>
+                    {item.error && (item.status === "failed" || item.status === "needs_review") ? (
+                      <span className="block truncate text-ui-xs text-destructive">{item.error}</span>
+                    ) : null}
+                  </span>
                   <span className="truncate text-ui-xs text-foreground-subtle">
                     {projectLeaf(item.workspacePath)}
                   </span>
@@ -288,13 +296,17 @@ export function TodoListPane({
                     开始
                   </Button>
                 ) : null}
-                {detail.sessionId ? (
+                {detail.sessionId || detail.status === "needs_review" ? (
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() =>
-                      onOpenSession(detail.workspacePath, detail.sessionId!, detail.workspaceIdentity)
-                    }
+                    onClick={() => {
+                      if (!detail.sessionId) {
+                        setError("会话已删除，无法打开。仍可合并或完成。");
+                        return;
+                      }
+                      onOpenSession(detail.workspacePath, detail.sessionId, detail.workspaceIdentity);
+                    }}
                   >
                     打开会话
                   </Button>

@@ -91,6 +91,21 @@ export class TodoService implements ITodoService {
         });
         return claimed;
       }
+      if (claimed.worktreePath && claimed.branchName && claimed.baseBranch && claimed.baseCommit) {
+        const session = await this.sessions.create({
+          workspacePath: claimed.workspacePath,
+          workspaceIdentity: claimed.workspaceIdentity,
+          workingDirectory: claimed.worktreePath,
+          text: `关联会话已经删除。请在同一分支上继续完成。\n\n${claimed.prompt}\n\n${STANDING_RULE}`,
+        });
+        return await this.repo.attachRun(claimed.id, {
+          baseBranch: claimed.baseBranch,
+          baseCommit: claimed.baseCommit,
+          branchName: claimed.branchName,
+          worktreePath: claimed.worktreePath,
+          sessionId: session.sessionId,
+        });
+      }
       const summary = await this.git.getRepositorySummary({
         workspacePath: claimed.workspacePath,
       });
@@ -143,6 +158,10 @@ export class TodoService implements ITodoService {
 
   settle(sessionId: string, outcome: "completed" | "failed"): Promise<TodoItem | null> {
     return this.repo.settle(sessionId, outcome);
+  }
+
+  noteSessionRemoved(sessionId: string): Promise<TodoItem | null> {
+    return this.repo.noteSessionRemoved(sessionId);
   }
 
   async merge(id: string): Promise<TodoItem> {
