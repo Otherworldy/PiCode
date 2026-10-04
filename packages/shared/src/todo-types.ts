@@ -45,3 +45,9 @@ export interface TodoCreateParams {
   workspaceIdentity?: string;
   attachments?: TodoAttachment[];
 }
+
+/** 只改未开始行的标题和说明。附件不在这里。 */
+export interface TodoUpdateParams {
+  title: string;
+  prompt: string;
+}
