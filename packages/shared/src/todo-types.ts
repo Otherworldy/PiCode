@@ -54,8 +54,16 @@ export interface TodoUpdateParams {
   prompt: string;
 }
 
-const MAX_TODO_TAGS = 8;
+export const MAX_TODO_TAGS = 8;
 const MAX_TODO_TAG_LENGTH = 32;
+
+/** 输入框里尚未确认的文字。英文逗号或中文逗号拆开，空段丢掉。 */
+export function splitTodoTagDraft(raw: string): string[] {
+  return raw
+    .split(/[,\uFF0C]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
 
 /** 空的丢掉，过长或过多直接拒绝。大小写不同只留第一次出现的写法。 */
 export function normalizeTodoTags(input: readonly string[]): string[] {
