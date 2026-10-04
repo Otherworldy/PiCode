@@ -1,9 +1,11 @@
-import type { TodoCreateParams, TodoItem, TodoStatus } from "@zcode/shared";
+import type { TodoCreateParams, TodoItem, TodoStatus, TodoUpdateParams } from "@zcode/shared";
 import { ServiceChannels } from "@zcode/shared";
 import { createServiceDescriptor } from "../descriptors.js";
 
 export interface ITodoService {
   create(params: TodoCreateParams): Promise<TodoItem>;
+  /** 只有未开始（status todo）可以改标题和说明。 */
+  update(id: string, params: TodoUpdateParams): Promise<TodoItem>;
   list(workspaceKey?: string): Promise<TodoItem[]>;
   start(id: string): Promise<TodoItem>;
   settle(sessionId: string, outcome: "completed" | "failed"): Promise<TodoItem | null>;

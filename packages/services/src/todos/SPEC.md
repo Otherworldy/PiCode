@@ -33,9 +33,14 @@ To-Dos 是项目上的工作队列，不是侧栏会话。一条 To-Do 必填标
 
 放弃写成 `canceled`。删除 worktree 是可选项，默认不删。`restore` 只把 `canceled` 改回 `todo`，不新建工作树。
 
+## 修改
+
+只有 `todo`（未开始，含放弃后恢复）可以改标题和说明。`update` 在状态不是 `todo` 时拒绝，不改行。附件不改。空说明仍按创建规则：没有附件就拒绝。
+
 ## 验收
 
 - 不带项目不能创建。两个项目的列表不串。
 - 同一项目第二条 start 在已有 `running` 时仍开始。同一行再 start 拒绝。
 - `settle` 对未知 session 无操作。
+- 未开始可以改标题和说明。已占成 `running` 后再改被拒绝。
 - 无提交不能 merge，只能 complete。

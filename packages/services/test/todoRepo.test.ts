@@ -105,6 +105,20 @@ test("nothing to merge cannot complete the merge path", async () => {
   });
 });
 
+test("only an unstarted todo can change its text", async () => {
+  await withRepo(async (repo) => {
+    const created = await repo.create({ title: "a", prompt: "p", workspacePath: "/proj/a" });
+    const updated = await repo.update(created.id, { title: "  b  ", prompt: " q " });
+    assert.equal(updated.title, "b");
+    assert.equal(updated.prompt, "q");
+    assert.equal(updated.status, "todo");
+    await repo.claim(created.id);
+    await assert.rejects(() => repo.update(created.id, { title: "c", prompt: "d" }), TodoStateError);
+    const kept = await repo.get(created.id);
+    assert.equal(kept?.title, "b");
+  });
+});
+
 test("restore puts an abandoned todo back in the queue", async () => {
   await withRepo(async (repo) => {
     const created = await repo.create({ title: "a", prompt: "p", workspacePath: "/proj/a" });

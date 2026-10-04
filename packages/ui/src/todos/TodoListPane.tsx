@@ -9,6 +9,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.js";
+import { Input } from "@/components/ui/input.js";
+import { Textarea } from "@/components/ui/textarea.js";
 import {
   Select,
   SelectContent,
@@ -49,6 +51,7 @@ export function TodoListPane({
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [draft, setDraft] = useState({ title: "", prompt: "" });
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -69,6 +72,12 @@ export function TodoListPane({
   }, [refresh]);
 
   const detail = items.find((item) => item.id === detailId) ?? null;
+  const editable = detail?.status === "todo";
+
+  useEffect(() => {
+    if (!detail) return;
+    setDraft({ title: detail.title, prompt: detail.prompt });
+  }, [detail]);
 
   async function run(action: () => Promise<unknown>) {
     setError(null);
@@ -263,7 +272,7 @@ export function TodoListPane({
           {detail ? (
             <>
               <DialogHeader>
-                <DialogTitle>{detail.title}</DialogTitle>
+                <DialogTitle>{editable ? "修改" : detail.title}</DialogTitle>
               </DialogHeader>
               <div className="flex flex-col gap-3 text-ui-sm">
                 <div className="flex items-center gap-2">
@@ -273,7 +282,26 @@ export function TodoListPane({
                     {detail.branchName ? ` / ${detail.branchName}` : ""}
                   </span>
                 </div>
-                <p className="whitespace-pre-wrap text-foreground">{detail.prompt}</p>
+                {editable ? (
+                  <>
+                    <Input
+                      size="lg"
+                      value={draft.title}
+                      onChange={(event) =>
+                        setDraft((current) => ({ ...current, title: event.target.value }))
+                      }
+                    />
+                    <Textarea
+                      value={draft.prompt}
+                      onChange={(event) =>
+                        setDraft((current) => ({ ...current, prompt: event.target.value }))
+                      }
+                      className="min-h-32 rounded-xl bg-surface px-3 py-2"
+                    />
+                  </>
+                ) : (
+                  <p className="whitespace-pre-wrap text-foreground">{detail.prompt}</p>
+                )}
                 {detail.error ? (
                   <div className="flex items-start gap-1.5 rounded-lg bg-destructive/10 px-2 py-1.5 text-ui-xs text-destructive">
                     <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
@@ -282,6 +310,18 @@ export function TodoListPane({
                 ) : null}
               </div>
               <DialogFooter className="gap-2 sm:justify-start">
+                {editable ? (
+                  <Button
+                    size="sm"
+                    disabled={
+                      !draft.title.trim() ||
+                      (!draft.prompt.trim() && detail.attachments.length === 0)
+                    }
+                    onClick={() => void run(() => todoService.update(detail.id, draft))}
+                  >
+                    保存
+                  </Button>
+                ) : null}
                 {detail.status === "todo" || detail.status === "failed" ? (
                   <Button size="sm" onClick={() => void run(() => todoService.start(detail.id))}>
                     <Play className="size-3.5" />

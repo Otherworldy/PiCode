@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import type { TodoCreateParams, TodoItem } from "@zcode/shared";
+import type { TodoCreateParams, TodoItem, TodoUpdateParams } from "@zcode/shared";
 import { getTasksIndexDatabasePath } from "#src/paths.js";
 import { runTasksDatabaseMigrations } from "#src/session/tasksDatabase/migrations.js";
 import { TodoStateError, workspaceKeyOf } from "#src/todos/todo.js";
@@ -173,6 +173,26 @@ export class TodoRepo {
       db.exec("ROLLBACK");
       throw error;
     }
+    return (await this.get(id))!;
+  }
+
+  // ponytail: 只改标题和说明。附件要重传时再加。
+  async update(id: string, params: TodoUpdateParams): Promise<TodoItem> {
+    const current = await this.get(id);
+    if (!current) throw new TodoStateError("To-Do 不存在");
+    const title = params.title.trim();
+    const prompt = params.prompt.trim();
+    if (!title || (!prompt && current.attachments.length === 0)) {
+      throw new TodoStateError("标题和说明都必填");
+    }
+    const db = await this.ensure();
+    const result = db
+      .prepare(
+        `UPDATE todos SET title = ?, prompt = ?, updated_at = ?
+         WHERE id = ? AND status = 'todo'`,
+      )
+      .run(title, prompt || "见附件。", Date.now(), id);
+    if (result.changes !== 1) throw new TodoStateError("只有未开始的 To-Do 可以修改");
     return (await this.get(id))!;
   }
 
