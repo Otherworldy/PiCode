@@ -8,6 +8,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import {
+  isBareSlashCommandTitle,
   isRemoteWorkspaceIdentity,
   ZCODE_AGENT_PROVIDER,
   zcodeTaskMetaSchema,
@@ -476,6 +477,33 @@ function compareGroupTasks(
     return leftOrder - rightOrder;
   }
   return taskNodeKey(left).localeCompare(taskNodeKey(right));
+}
+
+function isReplaceableSessionTitle(title: string): boolean {
+  const compact = title.trim();
+  return (
+    compact.length === 0 ||
+    isBareSlashCommandTitle(compact) ||
+    compact === "New session" ||
+    compact === "Untitled session"
+  );
+}
+
+/** 手动标题优先。占位标题不能盖掉索引里已经有的真实标题。 */
+function resolveSyncedTaskTitle(input: {
+  titleOverridden: boolean;
+  existingTitle?: string;
+  incomingTitle: string;
+}): string {
+  if (input.titleOverridden && input.existingTitle) return input.existingTitle;
+  if (
+    input.existingTitle &&
+    !isReplaceableSessionTitle(input.existingTitle) &&
+    isReplaceableSessionTitle(input.incomingTitle)
+  ) {
+    return input.existingTitle;
+  }
+  return input.incomingTitle;
 }
 
 export class TaskIndexRepo {
@@ -1327,7 +1355,12 @@ export class TaskIndexRepo {
           ...params.meta,
           // agent 只负责 session 核心标题，用户手动重命名属于 app 侧 task 状态。
           // 同步 agent snapshot 时保留已覆盖标题，避免后台状态刷新把用户标题冲掉。
-          title: titleOverridden && existingMeta ? existingMeta.title : params.meta.title,
+          // 占位标题（斜杠命令 / New session / Untitled）不能盖掉已经写下的真实标题。
+          title: resolveSyncedTaskTitle({
+            titleOverridden,
+            existingTitle: existingMeta?.title,
+            incomingTitle: params.meta.title,
+          }),
           titleOverridden,
           // turn.completed 会先通过 applyAgentPatch 写入较新的 completed/error。
           // 随后到达的 protocol snapshot 可能仍带较旧 running；如果这里降级 status，
@@ -1646,9 +1679,13 @@ export class TaskIndexRepo {
       }
       const current = rowToMeta(row);
       const canAcceptAgentTitle = row.title_overridden !== 1;
+      const patchTitle = params.patch.title?.trim() ?? "";
+      // 斜杠命令不是标题。旧 first_input 已经写成 /plannotator-plan-mode 时，不能再被写回去。
+      const acceptTitle =
+        canAcceptAgentTitle && patchTitle.length > 0 && !isBareSlashCommandTitle(patchTitle);
       const nextMeta: ZCodeTaskMeta = {
         ...current,
-        title: canAcceptAgentTitle && params.patch.title ? params.patch.title : current.title,
+        title: acceptTitle ? patchTitle : current.title,
         titleOverridden: row.title_overridden === 1,
         updatedAt: params.patch.updatedAt ?? current.updatedAt,
         status: params.patch.status ?? current.status,

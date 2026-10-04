@@ -4,6 +4,7 @@ import {
   deriveZCodeTaskStatusFromSessionSnapshot,
   generateTraceId,
   getZCodeUserVisibleMessages,
+  isBareSlashCommandTitle,
   isZCodeGoalContinuationReminderText,
   isZCodeModelOnlySyntheticUserMessage,
   resolveWorkspaceKey,
@@ -688,6 +689,8 @@ export function createZCodeTaskIndexSyncer(
       });
       return;
     }
+    const title = next.title.trim();
+    const commandTitle = isBareSlashCommandTitle(title);
     if (becameVisibleTask) {
       // v4 预热 session 从 draft 提升，或 online delta 首次出现新 session 时，
       // 不经过 zcodeSessionService.createSession。此处是最早且不依赖标题时序的新任务边界；
@@ -695,10 +698,12 @@ export function createZCodeTaskIndexSyncer(
       void resyncTaskIndexRowFromAgent(target, "session.became-visible", {
         moveGroupedTaskToTop: true,
       });
+      // 回源 snapshot 的 session.title 可能仍是 /plannotator-plan-mode。
+      // 列表摘要已经是真实标题时先写上，不能等点开才换。
+      if (title && !commandTitle) applyTitleChange(target, title);
       return;
     }
-    const title = next.title.trim();
-    if (title && (previous === undefined || previous.title !== next.title)) {
+    if (title && !commandTitle && (previous === undefined || previous.title !== next.title)) {
       applyTitleChange(target, title);
     }
   }
@@ -737,6 +742,54 @@ export function createZCodeTaskIndexSyncer(
         `首次 sessions-index 基线补齐 task index 失败 workspace=${resolveWorkspaceKey(state.target)} failed=${failedCount} total=${candidates.length}`,
         firstError,
       );
+    }
+  }
+
+  /** 已有行的标题如果只是斜杠命令，用列表摘要里的真实标题换掉。不必先点开会话。 */
+  async function replaceSlashCommandTitles(
+    state: WorkspaceIngestState,
+    summaries: Map<string, SessionSummary>,
+  ): Promise<void> {
+    let metas: ZCodeTaskMeta[];
+    try {
+      metas = await taskIndexRepo.listTaskMetas({
+        workspacePath: state.target.workspacePath,
+        workspaceIdentity: state.target.workspaceIdentity,
+      });
+    } catch (error) {
+      logger.warn(
+        undefined,
+        `读取命令标题失败 workspace=${resolveWorkspaceKey(state.target)}`,
+        error,
+      );
+      return;
+    }
+    if (!isLiveState(state)) return;
+    for (const meta of metas) {
+      if (meta.titleOverridden || !isBareSlashCommandTitle(meta.title)) continue;
+      const summary = summaries.get(meta.taskId);
+      const next = summary?.title.trim() ?? "";
+      if (!next || isBareSlashCommandTitle(next) || summary?.phase === "draft") continue;
+      try {
+        const updated = await taskIndexRepo.applyAgentPatch({
+          workspacePath: state.target.workspacePath,
+          workspaceIdentity: state.target.workspaceIdentity,
+          taskId: meta.taskId,
+          patch: { title: next },
+        });
+        if (!updated || !isLiveState(state)) continue;
+        emitWorkspaceTaskListChanged(
+          {
+            workspacePath: state.target.workspacePath,
+            workspaceIdentity: state.target.workspaceIdentity,
+            taskId: meta.taskId,
+          },
+          updated,
+          "task_title_changed",
+        );
+      } catch (error) {
+        logger.warn(undefined, `替换斜杠命令标题失败 taskId=${meta.taskId}`, error);
+      }
     }
   }
 
@@ -1023,6 +1076,7 @@ export function createZCodeTaskIndexSyncer(
         state.summaries = nextSummaries;
         state.seeded = true;
         void seedMissingRowsFromInitialSnapshot(state, nextSummaries.values());
+        void replaceSlashCommandTitles(state, nextSummaries);
         const generation = state.indexSubscriptionGeneration;
         void repairSubagentTaskIndex({
           target: state.target,
