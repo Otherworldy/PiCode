@@ -226,6 +226,11 @@ function isVisibleRealGoalUserMessage(message: ZCodeMessageWithParts, target: ZC
   return true;
 }
 
+/** 单独一条斜杠命令是控制动作，不是会话要办的事。与 pi-host isControlCommandTitle 同一条规则。 */
+export function isBareSlashCommandTitle(text: string): boolean {
+  return /^\/\S+$/u.test(text.trim());
+}
+
 export function resolveZCodeVisibleSessionTitle(input: {
   title?: string;
   messages: readonly ZCodeMessageWithParts[];
@@ -233,20 +238,24 @@ export function resolveZCodeVisibleSessionTitle(input: {
   fallback?: string;
 }): string {
   const normalizedTitle = input.title?.trim() ?? "";
+  // 计划模式先发 /plannotator-plan-mode，并被写成 first_input。
+  // 它不是用户要办的事，不能挡住后面的真实输入。
   if (
     normalizedTitle &&
+    !isBareSlashCommandTitle(normalizedTitle) &&
     !isZCodeGoalContinuationReminderText(normalizedTitle) &&
     !isZCodeGoalStateReminderText(normalizedTitle)
   ) {
     return normalizedTitle;
   }
 
-  const firstUser = input.messages.find(
-    (message) =>
-      message.info.role === "user" &&
-      getConversationMessageProjectionPolicy(message) === "realUserInput" &&
-      !isZCodeGoalModelOnlyReminderMessage(message),
-  );
+  const firstUser = input.messages.find((message) => {
+    if (message.info.role !== "user") return false;
+    if (getConversationMessageProjectionPolicy(message) !== "realUserInput") return false;
+    if (isZCodeGoalModelOnlyReminderMessage(message)) return false;
+    const text = textFromZCodeMessageParts(message.parts).trim();
+    return text.length > 0 && !isBareSlashCommandTitle(text);
+  });
   const firstUserText = textFromZCodeMessageParts(firstUser?.parts ?? []).trim();
   if (firstUserText) {
     return firstUserText.slice(0, 80);

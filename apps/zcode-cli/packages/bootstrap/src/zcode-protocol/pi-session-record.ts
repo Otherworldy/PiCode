@@ -12,7 +12,7 @@ import {
   type HostedSession,
   type HostSessionRegistry,
 } from "@zcode/pi-host";
-import type { ZCodeWorkspaceRef } from "@zcode/shared";
+import { isBareSlashCommandTitle, type ZCodeWorkspaceRef } from "@zcode/shared";
 import { projectIdFromDirectory } from "../app/paths.js";
 import { createPiHostedApp } from "../app/pi-hosted-app.js";
 import type { ZCodeProtocolMcpServer } from "@zcode/shared";
@@ -45,6 +45,9 @@ export async function bindHostedSession(
       const store = context.deps.sessionStore;
       if (!store) return;
       const compact = title.trim().replace(/\s+/g, " ");
+      // 计划模式的第一条 admission 是 /plannotator-plan-mode。写进 first_input 后，
+      // 侧栏会一直显示这条命令，直到点开会话才按 jsonl 重算。
+      const visibleTitle = compact && !isBareSlashCommandTitle(compact) ? compact.slice(0, 60) : "";
       await store.createSession({
         id: sessionId,
         projectID: projectIdFromDirectory(workspace.workspacePath),
@@ -54,7 +57,7 @@ export async function bindHostedSession(
         slug: sessionId.toLowerCase().replace(/[^a-z0-9._-]+/g, "-") || "session",
         directory: workspace.workspacePath,
         path: workspace.workspacePath,
-        title: compact ? compact.slice(0, 60) : "Untitled session",
+        title: visibleTitle || "Untitled session",
         titleSource: "first_input",
         version: context.deps.version ?? "0.0.0",
         permission: { mode: "build" },
@@ -68,6 +71,19 @@ export async function bindHostedSession(
   if (summary && context.deps.sessionStore) {
     const existing = await context.deps.sessionStore.getSession(sessionId);
     if (!existing) await app.runtime.ensureSessionPersistedForExternalActivity(summary.title);
+    else if (
+      isBareSlashCommandTitle(existing.title) &&
+      summary.title &&
+      !isBareSlashCommandTitle(summary.title)
+    ) {
+      // 旧行还停在命令标题。打开时用 jsonl 的真实标题换掉，避免下次回源又写回去。
+      await context.deps.sessionStore.updateSession({
+        id: sessionId,
+        title: summary.title.slice(0, 60),
+        titleSource: "generated",
+        expectedTitleSources: ["first_input", "default", "generated"],
+      });
+    }
   }
   const record: ZCodeProtocolSessionRecord = {
     app,

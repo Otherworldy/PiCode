@@ -1,6 +1,6 @@
 // 左侧列表投影：tasks-index 决定持久行集合与 membership，sessions-index 只补实时 activity/detail。
 // 这里保持纯函数，供 Project/Timeline/Pinned/Archived/Grouped 共用同一字段权威。
-import type { ZCodeTaskMeta } from "@zcode/shared";
+import { isBareSlashCommandTitle, type ZCodeTaskMeta } from "@zcode/shared";
 import { matchesTaskListMembershipKind } from "@zcode/shared/zcode-protocol-v4";
 import { buildTaskEntityKey } from "@/lib/taskQueryCache.js";
 import { compareZCodeTaskListItems } from "@/lib/taskListOrdering.js";
@@ -51,9 +51,15 @@ function mergeTaskIndexRowWithSession(
 ): ZCodeTaskMeta {
   const activity = getTaskListRowActivity(sessionTask);
   const sessionTitle = sessionTask.title.trim();
+  const sessionCommand = isBareSlashCommandTitle(sessionTitle);
+  const taskCommand = isBareSlashCommandTitle(taskIndexTask.title);
+  // 斜杠命令哪一边都不是标题。另一边有真实标题时用那一边。
   const sessionTitleWins =
     sessionTitle.length > 0 &&
-    (sessionTask.titleOverridden === true || taskIndexTask.titleOverridden !== true);
+    !sessionCommand &&
+    (sessionTask.titleOverridden === true ||
+      taskIndexTask.titleOverridden !== true ||
+      taskCommand);
   const titleOverridden =
     sessionTask.titleOverridden === true || taskIndexTask.titleOverridden === true
       ? true

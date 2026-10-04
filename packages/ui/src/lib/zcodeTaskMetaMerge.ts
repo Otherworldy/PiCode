@@ -1,4 +1,4 @@
-import type { ZCodeTaskMeta } from "@zcode/shared";
+import { isBareSlashCommandTitle, type ZCodeTaskMeta } from "@zcode/shared";
 
 function hasOwnTaskMetaField<T extends keyof ZCodeTaskMeta>(task: ZCodeTaskMeta, key: T) {
   return Object.prototype.hasOwnProperty.call(task, key);
@@ -6,7 +6,11 @@ function hasOwnTaskMetaField<T extends keyof ZCodeTaskMeta>(task: ZCodeTaskMeta,
 
 function isPlaceholderTaskTitle(title: string): boolean {
   const normalizedTitle = title.trim().toLocaleLowerCase();
-  return normalizedTitle.length === 0 || normalizedTitle === "new session";
+  return (
+    normalizedTitle.length === 0 ||
+    normalizedTitle === "new session" ||
+    isBareSlashCommandTitle(title)
+  );
 }
 
 function resolveMergedTaskTitle(preferredTask: ZCodeTaskMeta, fallbackTask: ZCodeTaskMeta): string {

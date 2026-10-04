@@ -2,6 +2,7 @@
 // ConversationSnapshot 派生为 SessionSummary，并维护 conflated 最新态 + 产出 upsert/remove delta。
 // 纯归约、无 IO；publisher（sessions-index-publisher）负责 seq 记账与帧构造，
 // 事件订阅与 flush 调度归 gateway（v4-gateway）。
+import { isBareSlashCommandTitle } from "@zcode/shared";
 import {
   deriveSessionWorkflowActivity,
   type ConversationSnapshot,
@@ -154,13 +155,24 @@ export class SessionsIndexProjection {
     // meta 之前 title 为空、record 时间可能被 resume 重置——store 种子里的
     // 稳定字段不得被降级值覆盖（否则侧栏表现为"原会话消失、冒出新任务"）。
     if (prev) {
+      const incomingCommand = isBareSlashCommandTitle(summary.title);
+      const prevCommand = isBareSlashCommandTitle(prev.title);
       // sessions-index 读侧要区分“存储/协议物理标题”和“用户显式重命名”。
       // 冷恢复 live 投影在 hydration 补齐前可能只有 default/generated 标题；旧 seed 若已是
       // custom，不得被这类自动标题降级，否则侧边栏会把用户手动标题闪回生成标题。
-      if (prev.titleSource === "custom" && summary.titleSource !== "custom") {
+      // 斜杠命令不算标题：不能覆盖已有的真实标题，自己也要被后来的真实标题换掉。
+      if (incomingCommand && prev.title && !prevCommand) {
+        summary.title = prev.title;
+        if (prev.titleSource === undefined) delete summary.titleSource;
+        else summary.titleSource = prev.titleSource;
+      } else if (
+        prev.titleSource === "custom" &&
+        summary.titleSource !== "custom" &&
+        !prevCommand
+      ) {
         summary.title = prev.title;
         summary.titleSource = prev.titleSource;
-      } else if (!summary.title && prev.title) {
+      } else if (!summary.title && prev.title && !prevCommand) {
         summary.title = prev.title;
         // 旧 store seed 的 titleSource 可缺省；冷投影的
         // default 只是暂态值。保住标题时也要保住“字段缺省”，否则

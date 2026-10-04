@@ -1,9 +1,11 @@
+import { isBareSlashCommandTitle } from "@zcode/shared";
 import { createProjectId } from "../deps.js";
 import type { ProjectId } from "../deps.js";
 
 export function titleFromInput(input: string): string {
   const compact = input.trim().replace(/\s+/g, " ");
-  if (!compact) return "Untitled session";
+  // 单独一条斜杠命令（计划模式的 /plannotator-plan-mode）不是用户要办的事。
+  if (!compact || isBareSlashCommandTitle(compact)) return "Untitled session";
   return compact.length <= 60 ? compact : `${compact.slice(0, 57)}...`;
 }
 
