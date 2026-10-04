@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import type { TodoCreateParams, TodoItem, TodoUpdateParams } from "@zcode/shared";
+import { normalizeTodoTags, type TodoCreateParams, type TodoItem, type TodoUpdateParams } from "@zcode/shared";
 import { getTasksIndexDatabasePath } from "#src/paths.js";
 import { runTasksDatabaseMigrations } from "#src/session/tasksDatabase/migrations.js";
 import { TodoStateError, workspaceKeyOf } from "#src/todos/todo.js";
@@ -26,12 +26,15 @@ CREATE TABLE IF NOT EXISTS todos (
   status TEXT NOT NULL,
   error TEXT,
   attachments TEXT,
+  tags TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_todos_workspace ON todos(workspace_key, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_todos_session ON todos(session_id) WHERE session_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS todo_seq (n INTEGER NOT NULL);
+-- ponytail: 用过的标签全局留着，删任务也不清。目录变大后再按项目拆。
+CREATE TABLE IF NOT EXISTS todo_tag_catalog (name TEXT PRIMARY KEY COLLATE NOCASE);
 `;
 
 /** 删了不复用。旧分支可能还在，重号会检出别人的 todo-1。 */
@@ -66,6 +69,7 @@ interface TodoRow {
   status: string;
   error: string | null;
   attachments: string | null;
+  tags: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -78,6 +82,29 @@ function parseAttachments(raw: string | null): TodoItem["attachments"] {
   } catch {
     return [];
   }
+}
+
+function parseTags(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((tag): tag is string => typeof tag === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function tagsOf(input: readonly string[] | undefined): string[] {
+  try {
+    return normalizeTodoTags(input ?? []);
+  } catch (error) {
+    throw new TodoStateError(error instanceof Error ? error.message : String(error));
+  }
+}
+
+function rememberTags(db: DatabaseSyncInstance, tags: string[]): void {
+  const insert = db.prepare("INSERT OR IGNORE INTO todo_tag_catalog (name) VALUES (?)");
+  for (const name of tags) insert.run(name);
 }
 
 function toItem(row: TodoRow): TodoItem {
@@ -96,6 +123,7 @@ function toItem(row: TodoRow): TodoItem {
     status: row.status as TodoItem["status"],
     error: row.error,
     attachments: parseAttachments(row.attachments),
+    tags: parseTags(row.tags),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -130,6 +158,9 @@ export class TodoRepo {
     if (!columns.some((column) => column.name === "attachments")) {
       db.exec("ALTER TABLE todos ADD COLUMN attachments TEXT");
     }
+    if (!columns.some((column) => column.name === "tags")) {
+      db.exec("ALTER TABLE todos ADD COLUMN tags TEXT");
+    }
     this.db = db;
   }
 
@@ -140,6 +171,7 @@ export class TodoRepo {
     const attachments = (params.attachments ?? []).filter(
       (file) => file.fileName && (file.localPath || file.dataBase64),
     );
+    const tags = tagsOf(params.tags);
     if (!workspacePath || !title || (!prompt && attachments.length === 0)) {
       throw new TodoStateError("标题、说明和项目都必填");
     }
@@ -155,8 +187,8 @@ export class TodoRepo {
       id = allocateTodoId(db);
       db.prepare(
         `INSERT INTO todos (
-          id, title, prompt, workspace_key, workspace_path, workspace_identity, attachments, status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'todo', ?, ?)`,
+          id, title, prompt, workspace_key, workspace_path, workspace_identity, attachments, tags, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'todo', ?, ?)`,
       ).run(
         id,
         title,
@@ -165,9 +197,11 @@ export class TodoRepo {
         workspacePath,
         params.workspaceIdentity?.trim() || null,
         attachments.length > 0 ? JSON.stringify(attachments) : null,
+        tags.length > 0 ? JSON.stringify(tags) : null,
         now,
         now,
       );
+      rememberTags(db, tags);
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
@@ -194,6 +228,28 @@ export class TodoRepo {
       .run(title, prompt || "见附件。", Date.now(), id);
     if (result.changes !== 1) throw new TodoStateError("只有未开始的 To-Do 可以修改");
     return (await this.get(id))!;
+  }
+
+  async setTags(id: string, tags: string[]): Promise<TodoItem> {
+    const normalized = tagsOf(tags);
+    const current = await this.get(id);
+    if (!current) throw new TodoStateError("To-Do 不存在");
+    const db = await this.ensure();
+    db.prepare("UPDATE todos SET tags = ?, updated_at = ? WHERE id = ?").run(
+      normalized.length > 0 ? JSON.stringify(normalized) : null,
+      Date.now(),
+      id,
+    );
+    rememberTags(db, normalized);
+    return (await this.get(id))!;
+  }
+
+  async listTags(): Promise<string[]> {
+    const db = await this.ensure();
+    const rows = db.prepare("SELECT name FROM todo_tag_catalog ORDER BY name COLLATE NOCASE").all() as {
+      name: string;
+    }[];
+    return rows.map((row) => row.name);
   }
 
   async list(workspaceKey?: string): Promise<TodoItem[]> {

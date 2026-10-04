@@ -34,6 +34,7 @@ export interface TodoItem {
   sessionId: string | null;
   status: TodoStatus;
   error: string | null;
+  tags: string[];
   createdAt: number;
   updatedAt: number;
 }
@@ -44,10 +45,33 @@ export interface TodoCreateParams {
   workspacePath: string;
   workspaceIdentity?: string;
   attachments?: TodoAttachment[];
+  tags?: string[];
 }
 
-/** 只改未开始行的标题和说明。附件不在这里。 */
+/** 只改未开始行的标题和说明。附件和标签不在这里。 */
 export interface TodoUpdateParams {
   title: string;
   prompt: string;
+}
+
+const MAX_TODO_TAGS = 8;
+const MAX_TODO_TAG_LENGTH = 32;
+
+/** 空的丢掉，过长或过多直接拒绝。大小写不同只留第一次出现的写法。 */
+export function normalizeTodoTags(input: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const raw of input) {
+    const name = raw.trim().replace(/\s+/g, " ");
+    if (!name) continue;
+    if (name.length > MAX_TODO_TAG_LENGTH) {
+      throw new Error(`标签不能超过 ${MAX_TODO_TAG_LENGTH} 个字`);
+    }
+    const key = name.toLocaleLowerCase();
+    if (seen.has(key)) continue;
+    if (tags.length >= MAX_TODO_TAGS) throw new Error(`一条 To-Do 最多 ${MAX_TODO_TAGS} 个标签`);
+    seen.add(key);
+    tags.push(name);
+  }
+  return tags;
 }

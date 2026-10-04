@@ -404,6 +404,13 @@ export interface ZCodeApp {
     taskId: string,
     options?: { traceContext?: TraceContext },
   ): Promise<BackgroundTaskCancelResult>;
+  /** 只改这一次正在跑的子会话的模型和思考等级。没有活会话时返回 false。 */
+  setRunningSubagentModel?(input: {
+    childSessionId: string;
+    provider: string;
+    model: string;
+    thought: string;
+  }): Promise<boolean>;
   /**
    * workflow run 的事件日志分页（详情页审计面）。可选能力：dwf journal 不可用时 run service
    * 整个不构造，此方法随之缺席，网关据此回结构化的能力不支持错误而不是空页——

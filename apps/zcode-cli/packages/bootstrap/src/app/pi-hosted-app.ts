@@ -441,6 +441,14 @@ export function createPiHostedApp(
     async readBackgroundBashOutput(workId: string) {
       return hosted.readManagedProcessOutput(workId);
     },
+    async setRunningSubagentModel(input: {
+      childSessionId: string;
+      provider: string;
+      model: string;
+      thought: string;
+    }) {
+      return hosted.setRunningSubagentModel(input);
+    },
     async cancelBackgroundTask(workId: string) {
       const managed = await hosted.cancelManagedProcess(workId);
       if (managed === "killed") return {};

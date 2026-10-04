@@ -3,7 +3,13 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { IGitService } from "#src/git/git.js";
 import type { AttachmentRef } from "@zcode/shared/zcode-protocol-v4";
-import type { TodoAttachment, TodoCreateParams, TodoItem, TodoUpdateParams } from "@zcode/shared";
+import type {
+  ModelSelection,
+  TodoAttachment,
+  TodoCreateParams,
+  TodoItem,
+  TodoUpdateParams,
+} from "@zcode/shared";
 import { TodoRepo } from "#src/todos/todoRepo.js";
 import { TodoStateError, type ITodoService } from "#src/todos/todo.js";
 
@@ -16,12 +22,14 @@ export interface TodoSessionPort {
     workingDirectory: string;
     text: string;
     attachments?: AttachmentRef[];
+    modelSelection: ModelSelection;
   }): Promise<{ sessionId: string }>;
   continue(input: {
     workspacePath: string;
     workspaceIdentity?: string;
     sessionId: string;
     text: string;
+    modelSelection: ModelSelection;
   }): Promise<void>;
 }
 
@@ -81,7 +89,15 @@ export class TodoService implements ITodoService {
     return this.repo.list(workspaceKey);
   }
 
-  async start(id: string): Promise<TodoItem> {
+  setTags(id: string, tags: string[]): Promise<TodoItem> {
+    return this.repo.setTags(id, tags);
+  }
+
+  listTags(): Promise<string[]> {
+    return this.repo.listTags();
+  }
+
+  async start(id: string, modelSelection: ModelSelection): Promise<TodoItem> {
     const claimed = await this.repo.claim(id);
     if (claimed === "missing") throw new TodoStateError("To-Do 不存在");
     if (claimed === "bad-status") throw new TodoStateError("当前状态不能开始");
@@ -92,6 +108,7 @@ export class TodoService implements ITodoService {
           workspaceIdentity: claimed.workspaceIdentity,
           sessionId: claimed.sessionId,
           text: `上一次执行中断了。请在同一分支上继续完成。\n\n${claimed.prompt}\n\n${STANDING_RULE}`,
+          modelSelection,
         });
         return claimed;
       }
@@ -101,6 +118,7 @@ export class TodoService implements ITodoService {
           workspaceIdentity: claimed.workspaceIdentity,
           workingDirectory: claimed.worktreePath,
           text: `关联会话已经删除。请在同一分支上继续完成。\n\n${claimed.prompt}\n\n${STANDING_RULE}`,
+          modelSelection,
         });
         return await this.repo.attachRun(claimed.id, {
           baseBranch: claimed.baseBranch,
@@ -145,6 +163,7 @@ export class TodoService implements ITodoService {
         workingDirectory: created.worktreePath,
         text: `${claimed.prompt}\n\n${STANDING_RULE}`,
         attachments: await materializeAttachments(claimed.id, claimed.attachments),
+        modelSelection,
       });
       return await this.repo.attachRun(claimed.id, {
         baseBranch: summary.branchName,

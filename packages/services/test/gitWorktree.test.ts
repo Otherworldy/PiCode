@@ -90,6 +90,30 @@ test("unborn head is not passed as a worktree start point", async () => {
   }
 });
 
+test("later unborn worktree still starts after a sibling commit", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "wt-unborn-next-"));
+  const repo = createGitCliRepo();
+  try {
+    await execFileAsync("git", ["init", "-q"], { cwd: dir });
+    const firstPath = join(dir, ".worktrees", "todo-1");
+    const first = await repo.createWorktree(dir, "todo-1", {
+      worktreePath: firstPath,
+      startPoint: "0000000000000000000000000000000000000000",
+    });
+    assert.equal(first.success, true, first.issues[0]?.message);
+    await execFileAsync("git", ["-c", "user.email=a@b.c", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "c"], {
+      cwd: firstPath,
+    });
+    const second = await repo.createWorktree(dir, "todo-2", {
+      worktreePath: join(dir, ".worktrees", "todo-2"),
+      startPoint: "0000000000000000000000000000000000000000",
+    });
+    assert.equal(second.success, true, second.issues[0]?.message);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("unborn worktree branch is not reported as missing", () => {
   const issues = rewriteUnbornWorktreeBranchMiss(
     [{ code: "target-branch-not-found", message: "Target branch was not found." }],

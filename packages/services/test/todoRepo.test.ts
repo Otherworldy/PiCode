@@ -200,20 +200,91 @@ test("a removed session starts again on the same worktree", async () => {
         throw new Error("unused");
       },
     };
+    const selection = { providerId: "p", modelId: "m", options: { reasoningLevel: "low" } };
+    let seen = false;
     const service = new TodoService(repo, git, {
-      async create() {
+      async create(input) {
+        seen = input.modelSelection.modelId === selection.modelId;
         return { sessionId: "session-2" };
       },
-      async continue() {
-        continued += 1;
-      },
+      async continue() {},
     });
-    const next = await service.start(created.id);
+    const next = await service.start(created.id, selection);
+    assert.equal(seen, true);
     assert.equal(worktrees, 0);
     assert.equal(continued, 0);
     assert.equal(next.status, "running");
     assert.equal(next.sessionId, "session-2");
     assert.equal(next.worktreePath, "/proj/a/.worktrees/todo-1");
+  });
+});
+
+test("tags stay in the catalog after the todo is deleted", async () => {
+  await withRepo(async (repo) => {
+    const created = await repo.create({
+      title: "a",
+      prompt: "p",
+      workspacePath: "/proj/a",
+      tags: [" Bug ", "bug", "Feature"],
+    });
+    assert.deepEqual(created.tags, ["Bug", "Feature"]);
+    await repo.delete(created.id);
+    assert.deepEqual(await repo.listTags(), ["Bug", "Feature"]);
+    await repo.claim(
+      (await repo.create({ title: "b", prompt: "p", workspacePath: "/proj/a", tags: ["feature"] })).id,
+    );
+    const running = await repo.list("/proj/a");
+    const tagged = await repo.setTags(running[0]!.id, ["x"]);
+    assert.equal(tagged.status, "running");
+    assert.deepEqual(tagged.tags, ["x"]);
+    assert.deepEqual(await repo.listTags(), ["Bug", "Feature", "x"]);
+    await assert.rejects(() => repo.setTags(tagged.id, ["1", "2", "3", "4", "5", "6", "7", "8", "9"]), TodoStateError);
+  });
+});
+
+test("retry sends the chosen model on the existing session", async () => {
+  await withRepo(async (repo) => {
+    const created = await repo.create({ title: "a", prompt: "p", workspacePath: "/proj/a" });
+    await repo.claim(created.id);
+    await repo.attachRun(created.id, {
+      baseBranch: "main",
+      baseCommit: "abc",
+      branchName: "todo-1",
+      worktreePath: "/proj/a/.worktrees/todo-1",
+      sessionId: "session-1",
+    });
+    await repo.markFailed(created.id, "中断");
+    const selection = { providerId: "p", modelId: "m", options: { reasoningLevel: "high" } };
+    let seen: unknown;
+    const service = new TodoService(repo, {
+      async getRepositorySummary() {
+        throw new Error("unused");
+      },
+      async listWorktrees() {
+        return [];
+      },
+      async createWorktree() {
+        throw new Error("unused");
+      },
+      async removeWorktree() {},
+      async countCommitsAhead() {
+        return 0;
+      },
+      async mergeBranch() {
+        throw new Error("unused");
+      },
+    }, {
+      async create() {
+        throw new Error("unused");
+      },
+      async continue(input) {
+        seen = input.modelSelection;
+      },
+    });
+    const next = await service.start(created.id, selection);
+    assert.deepEqual(seen, selection);
+    assert.equal(next.sessionId, "session-1");
+    assert.equal("modelSelection" in next, false);
   });
 });
 

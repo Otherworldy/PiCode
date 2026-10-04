@@ -71,10 +71,12 @@ export function StatusChip({ status }: { status: TodoStatus }) {
 function CardIconButton({
   label,
   onClick,
+  disabled,
   children,
 }: {
   label: string;
   onClick: () => void;
+  disabled?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -84,9 +86,10 @@ function CardIconButton({
       variant="ghost"
       aria-label={label}
       title={label}
+      disabled={disabled}
       onClick={(event) => {
         event.stopPropagation();
-        onClick();
+        if (!disabled) onClick();
       }}
     >
       {children}
@@ -99,17 +102,21 @@ export function TodoCard({
   now,
   onOpen,
   onStart,
+  onTag,
   onAbandon,
   onRestore,
   onDelete,
+  starting,
 }: {
   item: TodoItem;
   now: number;
   onOpen: () => void;
   onStart: () => void;
+  onTag?: (tag: string) => void;
   onAbandon: () => void;
   onRestore: () => void;
   onDelete: () => void;
+  starting?: boolean;
 }) {
   const canStart = item.status === "todo" || item.status === "failed";
   const canAbandon = item.status !== "done" && item.status !== "canceled";
@@ -132,8 +139,8 @@ export function TodoCard({
         <div className="flex shrink-0 items-center gap-0.5">
           <StatusChip status={item.status} />
           {canStart ? (
-            <CardIconButton label="开始" onClick={onStart}>
-              <Play className="size-3.5" />
+            <CardIconButton label="开始" onClick={onStart} disabled={starting}>
+              {starting ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
             </CardIconButton>
           ) : null}
           {item.status === "canceled" ? (
@@ -151,6 +158,23 @@ export function TodoCard({
           </CardIconButton>
         </div>
       </div>
+      {item.tags.length > 0 ? (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {item.tags.map((tag) => (
+            <button
+              key={tag.toLocaleLowerCase()}
+              type="button"
+              className="rounded-full bg-surface px-2 py-0.5 text-ui-xs text-foreground-subtle hover:text-foreground"
+              onClick={(event) => {
+                event.stopPropagation();
+                onTag?.(tag);
+              }}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {item.prompt && item.prompt !== "见附件。" ? (
         <p className="mt-1.5 line-clamp-2 text-ui-xs leading-snug text-foreground-subtle">{item.prompt}</p>
       ) : null}

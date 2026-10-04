@@ -31,7 +31,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
   → desktop-continuous 30ms / web-remote-replayable 150ms
 ```
 
-同一所有者，两套 flush。jsonl 为对话树真相；V4 snapshot 为 UI/远控派生缓存，可从 jsonl 重建。打开时若 publisher 还没有行，订阅前用 jsonl 再画一次；否则会交出空快照，加载结束后只剩输入框。
+同一所有者，两套 flush。jsonl 为对话树真相；V4 snapshot 为 UI/远控派生缓存，可从 jsonl 重建。打开时若 publisher 还没有行，订阅前用 jsonl 再画一次；否则会交出空快照，加载结束后只剩输入框。runtime `dispose` 后从注册表摘掉，不删 jsonl；留着已关掉的实例会让下次打开直接复用它，冷恢复不再读文件，画面仍是空的。
 
 上下文环的总量来自 Pi `getContextUsage()`，不另算。`message_end`、`tool_execution_end`、`compaction_end`，以及非重试的 `agent_end` 立刻推。流式 `message_update` 最多 250ms 推一次，生成过程中按 Pi 的估算上涨，不等整轮结束。值和上次一样则不下发。
 
@@ -46,7 +46,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 - 流中途失败：turn `failed`，已写出的 row 保留。
 - 模型失败只把一句摘要写进回复和 `lastError.message`；原始 JSON 放 `lastError.detail`。
 - Pi `auto_retry_start` 写入 `control.apiRetry.failures`。最终失败只进输入框上方的原错误横幅，摘要一行，历次失败和原文在「展开详情」。不写成助手正文。成功后清掉重试状态。同一次失败的后续 `agent_settled` 不清掉这条错误。
-- `/compact` 直接调用 Pi `session.compact()`，不进入输入队列。Pi 会先中断当前操作再压缩。空闲时压缩也要打开停止：`canStop` 为真，Stop 中断这次摘要请求。跑着的轮次里发生的自动压缩不抢走该轮的停止权。完成后的摘要写在 compact marker 的 `summary` 上，界面可展开查看。失败原因写在 marker 的 `error` 上，并进入输入框上方的错误横幅。命令被拒绝时也要弹出原因，不能只写日志。重开会话时从 jsonl 的 compaction 条目还原同一条 marker。
+- `/compact` 直接调用 Pi `session.compact()`，不进入输入队列。Pi 会先中断当前操作再压缩。空闲时压缩也要打开停止：`canStop` 为真，Stop 中断这次摘要请求。跑着的轮次里发生的自动压缩不抢走该轮的停止权。完成后的摘要写在 compact marker 的 `summary` 上，界面可展开查看。这条分隔线不进「已工作」折叠：轮次收起后仍要看见「正在压缩上下文」和终态。失败原因写在 marker 的 `error` 上，并进入输入框上方的错误横幅。命令被拒绝时也要弹出原因，不能只写日志。重开会话时从 jsonl 的 compaction 条目还原同一条 marker。
 - 输入框模型左侧的圆环读 Pi `getContextUsage()`。一轮结束、压缩结束或切换模型后写入 `usage.contextWindow`。点击圆环发送 `/compact`。
 - 打开会话只下发尾部一窗。页面向上滚动再拉更早的一窗，不再在打开时把整段历史灌进时间线。下发的工具参数和输出只留 head+tail；宿主里的原文仍留给文件回滚。投影未到时时间线显示加载，不留白。
 - 冷恢复重放 jsonl 时，行先落完，actions 只算一次。不能每条事件都扫整窗，否则几万行的会话订阅一直不返回。
@@ -110,6 +110,10 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 ## 子代理面板
 
 目录和只读侧栏仍用现有 V4 `subagents` 字段。子运行的 jsonl 写在父会话文件同名目录下，面板仍读这份文件。不读 PiCode `subagent_child` 会话库，也不依赖 `pi-subagents` 插件是否安装。
+
+正在跑的 `picode_subagent` 只活在当前进程里。父会话把这些活会话写进 `backgroundWorks`（`kind: subagent`，`workId` 和 `childSessionId` 都是子会话 id，`cancellable: true`），状态面板因此出现停止按钮。`cancelBackgroundWork` 只 abort 这个子会话，不停父会话。按下停止后这一行立刻离开「正在运行」，即使 jsonl 还没写成终态。磁盘上看起来还在跑、但本进程已经没有的记录不给按钮。
+
+活着的子会话把当前 `provider` / `model` / `thought` 放进 `subagents.running`。状态面板用这份值和会话已有的模型目录展示下拉框。`setRunningSubagentModel` 只调用这个子会话的 `setModel` / `setThinkingLevel`，不改父会话，也不写设置里的默认。已经发出的请求不打断，下一次模型请求用新的。本进程没有的运行记录只显示目录，不能改。
 
 设置页拥有代理定义：用户 `~/.PiCode/agents`，项目 `<workspace>/.PiCode/agents`，内置 `general-purpose` / `Explore`。Pi 会话挂一个 `picode_subagent` 工具，按这份定义起子会话。子会话不再挂这个工具，也不挂 MCP。同名的 Pi 插件工具 `subagent` 在主会话上禁用，避免两套定义争用。
 

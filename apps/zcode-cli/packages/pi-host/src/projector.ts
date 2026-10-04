@@ -287,19 +287,38 @@ export class PiToV4Projector {
   }
 
   replaceManagedProcesses(works: ConversationSnapshot["backgroundWorks"]): ConversationDelta[] {
-    const kept = this.snapshot.backgroundWorks.filter(
-      (work) => !work.workId.startsWith(PI_PROCESS_WORK_PREFIX),
+    return this.replaceBackgroundWorks(works, (work) =>
+      work.workId.startsWith(PI_PROCESS_WORK_PREFIX),
     );
-    const next = [...kept, ...works];
+  }
+
+  replaceSubagentWorks(works: ConversationSnapshot["backgroundWorks"]): ConversationDelta[] {
+    return this.replaceBackgroundWorks(works, (work) => work.kind === "subagent");
+  }
+
+  /** 按位替换一类后台任务。两路刷新若各自重排整表，停止按钮会在终端和子会话之间跳位。 */
+  private replaceBackgroundWorks(
+    works: ConversationSnapshot["backgroundWorks"],
+    replaced: (work: ConversationSnapshot["backgroundWorks"][number]) => boolean,
+  ): ConversationDelta[] {
     const prev = this.snapshot.backgroundWorks;
-    if (
-      prev.length === next.length &&
-      prev.every(
-        (work, index) => work.workId === next[index]?.workId && work.title === next[index]?.title,
-      )
-    ) {
-      return [];
+    const incoming = new Map(works.map((work) => [work.workId, work]));
+    const next: ConversationSnapshot["backgroundWorks"] = [];
+    const seen = new Set<string>();
+    for (const work of prev) {
+      if (!replaced(work)) {
+        next.push(work);
+        continue;
+      }
+      const replacement = incoming.get(work.workId);
+      if (!replacement) continue;
+      next.push(replacement);
+      seen.add(work.workId);
     }
+    for (const work of works) {
+      if (!seen.has(work.workId)) next.push(work);
+    }
+    if (JSON.stringify(prev) === JSON.stringify(next)) return [];
     return this.applyState({ backgroundWorks: next });
   }
 
@@ -782,7 +801,8 @@ export class PiToV4Projector {
     const row: ConversationRow = {
       ...this.base(this.turnId || "compact"),
       kind: "timelineMarker",
-      lane: "assistantWork",
+      // 轮尾，不进「已工作」折叠。否则空闲压缩时分隔线被收起，跑完也看不到。
+      lane: "turnTailBoundary",
       marker: { type: "compact", origin: "manual", status: "running" },
     };
     const deltas: ConversationDelta[] = [{ op: "row.appended", row }];
@@ -838,7 +858,7 @@ export class PiToV4Projector {
             row: {
               ...this.base(this.turnId || "compact"),
               kind: "timelineMarker",
-              lane: "assistantWork",
+              lane: "turnTailBoundary",
               marker,
             },
           },

@@ -21,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea.js";
 import { cn } from "@/components/lib/utils.js";
 import { useOptionalPlatform } from "@/hooks/usePlatform.js";
 import { projectLeaf } from "@/todos/todoBoard.js";
+import { TodoTagField } from "@/todos/TodoTagField.js";
 
 const MAX_FILES = 8;
 
@@ -35,17 +36,20 @@ export function TodoEditorDialog({
   defaultProjectKey,
   onOpenChange,
   onCreate,
+  suggestions,
 }: {
   open: boolean;
   projects: { workspacePath: string; workspaceIdentity?: string }[];
   defaultProjectKey: string;
   onOpenChange: (open: boolean) => void;
+  suggestions: string[];
   onCreate: (input: {
     title: string;
     prompt: string;
     workspacePath: string;
     workspaceIdentity?: string;
     attachments: TodoAttachment[];
+    tags: string[];
   }) => Promise<void>;
 }) {
   const platform = useOptionalPlatform();
@@ -54,6 +58,7 @@ export function TodoEditorDialog({
   const [prompt, setPrompt] = useState("");
   const [projectKey, setProjectKey] = useState(defaultProjectKey);
   const [files, setFiles] = useState<DraftFile[]>([]);
+  const [tags, setTags] = useState<string[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -62,6 +67,7 @@ export function TodoEditorDialog({
     setTitle("");
     setPrompt("");
     setProjectKey(defaultProjectKey);
+    setTags([]);
     setFiles((current) => {
       for (const file of current) if (file.previewUrl) URL.revokeObjectURL(file.previewUrl);
       return [];
@@ -112,6 +118,7 @@ export function TodoEditorDialog({
               workspacePath: project.workspacePath,
               workspaceIdentity: project.workspaceIdentity,
               attachments: files.map(({ id: _id, previewUrl: _preview, ...file }) => file),
+              tags,
             })
               .then(() => onOpenChange(false))
               .finally(() => setBusy(false));
@@ -152,6 +159,7 @@ export function TodoEditorDialog({
               className="min-h-32 rounded-xl bg-surface px-3 py-2"
               required={files.length === 0}
             />
+            <TodoTagField tags={tags} suggestions={suggestions} onChange={setTags} />
             {files.length > 0 ? (
               <ul className="flex flex-wrap gap-2">
                 {files.map((file) => (

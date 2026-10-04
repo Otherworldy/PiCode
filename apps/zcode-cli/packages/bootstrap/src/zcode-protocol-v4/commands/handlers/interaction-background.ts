@@ -265,6 +265,35 @@ async function cancelBackgroundWork(
   return undefined;
 }
 
+class V4RunningSubagentModelRejectedError extends Error {
+  readonly reasonCode = "fault.command.runningSubagentModelRejected.not_found";
+
+  constructor() {
+    super("running subagent not found");
+    this.name = "V4RunningSubagentModelRejectedError";
+  }
+}
+
+/** 只改这一次活着的子会话，不写设置，也不停父会话。 */
+async function setRunningSubagentModel(
+  host: V4CommandCoreHost,
+  envelope: CommandEnvelope,
+): Promise<CommandResult | undefined> {
+  const payload = envelope.payload as CommandPayloadMap["setRunningSubagentModel"];
+  const record = requireRecord(host, envelope.sessionId);
+  if (!record.app.setRunningSubagentModel) {
+    throw new V4CapabilityUnsupportedError("setRunningSubagentModel", record.app.sessionId);
+  }
+  const ok = await record.app.setRunningSubagentModel({
+    childSessionId: payload.childSessionId,
+    provider: payload.provider,
+    model: payload.model,
+    thought: payload.thought,
+  });
+  if (!ok) throw new V4RunningSubagentModelRejectedError();
+  return undefined;
+}
+
 /**
  * resumeWorkflowRun：workId ≡ runId 直传 app 能力。
  * - 能力缺席（journal 不可用 / 端口无 resume）→ 能力不支持错误（同 cancel 的语义）。
@@ -389,6 +418,7 @@ export const interactionBackgroundHandlers = {
   requestWorkspaceHookReview,
   snoozeInteractionAutoResolution,
   cancelBackgroundWork,
+  setRunningSubagentModel,
   resumeWorkflowRun,
   startSavedWorkflow,
   amendWorkflowRunSettings,

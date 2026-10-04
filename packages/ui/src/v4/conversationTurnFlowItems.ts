@@ -27,6 +27,24 @@ function isAssistantWorkRow(row: ConversationRow): row is AssistantWorkRow {
   return row.kind !== "turnHeader" && row.kind !== "userInput";
 }
 
+/** 压缩状态不进「已工作」折叠。跑完的轮默认收起，塞进去就变成没有「正在压缩上下文」。 */
+export function isCompactStatusRow(row: AssistantWorkRow): boolean {
+  return row.kind === "timelineMarker" && row.marker.type === "compact";
+}
+
+export function splitCompactStatusRows(
+  rows: readonly AssistantWorkRow[],
+): Array<{ pinned: boolean; rows: AssistantWorkRow[] }> {
+  const groups: Array<{ pinned: boolean; rows: AssistantWorkRow[] }> = [];
+  for (const row of rows) {
+    const pinned = isCompactStatusRow(row);
+    const last = groups.at(-1);
+    if (last?.pinned === pinned) last.rows.push(row);
+    else groups.push({ pinned, rows: [row] });
+  }
+  return groups;
+}
+
 function appendGroupedAssistantFlowItem(
   items: ConversationTurnFlowItem[],
   kind: "assistantHistory" | "assistantWork",

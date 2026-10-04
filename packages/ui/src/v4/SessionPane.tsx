@@ -2162,6 +2162,31 @@ export function SessionPane({
     },
     [dispatchCommand, sessionId],
   );
+  const handleSetRunningSubagentModel = useCallback(
+    (
+      childSessionId: string,
+      next: { provider: string; model: string; thought: string },
+    ) => {
+      if (!sessionId) return;
+      return dispatchCommand(
+        "setRunningSubagentModel",
+        {
+          childSessionId,
+          provider: next.provider,
+          model: next.model,
+          thought: next.thought,
+        },
+        sessionId,
+      ).then((ack) => {
+        if (ack.status !== "accepted" && ack.status !== "noop") {
+          logger.warn(
+            `[v4-pane] setRunningSubagentModel 被拒绝: ${ack.status} ${ack.reasonCode ?? ""}`,
+          );
+        }
+      });
+    },
+    [dispatchCommand, sessionId],
+  );
 
   // 动态工作流灰度快照：只读 store，
   // 取数在 Root 里做一次。未就绪时 enabled 为 false，按未命中处理。
@@ -4941,6 +4966,11 @@ export function SessionPane({
                 : undefined
             }
             onCancelBackgroundWork={readOnly ? undefined : handleCancelBackgroundWork}
+            modelSelectionView={modelSelectionView}
+            modelProvider={provider}
+            onSetRunningSubagentModel={
+              readOnly ? undefined : handleSetRunningSubagentModel
+            }
             onOpenSubagentSession={onOpenSubagentSession ? handleOpenSubagentSession : undefined}
             onOpenSubagentDirectory={
               onOpenSubagentDirectory ? handleOpenSubagentDirectory : undefined

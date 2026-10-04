@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
+import {
+  splitCompactStatusRows,
+  type AssistantWorkRow,
+} from "./conversationTurnFlowItems.js";
 import { buildConversationTurnRenderUnits } from "./conversationTurnRenderUnits.js";
 
 function header(
@@ -73,4 +77,43 @@ test("stopped, failed, and finished turns collapse tools and reasoning", () => {
 
 test("a running turn stays open", () => {
   assert.equal(historyOpen([header("running"), ...workRows(false)]), true);
+});
+
+test("trailing compact marker stays outside collapsed work", () => {
+  const marker: ConversationRow = {
+    rowId: 5,
+    turnId: "t1",
+    createdAt: 5,
+    createdAtSeq: 5,
+    kind: "timelineMarker",
+    lane: "turnTailBoundary",
+    marker: { type: "compact", origin: "manual", status: "running" },
+  };
+  const unit = buildConversationTurnRenderUnits([header("completedSuccess"), ...workRows(true), marker])[0];
+  assert.equal(unit?.assistantTailRows.some((row) => row.rowId === 5), true);
+  assert.equal(
+    unit?.workSegments?.[0]?.assistantFollowingRows.some((row) => row.rowId === 5),
+    false,
+  );
+});
+
+test("compact status rows stay pinned when folded with tools", () => {
+  const tool: ConversationRow = workRows(false)[1]!;
+  const marker: ConversationRow = {
+    rowId: 5,
+    turnId: "t1",
+    createdAt: 5,
+    createdAtSeq: 5,
+    kind: "timelineMarker",
+    lane: "assistantWork",
+    marker: { type: "compact", origin: "manual", status: "success" },
+  };
+  const groups = splitCompactStatusRows([tool, marker] as AssistantWorkRow[]);
+  assert.deepEqual(
+    groups.map((group) => [group.pinned, group.rows.map((row) => row.rowId)]),
+    [
+      [false, [3]],
+      [true, [5]],
+    ],
+  );
 });

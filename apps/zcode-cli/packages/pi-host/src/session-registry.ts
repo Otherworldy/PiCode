@@ -12,6 +12,14 @@ import { HostQueue } from "./host-queue.js";
 import { workspaceKey } from "./identity.js";
 import { readPiJsonl } from "./jsonl-history.js";
 import {
+  abortLiveSubagent,
+  getLiveSubagentModel,
+  hasLiveSubagent,
+  setLiveSubagentModel,
+  subagentControlWorks,
+  subscribeLiveSubagents,
+} from "./live-subagents.js";
+import {
   listPiSubagentChildren,
   piSubagentRevision,
   type PiSubagentChild,
@@ -56,6 +64,12 @@ export interface HostedSession {
   abort(): Promise<void>;
   continueAfterError(): Promise<void>;
   cancelManagedProcess(workId: string): Promise<"killed" | "missing" | "unrelated">;
+  setRunningSubagentModel(input: {
+    childSessionId: string;
+    provider: string;
+    model: string;
+    thought: string;
+  }): Promise<boolean>;
   readManagedProcessOutput(workId: string): Promise<import("@zcode/shared").BackgroundBashOutputResult>;
   compact(): Promise<void>;
   navigateTree(targetId: string): Promise<void>;
@@ -684,33 +698,57 @@ export class HostSessionRegistry {
       }
     };
     let subagentKey = "";
+    let subagentPublishGen = 0;
+    const cancelledSubagents = new Set<string>();
     let subagentTimer: ReturnType<typeof setTimeout> | undefined;
     const publishSubagents = async () => {
       if (!meta.sessionFile) return;
+      const gen = ++subagentPublishGen;
       const children = await listPiSubagentChildren({
         parentSessionFile: meta.sessionFile,
         parentSessionId: meta.sessionId,
       }).catch(() => [] as PiSubagentChild[]);
+      if (gen !== subagentPublishGen) return;
       const running = children.filter(
         (child) => child.status === "running" || child.status === "waiting" || child.status === "blocked",
       );
+      for (const id of cancelledSubagents) {
+        const child = children.find((item) => item.childSessionId === id);
+        // 文件还没被扫到时不能忘掉取消，否则这一行会又出现在「正在运行」。
+        if (child && !running.includes(child)) cancelledSubagents.delete(id);
+      }
+      // 用户已经按下停止。磁盘状态还没落成终态时，不要把它留在「正在运行」。
+      const visibleRunning = running.filter((child) => !cancelledSubagents.has(child.childSessionId));
       const next = {
         revision: piSubagentRevision(children),
         childSessionIds: children.map((child) => child.childSessionId),
-        running: running.map((child) => ({
-          childSessionId: child.childSessionId,
-          subagentType: child.subagentType,
-          title: child.title,
-          status: child.status as "running" | "waiting" | "blocked",
-          ...(child.summary ? { summary: child.summary } : {}),
-          ...(child.startedAt ? { startedAt: child.startedAt } : {}),
-        })),
-        endedTotal: children.length - running.length,
+        running: visibleRunning.map((child) => {
+          const model = getLiveSubagentModel(child.childSessionId);
+          return {
+            childSessionId: child.childSessionId,
+            subagentType: child.subagentType,
+            title: child.title,
+            status: child.status as "running" | "waiting" | "blocked",
+            ...(child.summary ? { summary: child.summary } : {}),
+            ...(child.startedAt ? { startedAt: child.startedAt } : {}),
+            ...(model
+              ? {
+                  modelProvider: model.provider,
+                  modelId: model.model,
+                  ...(model.thought ? { thought: model.thought } : {}),
+                }
+              : {}),
+          };
+        }),
+        endedTotal: children.length - visibleRunning.length,
       };
       const key = JSON.stringify(next);
-      if (key === subagentKey) return;
-      subagentKey = key;
-      emit(projector.replaceSubagents(next));
+      if (key !== subagentKey) {
+        subagentKey = key;
+        emit(projector.replaceSubagents(next));
+      }
+      // 目录没变也要刷新停止句柄：子会话已经 abort，文件看起来还在跑。
+      emit(projector.replaceSubagentWorks(subagentControlWorks(visibleRunning, hasLiveSubagent)));
     };
     const scheduleSubagents = () => {
       if (subagentTimer) clearTimeout(subagentTimer);
@@ -725,6 +763,9 @@ export class HostSessionRegistry {
       clearInterval(subagentPoll);
       subagentPoll = undefined;
     };
+    const unsubscribeLiveSubagents = subscribeLiveSubagents(() => {
+      void publishSubagents();
+    });
     const unsubscribeProcesses =
       pi.subscribeManagedProcesses?.((works) => {
         emit(projector.replaceManagedProcesses(works));
@@ -818,9 +859,21 @@ export class HostSessionRegistry {
       },
       cancelManagedProcess: async (workId) => {
         const id = workId.startsWith("pi-process:") ? workId.slice("pi-process:".length) : "";
-        if (!id) return "unrelated";
-        return (await pi.killManagedProcess?.(id)) ? "killed" : "missing";
+        if (id) return (await pi.killManagedProcess?.(id)) ? "killed" : "missing";
+        // 子会话的 workId 就是子会话 id。停不到就交给注册表里的子会话，不要回落去停父会话。
+        if (abortLiveSubagent(workId)) {
+          cancelledSubagents.add(workId);
+          void publishSubagents();
+          return "killed";
+        }
+        return "unrelated";
       },
+      setRunningSubagentModel: (input) =>
+        setLiveSubagentModel(input.childSessionId, {
+          provider: input.provider,
+          model: input.model,
+          thought: input.thought,
+        }),
       readManagedProcessOutput: (workId) =>
         pi.readManagedProcessOutput?.(workId) ?? Promise.resolve({ kind: "unavailable", workId }),
       compact: () => pi.compact(),
@@ -926,9 +979,15 @@ export class HostSessionRegistry {
         if (contextTimer) clearTimeout(contextTimer);
         if (subagentTimer) clearTimeout(subagentTimer);
         stopSubagentPoll();
+        unsubscribeLiveSubagents();
         unsubscribeProcesses();
         unsubscribe();
         pi.dispose();
+        // 常驻回收只关 runtime，不删 jsonl。注册表若留着这个实例，下次 create 直接返回它，不再读文件，订阅拿到空投影。
+        this.sessions.delete(meta.sessionId);
+        this.toolChecks.delete(meta.sessionId);
+        this.children.delete(meta.sessionId);
+        for (const ids of this.children.values()) ids.delete(meta.sessionId);
       },
       hydrateHistory: (content) => {
         const parsed = readPiJsonl(content);

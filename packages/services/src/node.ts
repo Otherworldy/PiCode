@@ -2669,10 +2669,11 @@ export function createLocalServices(options: {
           payload: {
             workspaceId: input.workspaceIdentity?.trim() || input.workspacePath,
             workingDirectory: input.workingDirectory,
-            config: { mode: "yolo" },
+            config: { mode: "yolo", modelSelection: input.modelSelection },
             firstInput: {
               text: input.text,
               mode: "yolo",
+              modelSelection: input.modelSelection,
               ...(input.attachments?.length ? { attachments: input.attachments } : {}),
             },
           },
@@ -2694,7 +2695,7 @@ export function createLocalServices(options: {
           sessionId: input.sessionId,
           type: "sendText",
           issuedAt: Date.now(),
-          payload: { text: input.text, mode: "yolo" },
+          payload: { text: input.text, mode: "yolo", modelSelection: input.modelSelection },
         },
       });
       if (ack.status !== "accepted" && ack.status !== "duplicate") {

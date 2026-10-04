@@ -245,6 +245,13 @@ export const commandPayloadSchemas = {
   pauseGoal: z.object({}),
   resumeGoal: z.object({}),
   cancelBackgroundWork: z.object({ workId: z.string() }),
+  // 只改这一次正在跑的子会话，不写子智能体设置。
+  setRunningSubagentModel: z.object({
+    childSessionId: z.string().min(1),
+    provider: z.string().min(1),
+    model: z.string().min(1),
+    thought: z.string(),
+  }),
   // cancel & resume：恢复一个已取消 / 被进程死亡
   // 打断的 dwf run。workId ≡ runId（与 cancelBackgroundWork 同一个身份等式）；`name` 可选，
   // 喂恢复后完成通知的主题（重启后原 CreateWorkflow 工具 input 不可得）。刻意不携

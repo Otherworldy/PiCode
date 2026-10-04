@@ -1,4 +1,10 @@
-import type { TodoCreateParams, TodoItem, TodoStatus, TodoUpdateParams } from "@zcode/shared";
+import type {
+  ModelSelection,
+  TodoCreateParams,
+  TodoItem,
+  TodoStatus,
+  TodoUpdateParams,
+} from "@zcode/shared";
 import { ServiceChannels } from "@zcode/shared";
 import { createServiceDescriptor } from "../descriptors.js";
 
@@ -7,7 +13,11 @@ export interface ITodoService {
   /** 只有未开始（status todo）可以改标题和说明。 */
   update(id: string, params: TodoUpdateParams): Promise<TodoItem>;
   list(workspaceKey?: string): Promise<TodoItem[]>;
-  start(id: string): Promise<TodoItem>;
+  /** 任何状态都能改。用过的标签留在目录里。 */
+  setTags(id: string, tags: string[]): Promise<TodoItem>;
+  listTags(): Promise<string[]>;
+  /** 模型只用于这一次会话，不写进行里。 */
+  start(id: string, modelSelection: ModelSelection): Promise<TodoItem>;
   settle(sessionId: string, outcome: "completed" | "failed"): Promise<TodoItem | null>;
   /** 会话已删除。没有对应行则不动。 */
   noteSessionRemoved(sessionId: string): Promise<TodoItem | null>;

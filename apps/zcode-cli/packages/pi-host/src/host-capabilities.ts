@@ -1,6 +1,8 @@
 import { mkdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { CreateAgentSessionOptions } from "@earendil-works/pi-coding-agent";
+import { trackLiveSubagent } from "./live-subagents.js";
+import { mapThought } from "./model-delegate.js";
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
 import { createPermissionExtension, gateTool, type ToolPermissionCheck } from "./permission-gate.js";
 
@@ -172,17 +174,40 @@ export async function runZcodeSubagent(input: {
     sessionManager: SessionManager.create(input.cwd, childDir),
     settingsManager: SettingsManager.inMemory({ retry: { enabled: false } }),
   });
-  const onAbort = () => {
+  let cancelled = false;
+  const stopChild = () => {
+    cancelled = true;
     void session.abort();
   };
-  input.signal?.addEventListener("abort", onAbort);
+  const readModel = () => ({
+    provider: session.model?.provider ?? "",
+    model: session.model?.id ?? "",
+    thought: session.thinkingLevel ?? "",
+  });
+  // 父会话的工具 signal 和面板上的停止按钮都只停这一个子会话。
+  // 模型切换同样只打到这个 session，不写子智能体设置。
+  const release = trackLiveSubagent(session.sessionId, {
+    abort: stopChild,
+    getModel: readModel,
+    setModel: async (next) => {
+      const model = input.modelRuntime?.getModel(next.provider, next.model);
+      if (!model) return false;
+      await session.setModel(model);
+      if (next.thought) session.setThinkingLevel(mapThought(next.thought));
+      return true;
+    },
+  });
+  input.signal?.addEventListener("abort", stopChild);
   try {
     await session.prompt(input.task);
+    if (cancelled || input.signal?.aborted) return "subagent cancelled";
     return assistantText(session.messages as { role?: string; content?: unknown }[]) || "(no response)";
   } catch (error) {
+    if (cancelled || input.signal?.aborted) return "subagent cancelled";
     return `subagent failed: ${error instanceof Error ? error.message : String(error)}`;
   } finally {
-    input.signal?.removeEventListener("abort", onAbort);
+    release();
+    input.signal?.removeEventListener("abort", stopChild);
     session.dispose();
   }
 }

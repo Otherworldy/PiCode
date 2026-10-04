@@ -1,5 +1,8 @@
 /* oxlint-disable eslint(max-lines) -- 状态面板同时维护收起态摘要、展开态分区、菜单策略和宽度自适应，同文件能保证两种形态共享同一内容优先级。 */
+import type { ModelSelectionView } from "@zcode/services";
+import type { ZCodeProvider } from "@zcode/shared";
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
+import { RunningSubagentModelControl } from "@/v4/RunningSubagentModelControl.js";
 import {
   forwardRef,
   memo,
@@ -147,6 +150,12 @@ interface ConversationStatusPanelProps {
   onOpenPlanDetail?: (request: OpenPlanDetailSideTabRequest) => void;
   onOpenBackgroundBash?: (work: BackgroundWorkSummary) => void;
   onCancelBackgroundWork?: (workId: string) => void;
+  modelSelectionView?: ModelSelectionView | null;
+  modelProvider?: ZCodeProvider;
+  onSetRunningSubagentModel?: (
+    childSessionId: string,
+    next: { provider: string; model: string; thought: string },
+  ) => void | Promise<void>;
   onOpenSubagentSession?: (request: OpenSubagentSideTabRequest) => void;
   onOpenSubagentDirectory?: (request: OpenSubagentDirectorySideTabRequest) => void;
   onOpenWorkflowRun?: (target: ConversationStatusPanelWorkflowRunTarget) => void;
@@ -1321,10 +1330,13 @@ function WorkflowStatusSection({
 
 function SubagentStatusSection({
   endedSubagentCount,
+  modelProvider,
+  modelSelectionView,
   onCancelBackgroundWork,
   onOpenChange,
   onOpenSubagentDirectory,
   onOpenSubagentSession,
+  onSetRunningSubagentModel,
   open,
   parentSessionId,
   rootSessionId,
@@ -1333,7 +1345,10 @@ function SubagentStatusSection({
   subagents,
 }: {
   endedSubagentCount: number;
+  modelProvider?: ZCodeProvider;
+  modelSelectionView?: ModelSelectionView | null;
   onCancelBackgroundWork?: (workId: string) => void;
+  onSetRunningSubagentModel?: ConversationStatusPanelProps["onSetRunningSubagentModel"];
   onOpenChange?: (open: boolean) => void;
   onOpenSubagentDirectory?: (request: OpenSubagentDirectorySideTabRequest) => void;
   onOpenSubagentSession?: (request: OpenSubagentSideTabRequest) => void;
@@ -1445,6 +1460,20 @@ function SubagentStatusSection({
                       intl.formatMessage,
                     )}
                   </span>
+                  {subagent.modelProvider && subagent.modelId ? (
+                    <RunningSubagentModelControl
+                      modelProvider={subagent.modelProvider}
+                      modelId={subagent.modelId}
+                      thought={subagent.thought}
+                      provider={modelProvider}
+                      modelSelectionView={modelSelectionView}
+                      onChange={
+                        onSetRunningSubagentModel
+                          ? (next) => onSetRunningSubagentModel(subagent.childSessionId, next)
+                          : undefined
+                      }
+                    />
+                  ) : null}
                   {subagent.controlWorkId && subagent.cancellable !== false ? (
                     <RunningWorkCancelButton
                       workId={subagent.controlWorkId}
@@ -1762,6 +1791,9 @@ function ConversationStatusPanelImpl({
   onOpenPlanDetail,
   onOpenBackgroundBash,
   onCancelBackgroundWork,
+  modelSelectionView,
+  modelProvider,
+  onSetRunningSubagentModel,
   onOpenSubagentSession,
   onOpenSubagentDirectory,
   onOpenWorkflowRun,
@@ -2064,6 +2096,9 @@ function ConversationStatusPanelImpl({
                 subagents={model.runningSubagentWorks}
                 endedSubagentCount={canRenderEndedAgents ? endedSubagentCount : 0}
                 onCancelBackgroundWork={onCancelBackgroundWork}
+                modelSelectionView={modelSelectionView}
+                modelProvider={modelProvider}
+                onSetRunningSubagentModel={onSetRunningSubagentModel}
                 open={agentSectionOpen}
                 onOpenChange={onAgentSectionOpenChange}
                 separated={

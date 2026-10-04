@@ -77,6 +77,7 @@ import {
   isConversationReasoningRowVisible,
   type ConversationRowRenderContext,
 } from "@/v4/conversationRowContext.js";
+import { splitCompactStatusRows } from "@/v4/conversationTurnFlowItems.js";
 import type {
   AssistantWorkRow,
   ConversationTurnFlowItem,
@@ -472,6 +473,33 @@ function OpenConversationAssistantWorkItems({
   );
 }
 
+function CollapsibleAssistantWorkItems({
+  rows,
+  historyContainer,
+  ...rest
+}: {
+  rows: readonly AssistantWorkRow[];
+  context: ConversationRowRenderContext;
+  stageTailIsRunning?: boolean;
+  assistantCodeCommentProjectionEnabled?: boolean;
+  historyContainer: { chunkKey: string; open: boolean };
+}) {
+  const groups = splitCompactStatusRows(rows);
+  if (groups.length === 1 && groups[0]?.pinned !== true) {
+    return (
+      <ConversationAssistantWorkItems rows={rows} historyContainer={historyContainer} {...rest} />
+    );
+  }
+  return groups.map((group) => (
+    <ConversationAssistantWorkItems
+      key={group.rows[0]!.rowId}
+      rows={group.rows}
+      {...rest}
+      historyContainer={group.pinned ? undefined : historyContainer}
+    />
+  ));
+}
+
 function resolveCronAutomationTurnCards(
   rows: readonly AssistantWorkRow[],
 ): CronAutomationTurnCard[] {
@@ -774,7 +802,7 @@ function ConversationWorkSegmentFlow({
             historyChunkIndex === 0 ? segment.key : `${segment.key}:chunk-${historyChunkIndex}`;
           historyChunkIndex += 1;
           content = (
-            <ConversationAssistantWorkItems
+            <CollapsibleAssistantWorkItems
               rows={item.rows}
               context={context}
               stageTailIsRunning={stageTailIsRunning}
@@ -801,12 +829,12 @@ function ConversationWorkSegmentFlow({
             />
           );
         } else {
-          // 跟在正文后的工具和思考也要进同一层折叠。中断或结束后不能继续摊在「已工作」外面。
+          // 跟在正文后的工具和思考也要进同一层折叠。压缩分隔线除外，否则收起后看不到。
           const chunkKey =
             historyChunkIndex === 0 ? segment.key : `${segment.key}:chunk-${historyChunkIndex}`;
           historyChunkIndex += 1;
           content = (
-            <ConversationAssistantWorkItems
+            <CollapsibleAssistantWorkItems
               rows={item.rows}
               context={context}
               stageTailIsRunning={stageTailIsRunning}

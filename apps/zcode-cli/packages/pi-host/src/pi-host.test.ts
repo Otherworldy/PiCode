@@ -166,6 +166,8 @@ test("idle compaction can be stopped and then clears the stop control", () => {
   projector.apply({ type: "compaction_start" });
   assert.equal(projector.getSnapshot().control.canStop, true);
   assert.equal(projector.getSnapshot().control.stopTargetKind, "compact");
+  const running = projector.getSnapshot().rows.window.find((row) => row.kind === "timelineMarker");
+  assert.equal(running && running.kind === "timelineMarker" ? running.lane : "", "turnTailBoundary");
   projector.apply({ type: "compaction_end", aborted: true });
   assert.equal(projector.getSnapshot().control.canStop, false);
   assert.equal(projector.getSnapshot().control.stopTargetKind, "unknown");
@@ -1023,6 +1025,19 @@ test("list skips empty jsonl and hydrateHistory rebuilds rows", async () => {
   });
   opened.reloadHistory(await readFile(opened.sessionFile, "utf8"));
   assert.ok(redrawn.some((delta) => delta.op === "row.appended" && delta.kind === "userInput"));
+  opened.dispose();
+  assert.equal(registry.get("sess_chat"), undefined);
+  await writeFile(
+    opened.sessionFile,
+    `${await readFile(opened.sessionFile, "utf8")}\n{"type":"message","id":"u2","timestamp":"2026-01-02T03:04:08.000Z","message":{"role":"user","content":[{"type":"text","text":"later"}]}}`,
+  );
+  const reopened = await registry.create({ workspacePath: root, sessionId: "sess_chat" });
+  assert.notEqual(reopened, opened);
+  const texts = reopened.projector
+    .getSnapshot()
+    .rows.window.filter((row) => row.kind === "userInput")
+    .map((row) => ("text" in row ? row.text : ""));
+  assert.deepEqual(texts, ["hello pi", "later"]);
   await rm(root, { recursive: true, force: true });
 });
 

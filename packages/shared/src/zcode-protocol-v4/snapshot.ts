@@ -397,6 +397,10 @@ export const runningSubagentSummarySchema = z.object({
   summary: z.string().optional(),
   status: z.enum(["running", "waiting", "blocked"]),
   startedAt: timestampSchema.optional(),
+  // 只描述这一次活着的子会话。缺席表示本进程没有可改的运行时。
+  modelProvider: z.string().optional(),
+  modelId: z.string().optional(),
+  thought: z.string().optional(),
 });
 export type RunningSubagentSummary = z.infer<typeof runningSubagentSummarySchema>;
 

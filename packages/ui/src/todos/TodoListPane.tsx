@@ -1,16 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { CircleAlert, LayoutGrid, List, ListTodo, Play, Plus } from "lucide-react";
-import type { TodoItem } from "@zcode/shared";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LayoutGrid, List, ListTodo, Plus } from "lucide-react";
+import type { ModelSelection, TodoItem } from "@zcode/shared";
 import { Button } from "@/components/ui/button.js";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog.js";
-import { Input } from "@/components/ui/input.js";
-import { Textarea } from "@/components/ui/textarea.js";
 import {
   Select,
   SelectContent,
@@ -31,7 +22,9 @@ import {
   relativeTime,
   todoColumnOf,
 } from "@/todos/todoBoard.js";
+import { TodoDetailDialog } from "@/todos/TodoDetailDialog.js";
 import { TodoEditorDialog } from "@/todos/TodoEditorDialog.js";
+import { TodoStartDialog } from "@/todos/TodoStartDialog.js";
 
 export function TodoListPane({
   onOpenSession,
@@ -46,6 +39,9 @@ export function TodoListPane({
   const defaultKey =
     activeWorkspaceIdentity?.trim() || activeWorkspacePath || projects[0]?.workspacePath || "";
   const [filter, setFilter] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
+  const [knownTags, setKnownTags] = useState<string[]>([]);
+  const [startId, setStartId] = useState<string | null>(null);
   const [view, setView] = useState<"board" | "list">("board");
   const [showCanceled, setShowCanceled] = useState(true);
   const [items, setItems] = useState<TodoItem[]>([]);
@@ -55,6 +51,8 @@ export function TodoListPane({
   const [draft, setDraft] = useState({ title: "", prompt: "" });
   const [now, setNow] = useState(() => Date.now());
   const membershipVersion = useTaskListMembershipVersion();
+  const startingRef = useRef(new Set<string>());
+  const [startingIds, setStartingIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 60_000);
@@ -65,6 +63,7 @@ export function TodoListPane({
     if (!todoService) return;
     const rows = await todoService.list(filter || undefined);
     setItems(rows.filter((item) => showCanceled || item.status !== "canceled"));
+    setKnownTags(await todoService.listTags());
   }, [filter, showCanceled, todoService]);
 
   useEffect(() => {
@@ -75,7 +74,6 @@ export function TodoListPane({
   }, [refresh, membershipVersion]);
 
   const detail = items.find((item) => item.id === detailId) ?? null;
-  const editable = detail?.status === "todo";
 
   useEffect(() => {
     if (!detail) return;
@@ -93,6 +91,21 @@ export function TodoListPane({
     }
   }
 
+  function requestStart(id: string) {
+    if (startingRef.current.has(id)) return;
+    setStartId(id);
+  }
+
+  function startTodo(id: string, modelSelection: ModelSelection) {
+    if (!todoService || startingRef.current.has(id)) return;
+    startingRef.current.add(id);
+    setStartingIds(new Set(startingRef.current));
+    void run(() => todoService.start(id, modelSelection)).finally(() => {
+      startingRef.current.delete(id);
+      setStartingIds(new Set(startingRef.current));
+    });
+  }
+
   function openNew() {
     setEditorOpen(true);
   }
@@ -101,11 +114,17 @@ export function TodoListPane({
     return <p className="p-6 text-ui-sm text-foreground-subtle">当前 Host 没有 To-Dos。</p>;
   }
 
+  const visible = tagFilter
+    ? items.filter((item) =>
+        item.tags.some((tag) => tag.toLocaleLowerCase() === tagFilter.toLocaleLowerCase()),
+      )
+    : items;
+  const startItem = items.find((item) => item.id === startId) ?? null;
   const grouped = {
-    todo: items.filter((item) => todoColumnOf(item.status) === "todo"),
-    inProgress: items.filter((item) => todoColumnOf(item.status) === "inProgress"),
-    attention: items.filter((item) => todoColumnOf(item.status) === "attention"),
-    done: items.filter((item) => todoColumnOf(item.status) === "done"),
+    todo: visible.filter((item) => todoColumnOf(item.status) === "todo"),
+    inProgress: visible.filter((item) => todoColumnOf(item.status) === "inProgress"),
+    attention: visible.filter((item) => todoColumnOf(item.status) === "attention"),
+    done: visible.filter((item) => todoColumnOf(item.status) === "done"),
   };
 
   return (
@@ -138,6 +157,22 @@ export function TodoListPane({
           />
           显示已放弃
         </label>
+        {knownTags.map((tag) => {
+          const active = tag.toLocaleLowerCase() === tagFilter.toLocaleLowerCase();
+          return (
+            <button
+              key={tag.toLocaleLowerCase()}
+              type="button"
+              className={cn(
+                "h-8 rounded-full px-3 text-ui-sm",
+                active ? "bg-brand/15 text-brand" : "bg-surface text-foreground-subtle",
+              )}
+              onClick={() => setTagFilter(active ? "" : tag)}
+            >
+              {tag}
+            </button>
+          );
+        })}
         <div className="inline-flex h-8 rounded-full bg-surface p-0.5">
           <button
             type="button"
@@ -194,7 +229,7 @@ export function TodoListPane({
             <span>更新</span>
           </div>
           <ul className="flex flex-col gap-2">
-            {items.map((item) => (
+            {visible.map((item) => (
               <li key={item.id}>
                 <button
                   type="button"
@@ -204,6 +239,11 @@ export function TodoListPane({
                   <StatusChip status={item.status} />
                   <span className="min-w-0">
                     <span className="block truncate text-ui-sm font-medium">{item.title}</span>
+                    {item.tags.length > 0 ? (
+                      <span className="block truncate text-ui-xs text-foreground-subtle">
+                        {item.tags.join(" · ")}
+                      </span>
+                    ) : null}
                     {item.error && (item.status === "failed" || item.status === "needs_review") ? (
                       <span className="block truncate text-ui-xs text-destructive">{item.error}</span>
                     ) : null}
@@ -252,7 +292,9 @@ export function TodoListPane({
                           item={item}
                           now={now}
                           onOpen={() => setDetailId(item.id)}
-                          onStart={() => void run(() => todoService.start(item.id))}
+                          onStart={() => requestStart(item.id)}
+                          onTag={setTagFilter}
+                          starting={startingIds.has(item.id)}
                           onAbandon={() => void run(() => todoService.abandon(item.id))}
                           onRestore={() => void run(() => todoService.restore(item.id))}
                           onDelete={() => void run(() => todoService.delete(item.id))}
@@ -272,112 +314,34 @@ export function TodoListPane({
         projects={projects}
         defaultProjectKey={filter || defaultKey}
         onOpenChange={setEditorOpen}
+        suggestions={knownTags}
         onCreate={(input) => run(() => todoService.create(input))}
       />
 
-      <Dialog open={detail != null} onOpenChange={(open) => !open && setDetailId(null)}>
-        <DialogContent className="max-w-lg">
-          {detail ? (
-            <>
-              <DialogHeader>
-                <DialogTitle>{editable ? "修改" : detail.title}</DialogTitle>
-              </DialogHeader>
-              <div className="flex flex-col gap-3 text-ui-sm">
-                <div className="flex items-center gap-2">
-                  <StatusChip status={detail.status} />
-                  <span className="truncate text-ui-xs text-foreground-subtle">
-                    {projectLeaf(detail.workspacePath)}
-                    {detail.branchName ? ` / ${detail.branchName}` : ""}
-                  </span>
-                </div>
-                {editable ? (
-                  <>
-                    <Input
-                      size="lg"
-                      value={draft.title}
-                      onChange={(event) =>
-                        setDraft((current) => ({ ...current, title: event.target.value }))
-                      }
-                    />
-                    <Textarea
-                      value={draft.prompt}
-                      onChange={(event) =>
-                        setDraft((current) => ({ ...current, prompt: event.target.value }))
-                      }
-                      className="min-h-32 rounded-xl bg-surface px-3 py-2"
-                    />
-                  </>
-                ) : (
-                  <p className="whitespace-pre-wrap text-foreground">{detail.prompt}</p>
-                )}
-                {detail.error ? (
-                  <div className="flex items-start gap-1.5 rounded-lg bg-destructive/10 px-2 py-1.5 text-ui-xs text-destructive">
-                    <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
-                    <span>{detail.error}</span>
-                  </div>
-                ) : null}
-              </div>
-              <DialogFooter className="gap-2 sm:justify-start">
-                {editable ? (
-                  <Button
-                    size="sm"
-                    disabled={
-                      !draft.title.trim() ||
-                      (!draft.prompt.trim() && detail.attachments.length === 0)
-                    }
-                    onClick={() => void run(() => todoService.update(detail.id, draft))}
-                  >
-                    保存
-                  </Button>
-                ) : null}
-                {detail.status === "todo" || detail.status === "failed" ? (
-                  <Button size="sm" onClick={() => void run(() => todoService.start(detail.id))}>
-                    <Play className="size-3.5" />
-                    开始
-                  </Button>
-                ) : null}
-                {detail.sessionId || detail.status === "needs_review" ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      if (!detail.sessionId) {
-                        setError("会话已删除，无法打开。仍可合并或完成。");
-                        return;
-                      }
-                      onOpenSession(detail.workspacePath, detail.sessionId, detail.workspaceIdentity);
-                    }}
-                  >
-                    打开会话
-                  </Button>
-                ) : null}
-                {detail.status === "needs_review" ? (
-                  <>
-                    <Button size="sm" onClick={() => void run(() => todoService.merge(detail.id))}>
-                      合并
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => void run(() => todoService.complete(detail.id))}>
-                      完成
-                    </Button>
-                  </>
-                ) : null}
-                {detail.status === "canceled" ? (
-                  <Button size="sm" variant="outline" onClick={() => void run(() => todoService.restore(detail.id))}>
-                    恢复
-                  </Button>
-                ) : detail.status !== "done" ? (
-                  <Button size="sm" variant="ghost" onClick={() => void run(() => todoService.abandon(detail.id))}>
-                    放弃
-                  </Button>
-                ) : null}
-                <Button size="sm" variant="ghost" onClick={() => void run(() => todoService.delete(detail.id)).then(() => setDetailId(null))}>
-                  删除
-                </Button>
-              </DialogFooter>
-            </>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      {startItem ? (
+        <TodoStartDialog
+          item={startItem}
+          onCancel={() => setStartId(null)}
+          onConfirm={(selection) => {
+            const id = startItem.id;
+            setStartId(null);
+            startTodo(id, selection);
+          }}
+        />
+      ) : null}
+
+      <TodoDetailDialog
+        detail={detail}
+        draft={draft}
+        knownTags={knownTags}
+        starting={detail != null && startingIds.has(detail.id)}
+        todoService={todoService}
+        onDraft={setDraft}
+        onClose={() => setDetailId(null)}
+        onRun={run}
+        onStart={requestStart}
+        onOpenSession={onOpenSession}
+      />
     </div>
   );
 }

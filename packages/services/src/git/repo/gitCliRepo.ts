@@ -1321,9 +1321,14 @@ export function createGitCliRepo(options?: { commandProvider?: GitCommandProvide
       const args = ["worktree", "add", targetWorktreePath];
       if (!branchExists) {
         args.push("-b", normalizedBranchName);
-        // 空仓库 HEAD 是 40 个 0，不是提交。传进去会 fatal: invalid reference。
         const startPoint = options?.startPoint?.trim();
-        if (startPoint && startPoint !== UNBORN_HEAD) args.push("--", startPoint);
+        if (startPoint === UNBORN_HEAD) {
+          // 主工作区还没提交。省略起点时，别的 worktree 一旦有提交，
+          // git 会去解析无效 HEAD，报 invalid reference。空起点必须显式 orphan。
+          args.push("--orphan");
+        } else if (startPoint) {
+          args.push("--", startPoint);
+        }
       } else {
         args.push(normalizedBranchName);
       }
