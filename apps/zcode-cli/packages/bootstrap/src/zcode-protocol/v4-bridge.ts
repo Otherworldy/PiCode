@@ -1487,10 +1487,20 @@ export function createConversationV4Gateway(
     getSessionIndexMeta: (sessionId) => {
       const record = context.sessions.get(sessionId);
       if (!record) return null;
+      const cwd = (record.app as { piHosted?: { cwd?: string } }).piHosted?.cwd;
+      const samePath = (left: string, right: string) => {
+        const norm = (value: string) =>
+          value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+        return norm(left) === norm(right);
+      };
       return {
         createdAt: record.createdAt,
         lastActivityAt: record.updatedAt,
         ...(record.parentSessionId ? { parentSessionId: String(record.parentSessionId) } : {}),
+        // 主工作区不写。写了的话列表会把仓库目录名当成分支。
+        ...(cwd && !samePath(cwd, record.workspace.workspacePath)
+          ? { workingDirectory: cwd }
+          : {}),
       };
     },
     listWorkspaceSessionIds: (workspaceId) =>

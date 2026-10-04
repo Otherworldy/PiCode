@@ -1,7 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import { randomUUID } from "node:crypto";
 import type { TodoCreateParams, TodoItem } from "@zcode/shared";
 import { getTasksIndexDatabasePath } from "#src/paths.js";
 import { runTasksDatabaseMigrations } from "#src/session/tasksDatabase/migrations.js";
@@ -32,7 +31,25 @@ CREATE TABLE IF NOT EXISTS todos (
 );
 CREATE INDEX IF NOT EXISTS idx_todos_workspace ON todos(workspace_key, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_todos_session ON todos(session_id) WHERE session_id IS NOT NULL;
+CREATE TABLE IF NOT EXISTS todo_seq (n INTEGER NOT NULL);
 `;
+
+/** 删了不复用。旧分支可能还在，重号会检出别人的 todo-1。 */
+function allocateTodoId(db: DatabaseSyncInstance): string {
+  const row = db.prepare("SELECT n FROM todo_seq").get() as { n: number } | undefined;
+  let n = row?.n ?? 0;
+  if (!row) {
+    const ids = db.prepare("SELECT id FROM todos").all() as { id: string }[];
+    for (const item of ids) {
+      const match = /^todo-(\d+)$/.exec(item.id);
+      if (match) n = Math.max(n, Number(match[1]));
+    }
+    db.prepare("INSERT INTO todo_seq (n) VALUES (?)").run(n);
+  }
+  n += 1;
+  db.prepare("UPDATE todo_seq SET n = ?").run(n);
+  return `todo-${n}`;
+}
 
 interface TodoRow {
   id: string;
@@ -128,26 +145,34 @@ export class TodoRepo {
     }
     const db = await this.ensure();
     const now = Date.now();
-    const id = randomUUID();
     const workspaceKey = workspaceKeyOf({
       workspacePath,
       workspaceIdentity: params.workspaceIdentity,
     });
-    db.prepare(
-      `INSERT INTO todos (
-        id, title, prompt, workspace_key, workspace_path, workspace_identity, attachments, status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'todo', ?, ?)`,
-    ).run(
-      id,
-      title,
-      prompt || "见附件。",
-      workspaceKey,
-      workspacePath,
-      params.workspaceIdentity?.trim() || null,
-      attachments.length > 0 ? JSON.stringify(attachments) : null,
-      now,
-      now,
-    );
+    db.exec("BEGIN IMMEDIATE");
+    let id: string;
+    try {
+      id = allocateTodoId(db);
+      db.prepare(
+        `INSERT INTO todos (
+          id, title, prompt, workspace_key, workspace_path, workspace_identity, attachments, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'todo', ?, ?)`,
+      ).run(
+        id,
+        title,
+        prompt || "见附件。",
+        workspaceKey,
+        workspacePath,
+        params.workspaceIdentity?.trim() || null,
+        attachments.length > 0 ? JSON.stringify(attachments) : null,
+        now,
+        now,
+      );
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
     return (await this.get(id))!;
   }
 
@@ -177,8 +202,8 @@ export class TodoRepo {
     return row ? toItem(row) : null;
   }
 
-  /** 同一项目已有 running 时不占用。返回 null 表示忙或状态不对。 */
-  async claim(id: string): Promise<TodoItem | "missing" | "busy" | "bad-status"> {
+  /** 只有 todo / failed 能占成 running。同一行并发开始只有一次成功。 */
+  async claim(id: string): Promise<TodoItem | "missing" | "bad-status"> {
     const db = await this.ensure();
     const current = await this.get(id);
     if (!current) return "missing";
@@ -187,16 +212,10 @@ export class TodoRepo {
     const result = db
       .prepare(
         `UPDATE todos SET status = 'running', error = NULL, updated_at = ?
-         WHERE id = ? AND status IN ('todo', 'failed')
-         AND NOT EXISTS (
-           SELECT 1 FROM todos other
-           WHERE other.workspace_key = todos.workspace_key AND other.status = 'running' AND other.id != todos.id
-         )`,
+         WHERE id = ? AND status IN ('todo', 'failed')`,
       )
       .run(now, id);
     if (result.changes === 1) return (await this.get(id))!;
-    const again = await this.get(id);
-    if (again?.status === "todo" || again?.status === "failed") return "busy";
     return "bad-status";
   }
 

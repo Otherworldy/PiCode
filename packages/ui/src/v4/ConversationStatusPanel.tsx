@@ -103,6 +103,8 @@ import {
 
 interface ConversationStatusPanelProps {
   workspacePath: string;
+  /** 会话 worktree。缺省沿用 workspacePath。分支列表不能去查主工作区。 */
+  gitWorkspacePath?: string;
   workspaceIdentity?: string;
   gitSummary?: GitRepositorySummary | null;
   gitDirtyFileCount?: number;
@@ -365,6 +367,7 @@ function GitStatusSection({
   separated,
   workspaceIdentity,
   workspacePath,
+  gitWorkspacePath,
   useVerticalFloatingPanels,
 }: {
   activeTaskChangeSummary?: ZCodeTaskChangeSummary | null;
@@ -376,6 +379,7 @@ function GitStatusSection({
   separated: boolean;
   workspaceIdentity?: string;
   workspacePath: string;
+  gitWorkspacePath?: string;
   useVerticalFloatingPanels: boolean;
 }) {
   const { intl } = useZCodeIntl();
@@ -385,6 +389,7 @@ function GitStatusSection({
   }
   const hasChanges = git.added + git.removed > 0;
   const canOpenReview = Boolean(onOpenGitReview && gitSummary.isRepository);
+  const gitPath = gitWorkspacePath ?? workspacePath;
 
   return (
     <StatusSection
@@ -430,7 +435,7 @@ function GitStatusSection({
           </span>
         </button>
         <GitBranchSwitcher
-          workspacePath={workspacePath}
+          workspacePath={gitPath}
           gitSummary={gitSummary}
           dirtyFileCount={git.dirtyFileCount}
           onRefreshGit={onRefreshGit}
@@ -442,7 +447,7 @@ function GitStatusSection({
           showFooterActions
         />
         <GitActionMenu
-          workspacePath={workspacePath}
+          workspacePath={gitPath}
           workspaceIdentity={workspaceIdentity}
           gitSummary={gitSummary}
           activeTaskChangeSummary={activeTaskChangeSummary ?? null}
@@ -1722,6 +1727,7 @@ function StatusSummaryRow({
 
 function ConversationStatusPanelImpl({
   workspacePath,
+  gitWorkspacePath,
   workspaceIdentity,
   gitSummary,
   gitDirtyFileCount = 0,
@@ -1988,6 +1994,7 @@ function ConversationStatusPanelImpl({
                 gitSummary={gitSummary}
                 gitWorktreeReviewSourceId={gitWorktreeReviewSourceId}
                 workspacePath={workspacePath}
+                gitWorkspacePath={gitWorkspacePath}
                 workspaceIdentity={workspaceIdentity}
                 activeTaskChangeSummary={activeTaskChangeSummary}
                 onRefreshGit={onRefreshGit}

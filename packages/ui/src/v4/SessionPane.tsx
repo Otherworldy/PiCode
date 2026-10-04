@@ -104,6 +104,7 @@ import {
   bindSessionWorktree,
   draftWorktree,
   draftWorktreeEpoch,
+  sessionGitDirectory,
   subscribeSessionWorktrees,
 } from "@/v4/sessionWorktree.js";
 import { projectSessionConfigToTaskConfigOptions } from "@/v4/composer/sessionConfigTaskCache.js";
@@ -2334,6 +2335,11 @@ export function SessionPane({
     subscribeSessionWorktrees,
     () => draftWorktreeEpoch(workspaceKey),
     () => 0,
+  );
+  const gitWorkspacePath = useSyncExternalStore(
+    subscribeSessionWorktrees,
+    () => sessionGitDirectory(workspacePath, sessionId),
+    () => workspacePath,
   );
   const { binding: prewarmBinding } = useDraftSessionPrewarm({
     enabled: sessionId === null && draftAgentStartupAllowed,
@@ -4881,6 +4887,7 @@ export function SessionPane({
         {!isDraft ? (
           <ConversationStatusPanel
             workspacePath={workspacePath}
+            gitWorkspacePath={gitWorkspacePath}
             workspaceIdentity={workspaceIdentity}
             gitSummary={gitSummary}
             gitDirtyFileCount={gitDirtyFileCount}

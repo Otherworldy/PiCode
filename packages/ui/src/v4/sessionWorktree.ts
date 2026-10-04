@@ -50,6 +50,13 @@ export function sessionWorktreePath(sessionId: string): string | null {
   return bySession.get(sessionId) ?? null;
 }
 
+/** Git 卡片和切分支必须用会话 worktree。用主工作区的话，一点开当前分支就变成 main。 */
+export function sessionGitDirectory(workspacePath: string, sessionId: string | null): string {
+  if (!sessionId) return workspacePath;
+  const cwd = sessionWorktreePath(sessionId);
+  return cwd && isWorkspaceWorktree(workspacePath, cwd) ? cwd : workspacePath;
+}
+
 export function worktreeBranchLabel(worktreePath: string): string {
   const normalized = worktreePath.replace(/\\/g, "/").replace(/\/+$/, "");
   const name = normalized.slice(normalized.lastIndexOf("/") + 1);

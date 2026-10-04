@@ -80,7 +80,6 @@ export class TodoService implements ITodoService {
   async start(id: string): Promise<TodoItem> {
     const claimed = await this.repo.claim(id);
     if (claimed === "missing") throw new TodoStateError("To-Do 不存在");
-    if (claimed === "busy") throw new TodoStateError("该项目已有一条 To-Do 在跑");
     if (claimed === "bad-status") throw new TodoStateError("当前状态不能开始");
     try {
       if (claimed.sessionId && claimed.worktreePath) {
@@ -105,8 +104,13 @@ export class TodoService implements ITodoService {
         throw new TodoStateError("不能从已有 worktree 开始");
       }
       if (!summary.branchName || !main.head) throw new TodoStateError("项目不在可用分支上");
-      const branchName = `todo/${claimed.id}`;
-      const worktreePath = resolve(summary.repoRoot, ".worktrees", `todo-${claimed.id}`);
+      const short = /^todo-\d+$/.test(claimed.id);
+      const branchName = short ? claimed.id : `todo/${claimed.id}`;
+      const worktreePath = resolve(
+        summary.repoRoot,
+        ".worktrees",
+        short ? claimed.id : `todo-${claimed.id}`,
+      );
       const created = await this.git.createWorktree({
         workspacePath: claimed.workspacePath,
         branchName,

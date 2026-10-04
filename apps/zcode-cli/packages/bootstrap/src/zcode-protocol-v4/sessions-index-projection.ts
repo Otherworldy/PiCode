@@ -16,6 +16,8 @@ export interface SessionSummaryDeriveExtra {
   createdAt: number;
   lastActivityAt: number;
   parentSessionId?: string;
+  /** 与 workspace 不同才带。worktree 会话靠它让列表和 Git 卡片离开主工作区。 */
+  workingDirectory?: string;
 }
 
 const MAX_PREVIEW_CHARS = 120;
@@ -97,6 +99,7 @@ function deriveSessionSummary(
     lastActivityAt: extra.lastActivityAt,
     ...(lastAssistantPreview ? { lastAssistantPreview } : {}),
     createdAt: extra.createdAt,
+    ...(extra.workingDirectory ? { workingDirectory: extra.workingDirectory } : {}),
   };
 }
 

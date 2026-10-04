@@ -12,7 +12,7 @@
 
 一条 To-Do：`id`、`title`、`prompt`、所属项目（`workspacePath` + `workspaceIdentity`，必填）、`baseBranch`、`baseCommit`、`branchName`、`worktreePath`、`sessionId`、`status`、`error`、时间戳。项目只能是项目根，不能是已有 worktree。归属键是 `workspaceIdentity?.trim() || workspacePath`，创建后不改。列表和筛选都按这个键区分项目，不能因当前打开的工作区隐含归属。
 
-状态：`todo → running → needs_review → done`，旁路 `failed`、`canceled`。不设排队、初始化、合并中。同一项目同时只跑 1 条；其他项目互不挡。第二条点开始直接失败并说明该项目正在跑。`ponytail:` 每项目 1，要并行再把上限做成设置。
+状态：`todo → running → needs_review → done`，旁路 `failed`、`canceled`。不设排队、初始化、合并中。同一项目可以同时跑多条，每条在自己的 worktree 里。开始时会话权限默认完全访问。
 
 开始时：
 
@@ -52,7 +52,7 @@
 
 - [x] 写 `packages/services/src/todos/SPEC.md`（状态、谁写入、项目归属、Git 验收、远端身份）。
 - [x] shared 类型 + channel。sqlite 表 `todos` 与 repo：创建（必带项目）、按项目列表、开始占用、settle、合并、完成、放弃。
-- [x] `ITodoService`：start 内顺序为建 worktree → 开会话；失败则行进入 `failed` 并留下原因。占用按项目计，不按全局计。
+- [x] `ITodoService`：start 内顺序为建 worktree → 开会话；失败则行进入 `failed` 并留下原因。同一项目不互斥。
 - [x] Git `mergeBranch`：干净工作区、在基线、合并、冲突则原样返回。
 - [x] syncer 终态调用 `settle`。启动时把残留 `running` 打成 `failed`。
 - [x] UI 列表接到该服务。diff 用现有 Git 面板数据，不新做 diff 组件。
@@ -60,9 +60,9 @@
 
 ## Verification
 
-- 服务测试：状态只允许图上的边；不带项目不能创建；两个项目的行不串；`settle` 对未知 `sessionId` 无操作；同一项目第二次 start 在已有 `running` 时拒绝，另一项目仍可开始；无提交不能 merge，只能 complete。
+- 服务测试：状态只允许图上的边；不带项目不能创建；两个项目的行不串；`settle` 对未知 `sessionId` 无操作；同一项目可以同时占多条 `running`，同一行不能占两次；无提交不能 merge，只能 complete。
 - 现有 worktree 测试仍绿。手动：`pnpm dev:desktop`，新建时选一个脏工作区作为项目并开始，列表上看得到该项目。主目录 HEAD 不动，会话出现在所选项目而不是新项目，Agent cwd 在 `.worktrees/todo-*`。结束后行变为待审。主工作区脏时合并被拒；干净且在基线分支时合并成功并标完成。放弃不改主工作区。
 
 ## 不做
 
-定时、自动开跑、自动合并、每阶段提示词、init/preflight、看板、模板、从消息或 PR 生成、Agent 专用工具、压缩上下文、并发大于 1。要这些时再加状态，不另开产品。
+定时、自动开跑、自动合并、每阶段提示词、init/preflight、看板、模板、从消息或 PR 生成、Agent 专用工具、压缩上下文。要这些时再加状态，不另开产品。

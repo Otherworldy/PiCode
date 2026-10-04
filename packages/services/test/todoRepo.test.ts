@@ -30,17 +30,22 @@ test("create requires a project and lists stay split by project", async () => {
     await repo.create({ title: "b", prompt: "do b", workspacePath: "/proj/b" });
     const listed = await repo.list(alpha.workspaceKey);
     assert.deepEqual(listed.map((item) => item.title), ["a"]);
+    assert.equal(alpha.id, "todo-1");
+    await repo.delete(alpha.id);
+    const next = await repo.create({ title: "c", prompt: "do c", workspacePath: "/proj/a" });
+    assert.equal(next.id, "todo-3");
   });
 });
 
-test("settle ignores an unknown session and a second start is per project", async () => {
+test("settle ignores an unknown session and one project can run many todos", async () => {
   await withRepo(async (repo) => {
     assert.equal(await repo.settle("missing", "completed"), null);
     const first = await repo.create({ title: "a", prompt: "p", workspacePath: "/proj/a" });
     const second = await repo.create({ title: "b", prompt: "p", workspacePath: "/proj/a" });
     const other = await repo.create({ title: "c", prompt: "p", workspacePath: "/proj/c" });
-    assert.equal((await repo.claim(first.id)) !== "busy", true);
-    assert.equal(await repo.claim(second.id), "busy");
+    assert.equal(typeof (await repo.claim(first.id)) === "object", true);
+    assert.equal(typeof (await repo.claim(second.id)) === "object", true);
+    assert.equal(await repo.claim(first.id), "bad-status");
     assert.equal(typeof (await repo.claim(other.id)) === "object", true);
     const settled = await repo.settle("no-such-session", "failed");
     assert.equal(settled, null);

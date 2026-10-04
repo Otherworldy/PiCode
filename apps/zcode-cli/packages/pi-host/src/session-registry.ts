@@ -37,6 +37,8 @@ export interface HostedSession {
   readonly sessionId: string;
   readonly identity: string;
   readonly workspacePath: string;
+  /** Agent 实际 cwd。worktree 会话不是 workspacePath。 */
+  readonly cwd: string;
   readonly sessionFile: string;
   readonly parentSessionId?: string;
   readonly workId?: string;
@@ -426,6 +428,7 @@ export class HostSessionRegistry {
       sessionId: input.sessionId,
       identity: input.identity,
       workspacePath: input.workspacePath,
+      cwd: input.cwd ?? input.workspacePath,
       sessionFile: pi.sessionFile ?? input.sessionFile,
       parentSessionId: input.parentSessionId,
       viaRegistry: input.viaRegistry ?? Boolean(input.parentSessionId),
@@ -585,6 +588,7 @@ export class HostSessionRegistry {
       sessionId: string;
       identity: string;
       workspacePath: string;
+      cwd: string;
       sessionFile: string;
       parentSessionId?: string;
       viaRegistry: boolean;
@@ -782,6 +786,7 @@ export class HostSessionRegistry {
       sessionId: meta.sessionId,
       identity: meta.identity,
       workspacePath: meta.workspacePath,
+      cwd: meta.cwd,
       sessionFile: meta.sessionFile,
       parentSessionId: meta.parentSessionId,
       workId: meta.workId,

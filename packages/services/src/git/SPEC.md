@@ -20,6 +20,7 @@ Git 服务提供基于本地 Git CLI 的仓库状态读取与分支/变动操作
 2. **分支存在性处理**：
    - 若目标分支已存在：执行 `git worktree add <worktreePath> <branchName>` 检出已有分支。
    - 若目标分支不存在：执行 `git worktree add <worktreePath> -b <branchName> [startPoint]` 创建并检出。
+   - `startPoint` 若是全 0 的未出生 HEAD，不传。空仓库没有提交，传给 Git 会报 `invalid reference`，界面变成 “Target branch was not found.”。省略后由 Git 建未出生分支。
 3. **路径安全**：
    - 目标路径若未显式指定，规范化到 `<repoRoot>/.worktrees/<sanitizedBranchName>`。
    - 净化分支名称中的非法路径字符（如 `/` 转为 `-` 或合法相对路径段）。

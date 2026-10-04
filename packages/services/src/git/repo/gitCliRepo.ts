@@ -51,6 +51,7 @@ import {
   parseStatusPorcelain,
   rewriteUnbornWorktreeBranchMiss,
   parseWorktreeList,
+  UNBORN_HEAD,
   toInvalidBranchNameIssue,
   toDiffResult,
 } from "./gitCliHelpers.js";
@@ -1320,9 +1321,9 @@ export function createGitCliRepo(options?: { commandProvider?: GitCommandProvide
       const args = ["worktree", "add", targetWorktreePath];
       if (!branchExists) {
         args.push("-b", normalizedBranchName);
-        if (options?.startPoint?.trim()) {
-          args.push("--", options.startPoint.trim());
-        }
+        // 空仓库 HEAD 是 40 个 0，不是提交。传进去会 fatal: invalid reference。
+        const startPoint = options?.startPoint?.trim();
+        if (startPoint && startPoint !== UNBORN_HEAD) args.push("--", startPoint);
       } else {
         args.push(normalizedBranchName);
       }

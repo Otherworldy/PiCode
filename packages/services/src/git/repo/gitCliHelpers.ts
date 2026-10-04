@@ -718,7 +718,7 @@ export function ensureRepositoryAvailable(
   return resolution;
 }
 
-const UNBORN_HEAD = "0000000000000000000000000000000000000000";
+export const UNBORN_HEAD = "0000000000000000000000000000000000000000";
 
 function compareLocalBranches(left: GitLocalBranch, right: GitLocalBranch): number {
   if (left.isCurrent !== right.isCurrent) return left.isCurrent ? -1 : 1;

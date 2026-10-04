@@ -22,6 +22,9 @@ import {
   subscribeSessionWorktrees,
   worktreeBranchLabel,
 } from "@/v4/sessionWorktree.js";
+
+const worktreeLabelClassName =
+  "min-w-0 max-w-[40%] shrink truncate rounded bg-muted px-1.5 text-ui-xs text-muted-foreground";
 import { formatTaskTitleWithChanges, getTaskChangeSummary } from "@/lib/taskChangeSummary.js";
 import {
   deriveTaskLeadingIndicator,
@@ -645,7 +648,7 @@ export const MemoTaskItem = memo(function TaskListItem({
               {taskTitle}
             </TaskTitleOverflowText>
             {worktreeLabel ? (
-              <span className="shrink-0 rounded bg-muted px-1.5 text-ui-xs text-muted-foreground">
+              <span title={worktreeLabel} className={worktreeLabelClassName}>
                 {worktreeLabel}
               </span>
             ) : null}
@@ -710,7 +713,7 @@ export const MemoTaskItem = memo(function TaskListItem({
       ) : (
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex min-w-0 items-center gap-2">
-            <div className="relative min-w-0 flex h-6 flex-1 flex-wrap items-center gap-1.5">
+            <div className="relative flex h-6 min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
               {isMobileActive && !shouldSuppressWorkspaceTaskMetadata ? (
                 <ControlHintTooltip
                   title={intl.formatMessage({ id: "taskList.mobileActive" })}
@@ -742,7 +745,7 @@ export const MemoTaskItem = memo(function TaskListItem({
                 {taskTitle}
               </TaskTitleOverflowText>
               {worktreeLabel ? (
-                <span className="shrink-0 rounded bg-muted px-1.5 text-ui-xs text-muted-foreground">
+                <span title={worktreeLabel} className={worktreeLabelClassName}>
                   {worktreeLabel}
                 </span>
               ) : null}

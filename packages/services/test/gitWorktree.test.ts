@@ -1,10 +1,18 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import test from "node:test";
+import { createGitCliRepo } from "../src/git/repo/gitCliRepo.js";
 import {
   mergeWorktreeBranches,
   parseWorktreeList,
   rewriteUnbornWorktreeBranchMiss,
 } from "../src/git/repo/gitCliHelpers.js";
+
+const execFileAsync = promisify(execFile);
 
 test("parseWorktreeList parses porcelain worktree output correctly", () => {
   const sample = `
@@ -66,6 +74,20 @@ test("unborn worktree branches still appear in the branch list", () => {
       ["feature/hello", false],
     ],
   );
+});
+
+test("unborn head is not passed as a worktree start point", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "wt-unborn-"));
+  try {
+    await execFileAsync("git", ["init", "-q"], { cwd: dir });
+    const created = await createGitCliRepo().createWorktree(dir, "todo/unborn", {
+      worktreePath: join(dir, ".worktrees", "todo-unborn"),
+      startPoint: "0000000000000000000000000000000000000000",
+    });
+    assert.equal(created.success, true, created.issues[0]?.message);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("unborn worktree branch is not reported as missing", () => {
