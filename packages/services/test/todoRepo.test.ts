@@ -394,6 +394,52 @@ test("retry sends the chosen model on the existing session", async () => {
   });
 });
 
+test("a pasted image is still there when the editor reopens", async () => {
+  await withRepo(async (repo) => {
+    const created = await repo.create({
+      title: "a",
+      prompt: "see image",
+      workspacePath: "/proj/a",
+      attachments: [
+        {
+          fileName: "image.png",
+          mime: "image/png",
+          bytes: 5,
+          localPath: "C:/Temp/clipboard.png",
+          dataBase64: "aGVsbG8=",
+        },
+      ],
+    });
+    assert.equal((await repo.get(created.id))?.attachments[0]?.dataBase64, "aGVsbG8=");
+    const updated = await repo.update(created.id, {
+      title: "a",
+      prompt: "see image",
+      attachments: [
+        {
+          fileName: "next.png",
+          mime: "image/png",
+          bytes: 3,
+          localPath: "C:/Temp/gone.png",
+          dataBase64: "bmV4",
+        },
+      ],
+    });
+    assert.equal(updated.attachments[0]?.fileName, "next.png");
+    assert.equal(updated.attachments[0]?.dataBase64, "bmV4");
+    assert.equal(updated.attachments[0]?.localPath, undefined);
+    const kept = await repo.update(created.id, { title: "b", prompt: "see image" });
+    assert.equal(kept.attachments[0]?.dataBase64, "bmV4");
+    await repo.claim(created.id);
+    await assert.rejects(
+      () => repo.update(created.id, { title: "c", prompt: "d", attachments: [] }),
+      TodoStateError,
+    );
+    const still = await repo.get(created.id);
+    assert.equal(still?.title, "b");
+    assert.equal(still?.attachments[0]?.dataBase64, "bmV4");
+  });
+});
+
 test("only an unstarted todo can change its text", async () => {
   await withRepo(async (repo) => {
     const created = await repo.create({ title: "a", prompt: "p", workspacePath: "/proj/a" });

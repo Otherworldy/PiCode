@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
-import { FileText, ImagePlus, X } from "lucide-react";
+import { ImagePlus } from "lucide-react";
 import type { TodoAttachment } from "@zcode/shared";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -21,14 +21,16 @@ import { Textarea } from "@/components/ui/textarea.js";
 import { cn } from "@/components/lib/utils.js";
 import { useOptionalPlatform } from "@/hooks/usePlatform.js";
 import { projectLeaf } from "@/todos/todoBoard.js";
+import {
+  clipboardFiles,
+  draftsFromBrowserFiles,
+  draftsToStored,
+  MAX_TODO_FILES,
+  revokeDraftPreviews,
+  TodoAttachmentChips,
+  type TodoDraftFile,
+} from "@/todos/todoAttachments.js";
 import { TodoTagField } from "@/todos/TodoTagField.js";
-
-const MAX_FILES = 8;
-
-interface DraftFile extends TodoAttachment {
-  id: string;
-  previewUrl?: string;
-}
 
 export function TodoEditorDialog({
   open,
@@ -57,7 +59,7 @@ export function TodoEditorDialog({
   const [title, setTitle] = useState("");
   const [prompt, setPrompt] = useState("");
   const [projectKey, setProjectKey] = useState(defaultProjectKey);
-  const [files, setFiles] = useState<DraftFile[]>([]);
+  const [files, setFiles] = useState<TodoDraftFile[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -69,33 +71,23 @@ export function TodoEditorDialog({
     setProjectKey(defaultProjectKey);
     setTags([]);
     setFiles((current) => {
-      for (const file of current) if (file.previewUrl) URL.revokeObjectURL(file.previewUrl);
+      revokeDraftPreviews(current);
       return [];
     });
   }, [defaultProjectKey, open]);
 
-  async function addFiles(list: File[]) {
-    const room = MAX_FILES - files.length;
-    const next: DraftFile[] = [];
-    for (const file of list.slice(0, room)) {
-      const localPath = platform?.getPathForFile?.(file)?.trim() || undefined;
-      const image = file.type.startsWith("image/");
-      next.push({
-        id: `${file.name}-${file.size}-${file.lastModified}`,
-        fileName: file.name || (image ? "image.png" : "file"),
-        mime: file.type || "application/octet-stream",
-        bytes: file.size,
-        ...(localPath ? { localPath } : { dataBase64: await readBase64(file) }),
-        ...(image ? { previewUrl: URL.createObjectURL(file) } : {}),
-      });
-    }
+  async function addFiles(list: File[], fromClipboard: boolean) {
+    const next = await draftsFromBrowserFiles(list, {
+      fromClipboard,
+      room: MAX_TODO_FILES - files.length,
+      pathForFile: (file) => platform?.getPathForFile?.(file),
+    });
     setFiles((current) => [...current, ...next]);
   }
 
   function removeFile(id: string) {
     setFiles((current) => {
-      const target = current.find((file) => file.id === id);
-      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      revokeDraftPreviews(current.filter((file) => file.id === id));
       return current.filter((file) => file.id !== id);
     });
   }
@@ -117,17 +109,17 @@ export function TodoEditorDialog({
               prompt,
               workspacePath: project.workspacePath,
               workspaceIdentity: project.workspaceIdentity,
-              attachments: files.map(({ id: _id, previewUrl: _preview, ...file }) => file),
+              attachments: draftsToStored(files),
               tags,
             })
               .then(() => onOpenChange(false))
               .finally(() => setBusy(false));
           }}
-          onPaste={(event: ClipboardEvent) => {
-            const pasted = Array.from(event.clipboardData.files);
+          onPasteCapture={(event: ClipboardEvent) => {
+            const pasted = clipboardFiles(event.clipboardData);
             if (pasted.length === 0) return;
             event.preventDefault();
-            void addFiles(pasted);
+            void addFiles(pasted, true);
           }}
           onDragOver={(event: DragEvent) => {
             event.preventDefault();
@@ -137,7 +129,7 @@ export function TodoEditorDialog({
           onDrop={(event: DragEvent) => {
             event.preventDefault();
             setDragOver(false);
-            void addFiles(Array.from(event.dataTransfer.files));
+            void addFiles(Array.from(event.dataTransfer.files), false);
           }}
         >
           <DialogHeader className="px-5 pt-5">
@@ -160,33 +152,7 @@ export function TodoEditorDialog({
               required={files.length === 0}
             />
             <TodoTagField tags={tags} suggestions={suggestions} onChange={setTags} />
-            {files.length > 0 ? (
-              <ul className="flex flex-wrap gap-2">
-                {files.map((file) => (
-                  <li
-                    key={file.id}
-                    className="flex max-w-full items-center gap-2 rounded-lg border border-border bg-card py-1 pr-1 pl-1"
-                  >
-                    {file.previewUrl ? (
-                      <img src={file.previewUrl} alt="" className="size-10 rounded-md object-cover" />
-                    ) : (
-                      <span className="flex size-10 items-center justify-center rounded-md bg-surface">
-                        <FileText className="size-4 text-foreground-subtle" />
-                      </span>
-                    )}
-                    <span className="max-w-40 truncate text-ui-xs">{file.fileName}</span>
-                    <button
-                      type="button"
-                      className="rounded-md p-1 text-foreground-subtle hover:bg-surface-hover"
-                      aria-label={`移除 ${file.fileName}`}
-                      onClick={() => removeFile(file.id)}
-                    >
-                      <X className="size-3.5" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
+            <TodoAttachmentChips files={files} onRemove={removeFile} />
           </div>
           <DialogFooter className="items-center border-t border-border px-5 py-3 sm:justify-between">
             <div className="flex min-w-0 items-center gap-2">
@@ -206,7 +172,7 @@ export function TodoEditorDialog({
                 multiple
                 className="hidden"
                 onChange={(event) => {
-                  void addFiles(Array.from(event.currentTarget.files ?? []));
+                  void addFiles(Array.from(event.currentTarget.files ?? []), false);
                   event.currentTarget.value = "";
                 }}
               />
@@ -234,16 +200,4 @@ export function TodoEditorDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-function readBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const value = String(reader.result ?? "");
-      resolve(value.slice(value.indexOf(",") + 1));
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
 }
