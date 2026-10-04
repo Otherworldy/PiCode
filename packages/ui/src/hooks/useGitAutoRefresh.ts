@@ -3,6 +3,7 @@ import type { IDisposable } from "@zcode/rpc";
 import type { GitRepositorySummary } from "@zcode/shared";
 import {
   buildGitAutoRefreshWatchPaths,
+  gitAutoRefreshDueAt,
   parseGitAutoRefreshWatchPaths,
   shouldEnableGitAutoRefreshForWorkspace,
   stringifyGitAutoRefreshWatchPaths,
@@ -10,9 +11,6 @@ import {
 import { logger } from "@/logger.js";
 import { useWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 
-// agent 批量写文件时，150ms watcher 防抖 + 350ms Git 防抖仍会把长批次拆成多轮
-// `git status`。这里把 Git 自动刷新延后到 1 分钟，降低大工作区里的重复 Git I/O。
-const GIT_AUTO_REFRESH_DEBOUNCE_MS = 60_000;
 
 interface GitWatcherRegistration {
   subscription: IDisposable;
@@ -40,6 +38,7 @@ export function useGitAutoRefresh({
   const { fileWatcherService, systemService } = workspaceServices;
   const refreshRef = useRef(onRefreshGit);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const burstStartedAtRef = useRef<number | null>(null);
   const currentWorkspaceKey = workspaceIdentity?.trim() || workspacePath;
   const canWatchCurrentWorkspace = shouldEnableGitAutoRefreshForWorkspace({
     enabled,
@@ -108,17 +107,24 @@ export function useGitAutoRefresh({
     const registrations: GitWatcherRegistration[] = [];
 
     const scheduleRefresh = (path: string) => {
+      const now = Date.now();
+      const next = gitAutoRefreshDueAt({
+        now,
+        burstStartedAt: burstStartedAtRef.current,
+      });
+      burstStartedAtRef.current = next.burstStartedAt;
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
       debounceTimerRef.current = setTimeout(() => {
         debounceTimerRef.current = null;
+        burstStartedAtRef.current = null;
         logger.debug("[GitAutoRefresh] Git 状态变更，刷新仓库状态", {
           workspacePath,
           path,
         });
         refreshRef.current();
-      }, GIT_AUTO_REFRESH_DEBOUNCE_MS);
+      }, Math.max(0, next.dueAt - now));
     };
 
     // Git summary 每次刷新都会带回新的 autoRefreshWatchPaths 数组引用。
@@ -159,6 +165,7 @@ export function useGitAutoRefresh({
 
     return () => {
       cancelled = true;
+      burstStartedAtRef.current = null;
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = null;

@@ -13,6 +13,25 @@ export function shouldEnableGitAutoRefreshForWorkspace(params: {
   return params.enabled && params.currentWorkspaceKey === params.summaryWorkspaceKey;
 }
 
+// 安静后马上刷。连续写入最多再忍一会儿，避免每个文件一次 git status。
+export const GIT_AUTO_REFRESH_QUIET_MS = 1_000;
+export const GIT_AUTO_REFRESH_MAX_WAIT_MS = 5_000;
+
+export function gitAutoRefreshDueAt(params: {
+  now: number;
+  burstStartedAt: number | null;
+  quietMs?: number;
+  maxWaitMs?: number;
+}): { burstStartedAt: number; dueAt: number } {
+  const quietMs = params.quietMs ?? GIT_AUTO_REFRESH_QUIET_MS;
+  const maxWaitMs = params.maxWaitMs ?? GIT_AUTO_REFRESH_MAX_WAIT_MS;
+  const burstStartedAt = params.burstStartedAt ?? params.now;
+  return {
+    burstStartedAt,
+    dueAt: Math.min(params.now + quietMs, burstStartedAt + maxWaitMs),
+  };
+}
+
 function normalizeWatchPath(path: string): string {
   const trimmed = path.trim();
   if (trimmed === "/" || /^[A-Za-z]:[\\/]?$/.test(trimmed)) {

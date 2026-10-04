@@ -250,9 +250,12 @@ async function editUserQuery(
 }
 
 /**
- * retryTurn：assistant target → messageId → rewind 截断 + 重发
+ * retryTurn：assistant target → 所属 user prompt → rewind 截断 + 重发
  * canonical user intent。intent 在 projection resolver 阶段、rewind **之前**完成解析，
  * 截断后不再回读可见文本或 transcript parent 猜测原输入。
+ *
+ * 不能用 assistant 的 messageId 当锚点。Pi 对非 user 节点把叶子停在该节点，旧回复仍在上下文里，
+ * 原 prompt 再发一次时模型会当成已经做完，请求成功后直接停。
  */
 async function retryTurn(
   host: V4CommandCoreHost,
@@ -271,7 +274,7 @@ async function retryTurn(
   const attachmentRefs = stableAttachmentRefs(resolution.editTarget);
   const attachments = await mapAttachmentRefsToTurnAttachments(record.app, attachmentRefs);
   try {
-    await submitConversationRewind(host, record, resolution.messageId);
+    await submitConversationRewind(host, record, resolution.editTarget.transcriptMessageId);
     await startCanonicalIntent(
       host,
       record,

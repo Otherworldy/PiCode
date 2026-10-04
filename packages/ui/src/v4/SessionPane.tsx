@@ -3688,12 +3688,23 @@ export function SessionPane({
         return;
       }
       handleDraftSwitchMode(mode);
-      // 草稿要等下一条消息才进 Host。正在跑的新会话切权限必须马上生效。
+      // 草稿没有会话，等下一条消息带上 mode。已有会话必须马上写到 Host：
+      // switchCollaborationMode 是 CAS，缺 baseRevision 会在信封工厂直接抛，catch 吞掉后
+      // 运行中的工具闸仍读旧 mode。
       if (sessionId != null && (mode === "build" || mode === "edit" || mode === "yolo")) {
-        void dispatchCommand("switchCollaborationMode", { mode }, sessionId).catch(() => undefined);
+        void configCommandBarrier.enqueue(() =>
+          dispatchConfigCas("switchCollaborationMode", { mode }, { targetSessionId: sessionId }),
+        );
       }
     },
-    [dispatchCommand, handleDraftSwitchMode, handleSendText, sessionId, slashCommands],
+    [
+      configCommandBarrier,
+      dispatchConfigCas,
+      handleDraftSwitchMode,
+      handleSendText,
+      sessionId,
+      slashCommands,
+    ],
   );
 
   // context usage 面板的压缩入口（命令文本 = "/compact"，复用 slash 解析路径）。

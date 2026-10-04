@@ -386,13 +386,14 @@ export class PiToV4Projector {
   private reduce(event: PiHostEvent): ConversationDelta[] {
     switch (event.type) {
       case "agent_start":
-        return this.startTurn();
+        return this.startTurn(event.at);
       case "agent_end":
         if (event.willRetry) {
           this.pendingError = undefined;
           return [];
         }
         return this.settleTurn();
+
       case "auto_retry_start":
         return this.noteRetry(event);
       case "auto_retry_end":
@@ -402,7 +403,7 @@ export class PiToV4Projector {
           control: { ...this.snapshot.control, apiRetry: null },
         });
       case "agent_settled":
-        return this.settleTurn();
+        return this.settleTurn(event.at);
       case "message_end":
         if (event.message.role !== "assistant") return [];
         this.pendingError = clipError(
@@ -500,7 +501,7 @@ export class PiToV4Projector {
     ];
   }
 
-  private startTurn(): ConversationDelta[] {
+  private startTurn(at?: number): ConversationDelta[] {
     // Pi 重试会再发 agent_start。上一轮还在跑时不能再开一条「工作中」。
     if (this.snapshot.control.phase === "running" && this.turnId) {
       // 重试的下一次请求不能把用户已经按过的停止清掉。
@@ -519,13 +520,14 @@ export class PiToV4Projector {
     this.streamingTextRowId = null;
     this.streamingReasoningRowId = null;
     this.assistantMessageId = undefined;
+    const startedAt = at ?? Date.now();
     const header: ConversationRow = {
       ...this.base(this.turnId),
       kind: "turnHeader",
       origin: "userInput",
       executionKind: "agent",
       state: "running",
-      startedAt: Date.now(),
+      startedAt,
     };
     return [
       { op: "row.appended", row: header },
@@ -541,7 +543,7 @@ export class PiToV4Projector {
             activeWorks: [
               {
                 kind: "primaryTurn",
-                startedAt: Date.now(),
+                startedAt,
                 ...(this.workId ? { foregroundExecutionId: this.workId } : {}),
               },
             ],
@@ -935,9 +937,10 @@ export class PiToV4Projector {
     return deltas;
   }
 
-  private settleTurn(): ConversationDelta[] {
+  private settleTurn(at?: number): ConversationDelta[] {
     // agent_end 已经收过口时，紧跟着的 agent_settled 不能把 interrupted 盖成 success。
     if (this.snapshot.control.phase !== "running") return [];
+    const endedAt = at ?? Date.now();
     const errorText = this.pendingError;
     this.pendingError = undefined;
     const presented = errorText ? presentModelError(errorText) : undefined;
@@ -954,7 +957,12 @@ export class PiToV4Projector {
       if (row.kind === "turnHeader" && row.turnId === this.turnId && row.state === "running") {
         deltas.push({
           op: "row.upserted",
-          row: { ...row, state, endedAt: Date.now() },
+          row: {
+            ...row,
+            state,
+            endedAt,
+            activeMs: Math.max(0, endedAt - row.startedAt),
+          },
         });
       }
       if (row.kind === "assistantText" && row.state === "streaming") {

@@ -763,6 +763,44 @@ export class HostSessionRegistry {
       clearInterval(subagentPoll);
       subagentPoll = undefined;
     };
+    // 侧栏读的是子会话 jsonl，不是正在写它的那个 runtime。不重读的话工具停在打开瞬间，工时也被收成 1 秒。
+    let historyWatch: ReturnType<typeof setInterval> | undefined;
+    let lastHistory = "";
+    let historyPainting = false;
+    const stopHistoryWatch = () => {
+      if (!historyWatch) return;
+      clearInterval(historyWatch);
+      historyWatch = undefined;
+    };
+    const paintHistory = (content: string, settle: boolean) => {
+      if (historyPainting) return;
+      historyPainting = true;
+      try {
+        lastHistory = content;
+        const parsed = readPiJsonl(content, { settle });
+        emit(projector.reload(parsed.events));
+        if (parsed.summary?.title) emit(projector.setTitle(parsed.summary.title, "generated"));
+      } finally {
+        historyPainting = false;
+      }
+    };
+    const startHistoryWatch = () => {
+      if (historyWatch || !hasLiveSubagent(meta.sessionId)) return;
+      historyWatch = setInterval(() => {
+        void (async () => {
+          if (historyPainting || pi.isStreaming) return;
+          const live = hasLiveSubagent(meta.sessionId);
+          const content = await readFile(meta.sessionFile, "utf8").catch(() => "");
+          if (!live) {
+            stopHistoryWatch();
+            if (content) paintHistory(content, true);
+            return;
+          }
+          if (!content || content === lastHistory) return;
+          paintHistory(content, false);
+        })();
+      }, 1000);
+    };
     const unsubscribeLiveSubagents = subscribeLiveSubagents(() => {
       void publishSubagents();
     });
@@ -930,7 +968,16 @@ export class HostSessionRegistry {
         if (pi.hasEntry && !pi.hasEntry(targetId)) {
           const row = projector.getSnapshot().rows.window.find((item) => item.entityId === targetId);
           const text = row && "text" in row && typeof row.text === "string" ? row.text : "";
-          entryId = (text && pi.matchUserEntry?.(text)) || "";
+          const role =
+            row?.kind === "userInput" ? "user" : row?.kind === "assistantText" ? "assistant" : undefined;
+          // 实时行的 entityId 是 message.id，不是树节点 id。先按消息 id 对上 entry，对不上再用原文。
+          entryId =
+            pi.resolveEntry?.(targetId, {
+              ...(text ? { text } : {}),
+              ...(role ? { role } : {}),
+            }) ||
+            (text && role !== "assistant" && pi.matchUserEntry?.(text)) ||
+            "";
           if (!entryId) throw new Error(`Entry ${targetId} not found`);
         }
         if (pi.isStreaming) await pi.abort();
@@ -978,6 +1025,7 @@ export class HostSessionRegistry {
       dispose: () => {
         if (contextTimer) clearTimeout(contextTimer);
         if (subagentTimer) clearTimeout(subagentTimer);
+        stopHistoryWatch();
         stopSubagentPoll();
         unsubscribeLiveSubagents();
         unsubscribeProcesses();
@@ -990,15 +1038,21 @@ export class HostSessionRegistry {
         for (const ids of this.children.values()) ids.delete(meta.sessionId);
       },
       hydrateHistory: (content) => {
-        const parsed = readPiJsonl(content);
+        const live = hasLiveSubagent(meta.sessionId);
+        lastHistory = content;
+        const parsed = readPiJsonl(content, { settle: !live });
         emit(projector.replay(parsed.events));
         if (parsed.summary?.title) emit(projector.setTitle(parsed.summary.title, "generated"));
         void publishSubagents();
+        if (live) startHistoryWatch();
       },
       reloadHistory: (content) => {
-        const parsed = readPiJsonl(content);
+        const live = hasLiveSubagent(meta.sessionId);
+        lastHistory = content;
+        const parsed = readPiJsonl(content, { settle: !live });
         emit(projector.reload(parsed.events));
         if (parsed.summary?.title) emit(projector.setTitle(parsed.summary.title, "generated"));
+        if (live) startHistoryWatch();
       },
       onDeltas: (listener) => {
         deltaListeners.add(listener);

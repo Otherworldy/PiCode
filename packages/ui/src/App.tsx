@@ -435,7 +435,9 @@ export function App({
     workspaceIdentity,
   });
   useGitAutoRefresh({
-    workspacePath: workspaceAbsPath,
+    // 会话在 .worktrees/ 时要盯这个副本。用父仓库路径对不上 summary key，监听直接关掉，
+    // 右上角一直停在旧数字，只有打开审查页（includeExtendedData）才会重拉。
+    workspacePath: gitWorkspacePath,
     workspaceIdentity,
     remoteSessionId: workspaceRpcTarget.remoteSessionId ?? null,
     gitSummary: gitState.summary,

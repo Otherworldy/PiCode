@@ -22,7 +22,7 @@ export type PiToolResult = {
 };
 
 export type PiHostEvent =
-  | { type: "agent_start" }
+  | { type: "agent_start"; at?: number }
   | { type: "agent_end"; willRetry?: boolean }
   | {
       type: "auto_retry_start";
@@ -32,7 +32,7 @@ export type PiHostEvent =
       errorMessage: string;
     }
   | { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string }
-  | { type: "agent_settled" }
+  | { type: "agent_settled"; at?: number }
   | { type: "message_start"; message: { role: string; content?: unknown; id?: string } }
   | {
       type: "message_end";

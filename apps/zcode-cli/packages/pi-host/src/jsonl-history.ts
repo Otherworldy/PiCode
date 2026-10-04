@@ -118,7 +118,10 @@ function activeEntries(entries: Record<string, unknown>[]): Record<string, unkno
   );
 }
 
-export function readPiJsonl(content: string): {
+export function readPiJsonl(
+  content: string,
+  options?: { settle?: boolean },
+): {
   summary: PiJsonlSummary | null;
   events: PiHostEvent[];
 } {
@@ -134,15 +137,21 @@ export function readPiJsonl(content: string): {
   let lastAssistant = "";
   const events: PiHostEvent[] = [];
   let inTurn = false;
+  let turnLastAt = 0;
 
-  const beginTurn = () => {
+  const noteAt = (at: number) => {
+    if (at > 0) turnLastAt = Math.max(turnLastAt, at);
+  };
+  const beginTurn = (at: number) => {
     if (inTurn) return;
-    events.push({ type: "agent_start" });
+    turnLastAt = at > 0 ? at : 0;
+    events.push(at > 0 ? { type: "agent_start", at } : { type: "agent_start" });
     inTurn = true;
   };
   const endTurn = () => {
     if (!inTurn) return;
-    events.push({ type: "agent_settled" });
+    const at = turnLastAt;
+    events.push(at > 0 ? { type: "agent_settled", at } : { type: "agent_settled" });
     inTurn = false;
   };
 
@@ -166,6 +175,7 @@ export function readPiJsonl(content: string): {
       continue;
     }
     if (type === "compaction" && typeof entry.summary === "string" && entry.summary.trim()) {
+      noteAt(timestamp);
       endTurn();
       events.push({ type: "compaction_start", reason: "manual" });
       events.push({
@@ -181,7 +191,8 @@ export function readPiJsonl(content: string): {
     if (type === "custom_message" && entry.display !== false) {
       const text = messageText(entry.content);
       if (!text.trim()) continue;
-      beginTurn();
+      beginTurn(timestamp);
+      noteAt(timestamp);
       const id = typeof entry.id === "string" ? entry.id : undefined;
       events.push({ type: "message_start", message: { role: "assistant", id } });
       events.push({ type: "message_end", message: { role: "assistant", content: text, id } });
@@ -194,7 +205,8 @@ export function readPiJsonl(content: string): {
     if (role === "bashExecution") {
       const id = typeof entry.id === "string" ? entry.id : "";
       if (!id) continue;
-      beginTurn();
+      beginTurn(timestamp);
+      noteAt(timestamp);
       const command = typeof message.command === "string" ? message.command : "";
       const output = typeof message.output === "string" ? message.output : "";
       const failed =
@@ -222,7 +234,7 @@ export function readPiJsonl(content: string): {
       const text = messageText(message.content);
       if (!firstUser && text.trim() && !isControlCommandTitle(text)) firstUser = text;
       endTurn();
-      beginTurn();
+      beginTurn(timestamp);
       events.push({
         type: "message_start",
         message: { role: "user", content: text, id: typeof entry.id === "string" ? entry.id : undefined },
@@ -230,7 +242,8 @@ export function readPiJsonl(content: string): {
       continue;
     }
     if (isAssistantRole(role)) {
-      beginTurn();
+      beginTurn(timestamp);
+      noteAt(timestamp);
       const id = typeof entry.id === "string" ? entry.id : undefined;
       events.push({ type: "message_start", message: { role: "assistant", id } });
       for (const call of toolCallsOf(message.content)) {
@@ -253,6 +266,7 @@ export function readPiJsonl(content: string): {
       const toolCallId = typeof message.toolCallId === "string" ? message.toolCallId : "";
       const toolName = typeof message.toolName === "string" ? message.toolName : "unknown";
       if (!toolCallId) continue;
+      noteAt(timestamp);
       events.push({
         type: "tool_execution_end",
         toolCallId,
@@ -262,7 +276,8 @@ export function readPiJsonl(content: string): {
       });
     }
   }
-  endTurn();
+  // 还在跑的子会话文件没有轮次结束标记。提前 settle 会把工时收成重放墙钟（约 1 秒）并折叠工具。
+  if (options?.settle !== false) endTurn();
 
   if (!firstUser && !namedTitle) return { summary: null, events: [] };
   const title = namedTitle ?? clip(firstUser, 60);

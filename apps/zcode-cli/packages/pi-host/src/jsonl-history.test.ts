@@ -105,6 +105,36 @@ test("replay keeps a compaction summary", () => {
   );
 });
 
+test("settled jsonl uses message timestamps for work duration", () => {
+  const projector = new PiToV4Projector("s1", "e1", { profile: "continuous" });
+  for (const event of readPiJsonl(sample).events) projector.apply(event);
+  const headers = projector.getSnapshot().rows.window.filter((row) => row.kind === "turnHeader");
+  const last = headers.at(-1);
+  assert.equal(last && last.kind === "turnHeader" ? last.state : "", "completedSuccess");
+  assert.equal(last && last.kind === "turnHeader" ? last.activeMs : -1, 3_000);
+  assert.equal(projector.getSnapshot().control.phase === "running", false);
+});
+
+test("live subagent jsonl stays open and keeps the file clock", () => {
+  const content = [
+    '{"type":"session","id":"child","timestamp":"2026-01-02T03:04:05.000Z","cwd":"/work"}',
+    '{"type":"message","id":"u1","timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"user","content":[{"type":"text","text":"explore"}]}}',
+    '{"type":"message","id":"a1","timestamp":"2026-01-02T03:06:42.000Z","message":{"role":"assistant","content":[{"type":"toolCall","id":"c1","name":"grep","arguments":{"pattern":"todo"}}]}}',
+  ].join("\n");
+  const projector = new PiToV4Projector("child", "e1");
+  for (const event of readPiJsonl(content, { settle: false }).events) projector.apply(event);
+  const header = projector.getSnapshot().rows.window.find((row) => row.kind === "turnHeader");
+  assert.equal(header && header.kind === "turnHeader" ? header.state : "", "running");
+  assert.equal(
+    header && header.kind === "turnHeader" ? header.startedAt : 0,
+    Date.parse("2026-01-02T03:04:06.000Z"),
+  );
+  assert.equal(header && header.kind === "turnHeader" ? header.endedAt : 0, undefined);
+  assert.equal(projector.getSnapshot().control.phase, "running");
+  const tool = projector.getSnapshot().rows.window.find((row) => row.kind === "toolCall");
+  assert.equal(tool && tool.kind === "toolCall" ? tool.status : "", "running");
+});
+
 test("replay hydrates user, assistant, tools into projector", () => {
   const { events } = readPiJsonl(sample);
   const projector = new PiToV4Projector("s1", "e1", { profile: "continuous" });
