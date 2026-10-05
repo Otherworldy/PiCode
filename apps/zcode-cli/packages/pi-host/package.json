@@ -20,8 +20,9 @@
     "test": "tsx --test src/*.test.ts src/**/*.test.ts"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "^0.86.1",
-    "@earendil-works/pi-coding-agent": "^0.86.1",
+    "@earendil-works/pi-ai": "^1.0.2",
+    "@earendil-works/pi-coding-agent": "^1.0.2",
+    "@earendil-works/pi-mcp": "^1.0.2",
     "@zcode/shared": "workspace:*"
   },
   "devDependencies": {

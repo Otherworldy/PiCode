@@ -121,7 +121,11 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 ## MCP
 
-设置页写入的 MCP（`~/.PiCode/cli/config.json` 的 `mcp.servers`）由 PiCode 的 `McpPort` 调用，不读 Pi 自己的 MCP 配置。默认只注册一个 `mcp` 代理工具：先列服务器，再按服务器搜索或描述工具，最后 `tool` + `args` 调用。服务器在第一次被代理用到时才连接。某个 server 设 `directTools: true` 时，才在会话创建时连接并把它的工具逐个注册成 Pi 工具。`enabled: false` 不连接。连接失败只记一条警告，不阻止会话创建。
+用户 MCP 的主人是 Pi：用户级 `~/.pi/agent/mcp.json`，项目级 `<cwd>/.pi/mcp.json`，都是 `mcpServers`。设置页仍写这两个文件。目标文件还不存在时，把旧的 `~/.PiCode/cli/config.json` 或 `<cwd>/.PiCode/config.json` 里的 `mcp.servers` 拷过去一次；之后只认 Pi 文件。项目条目覆盖同名的用户条目。SSE 不连。`directTools: true` 写成 Pi 的 `exposure: "direct"`，没写则是 `codemode`。
+
+会话加载 Pi 的 `codemode`、`tool_search` 和 MCP 扩展，不再注册 PiCode 的 `mcp` 代理工具。插件 MCP 和内置 `node_repl` 不进这两个文件，会话创建时用 `registerMcpServer` 注册。子会话不挂这三个扩展。
+
+浏览器和官方鉴权仍走这条 Pi 连接。`node_repl` 的每次请求带 `com.zcode/request-context.session_id`。官方 HTTP 仍用现有的逐请求 JWT fetch；官方 stdio 仍把身份头放进 `_meta`。设置页刷新连接状态仍可能再打开一份 `McpPort`，与会话里的 Pi 连接不是同一个客户端。
 
 ## 持久化与旧会话
 
@@ -133,7 +137,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 SDK 来源是 `AppSettings.piSdkSource`。缺省 `builtin`，用打进 `zcode.cjs` 的 `@earendil-works/pi-coding-agent`。`global` 时 Host 注入 `ZCODE_PI_SDK=global`，进程里只解析一次本机 `npm root -g` 的同名包。主次版本必须和内置包一致，并且要有 `createAgentSession`。找不到、版本不一致或加载失败都继续用内置，原因记在 `runtime/capabilities` 的 `piSdk.reason`（`missing` / `incompatible` / `load-failed`）。改设置后重启应用再生效。委托测试用的 `createDelegateProvider` 仍走内置 `pi-ai`。
 
-设置页的 HTTP 代理和「不使用代理的地址」仍写 `AppSettings`，由 Host 在拉起 agent 时注入 `ZCODE_HTTP_PROXY` / `ZCODE_NO_PROXY`。CLI 仍会清掉进程里的标准 `HTTP_PROXY` / `NO_PROXY`，避免用户 shell 代理泄漏。清完之后只把这两个 ZCODE 值写回标准变量，并用已有的 `createNetworkProxyFetch` 换掉 `globalThis.fetch`。Pi 模型请求走这层 fetch；Pi bash 继承进程环境，curl/git 因此读到同一套规则。绕过规则与旧模型出口相同（主机、前缀点、端口、`*`）。没配代理则不换 fetch。改设置后下次启动 agent 生效。MCP 仍走原来的 `McpPort` 网络配置，不另开一条代理。
+设置页的 HTTP 代理和「不使用代理的地址」仍写 `AppSettings`，由 Host 在拉起 agent 时注入 `ZCODE_HTTP_PROXY` / `ZCODE_NO_PROXY`。CLI 仍会清掉进程里的标准 `HTTP_PROXY` / `NO_PROXY`，避免用户 shell 代理泄漏。清完之后只把这两个 ZCODE 值写回标准变量，并用已有的 `createNetworkProxyFetch` 换掉 `globalThis.fetch`。Pi 模型请求走这层 fetch；Pi bash 继承进程环境，curl/git 因此读到同一套规则。绕过规则与旧模型出口相同（主机、前缀点、端口、`*`）。没配代理则不换 fetch。改设置后下次启动 agent 生效。普通 MCP 的 HTTP 走这层 fetch；官方 HTTP 仍用原来的鉴权 fetch。
 
 **目录所有者：** Pi `ModelRuntime.getAvailableSnapshot()`。CLI 在 `workspace/readPresentation` 上行目录；Host `IModelSelectionService` 只投影这份目录，不再用 PiCode Provider Registry 当聊天/设置页候选。投影必须把 `getView(input.selection)` 写成 `effectiveSelection`，否则 Composer 触发器拿不到当前草稿模型。Composer 与设置「模型设置」共用该视图。`switchModelConfig` 走 `session.setModel`。空闲时输入框里的模型属于下一次提交，在 `prompt`、steer 或手动 `/compact` 之前写入。压缩不读会话里的旧模型。会话已经在跑时，输入框一切模型或思考档位就立刻 `setModel`：已经发出的那次请求不中断，同一轮里的下一次模型请求用新的。排队项仍带着入队时的选择，出队再换。
 

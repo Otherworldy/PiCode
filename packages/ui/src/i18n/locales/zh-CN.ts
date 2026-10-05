@@ -2060,7 +2060,7 @@ const zhCN: Record<string, string> = {
   "settings.mcp.form.type": "类型",
   "settings.mcp.form.timeoutMs": "超时时间 MS",
   "settings.mcp.form.directTools": "直接注册为 Pi 工具",
-  "settings.mcp.form.directToolsHint": "默认只通过 mcp 代理按需调用。打开后，这个服务器的工具会逐个出现在会话里。",
+  "settings.mcp.form.directToolsHint": "默认 codemode：模型用脚本查找再调用。打开后，工具直接出现在会话里。",
   "settings.mcp.form.protocolVersion": "协议版本",
   "settings.mcp.form.protocolVersion.auto": "自动（推荐）",
   "settings.mcp.form.protocolVersion.legacy": "兼容旧版",

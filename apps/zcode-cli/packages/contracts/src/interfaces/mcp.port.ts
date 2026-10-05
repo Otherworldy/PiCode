@@ -309,5 +309,16 @@ export interface McpPort {
   status(): Promise<Record<string, McpServerStatus>>;
   listTools(): Promise<McpToolDescriptor[]>;
   callTool(request: McpCallToolRequest, options?: McpCallToolOptions): Promise<McpToolCallResult>;
+  /** Official stdio identity headers for Pi's native MCP transport. */
+  piOutgoingMeta?(input: {
+    serverName: string;
+    config: McpServerConfig;
+    sessionId?: string;
+  }): Promise<Record<string, unknown> | undefined>;
+  /** Official HTTP JWT fetch for Pi's native MCP transport. */
+  piOfficialFetch?(input: {
+    serverName: string;
+    config: McpServerConfig;
+  }): typeof fetch | undefined;
   close(): Promise<void>;
 }

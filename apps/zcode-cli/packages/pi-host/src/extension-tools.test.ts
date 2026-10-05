@@ -91,9 +91,6 @@ test("extension tools are sent upstream with PiCode tools", async () => {
       modelRuntime,
       capabilities: {
         listSubagents: async () => [],
-        listMcpTools: async () => [],
-        callMcpTool: async () => ({ text: "ok" }),
-        useMcp: async () => ({ text: "ok" }),
       },
     })({
       sessionId: "ext-tools",

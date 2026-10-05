@@ -13,38 +13,8 @@ export interface ZcodeSubagentProfile {
   tools?: readonly string[];
 }
 
-export interface ZcodeMcpTool {
-  name: string;
-  description?: string;
-  serverName: string;
-  toolName: string;
-  inputSchema: Record<string, unknown>;
-}
-
-export interface PiMcpRequest {
-  cwd: string;
-  server?: string;
-  search?: string;
-  describe?: string;
-  tool?: string;
-  args?: Record<string, unknown>;
-  sessionId?: string;
-  signal?: AbortSignal;
-}
-
 export interface PiCapabilityPorts {
   listSubagents(cwd: string): Promise<ZcodeSubagentProfile[]>;
-  /** 只返回 directTools 服务器上、已经连接的工具。 */
-  listMcpTools(cwd: string): Promise<ZcodeMcpTool[]>;
-  callMcpTool(input: {
-    serverName: string;
-    toolName: string;
-    arguments?: Record<string, unknown>;
-    sessionId?: string;
-    signal?: AbortSignal;
-  }): Promise<{ text: string; isError?: boolean }>;
-  /** 代理：列服务器不连接；搜索、描述、调用才连接指定服务器。 */
-  useMcp(input: PiMcpRequest): Promise<{ text: string; isError?: boolean }>;
 }
 
 const PI_BUILTIN_TOOL_NAMES = ["read", "bash", "powershell", "edit", "write", "grep", "find", "ls"];
@@ -115,10 +85,6 @@ function assistantText(messages: readonly { role?: string; content?: unknown }[]
     }
   }
   return chunks.join("\n");
-}
-
-function objectSchema(schema: Record<string, unknown>): Record<string, unknown> {
-  return schema.type === "object" ? schema : { type: "object", properties: {} };
 }
 
 export async function runZcodeSubagent(input: {
@@ -216,11 +182,9 @@ export async function createCapabilityTools(input: {
   cwd: string;
   ports: PiCapabilityPorts;
   check?: ToolPermissionCheck;
-  reservedNames: readonly string[];
   sessionId?: string;
   runSubagent: (profile: ZcodeSubagentProfile, task: string, signal?: AbortSignal) => Promise<string>;
 }) {
-  const reserved = new Set(input.reservedNames);
   const agents = await input.ports.listSubagents(input.cwd).catch(() => []);
   const catalog =
     agents.length > 0
@@ -258,78 +222,5 @@ export async function createCapabilityTools(input: {
     },
   });
 
-  const proxy = tool<{
-    server?: string;
-    search?: string;
-    describe?: string;
-    tool?: string;
-    args?: Record<string, unknown>;
-  }>({
-    name: "mcp",
-    label: "MCP",
-    description:
-      "Call PiCode MCP servers without loading every tool schema. Omit fields to list servers. Set server plus search or describe to inspect one server. Set server, tool, and args to call.",
-    promptSnippet: "Search or call a PiCode MCP server",
-    promptGuidelines: [
-      "Use mcp to discover and call MCP tools. Do not assume a server's tools are registered unless they were marked direct.",
-    ],
-    parameters: {
-      type: "object",
-      properties: {
-        server: { type: "string", description: "MCP server name" },
-        search: { type: "string", description: "Filter this server's tools by name or description" },
-        describe: { type: "string", description: "Tool name whose schema should be returned" },
-        tool: { type: "string", description: "Tool name to call" },
-        args: {
-          type: "object",
-          description: "Arguments for tool",
-          additionalProperties: true,
-        },
-      },
-    },
-    execute: async (_toolCallId, params, signal) => {
-      await gateTool(input.check, "mcp", params);
-      const result = await input.ports.useMcp({
-        cwd: input.cwd,
-        ...(typeof params.server === "string" ? { server: params.server } : {}),
-        ...(typeof params.search === "string" ? { search: params.search } : {}),
-        ...(typeof params.describe === "string" ? { describe: params.describe } : {}),
-        ...(typeof params.tool === "string" ? { tool: params.tool } : {}),
-        ...(params.args && typeof params.args === "object" ? { args: params.args } : {}),
-        sessionId: input.sessionId,
-        signal,
-      });
-      const text = result.text.trim() || (result.isError ? "MCP request failed" : "(empty)");
-      return textResult(result.isError ? `MCP error: ${text}` : text);
-    },
-  });
-
-  const mcpTools = await input.ports.listMcpTools(input.cwd).catch(() => []);
-  const mcp = mcpTools
-    .filter(
-      (tool) =>
-        tool.name && !reserved.has(tool.name) && tool.name !== subagent.name && tool.name !== proxy.name,
-    )
-    .map((mcpTool) =>
-      tool<Record<string, unknown>>({
-
-        name: mcpTool.name,
-        label: mcpTool.name,
-        description: mcpTool.description?.trim() || `MCP ${mcpTool.serverName}/${mcpTool.toolName}`,
-        parameters: objectSchema(mcpTool.inputSchema),
-        execute: async (_toolCallId, params, signal) => {
-          await gateTool(input.check, mcpTool.name, params);
-          const result = await input.ports.callMcpTool({
-            serverName: mcpTool.serverName,
-            toolName: mcpTool.toolName,
-            arguments: params,
-            sessionId: input.sessionId,
-            signal,
-          });
-          const text = result.text.trim() || (result.isError ? "MCP tool failed" : "(empty)");
-          return textResult(result.isError ? `MCP error: ${text}` : text);
-        },
-      }),
-    );
-  return [subagent, proxy, ...mcp];
+  return [subagent];
 }

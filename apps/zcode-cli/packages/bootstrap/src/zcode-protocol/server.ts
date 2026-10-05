@@ -5,7 +5,7 @@ import {
   zcodeWorkspaceCancelGenerateTextParamsSchema,
   zcodeWorkspaceHookTrustGrantParamsSchema,
 } from "@zcode/shared";
-import type { BrowserControlPort } from "@zcode/contracts";
+import type { BrowserControlPort, McpServerConfig } from "@zcode/contracts";
 import { InMemoryWorkspaceHookPolicyProvider, PermissionService } from "@zcode/core";
 import type { CollaborationMode } from "@zcode/contracts";
 import {
@@ -107,7 +107,7 @@ import {
   HostSessionRegistry,
   mapPiToolName,
 } from "@zcode/pi-host";
-import { createPiCapabilityPorts, hostBrowserSkillPaths } from "./pi-capabilities.js";
+import { createPiCapabilityPorts, hostBrowserSkillPaths, piRuntimeMcpServers } from "./pi-capabilities.js";
 import { createInMemorySessionEventStore } from "@zcode/contracts";
 
 export type { ZCodeProtocolAgentDependencies, ZCodeProtocolSessionRecord };
@@ -250,6 +250,20 @@ export class ZCodeProtocolAgentServer {
         storageRoot: join(ensureAppDataDir(homedir())),
         createSession: createSdkSessionFactory({
           capabilities: createPiCapabilityPorts(() => this.context),
+          mcpCompat: {
+            runtimeServers: ({ cwd }) => piRuntimeMcpServers(this.context, cwd),
+            outgoingMeta: async ({ serverName, config, sessionId }) =>
+              this.context.deps.mcpPort?.piOutgoingMeta?.({
+                serverName,
+                config: config as unknown as McpServerConfig,
+                sessionId,
+              }),
+            officialFetch: ({ serverName, config }) =>
+              this.context.deps.mcpPort?.piOfficialFetch?.({
+                serverName,
+                config: config as unknown as McpServerConfig,
+              }),
+          },
           skillPaths: (cwd) => hostBrowserSkillPaths(this.context, cwd),
         }),
         loadExtensions: true,

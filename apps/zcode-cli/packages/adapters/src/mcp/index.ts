@@ -1404,6 +1404,22 @@ class NodeMcpAdapter implements McpPort {
     return status;
   }
 
+  async piOutgoingMeta(input: {
+    serverName: string;
+    config: McpServerConfig;
+    sessionId?: string;
+  }): Promise<Record<string, unknown> | undefined> {
+    const authMeta = await this.resolveOfficialStdioAuthMeta(input.serverName, input.config, undefined);
+    return authMeta ? { [OFFICIAL_MCP_AUTH_META_KEY]: authMeta } : undefined;
+  }
+
+  piOfficialFetch(input: {
+    serverName: string;
+    config: McpServerConfig;
+  }): typeof fetch | undefined {
+    return this.createOfficialAuthFetch(input.config, input.serverName, 0);
+  }
+
   private async createTransport(
     config: McpServerConfig,
     serverName: string,

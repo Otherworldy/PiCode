@@ -33,6 +33,12 @@ import {
   prepareContinueMessages,
   runContinueAfterModelError,
 } from "./continue-after-error.js";
+import {
+  createZcodeMcpTransport,
+  loadZcodeMcpConfig,
+  registerableMcpServers,
+  type PiMcpCompat,
+} from "./pi-mcp.js";
 import { asPiEvent, type CreatePiSession, type PiSessionPort } from "./types.js";
 import {
   alignStoredModelApi,
@@ -177,6 +183,8 @@ export function createSdkSessionFactory(options: {
   defaultSelection?: { providerId: string; modelId: string; thought?: string };
   agentDir?: string;
   capabilities?: PiCapabilityPorts;
+  /** Plugin and node_repl servers, plus official-auth hooks. User servers stay in Pi mcp.json. */
+  mcpCompat?: PiMcpCompat;
   skillPaths?: (cwd: string) => string[];
   /** 测试注入。生产路径仍用 Pi 的 ModelRuntime。 */
   modelRuntime?: ModelRuntime;
@@ -227,6 +235,13 @@ export function createSdkSessionFactory(options: {
       ? await zcodePluginLoaderExtras(input.cwd, agentDir, options.skillPaths?.(input.cwd) ?? [])
       : undefined;
     const processes = !isolated && input.loadExtensions ? createPiProcessBridge() : undefined;
+    const usePiMcp = !isolated && input.loadExtensions && !input.parentSessionId;
+    const mcpRuntime = usePiMcp
+      ? registerableMcpServers(
+          (await options.mcpCompat?.runtimeServers({ cwd: input.cwd, sessionId: input.sessionId })) ?? [],
+        )
+      : [];
+    const codingForMcp = usePiMcp ? piCoding() : undefined;
     const resourceLoader = new (piCoding().DefaultResourceLoader)({
       cwd: input.cwd,
       agentDir,
@@ -234,6 +249,22 @@ export function createSdkSessionFactory(options: {
       ...(pluginExtras?.loader ?? { additionalSkillPaths: options.skillPaths?.(input.cwd) ?? [] }),
       extensionFactories: [
         createPermissionExtension(input.checkPermission),
+        ...(usePiMcp && codingForMcp
+          ? [
+              (pi: { registerMcpServer(name: string, config: (typeof mcpRuntime)[number]["config"]): void }) => {
+                for (const server of mcpRuntime) pi.registerMcpServer(server.name, server.config);
+              },
+              codingForMcp.createCodemodeExtension(),
+              codingForMcp.createToolSearchExtension(),
+              codingForMcp.createMcpExtension({
+                loadConfig: () => loadZcodeMcpConfig(agentDir, input.cwd),
+                createTransport: createZcodeMcpTransport({
+                  compat: options.mcpCompat,
+                  sessionId: input.sessionId,
+                }),
+              }),
+            ]
+          : []),
         ...(processes?.factories ?? []),
       ],
       ...(ssh ? { appendSystemPrompt: [sshWorkspacePrompt(ssh)] } : {}),
@@ -255,7 +286,6 @@ export function createSdkSessionFactory(options: {
           cwd: input.cwd,
           ports: options.capabilities,
           check: input.checkPermission,
-          reservedNames: ["read", "bash", "powershell", "edit", "write", "grep", "find", "ls"],
           sessionId: input.sessionId,
           runSubagent: (profile, task, signal) =>
             runZcodeSubagent({
@@ -337,9 +367,9 @@ export function createSdkSessionFactory(options: {
           lastTurn = session
             .prompt(text, {
               ...(options?.images?.length ? { images: options.images } : {}),
-              preflightResult: (ok) => {
+              preflightResult: () => {
                 settled = true;
-                resolve(ok);
+                resolve(true);
               },
             })
             .then(() => {
@@ -350,8 +380,12 @@ export function createSdkSessionFactory(options: {
             });
         }),
       waitTurn: () => lastTurn,
-      steer: (text, images) => session.steer(text, images),
-      followUp: (text, images) => session.followUp(text, images),
+      steer: async (text, images) => {
+        await session.steer(text, images);
+      },
+      followUp: async (text, images) => {
+        await session.followUp(text, images);
+      },
       abort: () => session.abort(),
       continueAfterError: () => {
         if (session.isStreaming) return Promise.reject(new Error("still running"));

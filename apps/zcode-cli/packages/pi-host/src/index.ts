@@ -48,7 +48,8 @@ export {
   writePiPluginConfig,
   type PiPluginConfigView,
 } from "./pi-plugin-config.js";
-export type { PiCapabilityPorts, ZcodeMcpTool, ZcodeSubagentProfile } from "./host-capabilities.js";
+export type { PiCapabilityPorts, ZcodeSubagentProfile } from "./host-capabilities.js";
+export type { PiMcpCompat, PiMcpRuntimeServer } from "./pi-mcp.js";
 export type { PiDiscoveredModel, PiModelConfigView, PiProviderDraft } from "./model-config-file.js";
 export { gateTool, type ToolPermissionCheck } from "./permission-gate.js";
 export type {

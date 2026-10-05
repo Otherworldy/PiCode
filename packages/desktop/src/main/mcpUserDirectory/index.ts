@@ -16,6 +16,7 @@ import type {
   SaveCliMcpToUserDirectoryRequest,
 } from "@zcode/shared";
 import type { McpConfigKeyName } from "./types.js";
+import { ensurePiMcpFiles, piProjectMcpFile, piUserMcpFile, toPiStoredMcpServer } from "@zcode/shared/node";
 import { isRecord, readJsonObject, writeTextAtomic } from "./utils.js";
 import { migrateLegacyCommonMcp } from "./legacy.js";
 
@@ -37,11 +38,11 @@ interface DirectoryMcpDescriptor {
 const ZCODE_MCP_DESCRIPTOR: DirectoryMcpDescriptor = {
   source: "zcodeagentmcp",
   directorySource: "zcode",
-  userConfigDirSegments: [".PiCode", "cli"],
-  workspaceConfigDirSegments: [".PiCode"],
-  fileName: "config.json",
+  userConfigDirSegments: [".pi", "agent"],
+  workspaceConfigDirSegments: [".pi"],
+  fileName: "mcp.json",
   format: "json",
-  configKeyName: "mcp.servers",
+  configKeyName: "mcpServers",
 };
 const ENABLED_KEY = "enabled";
 // 历史遗留：桌面端早期把停用状态写成 enable，而 CLI 契约字段（contracts McpServerConfigBase）
@@ -74,6 +75,15 @@ function buildDirectoryConfigPath(
   scope: Exclude<McpScope, "common">,
   workspacePath?: string,
 ): string {
+  if (descriptor.fileName === "mcp.json" && descriptor.userConfigDirSegments[0] === ".pi") {
+    if (scope === "user") return piUserMcpFile();
+    if (!workspacePath) {
+      throw new Error(
+        `Missing workspace path for ${descriptor.directorySource} workspace MCP config`,
+      );
+    }
+    return piProjectMcpFile(workspacePath);
+  }
   const baseDir = scope === "user" ? resolveUserHomeDir() : workspacePath;
   if (!baseDir) {
     throw new Error(
@@ -347,6 +357,24 @@ async function readDirectoryServersFromPreferredSources(
   return readDirectoryServersFromFile(AGENTS_MCP_DESCRIPTOR, scope, workspacePath);
 }
 
+function normalizePiServers(
+  servers: Record<string, Record<string, unknown>>,
+): Record<string, Record<string, unknown>> {
+  const next: Record<string, Record<string, unknown>> = {};
+  for (const [name, config] of Object.entries(servers)) {
+    const stored = toPiStoredMcpServer(config);
+    if (stored) next[name] = stored;
+  }
+  return next;
+}
+
+function ensurePiMcpConfig(workspacePath?: string): void {
+  ensurePiMcpFiles({
+    agentDir: dirname(piUserMcpFile()),
+    cwd: workspacePath && workspacePath.trim() ? workspacePath : resolveUserHomeDir(),
+  });
+}
+
 async function writeZCodeServersToFile(
   scope: Exclude<McpScope, "common">,
   servers: Record<string, Record<string, unknown>>,
@@ -354,13 +382,18 @@ async function writeZCodeServersToFile(
 ): Promise<void> {
   const filePath = buildDirectoryConfigPath(ZCODE_MCP_DESCRIPTOR, scope, workspacePath);
   const current = (await readJsonObject(filePath)) ?? {};
-  const next = writeServerMapToJson(current, ZCODE_MCP_DESCRIPTOR.configKeyName, servers);
+  const next = writeServerMapToJson(
+    current,
+    ZCODE_MCP_DESCRIPTOR.configKeyName,
+    normalizePiServers(servers),
+  );
   await writeTextAtomic(filePath, `${JSON.stringify(next, null, 2)}\n`);
 }
 
 export async function loadCliMcpFromUserDirectory(
   request?: LoadCliMcpFromUserDirectoryRequest,
 ): Promise<LoadCliMcpFromUserDirectoryResult> {
+  ensurePiMcpConfig(request?.workspacePath);
   const servers: NativeMcpServerRecord[] = [];
 
   // 去掉其他 provider 后，PiCode Agent 只按目录约定读取；先 workspace，再 user。
@@ -378,6 +411,7 @@ export async function loadCliMcpFromUserDirectory(
 export async function saveCliMcpToUserDirectory(
   payload: SaveCliMcpToUserDirectoryRequest,
 ): Promise<void> {
+  ensurePiMcpConfig(payload.projectPath);
   if (payload.action === "set-enabled") {
     if (typeof payload.enabled !== "boolean") {
       throw new Error("Missing enabled value for MCP set-enabled action");

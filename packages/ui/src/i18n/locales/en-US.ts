@@ -2203,7 +2203,7 @@ const enUS: Record<string, string> = {
   "settings.mcp.form.type": "Type",
   "settings.mcp.form.timeoutMs": "Timeout MS",
   "settings.mcp.form.directTools": "Register directly as Pi tools",
-  "settings.mcp.form.directToolsHint": "Off: the model calls this server through the mcp proxy. On: each of its tools is registered in the session.",
+  "settings.mcp.form.directToolsHint": "Off: codemode, the model finds tools from a script. On: each tool is declared to the model.",
   "settings.mcp.form.protocolVersion": "Protocol version",
   "settings.mcp.form.protocolVersion.auto": "Auto (recommended)",
   "settings.mcp.form.protocolVersion.legacy": "Legacy compatibility",

@@ -19,6 +19,7 @@ import type {
   SettingsDirectorySource,
 } from "@zcode/shared";
 import type { IMcpSyncService } from "./mcpSync.js";
+import { ensurePiMcpFiles, piProjectMcpFile, piUserMcpFile, toPiStoredMcpServer } from "@zcode/shared/node";
 import { checkRemoteSyncDirectoryWriteAccess } from "../remote-sync/remoteSyncWriteAccess.js";
 
 type McpConfigKeyName = "mcp.servers" | "mcpServers";
@@ -43,10 +44,10 @@ interface UserMcpRecord {
 const ZCODE_MCP_DESCRIPTOR: DirectoryMcpDescriptor = {
   source: "zcode",
   directorySource: "zcode",
-  userConfigDirSegments: [".PiCode", "cli"],
-  workspaceConfigDirSegments: [".PiCode"],
-  fileName: "config.json",
-  configKeyName: "mcp.servers",
+  userConfigDirSegments: [".pi", "agent"],
+  workspaceConfigDirSegments: [".pi"],
+  fileName: "mcp.json",
+  configKeyName: "mcpServers",
 };
 
 const AGENTS_MCP_DESCRIPTOR: DirectoryMcpDescriptor = {
@@ -154,6 +155,15 @@ function buildDirectoryConfigPath(
   scope: Exclude<McpScope, "common">,
   workspacePath?: string,
 ): string {
+  if (descriptor.fileName === "mcp.json" && descriptor.userConfigDirSegments[0] === ".pi") {
+    if (scope === "user") return piUserMcpFile();
+    if (!workspacePath) {
+      throw new Error(
+        `Missing workspace path for ${descriptor.directorySource} workspace MCP config`,
+      );
+    }
+    return piProjectMcpFile(workspacePath);
+  }
   const baseDir = scope === "user" ? resolveUserHomeDir() : workspacePath;
   if (!baseDir) {
     throw new Error(
@@ -216,9 +226,28 @@ async function collectEffectiveUserMcpRecordByName(): Promise<Map<string, UserMc
   return result;
 }
 
+function normalizePiServers(
+  servers: Record<string, Record<string, unknown>>,
+): Record<string, Record<string, unknown>> {
+  const next: Record<string, Record<string, unknown>> = {};
+  for (const [name, config] of Object.entries(servers)) {
+    const stored = toPiStoredMcpServer(config);
+    if (stored) next[name] = stored;
+  }
+  return next;
+}
+
+function ensurePiMcpConfig(workspacePath?: string): void {
+  ensurePiMcpFiles({
+    agentDir: dirname(piUserMcpFile()),
+    cwd: workspacePath && workspacePath.trim() ? workspacePath : homedir(),
+  });
+}
+
 async function loadMcpFromUserDirectory(
   request?: LoadCliMcpFromUserDirectoryRequest,
 ): Promise<LoadCliMcpFromUserDirectoryResult> {
+  ensurePiMcpConfig(request?.workspacePath);
   const servers: NativeMcpServerRecord[] = [];
   if (request?.workspacePath) {
     servers.push(
@@ -230,6 +259,7 @@ async function loadMcpFromUserDirectory(
 }
 
 async function saveMcpToUserDirectory(payload: SaveCliMcpToUserDirectoryRequest): Promise<void> {
+  ensurePiMcpConfig(payload.projectPath);
   if (payload.action === "set-enabled") {
     if (typeof payload.enabled !== "boolean") {
       throw new Error("Missing enabled value for MCP set-enabled action");
@@ -267,7 +297,7 @@ async function saveMcpToUserDirectory(payload: SaveCliMcpToUserDirectoryRequest)
     delete nextServers[payload.name];
   }
 
-  await writeZCodeServersToFile(scope, nextServers, payload.projectPath);
+  await writeZCodeServersToFile(scope, normalizePiServers(nextServers), payload.projectPath);
 }
 
 function sortMcpRecords(records: UserMcpRecord[]): UserMcpRecord[] {
@@ -327,7 +357,11 @@ async function writeZCodeServersToFile(
 ): Promise<void> {
   const filePath = buildDirectoryConfigPath(ZCODE_MCP_DESCRIPTOR, scope, workspacePath);
   const current = (await readJsonObject(filePath)) ?? {};
-  const next = writeServerMapToJson(current, ZCODE_MCP_DESCRIPTOR.configKeyName, servers);
+  const next = writeServerMapToJson(
+    current,
+    ZCODE_MCP_DESCRIPTOR.configKeyName,
+    normalizePiServers(servers),
+  );
   await writeTextAtomic(filePath, `${JSON.stringify(next, null, 2)}\n`);
 }
 

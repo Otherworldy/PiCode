@@ -18,6 +18,14 @@ export {
 } from "./node/sshRemote.js";
 export { scanOfficialPluginCacheRoots } from "./node/officialPluginCache.js";
 export {
+  ensurePiMcpFiles,
+  mcpServersFromDocument,
+  piProjectMcpFile,
+  piUserMcpFile,
+  readPiMcpServers,
+  toPiStoredMcpServer,
+} from "./node/piMcpConfigFile.js";
+export {
   APP_DATA_DIR_NAME,
   LEGACY_APP_DATA_DIR_NAME,
   ensureAppDataDir,

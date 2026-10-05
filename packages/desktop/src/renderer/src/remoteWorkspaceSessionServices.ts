@@ -33,7 +33,7 @@ export function buildRemoteWorkspaceSessionServices(
     // 远端 skill 同步的 import 必须写入 SSH 主机的 ~/.PiCode/skills。
     // 如果继续沿用 base service，UI 会显示同步成功但实际写到本机 ~/.PiCode/skills。
     skillSyncService: remoteServices.skillSyncService,
-    // 远端 MCP 同步的 import 必须写入 SSH 主机的 ~/.PiCode/cli/config.json。
+    // 远端 MCP 同步的 import 必须写入 SSH 主机的 ~/.pi/agent/mcp.json。
     // 这里与 skillSyncService 一样走 remote service，避免把远端配置写回本机用户目录。
     mcpSyncService: remoteServices.mcpSyncService,
     // 远端 plugin 同步会写入 SSH 主机的 ~/.PiCode/plugins 和 plugins.dirs；

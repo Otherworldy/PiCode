@@ -69,7 +69,7 @@ export function serverToForm(server: ZCodeMcpServer): FormState {
     // 非法枚举值归一为未设置（等价 auto），与 shared DTO 的 isMcpProtocolVersion
     // 静默丢弃行为对齐；否则 config 里的手滑值会让协议版本下拉显示空白。
     protocolVersion: isMcpProtocolVersion(cfg.protocolVersion) ? cfg.protocolVersion : "",
-    directTools: cfg.directTools === true,
+    directTools: cfg.directTools === true || cfg.exposure === "direct",
   };
 }
 
@@ -212,7 +212,7 @@ export function jsonDraftToForm(jsonText: string, fallback: FormState): FormStat
     protocolVersion: isMcpProtocolVersion(normalizedConfig.protocolVersion)
       ? normalizedConfig.protocolVersion
       : "",
-    directTools: normalizedConfig.directTools === true,
+    directTools: normalizedConfig.directTools === true || normalizedConfig.exposure === "direct",
   };
 }
 

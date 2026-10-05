@@ -1,6 +1,8 @@
 // Config Factory - Load and merge all config sources
 
-import { resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { piProjectMcpFile, piUserMcpFile, readPiMcpServers } from "@zcode/shared/node";
 import type {
   ConfigPort,
   HookConfigSource,
@@ -238,6 +240,7 @@ export function createConfig(options: ConfigFactoryOptions = {}): ConfigResult {
   });
   const mcpServerResolution = resolveEffectiveMcpServers({
     cliOverrides: options.cliOverrides,
+    cwd: workspacePath,
     envConfig,
     projectConfig: projectConfigResult.config,
     userConfig: userConfigResult.config,
@@ -371,6 +374,7 @@ export function resolveWorkspaceStorageDir(input: {
 
 function resolveEffectiveMcpServers(input: {
   cliOverrides?: RuntimeConfigPatch;
+  cwd: string;
   envConfig: RuntimeConfigPatch;
   projectConfig: RuntimeConfigPatch;
   userConfig: RuntimeConfigPatch;
@@ -387,11 +391,19 @@ function resolveEffectiveMcpServers(input: {
     }
   };
 
-  apply("system", DefaultRuntimeConfig);
-  // MCP server discovery has an extension-specific rule: user config shadows project config.
-  // This does not change the global config precedence for model/permission/UI fields.
-  apply("project", input.projectConfig);
-  apply("user", input.userConfig);
+  const userFile = piUserMcpFile();
+  const projectFile = piProjectMcpFile(input.cwd);
+  const pi = readPiMcpServers(dirname(userFile), input.cwd);
+  if (existsSync(userFile) || existsSync(projectFile)) {
+    for (const server of pi.servers) {
+      servers[server.name] = server.config as unknown as McpServerConfig;
+      sources[server.name] = server.scope === "project" ? "project" : "user";
+    }
+  } else {
+    apply("system", DefaultRuntimeConfig);
+    apply("project", input.projectConfig);
+    apply("user", input.userConfig);
+  }
   apply("env", input.envConfig);
   apply("cli", input.cliOverrides);
   return { servers, sources };
