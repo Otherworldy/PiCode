@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- PiCode Protocol 的 session/workspace 方法共享同一个 server context 与 snapshot helpers，迁移期先集中维护。 */
 import {
+  completePiPrompt,
   listPiSubagentChildren,
   piSubagentRevision,
   queryPiSessionUsage,
@@ -2777,12 +2778,61 @@ function shouldCloseSessionForExpectedPersistence(
   return expectedPersistence === undefined || currentPersistence === expectedPersistence;
 }
 
+function livePiModel(
+  context: ZCodeProtocolAgentServerContext,
+  workspaceKeyValue: string,
+): { providerId: string; modelId: string } | undefined {
+  let best: { updatedAt: number; providerId: string; modelId: string } | undefined;
+  for (const [sessionId, record] of context.sessions) {
+    if (record.workspace.workspaceKey !== workspaceKeyValue) continue;
+    const config = context.piHost?.get(sessionId)?.projector.getSnapshot().config;
+    const providerId = config?.provider?.trim() ?? "";
+    const modelId = config?.model?.trim() ?? "";
+    if (!providerId || !modelId) continue;
+    if (!best || record.updatedAt >= best.updatedAt) {
+      best = { updatedAt: record.updatedAt, providerId, modelId };
+    }
+  }
+  return best;
+}
+
 export async function generateWorkspaceText(
   context: ZCodeProtocolAgentServerContext,
   rawParams: unknown,
   abortSignal?: AbortSignal,
 ) {
   const params = parseParams(zcodeWorkspaceGenerateTextParamsSchema, rawParams);
+  if (params.querySource === "git_commit_message" && params.prompt) {
+    const live = livePiModel(context, params.workspace.workspaceKey);
+    const requested = {
+      providerId: params.selection.providerId,
+      modelId: params.selection.modelId,
+    };
+    const candidates = live ? [live, requested] : [requested];
+    const seen = new Set<string>();
+    for (const candidate of candidates) {
+      const key = `${candidate.providerId}/${candidate.modelId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      // 目录里没有这个模型才换下一个。请求失败必须抛出，不能静默改用别的模型。
+      const text = await completePiPrompt({
+        providerId: candidate.providerId,
+        modelId: candidate.modelId,
+        prompt: params.prompt,
+        ...(abortSignal ? { signal: abortSignal } : {}),
+      });
+      if (!text) continue;
+      return {
+        text,
+        selection: {
+          providerId: candidate.providerId,
+          modelId: candidate.modelId,
+          ...(params.selection.options ? { options: params.selection.options } : {}),
+        },
+        finishReason: "stop",
+      };
+    }
+  }
   const active = Array.from(context.sessions.values()).find(
     (record) => record.workspace.workspaceKey === params.workspace.workspaceKey,
   );

@@ -394,10 +394,15 @@ export function createSessionFacade(deps: CreateSessionFacadeDeps): SessionFacad
       });
     },
     generateWorkspaceText: async (input, options) => {
-      // 辅助文本入口只规范化模型身份；具体的最低档位由 Core 的辅助请求调用点显式决定。
-      const selection =
+      const identity =
         normalizeModelSelection(deps.providerRegistry.getView(), input.selection) ??
         input.selection;
+      // Git 提交信息是辅助调用。Factory 在 bind 之前就要求完整档位；
+      // 只规范化身份会把档位剥掉，生成在创建 Model 时直接失败。
+      const selection =
+        input.querySource === "git_commit_message"
+          ? completeAuxiliaryRegistryModelSelection(deps.providerRegistry, identity)
+          : identity;
       return await deps.runtime.generateWorkspaceText(
         { ...input, selection },
         {

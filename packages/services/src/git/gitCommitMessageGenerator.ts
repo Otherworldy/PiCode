@@ -236,13 +236,27 @@ function readRuntimeLocale(): string | undefined {
   }
 }
 
+function normalizeCommitSubjectLine(line: string): string {
+  return line.trim().replace(
+    /^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([^)]+\))?!?[：:][ \t]*/iu,
+    (match) => `${match.replace(/[：:][ \t]*$/u, "").toLowerCase()}: `,
+  );
+}
+
+/** 模型常在正文前加解释。取第一条 Conventional Commit，并带上紧随的正文。 */
+export function pickGeneratedCommitMessage(rawMessage: string): string {
+  const stripped = stripGeneratedCommitMessageDecorations(rawMessage);
+  const lines = stripped.split(/\r?\n/).map((line) => normalizeCommitSubjectLine(line));
+  const start = lines.findIndex((line) => CONVENTIONAL_COMMIT_RE.test(line));
+  if (start < 0) return stripped.trim();
+  // 主题和正文之间的空行是 Conventional Commit 的正常格式，不能在这里截断。
+  return lines.slice(start).join("\n").trim();
+}
+
 function validateGeneratedGitCommitMessage(
   rawMessage: string,
 ): { ok: true; message: string } | { ok: false; reason: "empty" | "invalid"; preview?: string } {
-  const message = stripGeneratedCommitMessageDecorations(rawMessage)
-    .trim()
-    .slice(0, MAX_COMMIT_MESSAGE_CHARS)
-    .trim();
+  const message = pickGeneratedCommitMessage(rawMessage).slice(0, MAX_COMMIT_MESSAGE_CHARS).trim();
   if (!message) {
     return { ok: false, reason: "empty" };
   }

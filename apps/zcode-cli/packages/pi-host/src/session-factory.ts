@@ -7,7 +7,8 @@ import { applyZcodePluginPlan, zcodePluginLoaderExtras } from "./pi-plugins.js";
 import { listSessionSlashCommands } from "./pi-slash-commands.js";
 import { toPiSkillView } from "./pi-skills.js";
 import { branchPiSessionFile, openOrCreateSession } from "./session-files.js";
-import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
+import { InMemoryCredentialStore, type AssistantMessage } from "@earendil-works/pi-ai";
+import { lowestPiThought, piAssistantText } from "./pi-assistant-text.js";
 import {
   createCapabilityTools,
   runZcodeSubagent,
@@ -76,6 +77,42 @@ function getProductionModelRuntime(): Promise<ModelRuntime> {
       return coding.ModelRuntime.create();
     });
   return productionRuntime;
+}
+
+/**
+ * One-shot Pi completion for auxiliary calls (git commit message).
+ * Returns null when the catalog has no such model so the caller can fall back.
+ */
+export async function completePiPrompt(input: {
+  providerId: string;
+  modelId: string;
+  prompt: string;
+  signal?: AbortSignal;
+}): Promise<string | null> {
+  const providerId = input.providerId.trim();
+  const modelId = input.modelId.trim();
+  const prompt = input.prompt.trim();
+  if (!providerId || !modelId || !prompt) return null;
+  const runtime = await getProductionModelRuntime();
+  const model = runtime.getModel(providerId, modelId);
+  if (!model) return null;
+  const thought = lowestPiThought(model);
+  let message: AssistantMessage | undefined;
+  for await (const event of runtime.streamSimple(
+    model,
+    { messages: [{ role: "user", content: prompt, timestamp: Date.now() }] },
+    {
+      ...(thought === "off" ? {} : { reasoning: thought }),
+      ...(input.signal ? { signal: input.signal } : {}),
+    },
+  )) {
+    if (event.type === "done") message = event.message;
+    else if (event.type === "error") {
+      throw new Error(event.error.errorMessage?.trim() || "模型请求失败。");
+    }
+  }
+  if (!message) throw new Error("模型响应缺少文本内容。");
+  return piAssistantText(message);
 }
 
 // thinkingLevelMap 值为 null 表示没有该思考等级，目录列表同步时过滤掉。

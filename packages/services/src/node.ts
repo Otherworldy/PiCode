@@ -381,7 +381,10 @@ import {
   IModelSelectionService,
   IProviderSettingsService,
 } from "./model-provider/providerFacadeServices.js";
-import { overlayPiModelSelectionService } from "./zcode-agent/piModelCatalog.js";
+import {
+  getPiModelSelectionView,
+  overlayPiModelSelectionService,
+} from "./zcode-agent/piModelCatalog.js";
 import { createProviderSettingsConnectivityTester } from "./model-provider/providerSettingsConnectivity.js";
 import {
   createProviderProvisioningSource,
@@ -2321,8 +2324,10 @@ export function createLocalServices(options: {
   const gitCommitMessageGenerator = new GitCommitMessageGenerator({
     currentModelProvider: {
       async readCurrentModel() {
-        // Git sidecar 属于目标 Environment；初始模型直接读取同一 Host View，
-        // 不再通过临时 Agent workspace state 反推模型与 reasoning。
+        // 聊天用的是 Pi 目录。旧 Registry 的 preferredSelection 经常为空或对不上
+        // 已登录的模型，提交信息生成会直接报未读取到当前模型。
+        const pi = getPiModelSelectionView()?.preferredSelection;
+        if (pi?.providerId && pi.modelId) return pi;
         return (await providerRuntime.modelSelection.getView()).preferredSelection ?? null;
       },
     },

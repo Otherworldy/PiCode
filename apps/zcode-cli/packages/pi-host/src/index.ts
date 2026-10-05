@@ -31,7 +31,7 @@ export {
   type DelegateProvider,
   type ZCodeModelStreamPort,
 } from "./model-delegate.js";
-export { createSdkSessionFactory, listPiCatalog, mutatePiCatalog } from "./session-factory.js";
+export { completePiPrompt, createSdkSessionFactory, listPiCatalog, mutatePiCatalog } from "./session-factory.js";
 export { ensurePiSdk, getPiSdkStatus } from "./pi-sdk.js";
 export { listPiSkills } from "./pi-skills.js";
 export { listPiSlashCommands, listSessionSlashCommands } from "./pi-slash-commands.js";
