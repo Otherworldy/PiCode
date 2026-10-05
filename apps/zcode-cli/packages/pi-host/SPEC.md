@@ -136,7 +136,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 主路径：`ModelRuntime.create()` 读 Pi 标准 `auth.json` / `models.json`，`createAgentSession` 不传 `model` 时走 settings 默认或第一个可用模型。壳上不再打开 PiCode WelcomeScreen/登录门禁。
 
-SDK 来源是 `AppSettings.piSdkSource`。缺省 `builtin`，用打进 `zcode.cjs` 的 `@earendil-works/pi-coding-agent`。`global` 时 Host 注入 `ZCODE_PI_SDK=global`，进程里只解析一次本机 `npm root -g` 的同名包。主次版本必须和内置包一致，并且要有 `createAgentSession`。找不到、版本不一致或加载失败都继续用内置，原因记在 `runtime/capabilities` 的 `piSdk.reason`（`missing` / `incompatible` / `load-failed`）。改设置后重启应用再生效。委托测试用的 `createDelegateProvider` 仍走内置 `pi-ai`。
+SDK 来源是 `AppSettings.piSdkSource`。缺省 `builtin`，用打进 `zcode.cjs` 的 `@earendil-works/pi-coding-agent`。`global` 时 Host 注入 `ZCODE_PI_SDK=global`，进程里只解析一次本机 `npm root -g` 的同名包。主次版本必须和内置包一致，并且要有 `createAgentSession`。找不到、版本不一致或加载失败都继续用内置，原因记在 `runtime/capabilities` 的 `piSdk.reason`（`missing` / `incompatible` / `load-failed`）。改设置后重启应用再生效。委托测试用的 `createDelegateProvider` 仍走内置 `pi-ai`。设置页「通用」展示当前生效的 Pi SDK 版本号（徽章与说明），并在来源选项中提供对应版本标识。
 
 设置页的 HTTP 代理和「不使用代理的地址」仍写 `AppSettings`，由 Host 在拉起 agent 时注入 `ZCODE_HTTP_PROXY` / `ZCODE_NO_PROXY`。CLI 仍会清掉进程里的标准 `HTTP_PROXY` / `NO_PROXY`，避免用户 shell 代理泄漏。清完之后只把这两个 ZCODE 值写回标准变量，并用已有的 `createNetworkProxyFetch` 换掉 `globalThis.fetch`。Pi 模型请求走这层 fetch；Pi bash 继承进程环境，curl/git 因此读到同一套规则。绕过规则与旧模型出口相同（主机、前缀点、端口、`*`）。没配代理则不换 fetch。改设置后下次启动 agent 生效。普通 MCP 的 HTTP 走这层 fetch；官方 HTTP 仍用原来的鉴权 fetch。
 
