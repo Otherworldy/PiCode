@@ -2051,7 +2051,7 @@ const zcodePiProviderModelDraftSchema = z
     api: z.string().min(1).optional(),
   })
   .strict();
-const zcodePiProviderModelViewSchema = z
+export const zcodePiProviderModelViewSchema = z
   .object({
     id: z.string(),
     name: z.string(),
@@ -2064,6 +2064,7 @@ const zcodePiProviderModelViewSchema = z
     api: z.string().optional(),
   })
   .strict();
+export type ZCodePiProviderModelView = z.infer<typeof zcodePiProviderModelViewSchema>;
 const zcodePiDiscoveredModelSchema = z
   .object({
     id: z.string(),
@@ -2089,6 +2090,7 @@ export const zcodePiModelsMutateParamsSchema = z
       .optional(),
     defaultProvider: z.string().min(1).optional(),
     defaultModel: z.string().min(1).optional(),
+    defaultThought: z.string().optional(),
   })
   .strict();
 export type ZCodePiModelsMutateParams = z.infer<typeof zcodePiModelsMutateParamsSchema>;
@@ -2107,6 +2109,7 @@ export const zcodePiModelsMutateResultSchema = z
     ),
     defaultProvider: z.string().optional(),
     defaultModel: z.string().optional(),
+    defaultThought: z.string().optional(),
     discovered: z.array(zcodePiDiscoveredModelSchema).optional(),
   })
   .strict();

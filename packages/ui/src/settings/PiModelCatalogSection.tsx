@@ -4,16 +4,13 @@ import type { ZCodePiModelsMutateParams, ZCodePiModelsMutateResult } from "@zcod
 import { useZCodeSessionService } from "@/hooks/useZCodeSessionService.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { Button } from "@/components/ui/button.js";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select.js";
 import { toast } from "@/components/ui/toast.js";
 import { logger } from "@/logger.js";
-import { SettingsGroupCard, SettingsRow } from "@/settings/SettingsPageParts.js";
+import { SettingsSegmentedTabs } from "@/settings/SettingsSegmentedTabs.js";
+import {
+  DefaultModelCatalogTab,
+  type FlatModelEntry,
+} from "@/settings/DefaultModelCatalogTab.js";
 import {
   SettingsResourceGroupHeader,
   SettingsResourceList,
@@ -23,6 +20,7 @@ import { emptyProviderDraft, type ProviderDraft } from "@/settings/provider-draf
 
 type CatalogView = ZCodePiModelsMutateResult;
 type CatalogProvider = CatalogView["providers"][number];
+type ModelSectionTab = "defaultModel" | "providers";
 
 function providerDraft(provider: CatalogProvider): ProviderDraft {
   return {
@@ -48,6 +46,7 @@ export function PiModelCatalogSection({
   const [view, setView] = useState<CatalogView | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [activeTab, setActiveTab] = useState<ModelSectionTab>("defaultModel");
   const [editing, setEditing] = useState<ProviderDraft | null>(null);
   const workspace = useMemo(
     () => ({
@@ -111,169 +110,216 @@ export function PiModelCatalogSection({
     }
   };
 
+  const allModels: FlatModelEntry[] = useMemo(
+    () =>
+      view?.providers.flatMap((provider) =>
+        provider.models.map((model) => ({
+          providerId: provider.id,
+          providerName: provider.name,
+          providerApi: provider.api,
+          model,
+        })),
+      ) ?? [],
+    [view],
+  );
+
+  const currentDefault = useMemo(
+    () =>
+      allModels.find(
+        (entry) =>
+          entry.providerId === view?.defaultProvider && entry.model.id === view?.defaultModel,
+      ) ?? null,
+    [allModels, view?.defaultModel, view?.defaultProvider],
+  );
+
   const defaultValue =
     view?.defaultProvider && view.defaultModel ? `${view.defaultProvider}/${view.defaultModel}` : "";
 
+  const handleDefaultModelChange = (value: string) => {
+    const slash = value.indexOf("/");
+    if (slash <= 0) return;
+    const nextProviderId = value.slice(0, slash);
+    const nextModelId = value.slice(slash + 1);
+    const nextCandidate = allModels.find(
+      (entry) => entry.providerId === nextProviderId && entry.model.id === nextModelId,
+    );
+    const nextThought = nextCandidate?.model.thinkingLevels.includes(view?.defaultThought ?? "")
+      ? view?.defaultThought
+      : (nextCandidate?.model.thinkingLevels[0] ?? undefined);
+    void mutate({
+      action: "setDefault",
+      defaultProvider: nextProviderId,
+      defaultModel: nextModelId,
+      ...(nextThought !== undefined ? { defaultThought: nextThought } : {}),
+    });
+  };
+
+  const handleDefaultThoughtChange = (thought: string) => {
+    if (!view?.defaultProvider || !view?.defaultModel) return;
+    void mutate({
+      action: "setDefault",
+      defaultProvider: view.defaultProvider,
+      defaultModel: view.defaultModel,
+      defaultThought: thought,
+    });
+  };
+
   return (
     <div className="space-y-5">
-      {view && view.providers.some((provider) => provider.models.length > 0) ? (
-        <SettingsGroupCard>
-          <SettingsRow
-            label={intl.formatMessage({ id: "settings.modelProvider.pi.defaultModel" })}
-            controlLayout="wide"
-            control={
-              <Select
-                value={defaultValue}
-                onValueChange={(value) => {
-                  const slash = value.indexOf("/");
-                  if (slash <= 0) return;
-                  void mutate({
-                    action: "setDefault",
-                    defaultProvider: value.slice(0, slash),
-                    defaultModel: value.slice(slash + 1),
-                  });
-                }}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {view.providers.flatMap((provider) =>
-                    provider.models.map((model) => (
-                      <SelectItem
-                        key={`${provider.id}/${model.id}`}
-                        value={`${provider.id}/${model.id}`}
-                      >
-                        {provider.name}/{model.id}
-                      </SelectItem>
-                    )),
-                  )}
-                </SelectContent>
-              </Select>
+      <div className="flex items-center justify-between pb-1">
+        <SettingsSegmentedTabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          items={[
+            {
+              value: "defaultModel",
+              label: intl.formatMessage({ id: "settings.modelProvider.pi.tabDefaultModel" }),
+            },
+            {
+              value: "providers",
+              label: intl.formatMessage({ id: "settings.modelProvider.pi.tabProviders" }),
+            },
+          ]}
+        />
+      </div>
+
+      {activeTab === "defaultModel" ? (
+        <DefaultModelCatalogTab
+          loading={loading}
+          hasView={view !== null}
+          allModels={allModels}
+          currentDefault={currentDefault}
+          defaultValue={defaultValue}
+          defaultThought={view?.defaultThought}
+          onDefaultModelChange={handleDefaultModelChange}
+          onDefaultThoughtChange={handleDefaultThoughtChange}
+          onGoToProviders={() => setActiveTab("providers")}
+          onAddProvider={() => {
+            setActiveTab("providers");
+            setEditing(emptyProviderDraft());
+          }}
+        />
+      ) : (
+        <section className="space-y-3">
+          <SettingsResourceGroupHeader
+            count={view?.providers.length ?? 0}
+            title={intl.formatMessage({ id: "settings.modelProvider.pi.providers" })}
+            actions={
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={loading}
+                  onClick={() => void load()}
+                >
+                  <RefreshCw />
+                  {intl.formatMessage({ id: "settings.modelProvider.pi.refresh" })}
+                </Button>
+                <Button type="button" size="sm" onClick={() => setEditing(emptyProviderDraft())}>
+                  <Plus />
+                  {intl.formatMessage({ id: "settings.modelProvider.add" })}
+                </Button>
+              </>
             }
           />
-        </SettingsGroupCard>
-      ) : null}
-
-      <section className="space-y-3">
-        <SettingsResourceGroupHeader
-          count={view?.providers.length ?? 0}
-          title={intl.formatMessage({ id: "settings.modelProvider.pi.providers" })}
-          actions={
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={loading}
-                onClick={() => void load()}
-              >
-                <RefreshCw />
-                {intl.formatMessage({ id: "settings.modelProvider.pi.refresh" })}
-              </Button>
-              <Button type="button" size="sm" onClick={() => setEditing(emptyProviderDraft())}>
-                <Plus />
-                {intl.formatMessage({ id: "settings.modelProvider.add" })}
-              </Button>
-            </>
-          }
-        />
-        {loading && !view ? (
-          <p className="text-ui-base text-foreground-subtle">
-            {intl.formatMessage({ id: "settings.modelProvider.pi.loading" })}
-          </p>
-        ) : !view || view.providers.length === 0 ? (
-          <p className="text-ui-base text-foreground-subtle">
-            {intl.formatMessage({ id: "settings.modelProvider.pi.empty" })}
-          </p>
-        ) : (
-          <SettingsResourceList
-            items={view.providers}
-            getKey={(provider) => provider.id}
-            renderItem={(provider) => {
-              const isDefault = view.defaultProvider === provider.id;
-              return (
-                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate text-ui-base font-medium">{provider.name}</span>
-                      {isDefault ? (
-                        <span className="rounded-md bg-surface px-1.5 py-0.5 text-ui-sm text-foreground-subtle ring-1 ring-border">
-                          {intl.formatMessage({ id: "settings.modelProvider.pi.default" })}
+          {loading && !view ? (
+            <p className="text-ui-base text-foreground-subtle">
+              {intl.formatMessage({ id: "settings.modelProvider.pi.loading" })}
+            </p>
+          ) : !view || view.providers.length === 0 ? (
+            <p className="text-ui-base text-foreground-subtle">
+              {intl.formatMessage({ id: "settings.modelProvider.pi.empty" })}
+            </p>
+          ) : (
+            <SettingsResourceList
+              items={view.providers}
+              getKey={(provider) => provider.id}
+              renderItem={(provider) => {
+                const isDefault = view.defaultProvider === provider.id;
+                return (
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="truncate text-ui-base font-medium">{provider.name}</span>
+                        {isDefault ? (
+                          <span className="rounded-md bg-surface px-1.5 py-0.5 text-ui-sm text-foreground-subtle ring-1 ring-border">
+                            {intl.formatMessage({ id: "settings.modelProvider.pi.default" })}
+                          </span>
+                        ) : null}
+                        <span className="rounded-md bg-surface px-1.5 py-0.5 font-mono text-ui-sm text-foreground-subtle ring-1 ring-border">
+                          {provider.api}
                         </span>
+                      </div>
+                      <div className="mt-1 truncate text-ui-sm text-foreground-subtle">
+                        {provider.baseUrl || provider.id}
+                      </div>
+                      <div className="mt-1 truncate text-ui-sm text-foreground-subtle">
+                        {provider.models
+                          .map((model) =>
+                            model.api && model.api !== provider.api
+                              ? `${model.id} (${model.api})`
+                              : model.id,
+                          )
+                          .join(" · ")}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                      {!isDefault && provider.models[0] ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() =>
+                            void mutate({
+                              action: "setDefault",
+                              defaultProvider: provider.id,
+                              defaultModel: provider.models[0]!.id,
+                            })
+                          }
+                        >
+                          <Star />
+                          {intl.formatMessage({ id: "settings.modelProvider.pi.setDefault" })}
+                        </Button>
                       ) : null}
-                      <span className="rounded-md bg-surface px-1.5 py-0.5 font-mono text-ui-sm text-foreground-subtle ring-1 ring-border">
-                        {provider.api}
-                      </span>
-                    </div>
-                    <div className="mt-1 truncate text-ui-sm text-foreground-subtle">
-                      {provider.baseUrl || provider.id}
-                    </div>
-                    <div className="mt-1 truncate text-ui-sm text-foreground-subtle">
-                      {provider.models
-                        .map((model) =>
-                          model.api && model.api !== provider.api
-                            ? `${model.id} (${model.api})`
-                            : model.id,
-                        )
-                        .join(" · ")}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 flex-wrap justify-end gap-2">
-                    {!isDefault && provider.models[0] ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setEditing(providerDraft(provider))}
+                      >
+                        <Pencil />
+                        {intl.formatMessage({ id: "settings.modelProvider.edit" })}
+                      </Button>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         disabled={busy}
-                        onClick={() =>
-                          void mutate({
-                            action: "setDefault",
-                            defaultProvider: provider.id,
-                            defaultModel: provider.models[0]!.id,
-                          })
-                        }
+                        onClick={() => void testProvider(provider)}
                       >
-                        <Star />
-                        {intl.formatMessage({ id: "settings.modelProvider.pi.setDefault" })}
+                        <PlugZap />
+                        {intl.formatMessage({ id: "settings.modelProvider.pi.testConnection" })}
                       </Button>
-                    ) : null}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setEditing(providerDraft(provider))}
-                    >
-                      <Pencil />
-                      {intl.formatMessage({ id: "settings.modelProvider.edit" })}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => void testProvider(provider)}
-                    >
-                      <PlugZap />
-                      {intl.formatMessage({ id: "settings.modelProvider.pi.testConnection" })}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => void mutate({ action: "delete", providerId: provider.id })}
-                    >
-                      <Trash2 />
-                      {intl.formatMessage({ id: "settings.modelProvider.delete" })}
-                    </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void mutate({ action: "delete", providerId: provider.id })}
+                      >
+                        <Trash2 />
+                        {intl.formatMessage({ id: "settings.modelProvider.delete" })}
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              );
-            }}
-          />
-        )}
-      </section>
+                );
+              }}
+            />
+          )}
+        </section>
+      )}
 
       <ProviderSetupDialog
         busy={busy}

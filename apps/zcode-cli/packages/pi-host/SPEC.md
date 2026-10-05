@@ -142,7 +142,11 @@ SDK 来源是 `AppSettings.piSdkSource`。缺省 `builtin`，用打进 `zcode.cj
 
 **目录所有者：** Pi `ModelRuntime.getAvailableSnapshot()`。CLI 在 `workspace/readPresentation` 上行目录；Host `IModelSelectionService` 只投影这份目录，不再用 PiCode Provider Registry 当聊天/设置页候选。投影必须把 `getView(input.selection)` 写成 `effectiveSelection`，否则 Composer 触发器拿不到当前草稿模型。Composer 与设置「模型设置」共用该视图。`switchModelConfig` 走 `session.setModel`。空闲时输入框里的模型属于下一次提交，在 `prompt`、steer 或手动 `/compact` 之前写入。压缩不读会话里的旧模型。会话已经在跑时，输入框一切模型或思考档位就立刻 `setModel`：已经发出的那次请求不中断，同一轮里的下一次模型请求用新的。排队项仍带着入队时的选择，出队再换。
 
-设置页通过 `pi/models` 读写 `~/.pi/agent/models.json`（apiKey 明文回读，输入框不脱敏；保存时空字符串清掉密钥，请求不带 `apiKey` 则保留原值）和 `settings.json` 默认模型；保存后 `registerProvider`/`unregisterProvider` 更新活着的 `ModelRuntime`。渠道的 `api` 是默认请求格式。模型项没写 `api` 时补成渠道的；写成另一种驱动时保留，运行时用模型项上的 `api`。壳不另写 PiCode 供应商库。PiCode 账号登录、升级套餐、Coding Plan 额度不再作为产品面。
+设置页通过 `pi/models` 读写 `~/.pi/agent/models.json`（apiKey 明文回读，输入框不脱敏；保存时空字符串清掉密钥，请求不带 `apiKey` 则保留原值）和 `settings.json` 默认模型与思考等级；保存后 `registerProvider`/`unregisterProvider` 更新活着的 `ModelRuntime`。渠道的 `api` 是默认请求格式。模型项没写 `api` 时补成渠道的；写成另一种驱动时保留，运行时用模型项上的 `api`。壳不另写 PiCode 供应商库。PiCode 账号登录、升级套餐、Coding Plan 额度不再作为产品面。
+
+模型设置界面包含两个标签页：「默认模型」与「供应商管理」：
+- 「默认模型」页提供全局默认模型（供应商+模型ID）及默认思考等级（Reasoning Level）的直观选择与持久化，展示当前默认模型详细规格，并提供跳转至「供应商管理」的快捷入口；若未配置任何供应商或模型，展示空状态与前往添加供应商的操作。
+- 「供应商管理」页提供供应商与模型的增删改查、测试连接等管理能力。
 
 设置页「使用统计」只恢复应用用量。事实源是本机 Pi 会话 jsonl：`~/.pi/agent/sessions` 和旧的 `~/.PiCode/pi-host-sessions`，含子目录里的子会话。只读，不写回旧 usage 表。每个文件只计当前叶子；分叉抄来的同一条消息按 id 只计一次。时间窗外的消息不计。Pi 的 `input` 不含缓存，汇总时把 cache 加进 input，命中率才不会超过 1。没有首 token 耗时和工具耗时，这两项留空。
 

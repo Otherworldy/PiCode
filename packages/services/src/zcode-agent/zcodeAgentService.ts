@@ -3801,6 +3801,7 @@ export function createZCodeAgentService(
           ...(params.provider ? { provider: params.provider } : {}),
           ...(params.defaultProvider ? { defaultProvider: params.defaultProvider } : {}),
           ...(params.defaultModel ? { defaultModel: params.defaultModel } : {}),
+          ...(params.defaultThought !== undefined ? { defaultThought: params.defaultThought } : {}),
         },
         zcodePiModelsMutateResultSchema,
       );
