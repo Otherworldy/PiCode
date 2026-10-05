@@ -200,10 +200,13 @@ export function TodoDetailDialog({
                   disabled={!draft.title.trim() || (!draft.prompt.trim() && files.length === 0)}
                   onClick={() =>
                     void onRun(() =>
-                      todoService.update(detail.id, {
-                        ...draft,
-                        attachments: draftsToStored(files),
-                      }),
+                      // 修复原因：点击保存后未关闭编辑弹窗；修复依据：更新成功后调用 onClose 关闭窗口
+                      todoService
+                        .update(detail.id, {
+                          ...draft,
+                          attachments: draftsToStored(files),
+                        })
+                        .then(onClose),
                     )
                   }
                 >
