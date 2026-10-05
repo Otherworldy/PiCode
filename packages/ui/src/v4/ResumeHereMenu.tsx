@@ -9,12 +9,6 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu.js";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu.js";
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -27,38 +21,19 @@ export type ResumeHereChoice = {
   customInstructions?: string;
 };
 
-function MenuItem({
-  trigger,
-  onSelect,
-  children,
-}: {
-  trigger: "context" | "click";
-  onSelect: () => void;
-  children: ReactNode;
-}) {
-  return trigger === "click" ? (
-    <DropdownMenuItem onSelect={onSelect}>{children}</DropdownMenuItem>
-  ) : (
-    <ContextMenuItem onSelect={onSelect}>{children}</ContextMenuItem>
-  );
-}
-
 export function ResumeHereMenu({
   children,
   onPick,
-  trigger = "context",
 }: {
   children: ReactNode;
   onPick: (choice: ResumeHereChoice) => void;
-  /** context：右键。click：编辑重发旁的按钮。 */
-  trigger?: "context" | "click";
 }) {
   const { intl } = useZCodeIntl();
   const [menuOpen, setMenuOpen] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
   const [instructions, setInstructions] = useState("");
   const marked = menuOpen || customOpen;
-  const triggerNode = isValidElement(children)
+  const trigger = isValidElement(children)
     ? cloneElement(children as ReactElement<{ className?: string }>, {
         className: cn(
           (children as ReactElement<{ className?: string }>).props.className,
@@ -66,42 +41,31 @@ export function ResumeHereMenu({
         ),
       })
     : children;
-  const items = (
-    <>
-      <MenuItem trigger={trigger} onSelect={() => onPick({ summarize: false })}>
-        <GitBranchIcon />
-        {intl.formatMessage({ id: "chat.tree.skipSummary" })}
-      </MenuItem>
-      <MenuItem trigger={trigger} onSelect={() => onPick({ summarize: true })}>
-        <FileTextIcon />
-        {intl.formatMessage({ id: "chat.tree.summarize" })}
-      </MenuItem>
-      <MenuItem
-        trigger={trigger}
-        onSelect={() => {
-          setInstructions("");
-          setCustomOpen(true);
-        }}
-      >
-        <PencilIcon />
-        {intl.formatMessage({ id: "chat.tree.custom" })}
-      </MenuItem>
-    </>
-  );
 
   return (
     <>
-      {trigger === "click" ? (
-        <DropdownMenu onOpenChange={setMenuOpen}>
-          <DropdownMenuTrigger asChild>{triggerNode}</DropdownMenuTrigger>
-          <DropdownMenuContent className="w-44">{items}</DropdownMenuContent>
-        </DropdownMenu>
-      ) : (
-        <ContextMenu onOpenChange={setMenuOpen}>
-          <ContextMenuTrigger asChild>{triggerNode}</ContextMenuTrigger>
-          <ContextMenuContent className="w-44">{items}</ContextMenuContent>
-        </ContextMenu>
-      )}
+      <ContextMenu onOpenChange={setMenuOpen}>
+        <ContextMenuTrigger asChild>{trigger}</ContextMenuTrigger>
+        <ContextMenuContent className="w-44">
+          <ContextMenuItem onSelect={() => onPick({ summarize: false })}>
+            <GitBranchIcon />
+            {intl.formatMessage({ id: "chat.tree.skipSummary" })}
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={() => onPick({ summarize: true })}>
+            <FileTextIcon />
+            {intl.formatMessage({ id: "chat.tree.summarize" })}
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => {
+              setInstructions("");
+              setCustomOpen(true);
+            }}
+          >
+            <PencilIcon />
+            {intl.formatMessage({ id: "chat.tree.custom" })}
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
       <Dialog open={customOpen} onOpenChange={setCustomOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
