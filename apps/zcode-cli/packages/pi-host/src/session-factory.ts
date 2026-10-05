@@ -118,6 +118,7 @@ export async function mutatePiCatalog(input: {
   providerId?: string;
   defaultProvider?: string;
   defaultModel?: string;
+  defaultThought?: string;
 }): Promise<PiModelConfigView & { discovered?: PiDiscoveredModel[] }> {
   await ensurePiSdk();
   const agentDir = piCoding().getAgentDir();
@@ -135,8 +136,13 @@ export async function mutatePiCatalog(input: {
     await saveModelsJson(agentDir, file);
     const runtime = await getProductionModelRuntime();
     runtime.unregisterProvider(input.providerId);
-  } else if (input.action === "setDefault" && input.defaultProvider && input.defaultModel) {
-    settings.setDefaultModelAndProvider(input.defaultProvider, input.defaultModel);
+  } else if (input.action === "setDefault") {
+    if (input.defaultProvider && input.defaultModel) {
+      settings.setDefaultModelAndProvider(input.defaultProvider, input.defaultModel);
+    }
+    if (input.defaultThought !== undefined) {
+      settings.setDefaultThinkingLevel(input.defaultThought || undefined);
+    }
     await settings.flush();
   } else if (input.action === "discover") {
     const baseUrl = input.provider?.baseUrl ?? "";
@@ -146,6 +152,7 @@ export async function mutatePiCatalog(input: {
       ...toPiModelConfigView(file, {
         defaultProvider: settings.getDefaultProvider(),
         defaultModel: settings.getDefaultModel(),
+        defaultThought: settings.getDefaultThinkingLevel() ?? "medium",
       }),
       discovered,
     };
@@ -154,6 +161,7 @@ export async function mutatePiCatalog(input: {
   return toPiModelConfigView(file, {
     defaultProvider: settings.getDefaultProvider(),
     defaultModel: settings.getDefaultModel(),
+    defaultThought: settings.getDefaultThinkingLevel() ?? "medium",
   });
 }
 

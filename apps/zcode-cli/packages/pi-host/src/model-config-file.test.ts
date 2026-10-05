@@ -196,3 +196,13 @@ test("missing model api inherits the provider; an override is kept", () => {
   const view = toPiModelConfigView(saved);
   assert.equal(view.providers[0]?.models[0]?.api, "anthropic-messages");
 });
+
+test("toPiModelConfigView includes defaultProvider, defaultModel and defaultThought", () => {
+  const view = toPiModelConfigView(
+    { providers: {} },
+    { defaultProvider: "lens", defaultModel: "glm-5", defaultThought: "high" },
+  );
+  assert.equal(view.defaultProvider, "lens");
+  assert.equal(view.defaultModel, "glm-5");
+  assert.equal(view.defaultThought, "high");
+});

@@ -63,6 +63,7 @@ export async function mutatePiModels(rawParams: unknown) {
     ...(params.providerId ? { providerId: params.providerId } : {}),
     ...(params.defaultProvider ? { defaultProvider: params.defaultProvider } : {}),
     ...(params.defaultModel ? { defaultModel: params.defaultModel } : {}),
+    ...(params.defaultThought !== undefined ? { defaultThought: params.defaultThought } : {}),
   });
 }
 

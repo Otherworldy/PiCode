@@ -56,6 +56,7 @@ export type PiModelConfigView = {
   }>;
   defaultProvider?: string;
   defaultModel?: string;
+  defaultThought?: string;
 };
 
 export type ModelsJsonFile = {
@@ -88,7 +89,7 @@ export async function saveModelsJson(agentDir: string, file: ModelsJsonFile): Pr
 
 export function toPiModelConfigView(
   file: ModelsJsonFile,
-  defaults: { defaultProvider?: string; defaultModel?: string } = {},
+  defaults: { defaultProvider?: string; defaultModel?: string; defaultThought?: string } = {},
 ): PiModelConfigView {
   const providers = Object.entries(file.providers ?? {}).map(([id, raw]) => {
     const models = Array.isArray(raw.models) ? raw.models : [];
@@ -110,6 +111,7 @@ export function toPiModelConfigView(
     providers,
     ...(defaults.defaultProvider ? { defaultProvider: defaults.defaultProvider } : {}),
     ...(defaults.defaultModel ? { defaultModel: defaults.defaultModel } : {}),
+    ...(defaults.defaultThought ? { defaultThought: defaults.defaultThought } : {}),
   };
 }
 
