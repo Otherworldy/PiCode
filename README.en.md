@@ -19,6 +19,10 @@ PiCode is an AI coding workspace with desktop, browser, and terminal interfaces.
 | Web / PiCode CLI distribution | Terminal and browser workspace; packages the TUI, Web client, backend, and Agent together | `pnpm dev:web`                 |
 | Agent CLI                    | The `zcode` terminal interface, which also provides the Agent runtime for Desktop and Web | `pnpm --filter @zcode/cli dev` |
 
+## Updates
+
+- 2026-9-23: Merged the ZCode v3.14.3 workflow fixes.
+
 ## Setup
 
 Install Git, Node.js **24.14.0**, and pnpm **10.33.2**. [mise.toml](mise.toml) is the source of truth for tool versions. Run all development and packaging commands below from the repository root.

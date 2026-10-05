@@ -19,6 +19,10 @@ PiCode 是 AI 编程工作台，提供桌面应用、浏览器界面和终端 Ag
 | Web / PiCode 命令行版 | 浏览器工作台；Web、后端和 Agent 组装为独立运行包               | `pnpm dev:web`                 |
 | Agent CLI            | `zcode app-server` 为 Desktop/Web 提供 Pi Host 运行时；无参输出 help | `pnpm --filter @zcode/cli dev` |
 
+## 更新
+
+- 2026-9-23：合入 ZCode v3.14.3 的工作流修复。
+
 ## 初始化
 
 准备 Git、Node.js **24.14.0** 和 pnpm **10.33.2**，版本以 [mise.toml](mise.toml) 为准。以下开发和打包命令均在仓库根目录执行。
