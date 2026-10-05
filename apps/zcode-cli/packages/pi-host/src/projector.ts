@@ -1015,13 +1015,9 @@ export class PiToV4Projector {
 
   private syncActions(): ConversationDelta[] {
     const running = this.snapshot.control.phase === "running";
-    const users = this.snapshot.rows.window.filter(
-      (row) => row.kind === "userInput" && row.origin === "realUser",
-    );
     const assistants = this.snapshot.rows.window.filter(
       (row) => row.kind === "assistantText" && row.state === "complete",
     );
-    const latestUser = users.at(-1);
     const latestAssistant = assistants.at(-1);
     const forkRowByTurn = new Map<string, number>();
     for (const row of assistants) forkRowByTurn.set(row.turnId, row.rowId);
@@ -1039,7 +1035,7 @@ export class PiToV4Projector {
         row.kind === "assistantText" &&
         forkRowByTurn.get(row.turnId) === row.rowId;
       const nextActions =
-        !running && row.kind === "userInput" && row.rowId === latestUser?.rowId
+        !running && row.kind === "userInput" && row.origin === "realUser"
           ? { canEdit: true as const, editDisposition: "rewind" as const }
           : forkable && row.rowId === latestAssistant?.rowId
             ? { canRetry: true as const, canFork: true as const }

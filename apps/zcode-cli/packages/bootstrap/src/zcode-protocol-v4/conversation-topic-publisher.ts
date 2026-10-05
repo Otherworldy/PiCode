@@ -473,7 +473,7 @@ export class ConversationTopicPublisher {
     return this.projection.isLatestRetryAssistantRow(rowId);
   }
 
-  /** latestQueryEditOnly：只有最后一轮 realUser userInput row 可 edit。 */
+  /** 带 canEdit 的 realUser userInput 都能 edit，不限最后一条。 */
   isLatestEditableUserRow(rowId: number): boolean {
     return this.projection.isLatestEditableUserRow(rowId);
   }

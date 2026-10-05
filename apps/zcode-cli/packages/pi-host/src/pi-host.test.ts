@@ -817,6 +817,14 @@ test("navigateTree truncates and fork copies jsonl", async () => {
   );
   const assistant = assistants[1];
   assert.equal(assistant && assistant.kind === "assistantText" ? assistant.actions?.canRetry : false, true);
+  const userRows = parent.projector
+    .getSnapshot()
+    .rows.window.filter((row) => row.kind === "userInput");
+  assert.equal(userRows.length, 2);
+  assert.equal(
+    userRows.every((row) => row.kind === "userInput" && row.actions?.canEdit === true),
+    true,
+  );
   parent.projector.setFeedback(assistant?.entityId ?? "", "like");
   const liked = parent.projector.getSnapshot().rows.window.find((row) => row.entityId === assistant?.entityId);
   assert.equal(liked && liked.kind === "assistantText" ? liked.feedback : undefined, "like");
