@@ -14,6 +14,7 @@ export class FakePiSession implements PiSessionPort {
   compacted = false;
   acceptPrompt = true;
   navigatedTo: string[] = [];
+  navigateOptions?: { summarize?: boolean; customInstructions?: string };
   holdNavigate = false;
   summaryAborted = false;
   editorText?: string;
@@ -60,9 +61,10 @@ export class FakePiSession implements PiSessionPort {
 
   async navigateTree(
     targetId: string,
-    _options?: { summarize?: boolean; customInstructions?: string },
+    options?: { summarize?: boolean; customInstructions?: string },
   ): Promise<{ editorText?: string; cancelled?: boolean }> {
     this.navigatedTo.push(targetId);
+    this.navigateOptions = options;
     if (this.holdNavigate) await new Promise((resolve) => setTimeout(resolve, 20));
     return {
       cancelled: this.summaryAborted,

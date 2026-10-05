@@ -72,7 +72,10 @@ export interface HostedSession {
   }): Promise<boolean>;
   readManagedProcessOutput(workId: string): Promise<import("@zcode/shared").BackgroundBashOutputResult>;
   compact(): Promise<void>;
-  navigateTree(targetId: string): Promise<void>;
+  navigateTree(
+    targetId: string,
+    options?: { summarize?: boolean; customInstructions?: string },
+  ): Promise<{ cancelled?: boolean } | void>;
   resumeAt(request: SessionResumeRequest): Promise<SessionResumeResult>;
   noteBranchSummary(active: boolean): void;
   readSessionTree(): PiSessionTreeNode[];
@@ -962,7 +965,7 @@ export class HostSessionRegistry {
         pi.deleteBranch(entryId);
         return pi.readTree?.() ?? [];
       },
-      navigateTree: async (targetId) => {
+      navigateTree: async (targetId, options) => {
         let entryId = targetId;
         // 冷恢复的行 id 是 Pi entry。实时行 id 是 row:N，得用原文对上树节点。
         if (pi.hasEntry && !pi.hasEntry(targetId)) {
@@ -981,8 +984,35 @@ export class HostSessionRegistry {
           if (!entryId) throw new Error(`Entry ${targetId} not found`);
         }
         if (pi.isStreaming) await pi.abort();
-        await pi.navigateTree?.(entryId);
-        emit(projector.truncateFrom(targetId));
+        const summarize = options?.summarize === true;
+        if (summarize) {
+          projector.releaseStop();
+          summarizingBranch = true;
+          emit(projector.noteBranchSummary(true));
+        }
+        try {
+          const result = await pi.navigateTree?.(
+            entryId,
+            summarize
+              ? {
+                  summarize: true,
+                  ...(options?.customInstructions
+                    ? { customInstructions: options.customInstructions }
+                    : {}),
+                }
+              : undefined,
+          );
+          if (result?.cancelled) return { cancelled: true };
+          // 总结写在新叶子上。只截断旧行会把摘要丢掉。
+          if (summarize && pi.contextEvents) emit(projector.reload(pi.contextEvents()));
+          else emit(projector.truncateFrom(targetId));
+          return { cancelled: false };
+        } finally {
+          if (summarize) {
+            summarizingBranch = false;
+            emit(projector.noteBranchSummary(false));
+          }
+        }
       },
       setFeedback: (entityId, feedback) => {
         emit(projector.setFeedback(entityId, feedback));

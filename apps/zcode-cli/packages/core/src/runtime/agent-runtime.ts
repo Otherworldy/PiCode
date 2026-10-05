@@ -630,6 +630,9 @@ export interface AgentRuntime {
     events: SessionEvent[];
     targetMessageId: MessageId;
     traceContext: TraceContext;
+    // Pi 宿主才用。缺省不总结。
+    summarize?: boolean;
+    customInstructions?: string;
   }): Promise<ConversationRewindResult>;
   previewWorkspaceFileRewind(options?: {
     abortSignal?: AbortSignal;

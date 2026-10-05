@@ -101,11 +101,20 @@ async function submitConversationRewind(
   host: V4CommandCoreHost,
   record: V4SessionRecordView,
   anchorMessageId: string,
+  summary?: { summarize?: boolean; customInstructions?: string },
 ): Promise<void> {
   const result = await record.app.runtime.rewindConversationToMessage({
     events: [],
     targetMessageId: anchorMessageId as MessageId,
     traceContext: record.traceContext,
+    ...(summary?.summarize
+      ? {
+          summarize: true,
+          ...(summary.customInstructions
+            ? { customInstructions: summary.customInstructions }
+            : {}),
+        }
+      : {}),
   });
   if (result.strategy !== RewindStrategy.ActiveChain) {
     throw new Error(`conversation rewind unavailable for ${anchorMessageId}: ${result.strategy}`);
@@ -124,6 +133,9 @@ async function editUserQuery(
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["editUserQuery"];
   const record = requireRecord(host, envelope.sessionId);
+  const summary = payload.summarize
+    ? { summarize: true as const, customInstructions: payload.customInstructions }
+    : undefined;
   const resolution = host.resolveRowActionTarget?.(
     record.app.sessionId,
     payload.target,
@@ -185,7 +197,7 @@ async function editUserQuery(
     const applied = await record.app.runtime.applyWorkspaceFileRewind({
       ...fileOptions,
       commitAfterApply: async () => {
-        await submitConversationRewind(host, record, editTarget.transcriptMessageId);
+        await submitConversationRewind(host, record, editTarget.transcriptMessageId, summary);
         conversationRewindCommitted = true;
       },
     });
@@ -209,7 +221,7 @@ async function editUserQuery(
     if (!rewound) {
       // 截断发生在这次调用内部。抛错时赋值还没执行，必须先记上，失败才能画回原对话。
       rewound = true;
-      await submitConversationRewind(host, record, editTarget.transcriptMessageId);
+      await submitConversationRewind(host, record, editTarget.transcriptMessageId, summary);
     }
     await startCanonicalIntent(
       host,

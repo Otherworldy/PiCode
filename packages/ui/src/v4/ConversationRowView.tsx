@@ -10,6 +10,7 @@ import {
   CopyIcon,
   FileClockIcon,
   FileIcon,
+  FileTextIcon,
   GitBranchIcon,
   GoalIcon,
   PencilIcon,
@@ -212,6 +213,7 @@ type UserInputEditHandler = (
   newText: string,
   attachments?: readonly AttachmentRef[],
   workspaceMode?: "preserve" | "rewind",
+  summary?: ResumeHereChoice,
 ) => Promise<CommandAck | boolean | void> | CommandAck | boolean | void;
 
 type AssistantMessageFeedback = "like" | "dislike";
@@ -992,7 +994,11 @@ const UserInputRowView = memo(function UserInputRowView({
   }, []);
 
   const handleSubmitEdit = useCallback(
-    async (nextText: string, workspaceMode: "preserve" | "rewind" = "preserve") => {
+    async (
+      nextText: string,
+      workspaceMode: "preserve" | "rewind" = "preserve",
+      summary?: ResumeHereChoice,
+    ) => {
       if (!onEdit) return;
       if (!nextText.trim() && editAttachments.length === 0 && editContextCount === 0) return;
       setSubmitting(true);
@@ -1005,6 +1011,7 @@ const UserInputRowView = memo(function UserInputRowView({
           // 因此 edit 必须始终提交当前完整列表，显式 [] 才能表达“删除全部”。
           editAttachments,
           workspaceMode,
+          summary,
         );
         if (
           typeof result === "object" &&
@@ -1152,20 +1159,38 @@ const UserInputRowView = memo(function UserInputRowView({
           submitTestId={testId(TID_V4_EDIT_SUBMIT, String(row.rowId))}
           cancelTestId={testId(TID_V4_EDIT_CANCEL, String(row.rowId))}
           betweenCancelAndSubmitAction={
-            <ControlHintTooltip
-              title={rewindWorkspaceTooltipTitle}
-              description={rewindWorkspaceTooltipDescription}
-            >
-              {rewindWorkspaceDisabled ? (
-                // Button disabled 会应用 pointer-events-none，TooltipTrigger 直接落在
-                // 按钮上时收不到 hover。禁用态用外层 span 承接 hover，实际按钮仍保持 disabled。
-                <span className="inline-flex" data-disabled-tooltip-trigger="true">
-                  {rewindWorkspaceButton}
-                </span>
-              ) : (
-                rewindWorkspaceButton
-              )}
-            </ControlHintTooltip>
+            <>
+              <ResumeHereMenu
+                trigger="click"
+                onPick={(choice) => {
+                  void handleSubmitEdit(draft, "preserve", choice);
+                }}
+              >
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-md"
+                  disabled={!canSubmit || submitting}
+                  aria-label={intl.formatMessage({ id: "chat.tree.summarize" })}
+                >
+                  <FileTextIcon className="size-4" />
+                </Button>
+              </ResumeHereMenu>
+              <ControlHintTooltip
+                title={rewindWorkspaceTooltipTitle}
+                description={rewindWorkspaceTooltipDescription}
+              >
+                {rewindWorkspaceDisabled ? (
+                  // Button disabled 会应用 pointer-events-none，TooltipTrigger 直接落在
+                  // 按钮上时收不到 hover。禁用态用外层 span 承接 hover，实际按钮仍保持 disabled。
+                  <span className="inline-flex" data-disabled-tooltip-trigger="true">
+                    {rewindWorkspaceButton}
+                  </span>
+                ) : (
+                  rewindWorkspaceButton
+                )}
+              </ControlHintTooltip>
+            </>
           }
           className="w-full max-w-xl"
           shellClassName="min-h-32"
