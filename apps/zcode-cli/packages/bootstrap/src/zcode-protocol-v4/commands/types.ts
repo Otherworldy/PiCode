@@ -148,8 +148,8 @@ export interface V4CommandCoreHost {
    */
   isLatestRetryAssistantRow?(sessionId: string, rowId: number): boolean | null;
   /**
-   * latestQueryEditOnly core 侧防御：editUserQuery 只能指向当前投影里的最后一条
-   * realUser userInput row。false/null 都由 handler 拒绝，避免旧客户端绕过 UI。
+   * editUserQuery 只能指向当前投影里带 canEdit 的 realUser userInput。
+   * 不限最后一条。false/null 都由 handler 拒绝，避免旧客户端绕过 UI。
    */
   isLatestEditableUserRow?(sessionId: string, rowId: number): boolean | null;
   /** rowId → product turnId（editUserQuery 无 assistant anchor 时回查 store 用）。 */

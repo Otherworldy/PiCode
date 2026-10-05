@@ -81,6 +81,10 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 `editUserQuery` 重发用这次输入框里的模型。命令带了 `modelSelection` 就用它，不再套该轮最初的模型；没带时仍用原轮选择。
 
+任意一条真实用户消息都能编辑重发，不限最后一条。会话还在生成时全部不可编辑。编辑仍从该条 `navigateTree` 裁切当前叶子并重发，这条之后的消息不再留在这条叶子上。
+
+点发送或按回车后才选总结，不另加按钮。选项和从此处继续一样：不总结、总结、自定义提示词。选了总结就先把将被裁掉的分支总结进当前叶子，再重发。关掉选择则不发送。取消进行中的总结则不裁切、不重发。
+
 `applyFileRewind` 只退这一轮的文件，不截断聊天。真相是这一轮成功的 Pi 工具参数，不是旧 checkpoint。`edit` 要当前文件仍能唯一匹配 `newText` 才写回 `oldText`。`write` 要当前内容仍等于写入内容才删除该文件；覆盖掉的旧内容找不回来。对不上就整批不写。`bash` 只记为忽略，不阻止文件摘要上的撤销；编辑消息并选了回滚文件时，有忽略项仍拒绝。成功后把该轮 `fileChanges.state` 改成 `reverted`。SSH 工作区走和工具同一条远端读写。
 
 `switchCollaborationMode` 不恢复为 PiCode 协作模式机。危险工具仍走 PiCode `PermissionService`（Pi 无权限面）：allow 放行、deny 拒绝、ask 投影 `kind: permission` 给壳 PermissionDialog（Allow once / Allow for session / Block）。session allow 由 HostedSession 记忆。`mode=yolo` 直接放行全部工具，不再弹权限窗。输入框切换权限立刻写到这个会话，不等下一条消息。切到完全访问时，正在等的工具权限按允许关掉。插件 `confirm` 视为同意。`select` / `input` / `editor` 仍进底栏等人答，完全访问也不代答。`select` 把 `1. 标签 — 说明` 拆成问卷选项，回答仍回传原行。其它模式的 `confirm/select` 同样走底栏 userInput，不用 viewport overlay。

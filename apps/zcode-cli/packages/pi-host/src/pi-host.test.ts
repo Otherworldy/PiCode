@@ -817,6 +817,14 @@ test("navigateTree truncates and fork copies jsonl", async () => {
   );
   const assistant = assistants[1];
   assert.equal(assistant && assistant.kind === "assistantText" ? assistant.actions?.canRetry : false, true);
+  const userRows = parent.projector
+    .getSnapshot()
+    .rows.window.filter((row) => row.kind === "userInput");
+  assert.equal(userRows.length, 2);
+  assert.equal(
+    userRows.every((row) => row.kind === "userInput" && row.actions?.canEdit === true),
+    true,
+  );
   parent.projector.setFeedback(assistant?.entityId ?? "", "like");
   const liked = parent.projector.getSnapshot().rows.window.find((row) => row.entityId === assistant?.entityId);
   assert.equal(liked && liked.kind === "assistantText" ? liked.feedback : undefined, "like");
@@ -826,6 +834,59 @@ test("navigateTree truncates and fork copies jsonl", async () => {
   assert.equal(
     parent.projector.getSnapshot().rows.window.some((row) => row.kind === "userInput"),
     false,
+  );
+  await rm(root, { recursive: true, force: true });
+});
+
+test("summarized navigate reloads the branch summary and cancel keeps the leaf", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const fakes = new Map<string, FakePiSession>();
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async (input) => {
+      const fake = new FakePiSession(input.sessionId, input.sessionFile);
+      fakes.set(input.sessionId, fake);
+      return fake;
+    },
+  });
+  const parent = await registry.create({ workspacePath: root });
+  const fake = fakes.get(parent.sessionId)!;
+  parent.projector.apply({
+    type: "message_start",
+    message: { role: "user", id: "u1", content: "keep" },
+  });
+  parent.projector.apply({
+    type: "message_start",
+    message: { role: "user", id: "u2", content: "drop" },
+  });
+  fake.contextEventsList = [{ type: "branch_summary", summary: "dropped the rest" }];
+  await parent.navigateTree("u2", { summarize: true, customInstructions: "keep the decision" });
+  assert.deepEqual(fake.navigateOptions, {
+    summarize: true,
+    customInstructions: "keep the decision",
+  });
+  const marker = parent.projector.getSnapshot().rows.window.find((row) => row.kind === "timelineMarker");
+  assert.equal(
+    marker && marker.kind === "timelineMarker" && marker.marker.type === "branchSummary"
+      ? marker.marker.summary
+      : "",
+    "dropped the rest",
+  );
+  assert.equal(
+    parent.projector.getSnapshot().rows.window.some((row) => row.kind === "userInput"),
+    false,
+  );
+  parent.projector.apply({
+    type: "message_start",
+    message: { role: "user", id: "u3", content: "stay" },
+  });
+  fake.summaryAborted = true;
+  const cancelled = await parent.navigateTree("u3", { summarize: true });
+  assert.equal(cancelled?.cancelled, true);
+  assert.equal(
+    parent.projector.getSnapshot().rows.window.some((row) => row.kind === "userInput" && row.text === "stay"),
+    true,
   );
   await rm(root, { recursive: true, force: true });
 });

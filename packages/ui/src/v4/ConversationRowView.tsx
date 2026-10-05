@@ -75,6 +75,12 @@ import {
 } from "@/components/ai-elements/reasoning.js";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { WorkflowToolSummary } from "@/v4/WorkflowToolSummary.js";
 import { readWorkflowName } from "@/ToolCallBlocks/renderers/createWorkflowInput.js";
@@ -212,6 +218,7 @@ type UserInputEditHandler = (
   newText: string,
   attachments?: readonly AttachmentRef[],
   workspaceMode?: "preserve" | "rewind",
+  summary?: ResumeHereChoice,
 ) => Promise<CommandAck | boolean | void> | CommandAck | boolean | void;
 
 type AssistantMessageFeedback = "like" | "dislike";
@@ -883,6 +890,12 @@ const UserInputRowView = memo(function UserInputRowView({
   );
   const [editing, setEditing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [pendingSend, setPendingSend] = useState<{
+    text: string;
+    workspaceMode: "preserve" | "rewind";
+  } | null>(null);
+  const [summaryCustom, setSummaryCustom] = useState(false);
+  const [summaryInstructions, setSummaryInstructions] = useState("");
   const [draft, setDraft] = useState(row.text);
   const [editAttachments, setEditAttachments] = useState<AttachmentRef[]>(() => [
     ...(row.attachments ?? []),
@@ -979,6 +992,7 @@ const UserInputRowView = memo(function UserInputRowView({
   }, [parsedPrompt, parsedShareContext, row.attachments]);
 
   const handleCancelEdit = useCallback(() => {
+    setPendingSend(null);
     setDraft(parsedShareContext.visibleContent);
     setEditAttachments([...(row.attachments ?? [])]);
     setEditAttachmentIndices((row.attachments ?? []).map((_, index) => index));
@@ -992,7 +1006,11 @@ const UserInputRowView = memo(function UserInputRowView({
   }, []);
 
   const handleSubmitEdit = useCallback(
-    async (nextText: string, workspaceMode: "preserve" | "rewind" = "preserve") => {
+    async (
+      nextText: string,
+      workspaceMode: "preserve" | "rewind" = "preserve",
+      summary?: ResumeHereChoice,
+    ) => {
       if (!onEdit) return;
       if (!nextText.trim() && editAttachments.length === 0 && editContextCount === 0) return;
       setSubmitting(true);
@@ -1005,6 +1023,7 @@ const UserInputRowView = memo(function UserInputRowView({
           // 因此 edit 必须始终提交当前完整列表，显式 [] 才能表达“删除全部”。
           editAttachments,
           workspaceMode,
+          summary,
         );
         if (
           typeof result === "object" &&
@@ -1027,6 +1046,16 @@ const UserInputRowView = memo(function UserInputRowView({
     },
     [editAttachments, editContextCount, editPromptContexts, onEdit, row.entityId, row.rowId],
   );
+  const confirmPendingSend = useCallback(
+    (choice: ResumeHereChoice) => {
+      const pending = pendingSend;
+      setPendingSend(null);
+      setSummaryCustom(false);
+      if (!pending) return;
+      void handleSubmitEdit(pending.text, pending.workspaceMode, choice);
+    },
+    [handleSubmitEdit, pendingSend],
+  );
   const rewindWorkspaceDisabled = submitting || editWorkspaceRewindAvailability?.enabled !== true;
   const rewindWorkspaceButton = (
     <Button
@@ -1037,7 +1066,9 @@ const UserInputRowView = memo(function UserInputRowView({
       data-testid={testId(TID_V4_EDIT_REWIND_WORKSPACE, String(row.rowId))}
       aria-label={rewindWorkspaceLabel}
       onClick={() => {
-        void handleSubmitEdit(draft, "rewind");
+        setSummaryCustom(false);
+        setSummaryInstructions("");
+        setPendingSend({ text: draft, workspaceMode: "rewind" });
       }}
     >
       <FileClockIcon className="size-4" />
@@ -1171,10 +1202,86 @@ const UserInputRowView = memo(function UserInputRowView({
           shellClassName="min-h-32"
           onChange={setDraft}
           onSubmit={(nextText) => {
-            void handleSubmitEdit(nextText, "preserve");
+            if (!nextText.trim() && editAttachments.length === 0 && editContextCount === 0) {
+              return false;
+            }
+            setSummaryCustom(false);
+            setSummaryInstructions("");
+            setPendingSend({ text: nextText, workspaceMode: "preserve" });
+            return false;
           }}
           onCancel={handleCancelEdit}
         />
+        <Dialog
+          open={pendingSend !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setPendingSend(null);
+              setSummaryCustom(false);
+            }
+          }}
+        >
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>{submitLabel}</DialogTitle>
+            </DialogHeader>
+            {summaryCustom ? (
+              <>
+                <textarea
+                  className="h-24 w-full rounded-md border border-border bg-surface px-2 py-1 text-ui-sm"
+                  value={summaryInstructions}
+                  placeholder={intl.formatMessage({ id: "chat.tree.customPlaceholder" })}
+                  onChange={(event) => setSummaryInstructions(event.target.value)}
+                />
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={!summaryInstructions.trim() || submitting}
+                    onClick={() =>
+                      confirmPendingSend({
+                        summarize: true,
+                        customInstructions: summaryInstructions.trim(),
+                      })
+                    }
+                  >
+                    {intl.formatMessage({ id: "chat.tree.confirm" })}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={submitting}
+                  onClick={() => confirmPendingSend({ summarize: false })}
+                >
+                  {intl.formatMessage({ id: "chat.tree.skipSummary" })}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={submitting}
+                  onClick={() => confirmPendingSend({ summarize: true })}
+                >
+                  {intl.formatMessage({ id: "chat.tree.summarize" })}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={submitting}
+                  onClick={() => {
+                    setSummaryInstructions("");
+                    setSummaryCustom(true);
+                  }}
+                >
+                  {intl.formatMessage({ id: "chat.tree.custom" })}
+                </Button>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
         <ConversationFileRewindDialog
           variant="editConflict"
           open={conflictOpen}
@@ -1185,7 +1292,9 @@ const UserInputRowView = memo(function UserInputRowView({
           error={null}
           onApply={() => {}}
           onConversationOnly={() => {
-            void handleSubmitEdit(draft, "preserve");
+            setSummaryCustom(false);
+            setSummaryInstructions("");
+            setPendingSend({ text: draft, workspaceMode: "preserve" });
           }}
         />
       </RowShell>

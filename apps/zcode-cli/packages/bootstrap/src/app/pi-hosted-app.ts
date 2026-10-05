@@ -157,8 +157,20 @@ export function createPiHostedApp(
     },
     emitModelSelected: async () => undefined,
     getPlanEnabled: () => false,
-    rewindConversationToMessage: async (input: { targetMessageId: string }) => {
-      await hosted.navigateTree(String(input.targetMessageId));
+    rewindConversationToMessage: async (input: {
+      targetMessageId: string;
+      summarize?: boolean;
+      customInstructions?: string;
+    }) => {
+      const navigated = await hosted.navigateTree(String(input.targetMessageId), {
+        ...(input.summarize ? { summarize: true } : {}),
+        ...(input.customInstructions ? { customInstructions: input.customInstructions } : {}),
+      });
+      if (navigated?.cancelled) {
+        throw Object.assign(new Error("branch summary cancelled"), {
+          reasonCode: "guard.branchSummaryCancelled",
+        });
+      }
       return {
         keptMessageCount: 0,
         response: "",

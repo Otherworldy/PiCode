@@ -165,6 +165,9 @@ export const commandPayloadSchemas = {
     // 缺省沿用该轮最初的模型。输入框已经换过模型时，重发必须带当前选择，
     // 否则会把 session 模型盖回旧轮。
     modelSelection: modelSelectionSchema.optional(),
+    // 缺省不总结。true 时与从此处继续一样，先总结将被裁掉的分支再重发。
+    summarize: z.boolean().optional(),
+    customInstructions: z.string().max(8000).optional(),
   }),
   retryTurn: z.object({ target: conversationRowTargetSchema }),
   setAssistantFeedback: z.object({

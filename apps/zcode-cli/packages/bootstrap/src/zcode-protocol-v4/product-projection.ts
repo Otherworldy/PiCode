@@ -787,9 +787,14 @@ export class ProductProjection {
   }
 
   resolveEditTargetByEntityId(entityId: string): ConversationEditTarget | null {
-    if (entityId !== this.currentEditableEntityId) return null;
     const target = this.editTargetByEntityId.get(entityId);
-    return target ? { ...target, intent: { ...target.intent } } : null;
+    if (!target) return null;
+    // 行上的 canEdit 是准入。历史 target 仍留在表里，不能只凭 entityId 绕过已撤销的动作。
+    const row = this.snapshot.rows.window.find(
+      (candidate) => candidate.kind === "userInput" && candidate.entityId === entityId,
+    );
+    if (row?.actions?.canEdit !== true || !row.actions.editDisposition) return null;
+    return { ...target, intent: { ...target.intent } };
   }
 
   /**
@@ -979,7 +984,7 @@ export class ProductProjection {
     );
   }
 
-  /** latestQueryEditOnly：只有当前投影里的最后一条 realUser userInput row 可 edit。 */
+  /** 有 canEdit 的 realUser userInput 都可 edit，不限最后一条。 */
   isLatestEditableUserRow(rowId: number): boolean {
     const row = this.findRow(rowId);
     return Boolean(
@@ -1286,9 +1291,7 @@ export class ProductProjection {
       this.editTargetByEntityId.has(latestEditableEntityId)
         ? latestEditable.rowId
         : null;
-    // entity target 历史表会保留旧记录；仅撤销 row action 不足以阻止
-    // entityId 直查绕过 latest-only 语义。当前可编辑 authority 与 actions 在同一次
-    // materialization 中更新，resolver 不再遍历 rows，也不把 rowId 当 canonical key。
+    // 最新一条仍记下来，但不再当唯一可编辑目标。历史 realUser 行同样可编辑。
     this.currentEditableEntityId = latestEditableRowId === null ? null : latestEditableEntityId;
     const latestRetryableRowId = latestRetryable?.rowId ?? null;
     const deltas: ConversationDelta[] = [];
@@ -1306,7 +1309,14 @@ export class ProductProjection {
         if (canRewindFiles) nextActions.canRewindFiles = true;
         else delete nextActions.canRewindFiles;
       } else if (row.kind === "userInput") {
-        if (row.rowId === latestEditableRowId) {
+        const entityId = this.entityIdByRowId.get(row.rowId);
+        if (
+          !compactActive &&
+          row.origin === "realUser" &&
+          entityId &&
+          this.messageIdByRowId.has(row.rowId) &&
+          this.editTargetByEntityId.has(entityId)
+        ) {
           nextActions.canEdit = true;
           nextActions.editDisposition = "rewind";
         } else {

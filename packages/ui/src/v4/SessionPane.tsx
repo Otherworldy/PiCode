@@ -3173,6 +3173,7 @@ export function SessionPane({
       newText: string,
       attachments?: readonly AttachmentRef[],
       workspaceMode: "preserve" | "rewind" = "preserve",
+      summary?: { summarize: boolean; customInstructions?: string },
     ) => {
       const current = snapshotRef.current;
       if (!sessionId || current === null) return false;
@@ -3196,6 +3197,14 @@ export function SessionPane({
           // editUserQuery 的 attachments 缺省表示保留 canonical 原附件；
           // 只有显式透传 []，CLI 才能区分“用户删除全部”与“调用方未修改附件”。
           ...(attachments ? { attachments: [...attachments] } : {}),
+          ...(summary?.summarize
+            ? {
+                summarize: true,
+                ...(summary.customInstructions
+                  ? { customInstructions: summary.customInstructions }
+                  : {}),
+              }
+            : {}),
         },
         sessionId,
         current.revision,

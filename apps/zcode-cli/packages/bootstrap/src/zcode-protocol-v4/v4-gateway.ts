@@ -2663,7 +2663,7 @@ export class ConversationV4Gateway {
     return this.publishers.get(sessionId)?.isLatestRetryAssistantRow(rowId) ?? null;
   }
 
-  /** latestQueryEditOnly：edit 目标必须是当前投影里的最后一条 realUser userInput row。 */
+  /** 带 canEdit 的 realUser userInput 都能 edit，不限最后一条。 */
   isLatestEditableUserRow(sessionId: string, rowId: number): boolean | null {
     return this.publishers.get(sessionId)?.isLatestEditableUserRow(rowId) ?? null;
   }
