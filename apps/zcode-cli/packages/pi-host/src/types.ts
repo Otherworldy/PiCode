@@ -202,7 +202,12 @@ export interface PiSessionPort {
       replaceInstructions?: boolean;
       label?: string;
     },
-  ): Promise<{ editorText?: string; cancelled?: boolean; aborted?: boolean } | void>;
+  ): Promise<{
+    editorText?: string;
+    cancelled?: boolean;
+    aborted?: boolean;
+    summaryEntry?: { summary?: string };
+  } | void>;
   readTree?(): PiSessionTreeNode[];
   labelEntry?(id: string, label?: string): void;
   deleteBranch?(entryId: string): void;

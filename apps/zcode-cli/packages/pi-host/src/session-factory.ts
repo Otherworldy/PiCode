@@ -177,8 +177,8 @@ export async function mutatePiCatalog(input: {
     if (input.defaultProvider && input.defaultModel) {
       settings.setDefaultModelAndProvider(input.defaultProvider, input.defaultModel);
     }
-    if (input.defaultThought !== undefined) {
-      settings.setDefaultThinkingLevel(input.defaultThought || undefined);
+    if (input.defaultThought) {
+      settings.setDefaultThinkingLevel(mapThought(input.defaultThought));
     }
     await settings.flush();
   } else if (input.action === "discover") {

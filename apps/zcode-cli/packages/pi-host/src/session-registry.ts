@@ -1006,6 +1006,16 @@ export class HostSessionRegistry {
           // 总结写在新叶子上。只截断旧行会把摘要丢掉。
           if (summarize && pi.contextEvents) emit(projector.reload(pi.contextEvents()));
           else emit(projector.truncateFrom(targetId));
+          // 先收起「正在总结」，再补正文。反过来会把刚补上的摘要一起裁掉。
+          if (summarize) emit(projector.noteBranchSummary(false));
+          const summaryText = result?.summaryEntry?.summary?.trim() ?? "";
+          const alreadyShown = projector.getSnapshot().rows.window.some(
+            (row) =>
+              row.kind === "timelineMarker" &&
+              row.marker.type === "branchSummary" &&
+              row.marker.summary === summaryText,
+          );
+          if (summaryText && !alreadyShown) emit(projector.appendBranchSummary(summaryText));
           return { cancelled: false };
         } finally {
           if (summarize) {

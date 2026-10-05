@@ -102,6 +102,7 @@ export class PiToV4Projector {
   private readonly rowIndexById = new Map<number, number>();
   private aborted = false;
   private stopRequested = false;
+  private branchSummaryRowId: number | null = null;
   private seq = 0;
   private assistantMessageId?: string;
   private pendingError?: string;
@@ -180,6 +181,7 @@ export class PiToV4Projector {
     this.toolRowId.clear();
     this.toolArgs.clear();
     this.aborted = false;
+    this.branchSummaryRowId = null;
     const cleared = this.commit([{ op: "row.removed", fromRowId: 1 }]);
     return cleared.concat(this.replay(events));
   }
@@ -258,28 +260,52 @@ export class PiToV4Projector {
     this.aborted = false;
   }
 
-  // ponytail: stopTargetKind 复用 compact，只为让停止键出现。不写 compact activeWork，界面不会画压缩条。
+  // ponytail: stopTargetKind 复用 compact，只为让停止键出现。进行中的摘要是单独一行。
   noteBranchSummary(active: boolean): ConversationDelta[] {
     const control = this.snapshot.control;
-    if (active) {
-      return this.applyState({
-        control: {
-          ...control,
-          canStop: true,
-          stopState: "stoppable",
-          stopTargetKind: "compact",
-        },
-      });
-    }
-    const running = control.phase === "running";
-    return this.applyState({
-      control: {
-        ...control,
-        canStop: running,
-        stopState: running ? control.stopState : "idle",
-        stopTargetKind: running ? control.stopTargetKind : "unknown",
-      },
+    const controlDeltas = this.applyState({
+      control: active
+        ? {
+            ...control,
+            canStop: true,
+            stopState: "stoppable",
+            stopTargetKind: "compact",
+          }
+        : {
+            ...control,
+            canStop: control.phase === "running",
+            stopState: control.phase === "running" ? control.stopState : "idle",
+            stopTargetKind: control.phase === "running" ? control.stopTargetKind : "unknown",
+          },
     });
+    if (active) {
+      if (this.branchSummaryRowId !== null) return controlDeltas;
+      const row: ConversationRow = {
+        ...this.base("branch"),
+        kind: "timelineMarker",
+        lane: "turnTailBoundary",
+        marker: { type: "branchSummary", summary: "", status: "running" },
+      };
+      this.branchSummaryRowId = row.rowId;
+      return [...controlDeltas, { op: "row.appended", row }];
+    }
+    const rowId = this.branchSummaryRowId;
+    this.branchSummaryRowId = null;
+    const row = rowId === null ? undefined : this.snapshot.rows.window.find((item) => item.rowId === rowId);
+    if (!row || row.kind !== "timelineMarker" || row.marker.type !== "branchSummary" || row.marker.status !== "running") {
+      return controlDeltas;
+    }
+    return [...controlDeltas, { op: "row.removed", fromRowId: rowId! }];
+  }
+
+  appendBranchSummary(summary: string): ConversationDelta[] {
+    const row: ConversationRow = {
+      ...this.base("branch"),
+      kind: "timelineMarker",
+      lane: "turnTailBoundary",
+      marker: { type: "branchSummary", summary, status: "done" },
+    };
+    return [{ op: "row.appended", row }];
   }
 
   replaceSubagents(subagents: ConversationSnapshot["subagents"]): ConversationDelta[] {

@@ -342,6 +342,8 @@ export const timelineMarkerPayloadSchema = z.union([
   z.object({
     type: z.literal("branchSummary"),
     summary: z.string(),
+    // running：正在总结被裁掉的分支。done 或缺省：摘要已写入。
+    status: z.enum(["running", "done"]).optional(),
   }),
   // 出现在 child 会话首部（forkTimelineIsBoundary）。
   z.object({

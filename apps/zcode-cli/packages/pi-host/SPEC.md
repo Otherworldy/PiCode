@@ -57,7 +57,8 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 - 本地会话不把 `read` / `bash` / `edit` / `write` / `grep` / `find` / `ls` / `powershell` 注册成 customTools，也不关 Pi 内置工具。Pi 默认只激活 `read` / `bash` / `edit` / `write`；Host 在本地会话里补上已注册的 `grep` / `find` / `ls`。扩展仍可按原名替换，例如 pi-fff。卸掉替换扩展后，内置实现还在。权限走 `tool_call`，不换工具实现。SSH 工作区仍用远端实现替换 `read` / `bash` / `edit` / `write`，不把本机的 `grep` / `find` / `ls` 打开，否则这些工具打到本机盘。
 - PiCode 不再注册 `TodoRead` / `TodoWrite`，也不再提醒模型去调用它们。旧会话里的 todo 卡片和进程投影仍按工具名渲染。
 - 桌面和 CLI 同一份 `zcode.cjs` 把 Pi 打进 CJS。入口先设 `globalThis.PI_BUNDLED_NODE`，Pi 才用内嵌模块表加载 extension，而不是按 bundle 路径去找 `../dist/babel.cjs`。`import.meta.url` 不能改写成 `module.filename`：extension loader 同一个函数里有 `const module`，那个标识符在死区里，extension 会在 import 之前就失败。文件名改记在 `globalThis.__zcodeBundleFilename`。
-- 同一个标志让 codemode 去 bundle 旁边找 `codemode-worker.js`，并用 `createRequire` 解析 `quickjs-wasi/quickjs.wasm`。打包必须把这两个文件放在 `zcode.cjs` 旁边。wasm 取 Pi 依赖的 `quickjs-wasi@3.6.2`；仓库里被 hoist 的 2.2.0 没有这个导出，解析到它会让 codemode 直接失败。没标成 `direct` 的 MCP（包括 tdx）只能从这个沙箱里调。
+- 同一个标志让 codemode 去 bundle 旁边找 `codemode-worker.js` 和 `quickjs.wasm`。wasm 不能放进 `glm/node_modules`：electron-builder 复制 extraResources 时会丢掉源目录根上的 `node_modules`，安装包里沙箱会报找不到模块。bundle 启动时把 `quickjs-wasi/quickjs.wasm` 指到旁边这个文件。wasm 取 Pi 依赖的 `quickjs-wasi@3.6.2`；仓库里被 hoist 的 2.2.0 没有这个导出。没标成 `direct` 的 MCP（包括 tdx）只能从这个沙箱里调。
+- Pi 缩放内联图片读同目录的 `photon_rs_bg.wasm`（`@silvia-odwyer/photon-node`，与 Pi 依赖锁定的版本一致）。缺这个文件时缩放返回空，任意图片都会被换成 `[Image omitted: could not be resized below the inline image size limit.]`。不能放进 `glm/node_modules`，原因同上。
 - 插件后台任务打到已失效的 extension ctx 时，app-server 只记一行并继续。这个拒绝不能把进程打退出。
 - 插件直接 `createAgentSession` 绕过 Registry：扁 `toolCall`，无 `workId`，无活动面板。
 
@@ -83,7 +84,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 任意一条真实用户消息都能编辑重发，不限最后一条。会话还在生成时全部不可编辑。编辑仍从该条 `navigateTree` 裁切当前叶子并重发，这条之后的消息不再留在这条叶子上。
 
-点发送或按回车后才选总结，不另加按钮。选项和从此处继续一样：不总结、总结、自定义提示词。选了总结就先把将被裁掉的分支总结进当前叶子，再重发。关掉选择则不发送。取消进行中的总结则不裁切、不重发。
+点发送或按回车后才选总结，不另加按钮。选项和从此处继续一样：不总结、总结、自定义提示词。选了总结时，时间线上先出现「正在总结被丢下的内容」，完成后再把摘要正文留在原处，然后重发。关掉选择则不发送。取消进行中的总结则不裁切、不重发。
 
 `applyFileRewind` 只退这一轮的文件，不截断聊天。真相是这一轮成功的 Pi 工具参数，不是旧 checkpoint。`edit` 要当前文件仍能唯一匹配 `newText` 才写回 `oldText`。`write` 要当前内容仍等于写入内容才删除该文件；覆盖掉的旧内容找不回来。对不上就整批不写。`bash` 只记为忽略，不阻止文件摘要上的撤销；编辑消息并选了回滚文件时，有忽略项仍拒绝。成功后把该轮 `fileChanges.state` 改成 `reverted`。SSH 工作区走和工具同一条远端读写。
 

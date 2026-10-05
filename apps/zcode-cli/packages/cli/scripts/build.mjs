@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { chmod, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, readFile, rm } from "node:fs/promises";
 import { readThirdPartyNotices, stageThirdPartyNotices } from "../../../../../scripts/third-party-notices.mjs";
 import { basename, dirname, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -279,7 +279,7 @@ export const buildCli = async ({
     banner: {
       // SEA 与普通 CLI 共用入口；声明必须在 Agent 初始化和原生资源解压前可独立读取。
       // PI_BUNDLED_NODE 让 Pi 用内嵌模块表加载 extension。__zcodeBundleFilename 避开 loader 里的 `const module` 死区。
-      js: `#!/usr/bin/env node\n"use strict";\nif (process.argv.length === 3 && process.argv[2] === "--licenses") { const sea = require("node:sea"); const nodeNotice = sea.isSea() ? "\\n\\n## Bundled Node.js runtime\\n\\n" + sea.getAsset("zcode-node-license", "utf8") : ""; process.stdout.write(${JSON.stringify(notices.toString("utf8"))} + nodeNotice, () => process.exit(0)); } else {globalThis.PI_BUNDLED_NODE=true;globalThis.__zcodeBundleFilename=__filename;globalThis.__zcodeBundledPiVersion=${JSON.stringify(piVersion)};`,
+      js: `#!/usr/bin/env node\n"use strict";\nif (process.argv.length === 3 && process.argv[2] === "--licenses") { const sea = require("node:sea"); const nodeNotice = sea.isSea() ? "\\n\\n## Bundled Node.js runtime\\n\\n" + sea.getAsset("zcode-node-license", "utf8") : ""; process.stdout.write(${JSON.stringify(notices.toString("utf8"))} + nodeNotice, () => process.exit(0)); } else {globalThis.PI_BUNDLED_NODE=true;globalThis.__zcodeBundleFilename=__filename;globalThis.__zcodeBundledPiVersion=${JSON.stringify(piVersion)};const __zcodeModule=require("node:module").Module;const __zcodeResolve=__zcodeModule._resolveFilename;__zcodeModule._resolveFilename=function(request,parent,isMain,options){if(request==="quickjs-wasi/quickjs.wasm")return require("node:path").join(__dirname,"quickjs.wasm");return __zcodeResolve.call(this,request,parent,isMain,options);};`,
     },
     footer: { js: "}" },
     bundle: true,
@@ -328,8 +328,8 @@ export const buildCli = async ({
 };
 
 /**
- * PI_BUNDLED_NODE 从 zcode.cjs 旁边解析 codemode worker 和 quickjs wasm。
- * 安装包没有仓库 node_modules；就算有，hoist 的 quickjs-wasi@2.2.0 也不导出 ./quickjs.wasm。
+ * PI_BUNDLED_NODE 从 zcode.cjs 旁边解析 codemode worker、quickjs.wasm 和
+ * photon_rs_bg.wasm。不放 node_modules：electron-builder 会丢掉 extraResources 源目录根上的那一层。
  */
 async function stageCodemodeRuntime(cliDirectory, piPackageJson) {
   const requireFromPi = createRequire(piPackageJson);
@@ -350,20 +350,11 @@ async function stageCodemodeRuntime(cliDirectory, piPackageJson) {
     legalComments: "none",
     logLevel: "info",
   });
-  const wasmDir = resolve(cliDirectory, "dist/node_modules/quickjs-wasi");
-  await mkdir(wasmDir, { recursive: true });
-  await copyFile(wasmSource, resolve(wasmDir, "quickjs.wasm"));
-  await writeFile(
-    resolve(wasmDir, "package.json"),
-    `${JSON.stringify(
-      {
-        name: "quickjs-wasi",
-        type: "module",
-        exports: { "./quickjs.wasm": "./quickjs.wasm" },
-      },
-      null,
-      2,
-    )}\n`,
+  await copyFile(wasmSource, resolve(cliDirectory, "dist/quickjs.wasm"));
+  const photonEntry = requireFromPi.resolve("@silvia-odwyer/photon-node");
+  await copyFile(
+    resolve(dirname(photonEntry), "photon_rs_bg.wasm"),
+    resolve(cliDirectory, "dist/photon_rs_bg.wasm"),
   );
 }
 

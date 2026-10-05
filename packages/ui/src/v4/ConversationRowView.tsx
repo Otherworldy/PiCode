@@ -1896,8 +1896,9 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
   const isOfficeMode = useIsOfficeMode();
   const marker = row.marker;
   const [summaryRowId, setSummaryRowId] = useState<number | null>(null);
-  const summary =
-    marker.type === "compact" || marker.type === "branchSummary" ? marker.summary : undefined;
+  const summary = marker.type === "compact" ? marker.summary : undefined;
+  const branchSummaryText =
+    marker.type === "branchSummary" && marker.status !== "running" ? marker.summary.trim() : "";
   const summaryOpen = summaryRowId === row.rowId;
   const modelSelectionView = context.modelSelectionView ?? null;
   const view = useMemo((): {
@@ -1936,12 +1937,16 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
           running,
         };
       }
-      case "branchSummary":
+      case "branchSummary": {
+        const running = marker.status === "running";
         return {
           icon: MARKER_FORK_ICON,
-          label: `${intl.formatMessage({ id: "chat.tree.summaryMarker" })} · ${intl.formatMessage({ id: "chat.contextCompaction.viewSummary" })}`,
-          running: false,
+          label: intl.formatMessage({
+            id: running ? "chat.tree.summarizing" : "chat.tree.summaryMarker",
+          }),
+          running,
         };
+      }
       case "forkNotice":
         return {
           icon: MARKER_FORK_ICON,
@@ -2050,6 +2055,11 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
     {summaryOpen && summary ? (
       <div className="px-4 pb-2 text-ui-base whitespace-pre-wrap text-[var(--color-foreground)]">
         {summary}
+      </div>
+    ) : null}
+    {branchSummaryText ? (
+      <div className="px-4 pb-2 text-ui-base whitespace-pre-wrap text-[var(--color-foreground)]">
+        {branchSummaryText}
       </div>
     ) : null}
     </div>

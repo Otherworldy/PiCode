@@ -888,6 +888,15 @@ test("summarized navigate reloads the branch summary and cancel keeps the leaf",
     parent.projector.getSnapshot().rows.window.some((row) => row.kind === "userInput" && row.text === "stay"),
     true,
   );
+  assert.equal(
+    parent.projector.getSnapshot().rows.window.some(
+      (row) =>
+        row.kind === "timelineMarker" &&
+        row.marker.type === "branchSummary" &&
+        row.marker.status === "running",
+    ),
+    false,
+  );
   await rm(root, { recursive: true, force: true });
 });
 

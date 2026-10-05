@@ -39,15 +39,13 @@ export function stageAgentBundle({ repoRoot, platformKey, log = console.log }) {
   rmSync(glmDir, { recursive: true, force: true });
   mkdirSync(glmDir, { recursive: true });
   copyFileSync(cliBundlePath, stagedBundlePath);
-  // codemode 从 zcode.cjs 旁边解析 worker 和 quickjs wasm。漏拷则安装包里沙箱直接找不到模块。
-  for (const relativePath of [
-    "codemode-worker.js",
-    "node_modules/quickjs-wasi/package.json",
-    "node_modules/quickjs-wasi/quickjs.wasm",
-  ]) {
+  // codemode 从 zcode.cjs 旁边解析 worker 和 quickjs.wasm。
+  // Pi 缩放图片读同目录的 photon_rs_bg.wasm；缺了任意图片都会被省略。
+  // 不能放进这里的 node_modules：electron-builder 复制这个目录时会丢掉根上的那一层。
+  for (const relativePath of ["codemode-worker.js", "quickjs.wasm", "photon_rs_bg.wasm"]) {
     const source = resolve(dirname(cliBundlePath), relativePath);
     if (!existsSync(source)) {
-      throw new Error(`[stage:agent-bundle] missing codemode sidecar: ${source}`);
+      throw new Error(`[stage:agent-bundle] missing bundle sidecar: ${source}`);
     }
     const target = resolve(glmDir, relativePath);
     mkdirSync(dirname(target), { recursive: true });

@@ -3,7 +3,7 @@ import { CircleAlert, ImagePlus, Loader2, Play } from "lucide-react";
 import type { ITodoService } from "@zcode/services";
 import type { TodoItem } from "@zcode/shared";
 import { Button } from "@/components/ui/button.js";
-import { useAlertDialog } from "@/hooks/useAlertDialog.js";
+import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import {
   Dialog,
   DialogContent,
@@ -56,7 +56,7 @@ export function TodoDetailDialog({
   onStart: (id: string) => void;
   onOpenSession: (workspacePath: string, taskId: string, workspaceIdentity?: string) => void;
 }) {
-  const requestAlert = useAlertDialog();
+  const requestConfirmation = useConfirmDialog();
   const platform = useOptionalPlatform();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const editable = detail?.status === "todo";
@@ -250,11 +250,12 @@ export function TodoDetailDialog({
                           await todoService.merge(detail.id);
                         } catch (error) {
                           if (!isDirtyMergeError(error)) throw error;
-                          const confirmed = await requestAlert({
+                          const confirmed = await requestConfirmation({
                             title: "主工作区有未提交改动",
                             description:
-                              "将用模型为这些改动写提交说明，提交到基线分支，然后再合并这条 To-Do。冲突会停在待审。",
-                            actionLabel: "提交并合并",
+                              "用模型为这些改动写提交说明，提交到基线后再合并。先不提交则不改基线。冲突会停在待审。",
+                            confirmLabel: "用模型提交并合并",
+                            cancelLabel: "先不提交",
                           });
                           if (!confirmed) return;
                           await todoService.merge(detail.id, { commitDirty: true });
