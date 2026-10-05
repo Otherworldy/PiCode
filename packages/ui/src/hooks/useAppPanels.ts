@@ -73,6 +73,8 @@ import {
   type WorkspaceSidePaneTab,
 } from "@/lib/workspaceSidePane.js";
 import { isSidePaneTabVisibleForParent } from "@/lib/workspaceSidePane.js";
+import { openPluginUiSidePane } from "@/plugin-ui/index.js";
+import type { OpenPluginUiSideTabRequest } from "@/plugin-ui/contract.js";
 import { logger } from "@/logger.js";
 import { getPathLeaf, joinFilePath, toFileUrl } from "@/lib/path.js";
 import { shouldOpenWorkflowArtifactInBrowser } from "@/lib/workflowArtifactOpen.js";
@@ -919,6 +921,23 @@ export function useAppPanels(options: {
     [commitOpenedSidePaneState, revealSidePaneForCurrentOwner],
   );
 
+  const handleOpenPluginUi = useCallback(
+    (request: OpenPluginUiSideTabRequest) => {
+      const workspaceKey = request.workspaceIdentity?.trim() || request.workspacePath;
+      revealSidePaneForCurrentOwner();
+      commitOpenedSidePaneState((current) =>
+        openPluginUiSidePane(current, { ...request, workspaceKey }),
+      );
+      logger.debug("[App] 打开插件 UI 右侧 tab", {
+        parentSessionId: request.parentSessionId,
+        toolCallId: request.toolCallId,
+        pluginId: request.pluginId,
+        workspaceKey,
+      });
+    },
+    [commitOpenedSidePaneState, revealSidePaneForCurrentOwner],
+  );
+
   const handleOpenWorkflowRun = useCallback(
     (request: OpenScopedWorkflowRunSideTabRequest) => {
       const workspaceKey = request.workspaceIdentity?.trim() || request.workspacePath;
@@ -1569,6 +1588,7 @@ export function useAppPanels(options: {
     handleSyncSubagentSessionTabs,
     handleOpenSelectionSideChat,
     handleOpenPlanDetail,
+    handleOpenPluginUi,
     handleOpenWorkflowRun,
     handleOpenWorkflowRunDirectory,
     handleOpenWorkflowActorSession,

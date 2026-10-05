@@ -21,6 +21,7 @@ import {
   sshSpecFromConnectTarget,
 } from "@zcode/shared/node";
 import { randomUUID } from "node:crypto";
+import { createPluginSandboxRegistrationBridge } from "./pluginSandbox/index.js";
 import {
   MessagePortProtocol,
   ChannelServer,
@@ -237,6 +238,13 @@ function authorizeLocalMediaPreviewPath(path: string): Promise<string> {
     }
   });
 }
+
+const pluginSandboxRegistrationBridge = createPluginSandboxRegistrationBridge({
+  send: (message) => {
+    if (!parentPort) throw new Error("parentPort unavailable");
+    parentPort.postMessage(message);
+  },
+});
 
 // browser-use host↔main 桥：把 agent 的 browser 命令经 parentPort 转给 main（WebContentsView+CDP）。
 // parentPort 为空（不应发生于 host 进程）时 postToMain 抛错，bridge 自身返回 backend_unavailable。
@@ -2152,6 +2160,7 @@ async function disposeHostResources(reason: string): Promise<HostShutdownResult>
   disposeHostResourcesInFlight = (async () => {
     logger.info(`disposing host resources, reason=${reason}`);
 
+    pluginSandboxRegistrationBridge.dispose();
     stopHostNetworkTelemetry();
     hostSelfResourceTelemetry.stop();
     disposeLocalResourceTelemetry();
@@ -2222,6 +2231,7 @@ function disposeHostResourcesBestEffort(reason: string): void {
   hasDisposedHostResources = true;
 
   logger.info(`disposing host resources, reason=${reason}`);
+  pluginSandboxRegistrationBridge.dispose();
   stopHostNetworkTelemetry();
   disposeLocalResourceTelemetry();
   disposeAttachedServicePorts();
@@ -2366,6 +2376,11 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
     } else {
       pending.reject(new Error(msg.error ?? "本地视频预览路径授权失败"));
     }
+    return;
+  }
+
+  if (msg.type === HostMessageTypes.PluginSandboxRegisterResult) {
+    pluginSandboxRegistrationBridge.accept(msg);
     return;
   }
 
@@ -2867,6 +2882,7 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
               prepareLegacyAccountConnections,
               hostApiNetworkTransport,
               authorizeLocalMediaPreviewPath,
+              registerPluginSandbox: pluginSandboxRegistrationBridge.register,
               runtimeProcessEnvPatch: msg.runtimeProcessEnvPatch,
               agentRuntimeContext: {
                 getDeviceMid: () => msg.deviceMid,

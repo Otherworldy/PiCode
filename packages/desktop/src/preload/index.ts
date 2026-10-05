@@ -1,3 +1,4 @@
+import { installPluginSandboxHostBridge } from "./pluginSandbox/hostBridge.js";
 import {
   databaseStartupControlSchema,
   databaseStartupStateSchema,
@@ -726,6 +727,8 @@ contextBridge.exposeInMainWorld("zcode", {
   /** 获取桌面端设备标识符（deviceMid） */
   getDeviceId: () => ipcRenderer.invoke(PlatformChannels.GetDeviceId),
 });
+
+installPluginSandboxHostBridge();
 
 /**
  * MessagePort 不能通过 contextBridge 传递（contextBridge 会把它包成 Proxy，

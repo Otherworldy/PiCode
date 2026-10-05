@@ -274,6 +274,7 @@ async function sendText(
         : {}),
       attachmentRefs: payload.attachments,
       sharedContextRefs: payload.context_refs,
+      ...(payload.source ? { source: payload.source } : {}),
     });
     started = await startPromptTurn(host, record, {
       content: payload.text,

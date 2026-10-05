@@ -1,12 +1,19 @@
+import { getPluginSandboxHost } from "./pluginSandbox/index.js";
 /* eslint-disable max-lines -- 桌面命令分发需要共享窗口与平台上下文，集中维护更便于一致性 */
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { app, BrowserWindow, dialog, session, shell } from "electron";
-import type { MessageBoxOptions } from "electron";
+import { readZCodeStdioTapDevState, setZCodeStdioTapDevEnabled } from "@zcode/services/node";
 import {
+  buildZCodeEndpointUrls,
   DEFAULT_ZCODE_ENDPOINT_ORIGIN,
   DesktopCommandIds,
+  getCommunityUrlFromConfigs,
+  getFeedbackUrlFromConfig,
+  normalizeZCodeEndpointOrigin,
   PlatformChannels,
+  resolveHelpAppConfig,
+  resolveRuntimeZCodeEndpointOrigin,
+  resolveZCodeEndpointOrigin,
+  ZCODE_ENV,
+  ZCODE_PRODUCT_FLAVOR,
   type AppSettings,
   type DesktopCommandId,
   type Locale,
@@ -19,7 +26,10 @@ import {
   normalizeZCodeEndpointOrigin,
   resolveZCodeEndpointOrigin,
 } from "@zcode/shared";
-import { readZCodeStdioTapDevState, setZCodeStdioTapDevEnabled } from "@zcode/services/node";
+import type { MessageBoxOptions } from "electron";
+import { app, BrowserWindow, dialog, session, shell } from "electron";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { showAboutDialog } from "./about.js";
 import { exportLogs } from "./exportLogs.js";
 import { openResourceManager } from "./resourceManagerWindow.js";
@@ -97,6 +107,7 @@ async function clearAllDataAndRelaunch(options: {
     return;
   }
 
+  await getPluginSandboxHost()?.clearBrowserData();
   const { rm } = await import("node:fs/promises");
   try {
     await rm(options.credentialsDir, { recursive: true, force: true });
