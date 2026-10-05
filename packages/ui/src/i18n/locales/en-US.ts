@@ -61,7 +61,8 @@ const enUS: Record<string, string> = {
   "occupationOnboarding.migration": "Migrate conversations",
   "occupationOnboarding.migrationDescription": "Migrate conversation history from Claude Code",
   "occupationOnboarding.memory": "Enable Workspace Memory",
-  "occupationOnboarding.memoryDescription": "Let PiCode remember your preferences and work context.",
+  "occupationOnboarding.memoryDescription":
+    "Let PiCode remember your preferences and work context.",
   "occupationOnboarding.suggestions": "Enable proactive task suggestions",
   "occupationOnboarding.suggestionsDescription":
     "Show suggestions in new conversations. Click to fill the composer.",
@@ -1700,13 +1701,19 @@ const enUS: Record<string, string> = {
   "settings.locale": "Language",
   "settings.localeDescription": "Choose the display language used by the application UI.",
   "settings.piSdkSource": "Pi SDK",
-  "settings.piSdkSource.description": "The built-in package ships with PiCode. Global uses the Pi package installed by npm on this machine. Takes effect after restarting the app.",
+  "settings.piSdkSource.description":
+    "The built-in package ships with PiCode. Global uses the Pi package installed by npm on this machine. Takes effect after restarting the app.",
   "settings.piSdkSource.builtin": "Built-in",
   "settings.piSdkSource.global": "Global install",
-  "settings.piSdkSource.pending": "This process is still on the previous SDK. Restart to apply the new choice.",
-  "settings.piSdkSource.missing": "No global Pi package was found. This process is still using the built-in SDK.",
-  "settings.piSdkSource.incompatible": "Global Pi {globalVersion} does not match built-in {builtinVersion}. This process is still using the built-in SDK.",
-  "settings.piSdkSource.loadFailed": "The global Pi package failed to load. This process is still using the built-in SDK.",
+  "settings.piSdkSource.pending":
+    "This process is still on the previous SDK. Restart to apply the new choice.",
+  "settings.piSdkSource.missing":
+    "No global Pi package was found. This process is still using the built-in SDK.",
+  "settings.piSdkSource.incompatible":
+    "Global Pi {globalVersion} does not match built-in {builtinVersion}. This process is still using the built-in SDK.",
+  "settings.piSdkSource.loadFailed":
+    "The global Pi package failed to load. This process is still using the built-in SDK.",
+  "settings.piSdkSource.usingBuiltin": "Using built-in Pi {version}.",
   "settings.piSdkSource.usingGlobal": "Using global Pi {version}.",
   "settings.terminalProfile": "Inherit system terminal profile",
   "settings.terminalProfileDescription":
@@ -2203,7 +2210,8 @@ const enUS: Record<string, string> = {
   "settings.mcp.form.type": "Type",
   "settings.mcp.form.timeoutMs": "Timeout MS",
   "settings.mcp.form.directTools": "Register directly as Pi tools",
-  "settings.mcp.form.directToolsHint": "Off: codemode, the model finds tools from a script. On: each tool is declared to the model.",
+  "settings.mcp.form.directToolsHint":
+    "Off: codemode, the model finds tools from a script. On: each tool is declared to the model.",
   "settings.mcp.form.protocolVersion": "Protocol version",
   "settings.mcp.form.protocolVersion.auto": "Auto (recommended)",
   "settings.mcp.form.protocolVersion.legacy": "Legacy compatibility",
@@ -2265,7 +2273,8 @@ const enUS: Record<string, string> = {
     "Disabled {plugin} in this workspace (overriding User default)",
   "settings.plugins.toggle.failed": "Couldn't update {plugin}. Try again.",
   "settings.plugins.pi.title": "Pi plugins",
-  "settings.plugins.pi.hint": "Applies only in PiCode and does not change Pi settings.json. Takes effect on the next new session.",
+  "settings.plugins.pi.hint":
+    "Applies only in PiCode and does not change Pi settings.json. Takes effect on the next new session.",
   "settings.plugins.pi.loading": "Reading Pi plugins…",
   "settings.plugins.pi.empty": "No Pi plugins in this scope.",
   "settings.plugins.pi.failed": "Couldn't update Pi plugins. Try again.",
@@ -3940,7 +3949,8 @@ const enUS: Record<string, string> = {
   "settings.workspaceFileSearch.transformFailed":
     "Failed to apply the section operation; check the logs",
   "settings.workspaceFileSearch.reveal": "Reveal file location",
-  "settings.workspaceFileSearch.revealHint": "Save first; .picodeignore lives at the workspace root",
+  "settings.workspaceFileSearch.revealHint":
+    "Save first; .picodeignore lives at the workspace root",
   "settings.workspaceFileSearch.unsaved": "Unsaved changes",
   "settings.workspaceFileSearch.noWorkspace":
     "No workspace is open, so search ignore rules cannot be configured.",

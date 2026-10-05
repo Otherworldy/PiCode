@@ -849,7 +849,8 @@ const zhCN: Record<string, string> = {
   "git.branchSwitcher.createDialog.placeholder": "例如 feature/git-branch-switcher",
   "git.branchSwitcher.createDialog.helper": "首版只支持基于当前 HEAD 创建并切换。",
   "git.branchSwitcher.createDialog.inWorktreeLabel": "在独立工作区分支 (Worktree) 中打开",
-  "git.branchSwitcher.createDialog.inWorktreeHelper": "执行 git worktree add，把分支检出到仓库里的 .worktrees/。git worktree list 能看到。当前目录的 HEAD 不动。",
+  "git.branchSwitcher.createDialog.inWorktreeHelper":
+    "执行 git worktree add，把分支检出到仓库里的 .worktrees/。git worktree list 能看到。当前目录的 HEAD 不动。",
   "git.branchSwitcher.createDialog.confirm": "创建并切换",
   "git.branchSwitcher.blockedDialog.title": "提交更改以切换分支",
   "git.branchSwitcher.blockedDialog.description.tracked": "你对以下文件的更改将被检出操作覆盖：",
@@ -1189,8 +1190,7 @@ const zhCN: Record<string, string> = {
   "ssh.assetInstallMode.remote-download": "远端服务器下载",
   "ssh.assetInstallModeDescription":
     "远端服务器下载可减少上传等待，但服务器需要能访问 PiCode CDN，并具备下载、解压和校验工具。",
-  "ssh.localRuntime":
-    "使用本机模型和系统 ssh。不会把运行时下载或上传到 PiCode CDN。",
+  "ssh.localRuntime": "使用本机模型和系统 ssh。不会把运行时下载或上传到 PiCode CDN。",
   "ssh.password": "密码",
   "ssh.passwordPlaceholder": "输入 SSH 密码",
   "ssh.privateKey": "私钥",
@@ -1597,13 +1597,16 @@ const zhCN: Record<string, string> = {
   "settings.locale": "界面语言",
   "settings.localeDescription": "选择应用 UI 的显示语言。",
   "settings.piSdkSource": "Pi SDK",
-  "settings.piSdkSource.description": "内置包随 PiCode 发布。全局包使用本机 npm 安装的 Pi。重启应用后生效。",
+  "settings.piSdkSource.description":
+    "内置包随 PiCode 发布。全局包使用本机 npm 安装的 Pi。重启应用后生效。",
   "settings.piSdkSource.builtin": "内置",
   "settings.piSdkSource.global": "全局安装",
   "settings.piSdkSource.pending": "当前进程还是切换前的 SDK，重启后才会换成新选择。",
   "settings.piSdkSource.missing": "没有找到全局 Pi，这次仍使用内置 SDK。",
-  "settings.piSdkSource.incompatible": "全局 Pi {globalVersion} 与内置 {builtinVersion} 的主次版本不一致，这次仍使用内置 SDK。",
+  "settings.piSdkSource.incompatible":
+    "全局 Pi {globalVersion} 与内置 {builtinVersion} 的主次版本不一致，这次仍使用内置 SDK。",
   "settings.piSdkSource.loadFailed": "全局 Pi 无法加载，这次仍使用内置 SDK。",
+  "settings.piSdkSource.usingBuiltin": "当前使用内置 Pi {version}。",
   "settings.piSdkSource.usingGlobal": "当前使用全局 Pi {version}。",
   "settings.terminalProfile": "继承系统终端 Profile",
   "settings.terminalProfileDescription":
@@ -2060,7 +2063,8 @@ const zhCN: Record<string, string> = {
   "settings.mcp.form.type": "类型",
   "settings.mcp.form.timeoutMs": "超时时间 MS",
   "settings.mcp.form.directTools": "直接注册为 Pi 工具",
-  "settings.mcp.form.directToolsHint": "默认 codemode：模型用脚本查找再调用。打开后，工具直接出现在会话里。",
+  "settings.mcp.form.directToolsHint":
+    "默认 codemode：模型用脚本查找再调用。打开后，工具直接出现在会话里。",
   "settings.mcp.form.protocolVersion": "协议版本",
   "settings.mcp.form.protocolVersion.auto": "自动（推荐）",
   "settings.mcp.form.protocolVersion.legacy": "兼容旧版",
@@ -2124,15 +2128,18 @@ const zhCN: Record<string, string> = {
   "settings.plugins.pi.empty": "这个范围没有 Pi 插件。",
   "settings.plugins.pi.failed": "无法更新 Pi 插件，请重试。",
   "settings.plugins.pi.configure": "设置",
-  "settings.plugins.pi.configHint": "只改这个插件 config.json 里的开关、数字和文本。嵌套内容仍留在文件里。下次新建会话生效。",
+  "settings.plugins.pi.configHint":
+    "只改这个插件 config.json 里的开关、数字和文本。嵌套内容仍留在文件里。下次新建会话生效。",
   "settings.plugins.pi.configSkipped": "这些项仍留在文件里：{keys}",
   "settings.plugins.pi.configSave": "保存",
   "settings.plugins.pi.configSaved": "已保存，下次新建会话生效。",
   "settings.plugins.pi.update": "更新",
   "settings.plugins.pi.updated": "已更新，下次新建会话生效。",
   "settings.plugins.pi.checkFailed": "检查更新失败，请重试。",
-  "settings.modelProviderDescription": "列出 Pi 已配置的供应商和模型，来自 ~/.pi/agent/models.json 与 auth.json。",
-  "settings.modelProvider.pi.source": "模型来自 Pi Agent（~/.pi/agent/models.json 与 auth.json）。可在此添加、编辑供应商。",
+  "settings.modelProviderDescription":
+    "列出 Pi 已配置的供应商和模型，来自 ~/.pi/agent/models.json 与 auth.json。",
+  "settings.modelProvider.pi.source":
+    "模型来自 Pi Agent（~/.pi/agent/models.json 与 auth.json）。可在此添加、编辑供应商。",
   "settings.modelProvider.pi.refresh": "刷新",
   "settings.modelProvider.pi.loading": "正在读取 Pi 模型目录…",
   "settings.modelProvider.pi.empty": "还没有可用的 Pi 模型。点击「添加供应商」开始配置。",
