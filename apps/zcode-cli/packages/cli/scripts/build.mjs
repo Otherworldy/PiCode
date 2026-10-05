@@ -1,4 +1,5 @@
-import { chmod, readFile, rm } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { chmod, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { readThirdPartyNotices, stageThirdPartyNotices } from "../../../../../scripts/third-party-notices.mjs";
 import { basename, dirname, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -322,8 +323,49 @@ export const buildCli = async ({
   }
 
   await chmod(outfile, executableFileMode);
+  await stageCodemodeRuntime(cliDirectory, resolve(dirname(piEntry), "../package.json"));
   await stageThirdPartyNotices(resolve(cliDirectory, "dist"), resolve(rootDirectory, "../.."));
 };
+
+/**
+ * PI_BUNDLED_NODE 从 zcode.cjs 旁边解析 codemode worker 和 quickjs wasm。
+ * 安装包没有仓库 node_modules；就算有，hoist 的 quickjs-wasi@2.2.0 也不导出 ./quickjs.wasm。
+ */
+async function stageCodemodeRuntime(cliDirectory, piPackageJson) {
+  const requireFromPi = createRequire(piPackageJson);
+  const wasmSource = requireFromPi.resolve("quickjs-wasi/quickjs.wasm");
+  const workerEntry = fileURLToPath(
+    import.meta.resolve("@earendil-works/pi-codemode/worker", pathToFileURL(piPackageJson).href),
+  );
+  await build({
+    entryPoints: [workerEntry],
+    bundle: true,
+    // 旁边的 cli/package.json 是 "type": "module"。写成 CJS 的 .js 会在 worker 里 require 未定义。
+    format: "esm",
+    platform: "node",
+    target: "node22",
+    outfile: resolve(cliDirectory, "dist/codemode-worker.js"),
+    plugins: [createCjsImportMetaUrlPlugin()],
+    external: resolveBuildExternal(),
+    legalComments: "none",
+    logLevel: "info",
+  });
+  const wasmDir = resolve(cliDirectory, "dist/node_modules/quickjs-wasi");
+  await mkdir(wasmDir, { recursive: true });
+  await copyFile(wasmSource, resolve(wasmDir, "quickjs.wasm"));
+  await writeFile(
+    resolve(wasmDir, "package.json"),
+    `${JSON.stringify(
+      {
+        name: "quickjs-wasi",
+        type: "module",
+        exports: { "./quickjs.wasm": "./quickjs.wasm" },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
 
 const entryPath = process.argv[1];
 if (entryPath && import.meta.url === pathToFileURL(entryPath).href) {

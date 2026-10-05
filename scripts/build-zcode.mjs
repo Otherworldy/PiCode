@@ -184,6 +184,16 @@ async function stageZCodePackage({ packageRoot, version }) {
     recursive: true,
   });
   await cp(agentBundle, resolve(packageRoot, "agent", "zcode.cjs"));
+  const agentDist = resolve(root, "apps/zcode-cli/packages/cli/dist");
+  await mkdir(resolve(packageRoot, "agent/node_modules/quickjs-wasi"), { recursive: true });
+  for (const relativePath of [
+    "codemode-worker.js",
+    "node_modules/quickjs-wasi/package.json",
+    "node_modules/quickjs-wasi/quickjs.wasm",
+  ]) {
+    await assertFile(resolve(agentDist, relativePath), `codemode sidecar ${relativePath}`);
+    await cp(resolve(agentDist, relativePath), resolve(packageRoot, "agent", relativePath));
+  }
   // TUI 入口通过真正的 CLI 路径定位伴随配置；只复制 JS 会在仓库外启动失败。
   await cp(agentProvider, resolve(packageRoot, "agent/provider"), { recursive: true });
   await cp(

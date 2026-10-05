@@ -57,6 +57,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 - 本地会话不把 `read` / `bash` / `edit` / `write` / `grep` / `find` / `ls` / `powershell` 注册成 customTools，也不关 Pi 内置工具。Pi 默认只激活 `read` / `bash` / `edit` / `write`；Host 在本地会话里补上已注册的 `grep` / `find` / `ls`。扩展仍可按原名替换，例如 pi-fff。卸掉替换扩展后，内置实现还在。权限走 `tool_call`，不换工具实现。SSH 工作区仍用远端实现替换 `read` / `bash` / `edit` / `write`，不把本机的 `grep` / `find` / `ls` 打开，否则这些工具打到本机盘。
 - PiCode 不再注册 `TodoRead` / `TodoWrite`，也不再提醒模型去调用它们。旧会话里的 todo 卡片和进程投影仍按工具名渲染。
 - 桌面和 CLI 同一份 `zcode.cjs` 把 Pi 打进 CJS。入口先设 `globalThis.PI_BUNDLED_NODE`，Pi 才用内嵌模块表加载 extension，而不是按 bundle 路径去找 `../dist/babel.cjs`。`import.meta.url` 不能改写成 `module.filename`：extension loader 同一个函数里有 `const module`，那个标识符在死区里，extension 会在 import 之前就失败。文件名改记在 `globalThis.__zcodeBundleFilename`。
+- 同一个标志让 codemode 去 bundle 旁边找 `codemode-worker.js`，并用 `createRequire` 解析 `quickjs-wasi/quickjs.wasm`。打包必须把这两个文件放在 `zcode.cjs` 旁边。wasm 取 Pi 依赖的 `quickjs-wasi@3.6.2`；仓库里被 hoist 的 2.2.0 没有这个导出，解析到它会让 codemode 直接失败。没标成 `direct` 的 MCP（包括 tdx）只能从这个沙箱里调。
 - 插件后台任务打到已失效的 extension ctx 时，app-server 只记一行并继续。这个拒绝不能把进程打退出。
 - 插件直接 `createAgentSession` 绕过 Registry：扁 `toolCall`，无 `workId`，无活动面板。
 

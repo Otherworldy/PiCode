@@ -9,7 +9,7 @@
 // 实测陈旧 3 天，任何 agent CLI 侧改动在 dev 里静默不生效，排查时会把「改动没生效」
 // 误判成「代码没起作用」。两边共用这一份，dev 与打包不可能再各自漂移。
 import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 export const AGENT_BUNDLE_SOURCE_RELATIVE = "apps/zcode-cli/packages/cli/dist/zcode.cjs";
 
@@ -39,6 +39,20 @@ export function stageAgentBundle({ repoRoot, platformKey, log = console.log }) {
   rmSync(glmDir, { recursive: true, force: true });
   mkdirSync(glmDir, { recursive: true });
   copyFileSync(cliBundlePath, stagedBundlePath);
+  // codemode 从 zcode.cjs 旁边解析 worker 和 quickjs wasm。漏拷则安装包里沙箱直接找不到模块。
+  for (const relativePath of [
+    "codemode-worker.js",
+    "node_modules/quickjs-wasi/package.json",
+    "node_modules/quickjs-wasi/quickjs.wasm",
+  ]) {
+    const source = resolve(dirname(cliBundlePath), relativePath);
+    if (!existsSync(source)) {
+      throw new Error(`[stage:agent-bundle] missing codemode sidecar: ${source}`);
+    }
+    const target = resolve(glmDir, relativePath);
+    mkdirSync(dirname(target), { recursive: true });
+    copyFileSync(source, target);
+  }
   const meta = {
     runtime: "electron-node",
     entry: "zcode.cjs",
