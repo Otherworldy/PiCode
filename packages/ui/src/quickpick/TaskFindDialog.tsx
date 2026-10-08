@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
+import { isImeComposingKeyEvent } from "@/lib/imeComposition.js";
 import {
   getConversationFindState,
   resolveConversationFindNavigationSelection,
@@ -71,6 +72,9 @@ export function TaskFindDialog({
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<TaskFindScope>("conversation");
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const compositionActiveRef = useRef(false);
+  // compositionend 可能先于确认键 keydown，那时 isComposing 已是 false。
+  const ignoreConfirmKeyRef = useRef(false);
   const conversationState = useMemo(
     () =>
       getConversationFindState(query.trim() ? conversationMatchCount : 0, conversationMatchIndex),
@@ -225,8 +229,29 @@ export function TaskFindDialog({
     handleScopeChange(scope === "conversation" ? "changes" : "conversation");
   }, [handleScopeChange, scope]);
 
+  const handleCompositionStart = useCallback(() => {
+    compositionActiveRef.current = true;
+  }, []);
+  const handleCompositionEnd = useCallback(() => {
+    compositionActiveRef.current = false;
+    ignoreConfirmKeyRef.current = true;
+    window.setTimeout(() => {
+      ignoreConfirmKeyRef.current = false;
+    }, 0);
+  }, []);
   const handleInputKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (
+        isImeComposingKeyEvent({
+          compositionActive: compositionActiveRef.current || ignoreConfirmKeyRef.current,
+          key: event.key,
+          nativeEvent: event.nativeEvent,
+        })
+      ) {
+        // 中文输入法的 Enter / 方向键是选词和确认候选，不是上一条/下一条结果。
+        // preventDefault 会取消候选上屏，搜索框一直停在占位符，计数保持 0/0。
+        return;
+      }
       const direction = resolveConversationFindNavigationDirection(event.key, event.shiftKey);
       if (direction) {
         event.preventDefault();
@@ -282,6 +307,8 @@ export function TaskFindDialog({
         ref={inputRef}
         value={query}
         onChange={(event) => handleQueryChange(event.target.value)}
+        onCompositionStart={handleCompositionStart}
+        onCompositionEnd={handleCompositionEnd}
         onKeyDown={handleInputKeyDown}
         placeholder={intl.formatMessage({ id: placeholderId })}
         className="min-w-0 flex-1 bg-transparent text-ui-base font-medium text-foreground outline-none placeholder:text-foreground-subtlest"
