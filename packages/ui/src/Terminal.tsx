@@ -19,6 +19,7 @@ import {
   formatTerminalTabTitle,
   getNextTerminalSessionIndex,
   getTerminalSessionCloseAction,
+  resolveTerminalDisplayLabel,
   type TerminalPanelState,
   type TerminalSessionDescriptor,
 } from "@/terminal/terminalPanelState.js";
@@ -26,6 +27,7 @@ import {
 export function Terminal({
   services,
   cwd,
+  branchName = null,
   workspaceIdentity,
   openWorkspaceKeys,
   isVisible,
@@ -36,6 +38,8 @@ export function Terminal({
 }: {
   services: IServiceAccessor;
   cwd?: string;
+  /** 这个 cwd 当前的 Git 分支。路径对不上时调用方传 null，不要拿别的目录的分支来填。 */
+  branchName?: string | null;
   workspaceIdentity?: string;
   openWorkspaceKeys?: string[];
   isVisible: boolean;
@@ -301,6 +305,14 @@ export function Terminal({
             <div className="truncate text-ui-base font-medium text-foreground">
               {intl.formatMessage({ id: "terminal.title" })}
             </div>
+            {branchName ? (
+              <div
+                className="max-w-40 truncate font-mono text-ui-base text-foreground-subtle"
+                title={branchName}
+              >
+                {branchName}
+              </div>
+            ) : null}
             {activeSession?.shellLabel ? (
               <div className="shrink-0 text-ui-base text-foreground-subtle">
                 {activeSession.shellLabel}
@@ -313,7 +325,10 @@ export function Terminal({
               {currentSessions.map((session) => {
                 const projectName =
                   getPathLeaf(session.cwd ?? "") || intl.formatMessage({ id: "terminal.title" });
-                const title = formatTerminalTabTitle(projectName, session.index);
+                const title = formatTerminalTabTitle(
+                  resolveTerminalDisplayLabel(branchName, projectName),
+                  session.index,
+                );
                 return (
                   <TerminalTabTrigger
                     key={session.id}

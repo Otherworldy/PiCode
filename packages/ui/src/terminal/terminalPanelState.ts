@@ -84,6 +84,41 @@ export function formatTerminalTabTitle(projectName: string, index: number): stri
   return index === 1 ? projectName : `${projectName} ${index}`;
 }
 
+function comparablePath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+/**
+ * 终端标题只能用这个 cwd 自己的分支。
+ * Git 摘要按项目身份缓存，切到 worktree 后会短暂留着主工作区的分支；路径对不上就先不显示，避免把 main 标成当前终端。
+ */
+export function terminalBranchNameForCwd(
+  summary: { isRepository: boolean; workspacePath: string; branchName: string | null },
+  cwd: string,
+): string | null {
+  if (!summary.isRepository) return null;
+  if (comparablePath(summary.workspacePath) !== comparablePath(cwd)) return null;
+  const branchName = summary.branchName?.trim() ?? "";
+  return branchName.length > 0 ? branchName : null;
+}
+
+export function resolveTerminalDisplayLabel(
+  branchName: string | null | undefined,
+  fallback: string,
+): string {
+  const branch = branchName?.trim() ?? "";
+  return branch || fallback;
+}
+
+export function allocateTerminalTitle(baseTitle: string, usedTitles: ReadonlySet<string>): string {
+  const base = baseTitle.trim() || "Terminal";
+  if (!usedTitles.has(base)) return base;
+  for (let index = 2; ; index += 1) {
+    const candidate = `${base} ${index}`;
+    if (!usedTitles.has(candidate)) return candidate;
+  }
+}
+
 type TerminalSessionCloseAction = "none" | "close-panel" | "close-session";
 
 interface TerminalSessionExitResult {

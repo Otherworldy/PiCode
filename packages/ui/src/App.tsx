@@ -9,6 +9,7 @@ import { useTaskQueryCacheStore } from "@/store/taskQueryCacheStore.js";
 import { useAppPanels } from "@/hooks/useAppPanels.js";
 import { useGitAutoRefresh } from "@/hooks/useGitAutoRefresh.js";
 import { useGitRepository } from "@/hooks/useGitRepository.js";
+import { terminalBranchNameForCwd } from "@/terminal/terminalPanelState.js";
 import {
   isWorkspaceWorktree,
   subscribeSessionWorktrees,
@@ -217,6 +218,11 @@ export function App({
   const [summaryPanelVariantOverride, setSummaryPanelVariantOverride] =
     useState<ChatViewSummaryPanelVariant | null>(null);
   const draftFocusVersion = workspaceShellZCodeState.draftFocusVersion;
+  const terminalTargetRef = useRef<{ cwd: string; branchName: string | null }>({
+    cwd: workspaceAbsPath,
+    branchName: null,
+  });
+  const resolveTerminalTarget = useCallback(() => terminalTargetRef.current, []);
   const {
     isTerminalOpen,
     setIsTerminalOpen,
@@ -276,6 +282,7 @@ export function App({
     defaultWhiteboardNamePrefix: intl.formatMessage({
       id: "whiteboard.defaultName",
     }),
+    resolveTerminalTarget,
   });
   const workspaceKey = workspaceIdentity?.trim() || workspaceAbsPath;
   const notificationEnabled = useZCodeStore((s) => s.notificationEnabled);
@@ -437,6 +444,10 @@ export function App({
     remoteTarget: workspaceRpcTarget.remoteTarget,
     workspaceIdentity,
   });
+  terminalTargetRef.current = {
+    cwd: gitWorkspacePath,
+    branchName: terminalBranchNameForCwd(gitState.summary, gitWorkspacePath),
+  };
   useGitAutoRefresh({
     // 会话在 .worktrees/ 时要盯这个副本。用父仓库路径对不上 summary key，监听直接关掉，
     // 右上角一直停在旧数字，只有打开审查页（includeExtendedData）才会重拉。

@@ -12,6 +12,7 @@ export function AnimatedTerminalPanel({
   services,
   workspaceAbsPath,
   executionCwd,
+  branchName = null,
   workspaceIdentity,
   openWorkspaceKeys,
   isVisible,
@@ -26,6 +27,8 @@ export function AnimatedTerminalPanel({
   workspaceAbsPath: string;
   /** Git worktree 目录。缺省时终端仍在主工作区。 */
   executionCwd?: string;
+  /** execution cwd 当前的 Git 分支。摘要还是别的目录时为 null。 */
+  branchName?: string | null;
   workspaceIdentity?: string;
   openWorkspaceKeys?: string[];
   isVisible: boolean;
@@ -140,6 +143,7 @@ export function AnimatedTerminalPanel({
                 <Terminal
                   services={services}
                   cwd={terminalCwd}
+                  branchName={branchName}
                   workspaceIdentity={executionCwd ? undefined : workspaceIdentity}
                   openWorkspaceKeys={openWorkspaceKeys}
                   isVisible={isVisible}
