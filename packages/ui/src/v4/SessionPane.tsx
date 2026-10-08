@@ -3193,6 +3193,41 @@ export function SessionPane({
     [clearQueueEditOperation],
   );
 
+  // Bug 原因：UI plugins 改动删掉了 handleFork / forkActionsEnabled 定义，
+  // 但 ConversationTimeline 仍读 forkActionsEnabled，渲染时 ReferenceError，
+  // 整块会话（含命令面板）被错误边界吃掉。依据：forkAssistant 仍是 CAS 命令，
+  // 入口由 row.actions.canFork 投影裁决，pane 只恢复删除前的回调。
+  const handleFork = useCallback(
+    (target: ConversationRowTarget) => {
+      const current = snapshotRef.current;
+      if (!sessionId || current === null) return;
+      // forkAssistant 是 CAS 命令：baseRevision 取当前投影 revision。
+      void dispatchCommand(
+        "forkAssistant",
+        { target },
+        sessionId,
+        current.revision,
+        current.logEpoch,
+      )
+        .then((ack) => {
+          if (ack.status !== "accepted" && ack.status !== "duplicate") {
+            logger.warn(`[v4-pane] fork 被拒绝: ${ack.status} ${ack.reasonCode ?? ""}`);
+            return;
+          }
+          if (ack.result?.type === "forkAssistant") {
+            // 原地切到 child session（与新建会话同一选择路径）。
+            onSessionCreated?.(ack.result.sessionId);
+          }
+        })
+        .catch((error: unknown) => {
+          logger.warn("[v4-pane] fork 提交失败", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+    },
+    [dispatchCommand, onSessionCreated, sessionId],
+  );
+
   const handleEdit = useCallback(
     async (
       target: ConversationRowTarget,
@@ -3969,6 +4004,8 @@ export function SessionPane({
       });
     };
   }, [submitSessionResume]);
+  // fork 可用性完全由 row.actions.canFork（CLI stable resolver 投影）裁决；pane 只提供命令回调。
+  const forkActionsEnabled = !readOnly && !selectionSideChat && Boolean(sessionId);
   // editUserQuery 已由 command 层防御 latest real user query，并在 running
   // 提交时先 stop barrier 再 rewind/rerun；UI 不应再用 completed gate 把入口整轮隐藏。
   const editActionsEnabled = !readOnly && !selectionSideChat && Boolean(sessionId);
@@ -5138,6 +5175,15 @@ export function SessionPane({
                   isDraft ? (
                     <div data-testid={TID_CHAT_EMPTY} className="w-full">
                       <ConversationDraftEmptyState />
+                    </div>
+                  ) : timelineSnapshot === null ? (
+                    <div
+                      role="status"
+                      data-testid="v4-history-loading"
+                      className="flex h-full min-h-48 items-center justify-center gap-2 text-ui-sm text-foreground-subtle"
+                    >
+                      <ChatLoading loading size="sm" />
+                      {intl.formatMessage({ id: "chat.history.loadingSession" })}
                     </div>
                   ) : null
                 }

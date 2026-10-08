@@ -12,8 +12,21 @@ export type ConversationTurnFlowItem =
   | { kind: "userInput"; row: UserInputRow }
   | { kind: "assistantHistory"; rows: AssistantWorkRow[] }
   | { kind: "assistantText"; row: AssistantTextRow; latest: boolean }
-  | { kind: "assistantWork"; rows: AssistantWorkRow[] }
+  | {
+      kind: "assistantWork";
+      rows: AssistantWorkRow[];
+      /** inline 不进工作折叠（插件卡、压缩分隔线）。缺省按 following 折叠。 */
+      placement?: "following" | "inline";
+    }
   | ConversationCuaGroupRenderItem;
+
+/** 正文两侧的工具/思考块。纯压缩行和 inline 不算。 */
+export function isSeparatelyFoldedFlowItem(item: ConversationTurnFlowItem): boolean {
+  if (item.kind === "assistantHistory") return true;
+  if (item.kind === "cuaGroup") return item.flowKind === "assistantHistory";
+  if (item.kind !== "assistantWork" || item.placement === "inline") return false;
+  return item.rows.some((row) => !isCompactStatusRow(row));
+}
 
 function isUserInputRow(row: ConversationRow): row is UserInputRow {
   return row.kind === "userInput";
@@ -25,6 +38,30 @@ function isAssistantTextRow(row: ConversationRow): row is AssistantTextRow {
 
 function isAssistantWorkRow(row: ConversationRow): row is AssistantWorkRow {
   return row.kind !== "turnHeader" && row.kind !== "userInput";
+}
+
+/** Pi process 插件的 custom message。它不是模型正文，不能拿来切开折叠。 */
+export function isProcessEventText(text: string): boolean {
+  const trimmed = text.trim();
+  return trimmed.startsWith("<process_event") && trimmed.includes("</process_event>");
+}
+
+export function processEventSummary(text: string): string | null {
+  if (!isProcessEventText(text)) return null;
+  const summary = /<summary>([\s\S]*?)<\/summary>/.exec(text)?.[1]?.trim();
+  if (summary) return summary;
+  const line = text
+    .split("\n")
+    .map((item) => item.trim())
+    .find((item) => item.length > 0 && !item.startsWith("<"));
+  return line ?? null;
+}
+
+function staysOutsideWorkFold(row: AssistantWorkRow): boolean {
+  if (row.kind !== "toolCall") return false;
+  const name = row.toolName.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  // 问卷收进折叠后会被卸掉，展开前看起来像调用丢了。
+  return name === "ask_user_question" || name === "askuserquestion";
 }
 
 /** 压缩状态不进「已工作」折叠。跑完的轮默认收起，塞进去就变成没有「正在压缩上下文」。 */
@@ -47,15 +84,21 @@ export function splitCompactStatusRows(
 
 function appendGroupedAssistantFlowItem(
   items: ConversationTurnFlowItem[],
-  kind: "assistantHistory" | "assistantWork",
   row: AssistantWorkRow,
+  placement: "history" | "following" | "inline",
 ): void {
+  const kind = placement === "history" ? "assistantHistory" : "assistantWork";
+  const workPlacement = placement === "inline" ? "inline" : "following";
   const previous = items.at(-1);
-  if (previous?.kind === kind) {
+  if (
+    previous?.kind === kind &&
+    (previous.kind === "assistantHistory" || previous.placement === workPlacement)
+  ) {
     previous.rows.push(row);
     return;
   }
-  items.push({ kind, rows: [row] });
+  if (kind === "assistantHistory") items.push({ kind, rows: [row] });
+  else items.push({ kind, rows: [row], placement: workPlacement });
 }
 
 export function buildConversationFlowItems(options: {
@@ -63,8 +106,6 @@ export function buildConversationFlowItems(options: {
   assistantHistoryRows: readonly AssistantWorkRow[];
   assistantFollowingRows: readonly AssistantWorkRow[];
   assistantTailRows: readonly AssistantWorkRow[];
-  /** 当前 visual work segment 外置展示的末段正文。 */
-  visibleAssistantTextRow?: AssistantTextRow;
   /** 整个 product turn 唯一可挂 action 的最终正文。 */
   latestAssistantTextRow?: AssistantTextRow;
   timelineOnly: boolean;
@@ -84,12 +125,13 @@ export function buildConversationFlowItems(options: {
     // flowItems，renderer 会把它渲染在定时任务卡片、文件 summary 和消息操作栏之前。
     // 这里只保留真实 flow；boundary 由 TurnGroup 在全部 turn-local 附属 UI 之后统一收尾。
     if (tailRowIds.has(row.rowId)) continue;
+    // 正文是折叠边界：中间回复也留在折叠外，把前后工具切成各自的块。
+    // process 通知除外，它跟在工具后面，留在同一块里。
     if (
       isAssistantTextRow(row) &&
-      (row.rowId === options.visibleAssistantTextRow?.rowId || !historyRowIds.has(row.rowId)) &&
-      !followingRowIds.has(row.rowId) &&
       !tailRowIds.has(row.rowId) &&
-      !options.timelineOnly
+      !options.timelineOnly &&
+      !isProcessEventText(row.text)
     ) {
       items.push({
         kind: "assistantText",
@@ -98,11 +140,14 @@ export function buildConversationFlowItems(options: {
       });
       continue;
     }
-    appendGroupedAssistantFlowItem(
-      items,
-      historyRowIds.has(row.rowId) && !options.timelineOnly ? "assistantHistory" : "assistantWork",
-      row,
-    );
+    const placement = staysOutsideWorkFold(row)
+      ? "inline"
+      : options.timelineOnly || !historyRowIds.has(row.rowId)
+        ? followingRowIds.has(row.rowId)
+          ? "following"
+          : "inline"
+        : "history";
+    appendGroupedAssistantFlowItem(items, row, placement);
   }
 
   return items;

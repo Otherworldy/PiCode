@@ -77,7 +77,10 @@ import {
   isConversationReasoningRowVisible,
   type ConversationRowRenderContext,
 } from "@/v4/conversationRowContext.js";
-import { splitCompactStatusRows } from "@/v4/conversationTurnFlowItems.js";
+import {
+  isSeparatelyFoldedFlowItem,
+  splitCompactStatusRows,
+} from "@/v4/conversationTurnFlowItems.js";
 import type {
   AssistantWorkRow,
   ConversationTurnFlowItem,
@@ -85,6 +88,7 @@ import type {
   ConversationTurnWorkSegment,
 } from "@/v4/conversationTurnRenderUnits.js";
 import { formatConversationWorkDuration } from "@/v4/conversationWorkDuration.js";
+import { inferReasoningDurations } from "@/v4/reasoningDuration.js";
 import { ConversationTurnRow, resolveAssistantCopyText } from "@/v4/ConversationTurnRow.js";
 import { ConversationHookDetailsAction } from "@/v4/ConversationHookDetailsAction.js";
 import { toolCallRowToLegacyNode } from "@/v4/toolCallRowAdapter.js";
@@ -482,7 +486,7 @@ function CollapsibleAssistantWorkItems({
   context: ConversationRowRenderContext;
   stageTailIsRunning?: boolean;
   assistantCodeCommentProjectionEnabled?: boolean;
-  historyContainer: { chunkKey: string; open: boolean };
+  historyContainer?: { chunkKey: string; open: boolean };
 }) {
   const groups = splitCompactStatusRows(rows);
   if (groups.length === 1 && groups[0]?.pinned !== true) {
@@ -649,12 +653,32 @@ function OffPeakTurnCards({
   );
 }
 
+function foldedWorkLabel(
+  intl: ReturnType<typeof useZCodeIntl>["intl"],
+  locale: ReturnType<typeof useZCodeIntl>["locale"],
+  toolCount: number,
+  durationMs: number | undefined,
+): string | null {
+  if (toolCount <= 0) return null;
+  const duration = formatConversationWorkDuration(durationMs, intl, locale);
+  return duration
+    ? intl.formatMessage({ id: "chat.history.foldedWork" }, { count: toolCount, duration })
+    : intl.formatMessage({ id: "chat.history.foldedTools" }, { count: toolCount });
+}
+
 function AssistantHistoryStatus({
   segment,
   open,
+  plain = false,
+  toolCount = 0,
+  chunkDurationMs,
 }: {
   segment: ConversationTurnWorkSegment;
   open: boolean;
+  /** 没有可折叠的工具块时只显示时长，不挂触发器。 */
+  plain?: boolean;
+  toolCount?: number;
+  chunkDurationMs?: number;
 }) {
   const { intl, locale } = useZCodeIntl();
   const durationLabel = formatConversationWorkDuration(
@@ -662,37 +686,165 @@ function AssistantHistoryStatus({
     intl,
     locale,
   );
+  const folded = foldedWorkLabel(intl, locale, toolCount, chunkDurationMs);
+  const runningLabel = intl.formatMessage(
+    { id: "chat.history.workingFor" },
+    { duration: durationLabel ?? "" },
+  );
   const label =
     segment.workStatus?.state === "interrupted"
       ? intl.formatMessage({ id: "chat.history.stopped" })
       : segment.workStatus?.state === "running"
-        ? intl.formatMessage({ id: "chat.history.workingFor" }, { duration: durationLabel ?? "" })
-        : durationLabel
-          ? intl.formatMessage({ id: "chat.history.workedFor" }, { duration: durationLabel })
-          : intl.formatMessage({ id: "chat.history.worked" });
+        ? toolCount > 0
+          ? `${runningLabel} · ${intl.formatMessage({ id: "chat.history.foldedTools" }, { count: toolCount })}`
+          : runningLabel
+        : (folded ??
+          (durationLabel
+            ? intl.formatMessage({ id: "chat.history.workedFor" }, { duration: durationLabel })
+            : intl.formatMessage({ id: "chat.history.worked" })));
+  const button = (
+    <button
+      type="button"
+      data-testid={testId(TID_CHAT_ASSISTANT_HISTORY_TRIGGER, segment.key)}
+      data-history-open={String(open)}
+      className="group/history-message inline-flex max-w-full items-center gap-2 text-left text-ui-base text-foreground-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-input-border-focused)]"
+    >
+      <span className="truncate">{label}</span>
+      {!plain && !segment.assistantHistoryDefaultOpen ? (
+        <ChevronRightIcon
+          aria-hidden
+          className={cn(
+            "size-4 shrink-0 text-[var(--color-foreground-subtlest)] opacity-70 transition-transform",
+            open ? "rotate-90" : "rotate-0",
+          )}
+        />
+      ) : null}
+    </button>
+  );
 
+  return (
+    <div className="flex w-full border-b border-[var(--color-border)]/50 pb-2">
+      {plain ? button : <CollapsibleTrigger asChild>{button}</CollapsibleTrigger>}
+    </div>
+  );
+}
+
+function ProcessHistoryStatus({
+  chunkKey,
+  open,
+  toolCount,
+  chunkDurationMs,
+}: {
+  chunkKey: string;
+  open: boolean;
+  toolCount: number;
+  chunkDurationMs?: number;
+}) {
+  const { intl, locale } = useZCodeIntl();
+  const folded = foldedWorkLabel(intl, locale, toolCount, chunkDurationMs);
+  const duration = formatConversationWorkDuration(chunkDurationMs, intl, locale);
+  const label =
+    folded ??
+    (duration
+      ? intl.formatMessage({ id: "chat.history.workedFor" }, { duration })
+      : intl.formatMessage({ id: "chat.history.process" }));
   return (
     <div className="flex w-full border-b border-[var(--color-border)]/50 pb-2">
       <CollapsibleTrigger asChild>
         <button
           type="button"
-          data-testid={testId(TID_CHAT_ASSISTANT_HISTORY_TRIGGER, segment.key)}
+          data-testid={testId(TID_CHAT_ASSISTANT_HISTORY_TRIGGER, chunkKey)}
           data-history-open={String(open)}
+          data-history-role="process"
           className="group/history-message inline-flex max-w-full items-center gap-2 text-left text-ui-base text-foreground-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-input-border-focused)]"
         >
           <span className="truncate">{label}</span>
-          {!segment.assistantHistoryDefaultOpen ? (
-            <ChevronRightIcon
-              aria-hidden
-              className={cn(
-                "size-4 shrink-0 text-[var(--color-foreground-subtlest)] opacity-70 transition-transform",
-                open ? "rotate-90" : "rotate-0",
-              )}
-            />
-          ) : null}
+          <ChevronRightIcon
+            aria-hidden
+            className={cn(
+              "size-4 shrink-0 text-[var(--color-foreground-subtlest)] opacity-70 transition-transform",
+              open ? "rotate-90" : "rotate-0",
+            )}
+          />
         </button>
       </CollapsibleTrigger>
     </div>
+  );
+}
+
+function chunkWorkStats(
+  rows: readonly {
+    kind: string;
+    createdAt?: number;
+    startedAt?: number;
+    endedAt?: number;
+    durationMs?: number;
+  }[],
+): {
+  toolCount: number;
+  durationMs?: number;
+} {
+  let toolCount = 0;
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  for (const row of rows) {
+    if (row.kind === "toolCall") toolCount += 1;
+    const start = row.startedAt ?? row.createdAt;
+    let end = row.endedAt ?? start;
+    if (row.kind === "reasoning" && start !== undefined && row.durationMs !== undefined) {
+      end = Math.max(end ?? start, start + row.durationMs);
+    }
+    if (start !== undefined && start < min) min = start;
+    if (end !== undefined && end > max) max = end;
+  }
+  const span = Number.isFinite(min) && Number.isFinite(max) ? max - min : 0;
+  // 不足 1 秒多半是同一条消息上的时间戳，不能显示成「工作 1 秒」。
+  return span >= 1000 ? { toolCount, durationMs: span } : { toolCount };
+}
+
+function WorkChunkFold({
+  chunkKey,
+  defaultOpen,
+  header,
+  segment,
+  toolCount,
+  chunkDurationMs,
+  children,
+}: {
+  chunkKey: string;
+  defaultOpen: boolean;
+  header: "duration" | "process";
+  segment: ConversationTurnWorkSegment;
+  toolCount: number;
+  chunkDurationMs?: number;
+  children: (open: boolean) => ReactNode;
+}) {
+  const [storedOpen, setStoredOpen] = useState(defaultOpen);
+  useEffect(() => {
+    setStoredOpen(defaultOpen);
+  }, [defaultOpen, chunkKey]);
+  // 第一块在跑的时候锁开，和原来的「工作中」一样。后面的「过程」可以单独收。
+  const lockedOpen = header === "duration" && defaultOpen;
+  const open = lockedOpen ? true : storedOpen;
+  return (
+    <Collapsible open={open} onOpenChange={lockedOpen ? undefined : setStoredOpen}>
+      {header === "duration" ? (
+        <AssistantHistoryStatus
+          segment={segment}
+          open={open}
+          toolCount={toolCount}
+          chunkDurationMs={chunkDurationMs}
+        />
+      ) : (
+        <ProcessHistoryStatus
+          chunkKey={chunkKey}
+          open={open}
+          toolCount={toolCount}
+          chunkDurationMs={chunkDurationMs}
+        />
+      )}
+      {children(open)}
+    </Collapsible>
   );
 }
 
@@ -729,33 +881,37 @@ function ConversationWorkSegmentFlow({
   shareSelectionToggle?: ReactNode;
   shareSelectionRowId?: number;
 }) {
-  const [historyOpen, setHistoryOpen] = useState(segment.assistantHistoryDefaultOpen);
-  useEffect(() => {
-    setHistoryOpen(segment.assistantHistoryDefaultOpen);
-  }, [segment.assistantHistoryDefaultOpen, segment.key]);
-
   const shouldShowHistoryStatus = segment.workStatus !== undefined;
+  const hasFold = segment.flowItems.some(isSeparatelyFoldedFlowItem);
   const firstAssistantFlowItemIndex = segment.flowItems.findIndex(
     (item) => item.kind !== "userInput",
   );
-  let historyChunkIndex = 0;
-  const open = segment.assistantHistoryDefaultOpen ? true : historyOpen;
+  let foldIndex = 0;
+
+  const renderWorkItems = (
+    rows: typeof segment.assistantHistoryRows,
+    stageTailIsRunning: boolean,
+    historyContainer?: { chunkKey: string; open: boolean },
+  ) => (
+    <CollapsibleAssistantWorkItems
+      rows={rows}
+      context={context}
+      stageTailIsRunning={stageTailIsRunning}
+      assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
+      {...(historyContainer ? { historyContainer } : {})}
+    />
+  );
 
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={segment.assistantHistoryDefaultOpen ? undefined : setHistoryOpen}
-      // 外层 flex gap 不属于 Radix 测量的 content 高度，收起到 0 后会在
-      // display:none 的最后一帧再少 20px。普通兄弟用外边距保持原盒模型，history
-      // 的间距则放进动画层。
-      className="history-message flex flex-col [&>*+*:not([data-slot='collapsible-content'])]:mt-5"
-    >
+    // 外层不用 gap：Radix 收起动画量的是 content 高度，兄弟间距放在外边距上。
+    <div className="history-message flex flex-col [&>*+*]:mt-5">
       {segment.flowItems.map((item, index) => {
         const stageTailIsRunning =
           segment.workStatus?.state === "running" &&
           index === segment.flowItems.length - 1 &&
           (item.kind === "assistantHistory" || item.kind === "assistantWork");
-        const showHistoryStatus = shouldShowHistoryStatus && index === firstAssistantFlowItemIndex;
+        const showPlainStatus =
+          shouldShowHistoryStatus && !hasFold && index === firstAssistantFlowItemIndex;
         const itemKey =
           item.kind === "userInput" || item.kind === "assistantText"
             ? `${item.kind}:${item.row.rowId}`
@@ -780,36 +936,6 @@ function ConversationWorkSegmentFlow({
             ) : (
               userRow
             );
-        } else if (item.kind === "cuaGroup") {
-          const group = <ConversationCuaGroupRow item={item} context={context} />;
-          if (item.flowKind === "assistantHistory") {
-            const chunkKey =
-              historyChunkIndex === 0 ? segment.key : `${segment.key}:chunk-${historyChunkIndex}`;
-            historyChunkIndex += 1;
-            content = (
-              <CollapsibleContent
-                data-testid={testId(TID_CHAT_ASSISTANT_HISTORY_CONTENT, chunkKey)}
-                data-history-open={String(open)}
-              >
-                <div className="pt-5">{group}</div>
-              </CollapsibleContent>
-            );
-          } else {
-            content = group;
-          }
-        } else if (item.kind === "assistantHistory") {
-          const chunkKey =
-            historyChunkIndex === 0 ? segment.key : `${segment.key}:chunk-${historyChunkIndex}`;
-          historyChunkIndex += 1;
-          content = (
-            <CollapsibleAssistantWorkItems
-              rows={item.rows}
-              context={context}
-              stageTailIsRunning={stageTailIsRunning}
-              assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
-              historyContainer={{ chunkKey, open }}
-            />
-          );
         } else if (item.kind === "assistantText") {
           content = (
             <ConversationTurnRow
@@ -828,33 +954,62 @@ function ConversationWorkSegmentFlow({
               assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
             />
           );
-        } else {
-          // 跟在正文后的工具和思考也要进同一层折叠。压缩分隔线除外，否则收起后看不到。
-          const chunkKey =
-            historyChunkIndex === 0 ? segment.key : `${segment.key}:chunk-${historyChunkIndex}`;
-          historyChunkIndex += 1;
+        } else if (
+          isSeparatelyFoldedFlowItem(item) &&
+          (item.kind === "assistantHistory" ||
+            item.kind === "assistantWork" ||
+            item.kind === "cuaGroup")
+        ) {
+          // 正文把工具和思考切成独立块：第一块用整轮时长，后面的块用这段的工具次数和时长。
+          const chunkKey = foldIndex === 0 ? segment.key : `${segment.key}:chunk-${foldIndex}`;
+          const header = foldIndex === 0 ? "duration" : "process";
+          foldIndex += 1;
+          const stats = chunkWorkStats(item.rows);
           content = (
-            <CollapsibleAssistantWorkItems
-              rows={item.rows}
-              context={context}
-              stageTailIsRunning={stageTailIsRunning}
-              assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
-              historyContainer={{ chunkKey, open }}
-            />
+            <WorkChunkFold
+              chunkKey={chunkKey}
+              defaultOpen={segment.assistantHistoryDefaultOpen}
+              header={header}
+              segment={segment}
+              toolCount={stats.toolCount}
+              {...(stats.durationMs !== undefined ? { chunkDurationMs: stats.durationMs } : {})}
+            >
+              {(open) =>
+                item.kind === "cuaGroup" ? (
+                  <CollapsibleContent
+                    data-testid={testId(TID_CHAT_ASSISTANT_HISTORY_CONTENT, chunkKey)}
+                    data-history-open={String(open)}
+                  >
+                    <div className="pt-5">
+                      <ConversationCuaGroupRow item={item} context={context} />
+                    </div>
+                  </CollapsibleContent>
+                ) : (
+                  renderWorkItems(item.rows, stageTailIsRunning, { chunkKey, open })
+                )
+              }
+            </WorkChunkFold>
           );
+        } else if (item.kind === "cuaGroup") {
+          content = <ConversationCuaGroupRow item={item} context={context} />;
+        } else {
+          // 压缩分隔线和折叠区外的插件卡不进工作块。
+          content = renderWorkItems(item.rows, stageTailIsRunning);
         }
 
         return (
           <Fragment key={itemKey}>
-            {showHistoryStatus ? <AssistantHistoryStatus segment={segment} open={open} /> : null}
+            {showPlainStatus ? (
+              <AssistantHistoryStatus segment={segment} open={false} plain />
+            ) : null}
             {content}
           </Fragment>
         );
       })}
-      {shouldShowHistoryStatus && firstAssistantFlowItemIndex < 0 ? (
-        <AssistantHistoryStatus segment={segment} open={open} />
+      {shouldShowHistoryStatus && !hasFold && firstAssistantFlowItemIndex < 0 ? (
+        <AssistantHistoryStatus segment={segment} open={false} plain />
       ) : null}
-    </Collapsible>
+    </div>
   );
 }
 
@@ -1207,14 +1362,19 @@ function ConversationTurnGroupImpl({
     () => unit.assistantWorkRows.find((row) => row.kind === "reasoning")?.rowId,
     [unit.assistantWorkRows],
   );
+  const reasoningDurationMsByRowId = useMemo(
+    () => inferReasoningDurations(unit.renderRows, unit.header?.startedAt),
+    [unit.header?.startedAt, unit.renderRows],
+  );
   const assistantRowContext = useMemo<ConversationRowRenderContext>(
     () => ({
       ...context,
+      reasoningDurationMsByRowId,
       ...(firstReasoningRowId !== undefined
         ? { messageStreamFirstReasoningRowId: firstReasoningRowId }
         : {}),
     }),
-    [context, firstReasoningRowId],
+    [context, firstReasoningRowId, reasoningDurationMsByRowId],
   );
   const latestAssistantTextRow = unit.latestAssistantTextRow;
   const assistantPreviewPptxAutoOpenTarget = context.assistantPreviewPptxAutoOpenTarget;

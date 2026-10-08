@@ -194,8 +194,8 @@ export function readPiJsonl(
       beginTurn(timestamp);
       noteAt(timestamp);
       const id = typeof entry.id === "string" ? entry.id : undefined;
-      events.push({ type: "message_start", message: { role: "assistant", id } });
-      events.push({ type: "message_end", message: { role: "assistant", content: text, id } });
+      events.push({ type: "message_start", ...(timestamp > 0 ? { at: timestamp } : {}), message: { role: "assistant", id } });
+      events.push({ type: "message_end", ...(timestamp > 0 ? { at: timestamp } : {}), message: { role: "assistant", content: text, id } });
       continue;
     }
     if (type !== "message") continue;
@@ -214,12 +214,14 @@ export function readPiJsonl(
         (typeof message.exitCode === "number" && message.exitCode !== 0);
       events.push({
         type: "tool_execution_start",
+        ...(timestamp > 0 ? { at: timestamp } : {}),
         toolCallId: id,
         toolName: "bash",
         args: { command },
       });
       events.push({
         type: "tool_execution_end",
+        ...(timestamp > 0 ? { at: timestamp } : {}),
         toolCallId: id,
         toolName: "bash",
         result: { content: [{ type: "text", text: output }] },
@@ -245,10 +247,15 @@ export function readPiJsonl(
       beginTurn(timestamp);
       noteAt(timestamp);
       const id = typeof entry.id === "string" ? entry.id : undefined;
-      events.push({ type: "message_start", message: { role: "assistant", id } });
+      events.push({
+        type: "message_start",
+        ...(timestamp > 0 ? { at: timestamp } : {}),
+        message: { role: "assistant", id },
+      });
       for (const call of toolCallsOf(message.content)) {
         events.push({
           type: "tool_execution_start",
+          ...(timestamp > 0 ? { at: timestamp } : {}),
           toolCallId: call.id,
           toolName: call.name,
           args: call.args,
@@ -258,6 +265,7 @@ export function readPiJsonl(
       if (text.trim()) lastAssistant = text;
       events.push({
         type: "message_end",
+        ...(timestamp > 0 ? { at: timestamp } : {}),
         message: { role: "assistant", content: message.content, id },
       });
       continue;
@@ -269,6 +277,7 @@ export function readPiJsonl(
       noteAt(timestamp);
       events.push({
         type: "tool_execution_end",
+        ...(timestamp > 0 ? { at: timestamp } : {}),
         toolCallId,
         toolName,
         result: { content: [{ type: "text", text: messageText(message.content) }] },

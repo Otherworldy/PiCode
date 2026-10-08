@@ -33,9 +33,10 @@ export type PiHostEvent =
     }
   | { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string }
   | { type: "agent_settled"; at?: number }
-  | { type: "message_start"; message: { role: string; content?: unknown; id?: string } }
+  | { type: "message_start"; at?: number; message: { role: string; content?: unknown; id?: string } }
   | {
       type: "message_end";
+      at?: number;
       message: {
         role: string;
         content?: unknown;
@@ -47,6 +48,7 @@ export type PiHostEvent =
   | { type: "message_update"; assistantMessageEvent: PiAssistantDelta }
   | {
       type: "tool_execution_start";
+      at?: number;
       toolCallId: string;
       toolName: string;
       args?: unknown;
@@ -60,6 +62,7 @@ export type PiHostEvent =
     }
   | {
       type: "tool_execution_end";
+      at?: number;
       toolCallId: string;
       toolName: string;
       result?: PiToolResult;
@@ -86,6 +89,7 @@ export type PiExtensionUiEvent = {
     | "confirm"
     | "input"
     | "editor"
+    | "ask"
     | "notify"
     | "setStatus"
     | "setWidget"
@@ -95,6 +99,8 @@ export type PiExtensionUiEvent = {
   title?: string;
   message?: string;
   options?: string[];
+  /** ask-me 的结构化问卷。问题和选项分开，不把示意拼进 title。 */
+  questions?: HostAskQuestion[];
   placeholder?: string;
   prefill?: string;
   timeout?: number;
@@ -110,10 +116,26 @@ export type PiExtensionUiEvent = {
   state?: unknown;
 };
 
+export type HostAskQuestion = {
+  question: string;
+  header?: string;
+  multiSelect?: boolean;
+  options: Array<{ label: string; description?: string; preview?: string }>;
+};
+
+export type HostAskAnswer = {
+  question: string;
+  answer: string;
+  custom: boolean;
+  selected?: string[];
+  preview?: string;
+};
+
 export type PiExtensionUiResponse =
   | { id: string; cancelled: true }
   | { id: string; confirmed: boolean }
-  | { id: string; value: string };
+  | { id: string; value: string; content?: Record<string, unknown> }
+  | { id: string; content: Record<string, unknown> };
 
 export interface PiSlashCommandView {
   name: string;

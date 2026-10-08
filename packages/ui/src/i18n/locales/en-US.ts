@@ -4640,6 +4640,9 @@ const enUS: Record<string, string> = {
   "chat.history.workedFor": "Worked for {duration}",
   "chat.history.worked": "Worked",
   "chat.history.stopped": "Stopped",
+  "chat.history.process": "Process",
+  "chat.history.foldedWork": "Called {count} tools, worked {duration}",
+  "chat.history.foldedTools": "Called {count} tools",
   "chat.history.duration.day": "d",
   "chat.history.duration.hour": "h",
   "chat.history.duration.minute": "m",
@@ -4690,6 +4693,7 @@ const enUS: Record<string, string> = {
   "chat.reasoning.thought": "Thought",
   "chat.reasoning.durationFewSeconds": "a few seconds",
   "chat.reasoning.durationSeconds": "{seconds} seconds",
+  "chat.reasoning.durationFor": "for {duration}",
   "chat.contextUsage": "Context usage {used} of {total}",
   "chat.contextUsage.title": "Context windows",
   "chat.contextUsageDescription":

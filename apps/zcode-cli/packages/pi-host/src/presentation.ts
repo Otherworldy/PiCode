@@ -17,6 +17,8 @@ export function mapPiToolName(piName: string | undefined, viaRegistry = false): 
   if (!key) return "Tool";
   const mapped = FAMILY_NAMES[key.toLowerCase()];
   if (mapped) return mapped;
+  // pi-ask-me 的工具名。不映射的话问卷卡认不出，折叠后只剩一张空的「工具调用」。
+  if (key.toLowerCase() === "ask_user_question") return "AskUserQuestion";
   if (viaRegistry && SUBAGENT_NAMES.has(key.toLowerCase())) return "Agent";
   return key;
 }

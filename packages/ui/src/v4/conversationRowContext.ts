@@ -60,6 +60,8 @@ export interface ConversationRowRenderContext {
   messageStreamShowReasoning?: boolean;
   /** 当前 assistant 轮次的第一条 reasoning row；关闭完整思考时仍需展示。 */
   messageStreamFirstReasoningRowId?: number;
+  /** 思考行缺少 durationMs 时，按相邻事件补上的时长。 */
+  reasoningDurationMsByRowId?: ReadonlyMap<number, number>;
   /** 常规设置：是否在对话消息流中渲染 Todo 工具卡片。 */
   messageStreamShowTodos?: boolean;
   /** 常规设置：是否聚合连续的 Explore-compatible 工具。 */

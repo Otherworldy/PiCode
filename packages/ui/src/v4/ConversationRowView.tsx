@@ -2,6 +2,7 @@ import { GenUiMessageResponse } from "@/gen-ui/index.js";
 /* oxlint-disable eslint(max-lines) -- v4 逐行 row 渲染分发集中收口（每种 row 一个 memo 叶子 + timelineMarker 分隔线），拆分会打散行类型对照。 */
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { compactFailureText } from "@/v4/compactFailureText.js";
+import { processEventSummary } from "@/v4/conversationTurnFlowItems.js";
 import { ResumeHereMenu, type ResumeHereChoice } from "@/v4/ResumeHereMenu.js";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -1664,6 +1665,14 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
     [projectsCodeComments, row.text, streaming],
   );
   const visiblePreviewCards = previewCards && previewCards.length > 0 ? previewCards : null;
+  const processSummary = processEventSummary(row.text);
+  if (processSummary) {
+    return (
+      <RowShell rowId={row.rowId} className="group/assistant-row">
+        <p className="w-full text-ui-base text-foreground-subtle">{processSummary}</p>
+      </RowShell>
+    );
+  }
   return (
     <RowShell
       rowId={row.rowId}
@@ -1759,17 +1768,20 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
 const ReasoningRowView = memo(function ReasoningRowView({
   row,
   contentVariant,
+  durationMs,
 }: {
   row: ReasoningRow;
   contentVariant?: "default" | "nested";
+  durationMs?: number;
 }) {
   const streaming = row.state === "streaming";
   // 外观对齐旧 ThoughtBlock（旧版 chatMessageParts）：ai-elements Reasoning
   // 折叠组件。交互调整原因：流式 reasoning 默认展开会持续挤压工具和正文空间；
   // 现在 streaming/complete 都默认收起，只保留运行态文案，用户可手动展开。
   // autoCollapseKey 仍保证状态边界不会覆盖已经发生过的用户交互。
+  const resolvedDurationMs = streaming ? undefined : (row.durationMs ?? durationMs);
   const durationSeconds =
-    row.durationMs !== undefined ? Math.max(1, Math.ceil(row.durationMs / 1000)) : undefined;
+    resolvedDurationMs !== undefined ? Math.max(1, Math.ceil(resolvedDurationMs / 1000)) : undefined;
   if (streaming && row.text.length === 0) {
     return null;
   }
@@ -2355,7 +2367,11 @@ function ConversationRowViewImpl({
       // 关闭“显示思考过程”只隐藏每轮后续 reasoning；首条 reasoning
       // 是该轮最小必要思考提示，必须由 turn 全序派生的 rowId 保留下来。
       return isConversationReasoningRowVisible(row.rowId, context) ? (
-        <ReasoningRowView row={row} contentVariant={reasoningContentVariant} />
+        <ReasoningRowView
+          row={row}
+          contentVariant={reasoningContentVariant}
+          durationMs={context.reasoningDurationMsByRowId?.get(row.rowId)}
+        />
       ) : null;
     case "turnHeader":
       return <TurnHeaderRowView row={row} />;

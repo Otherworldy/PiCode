@@ -409,7 +409,11 @@ export class PiToV4Projector {
     return { mode: "startNow" };
   }
 
+  /** 重放时用 jsonl 上的原时间。缺省才用当前墙钟，避免一段工具被收成「工作 1 秒」。 */
+  private stamp: number | undefined;
+
   private reduce(event: PiHostEvent): ConversationDelta[] {
+    this.stamp = "at" in event && typeof event.at === "number" ? event.at : undefined;
     switch (event.type) {
       case "agent_start":
         return this.startTurn(event.at);
@@ -499,7 +503,7 @@ export class PiToV4Projector {
       turnId,
       entityId: `row:${rowId}`,
       productTurnId: this.productTurnId || turnId,
-      createdAt: Date.now(),
+      createdAt: this.stamp ?? Date.now(),
       createdAtSeq: rowId,
     };
   }
@@ -636,7 +640,20 @@ export class PiToV4Projector {
       if (rowId == null) return [];
       const row = this.snapshot.rows.window.find((item) => item.rowId === rowId);
       if (!row || (row.kind !== "assistantText" && row.kind !== "reasoning")) return [];
-      return [{ op: "row.upserted", row: { ...row, state: "complete" } }];
+      const durationMs =
+        delta.type === "thinking_end" && row.kind === "reasoning"
+          ? Math.max(0, (this.stamp ?? Date.now()) - row.createdAt)
+          : undefined;
+      return [
+        {
+          op: "row.upserted",
+          row: {
+            ...row,
+            state: "complete",
+            ...(durationMs !== undefined && durationMs > 0 ? { durationMs } : {}),
+          },
+        },
+      ];
     }
     if (delta.type === "toolcall_start") {
       if (!delta.id) return [];
@@ -820,7 +837,7 @@ export class PiToV4Projector {
       ...(event.isError ? { error: { code: "tool.error", message: text || "tool failed" } } : {}),
       outputPreview: undefined,
       progress: undefined,
-      endedAt: Date.now(),
+      endedAt: this.stamp ?? Date.now(),
     };
     return [{ op: "row.upserted", row: next }];
   }
@@ -940,11 +957,15 @@ export class PiToV4Projector {
     }
     const deltas: ConversationDelta[] = [];
     if (thinking) {
+      const at = this.stamp ?? Date.now();
+      const previous = this.earlierActivityAt(at);
+      const durationMs = previous === undefined ? undefined : Math.max(0, at - previous);
       const row: ConversationRow = {
         ...this.base(),
         kind: "reasoning",
         text: thinking,
         state: "complete",
+        ...(durationMs !== undefined && durationMs > 0 ? { durationMs } : {}),
       };
       this.streamingReasoningRowId = row.rowId;
       deltas.push({ op: "row.appended", row });
@@ -961,6 +982,26 @@ export class PiToV4Projector {
       deltas.push({ op: "row.appended", row });
     }
     return deltas;
+  }
+
+  /** 这条消息之前最近的活动时间。同一条消息上刚写入的工具不算。 */
+  private earlierActivityAt(before: number): number | undefined {
+    let best: number | undefined;
+    for (const row of this.snapshot.rows.window) {
+      if (row.turnId !== this.turnId) continue;
+      const stamps: number[] = [];
+      if (row.kind === "toolCall") {
+        if (row.createdAt < before) stamps.push(row.createdAt);
+        if (row.startedAt !== undefined && row.startedAt < before) stamps.push(row.startedAt);
+        if (row.endedAt !== undefined && row.endedAt < before) stamps.push(row.endedAt);
+      } else if (row.kind === "turnHeader") {
+        if (row.startedAt < before) stamps.push(row.startedAt);
+      } else if (row.createdAt < before) {
+        stamps.push(row.createdAt);
+      }
+      for (const stamp of stamps) best = best === undefined ? stamp : Math.max(best, stamp);
+    }
+    return best;
   }
 
   private settleTurn(at?: number): ConversationDelta[] {

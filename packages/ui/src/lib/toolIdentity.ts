@@ -299,6 +299,8 @@ export function resolveToolCallIdentity(toolCall: ToolIdentityLike): ToolCallIde
   }
 
   if (
+    normalizeLegacyToken(toolCall.toolName) === "ask_user_question" ||
+    normalizedKind === "ask_user_question" ||
     normalizedKind === "ask_question" ||
     normalizedTitle === "askuserquestion" ||
     hasAskUserQuestionPayload(toolCall)

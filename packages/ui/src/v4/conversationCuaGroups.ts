@@ -115,10 +115,18 @@ function appendFlowRow(
   items: ConversationTurnFlowItem[],
   kind: "assistantHistory" | "assistantWork",
   row: AssistantWorkRow,
+  placement: "following" | "inline" = "following",
 ): void {
   const previous = items.at(-1);
-  if (previous?.kind === kind) previous.rows.push(row);
-  else items.push({ kind, rows: [row] });
+  if (
+    previous?.kind === kind &&
+    (previous.kind === "assistantHistory" || previous.placement === placement)
+  ) {
+    previous.rows.push(row);
+    return;
+  }
+  if (kind === "assistantHistory") items.push({ kind, rows: [row] });
+  else items.push({ kind, rows: [row], placement });
 }
 
 export function prepareCuaGroupFlowItems(
@@ -237,19 +245,22 @@ export function prepareCuaGroupFlowItems(
       continue;
     }
 
+    const placement = item.kind === "assistantWork" ? (item.placement ?? "following") : "following";
     for (const row of item.rows) {
       if (row.kind === "toolCall" && isOfficialCuaToolCallRow(row)) {
         appendCua(row, item.kind);
       } else if (row.kind === "toolCall") {
         closeGroup();
-        appendFlowRow(prepared, item.kind, row);
+        appendFlowRow(prepared, item.kind, row, placement);
       } else if (row.kind === "assistantText") {
-        handleAssistantMessage(row, item.kind, () => appendFlowRow(prepared, item.kind, row));
+        handleAssistantMessage(row, item.kind, () =>
+          appendFlowRow(prepared, item.kind, row, placement),
+        );
       } else if (row.kind === "reasoning") {
-        handleReasoning(row, item.kind, () => appendFlowRow(prepared, item.kind, row));
+        handleReasoning(row, item.kind, () => appendFlowRow(prepared, item.kind, row, placement));
       } else {
         // marker、todo/status 只在 Group 外展示，不构成 response 工具边界。
-        appendFlowRow(prepared, item.kind, row);
+        appendFlowRow(prepared, item.kind, row, placement);
       }
     }
   }

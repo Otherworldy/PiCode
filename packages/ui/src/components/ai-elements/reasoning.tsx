@@ -12,6 +12,7 @@ import { cn } from "../lib/utils.js";
 import { TID_CHAT_REASONING_CONTENT, TID_CHAT_REASONING_TRIGGER } from "@zcode/shared";
 import { BrainIcon, ChevronRightIcon } from "lucide-react";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { formatConversationWorkDuration } from "@/v4/conversationWorkDuration.js";
 import { QueuedSummaryContent } from "@/ToolCallBlocks/QueuedSummaryContent.js";
 import type { ComponentProps, CSSProperties, ReactNode } from "react";
 import {
@@ -291,7 +292,11 @@ export const ReasoningTrigger = memo(
     ...props
   }: ReasoningTriggerProps) => {
     const { isStreaming, isOpen, duration } = useReasoning();
-    const { intl } = useZCodeIntl();
+    const { intl, locale } = useZCodeIntl();
+    const durationText =
+      duration === undefined
+        ? null
+        : formatConversationWorkDuration(duration * 1000, intl, locale);
     const streamingSummary =
       isStreaming && !isOpen ? resolveReasoningStreamingSummary(streamingText) : null;
     const streamingSummaryRef = useRef<HTMLSpanElement | null>(null);
@@ -328,34 +333,28 @@ export const ReasoningTrigger = memo(
 
     const thinkingMessage =
       getThinkingMessage?.(isStreaming, duration) ??
-      (isStreaming && !isOpen ? (
+      (isStreaming && durationText === null ? (
         <span className="animated-gradient-text font-medium">
           {intl.formatMessage({ id: "chat.reasoning.thinking" })}
         </span>
-      ) : duration === undefined ? (
+      ) : (
         <span className="inline-flex items-center gap-2">
           {/* 完成态“思考”单独使用 semibold，比同列工具类型标签更粗。
               统一为 medium，保持对话时间线的视觉层级一致。 */}
           <span className="font-medium text-foreground-subtlest">
             {intl.formatMessage({ id: "chat.reasoning.thought" })}
           </span>
-          <span className="font-normal text-foreground-subtlest">·</span>
-          <span className="font-normal text-foreground-subtlest">
-            {intl.formatMessage({ id: "chat.reasoning.durationFewSeconds" })}
-          </span>
-        </span>
-      ) : (
-        <span className="inline-flex items-center gap-2">
-          <span className="font-medium text-foreground-subtlest">
-            {intl.formatMessage({ id: "chat.reasoning.thought" })}
-          </span>
-          <span className="font-normal text-foreground-subtlest">·</span>
-          <span className="font-normal text-foreground-subtlest">
-            {intl.formatMessage(
-              { id: "chat.reasoning.durationSeconds" },
-              { seconds: String(duration) },
-            )}
-          </span>
+          {durationText ? (
+            <>
+              <span className="font-normal text-foreground-subtlest">·</span>
+              <span className="font-normal text-foreground-subtlest">
+                {intl.formatMessage(
+                  { id: "chat.reasoning.durationFor" },
+                  { duration: durationText },
+                )}
+              </span>
+            </>
+          ) : null}
         </span>
       ));
 

@@ -210,7 +210,6 @@ export function buildConversationTurnWorkSegments(options: {
       assistantHistoryRows: segmentHistoryRows,
       assistantFollowingRows: segmentFollowingRows,
       assistantTailRows: segmentTailRows,
-      ...(visibleAssistantTextRow ? { visibleAssistantTextRow } : {}),
       ...(options.latestAssistantTextRow
         ? { latestAssistantTextRow: options.latestAssistantTextRow }
         : {}),
