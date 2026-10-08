@@ -106,6 +106,7 @@ import {
   bindSessionWorktree,
   draftWorktree,
   draftWorktreeEpoch,
+  isWorkspaceWorktree,
   sessionGitDirectory,
   subscribeSessionWorktrees,
 } from "@/v4/sessionWorktree.js";
@@ -4153,6 +4154,10 @@ export function SessionPane({
         gitSummary,
         gitDirtyFileCount,
         gitWorktreeChangeSummary,
+        // 与面板同一道门：漏掉的话宽屏布局仍按「没有状态卡」排，Git 工具会盖住正文。
+        keepCleanRepository: Boolean(
+          gitWorkspacePath && isWorkspaceWorktree(workspacePath, gitWorkspacePath),
+        ),
         goal: selectionSideChat ? null : (snapshot?.goal ?? null),
         sessionPlans: state.sessionPlans,
         plan: snapshot?.plan ?? null,
@@ -4166,6 +4171,7 @@ export function SessionPane({
       gitDirtyFileCount,
       gitSummary,
       gitWorktreeChangeSummary,
+      gitWorkspacePath,
       snapshot?.backgroundWorks,
       snapshot?.goal,
       snapshot?.extensionWidgets,

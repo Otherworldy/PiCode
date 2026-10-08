@@ -28,6 +28,7 @@ import {
   CircleIcon,
   EllipsisIcon,
   FileDiffIcon,
+  GitBranchIcon,
   GoalIcon,
   ListChecksIcon,
   Maximize2Icon,
@@ -99,6 +100,7 @@ import {
 } from "@/v4/conversationStatusPanelModel.js";
 import type { ConversationStatusPanelWorkflowRunTarget } from "@/v4/conversationStatusPanelModel.js";
 import { workflowRunOpenTarget } from "@/v4/conversationStatusPanelModel.js";
+import { isWorkspaceWorktree } from "@/v4/sessionWorktree.js";
 import {
   buildConversationGoalIterationSummaries,
   getConversationGoalElapsedSeconds,
@@ -1632,6 +1634,7 @@ function StatusSummaryRow({
   const added = gitWorktreeChangeSummary?.added ?? 0;
   const removed = gitWorktreeChangeSummary?.removed ?? 0;
   const hasGitMiniSummary = Boolean(model.git && added + removed > 0);
+  const cleanGitBranchLabel = model.git?.branchName?.trim() || null;
 
   // 胶囊摘要过去把所有后台任务都写死成 Activity，纯 Subagent 因而没有复用
   // Running 明细的 Bot 语义。规则现在是三类的：**恰好一类**沿用该类图标，混合才是 Activity
@@ -1734,6 +1737,13 @@ function StatusSummaryRow({
       </span>
       <span className="shrink-0 text-[var(--color-foreground-subtle)]">{endedSubagentCount}</span>
     </StatusSummaryMetric>
+  ) : model.git ? (
+    // 干净的 To-Do worktree 没有行级 diff，胶囊若再返回 null，窄屏只剩空壳，展开入口也没了。
+    <StatusSummaryMetric icon={<GitBranchIcon className="size-4 text-[var(--color-foreground)]" />}>
+      <span className="min-w-0 truncate">
+        {cleanGitBranchLabel ?? intl.formatMessage({ id: "chat.statusPanel.environment" })}
+      </span>
+    </StatusSummaryMetric>
   ) : null;
 
   if (!summaryMetric) {
@@ -1803,6 +1813,9 @@ function ConversationStatusPanelImpl({
   const isOfficeMode = useIsOfficeMode();
   const miniMeasureRef = useRef<HTMLDivElement | null>(null);
   const [miniWidth, setMiniWidth] = useState(320);
+  const keepCleanRepository = Boolean(
+    gitWorkspacePath && isWorkspaceWorktree(workspacePath, gitWorkspacePath),
+  );
   const model = useMemo(
     () =>
       buildConversationStatusPanelModel({
@@ -1810,6 +1823,7 @@ function ConversationStatusPanelImpl({
         gitSummary,
         gitDirtyFileCount,
         gitWorktreeChangeSummary,
+        keepCleanRepository,
         goal,
         sessionPlans,
         workspacePath,
@@ -1826,6 +1840,7 @@ function ConversationStatusPanelImpl({
       gitDirtyFileCount,
       gitSummary,
       gitWorktreeChangeSummary,
+      keepCleanRepository,
       goal,
       sessionPlans,
       plan,
