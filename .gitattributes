@@ -9,3 +9,6 @@ third-party/upstream/** -text -whitespace
 third-party/native-search/licenses/** -text -whitespace
 third-party/runtime/*.txt -text -whitespace
 third-party/inventory.json linguist-generated=true
+
+# Gen UI 离线快照按 sha256 钉死。Windows autocrlf 会把 LF 改成 CRLF，构建校验会把换行当成内容漂移。
+apps/zcode-cli/packages/visualize-plugin/skills/visualize/assets/** -text

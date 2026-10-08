@@ -55,6 +55,23 @@ function askSelection(answer: {
   return values.length === 1 ? values[0] : undefined;
 }
 
+function questionnaireContent(content: unknown): Record<string, unknown> | undefined {
+  if (!content || typeof content !== "object" || Array.isArray(content)) return undefined;
+  const record = content as Record<string, unknown>;
+  const answers = record.answers;
+  const hasNamedAnswer =
+    !!answers &&
+    typeof answers === "object" &&
+    !Array.isArray(answers) &&
+    Object.keys(answers).length > 0;
+  const hasIndexedAnswer = Object.entries(record).some(([key, value]) => {
+    if (!/^answer_\d+$/.test(key)) return false;
+    if (Array.isArray(value)) return value.length > 0;
+    return typeof value === "string" && value.length > 0;
+  });
+  return hasNamedAnswer || hasIndexedAnswer ? record : undefined;
+}
+
 /**
  * resolveInteraction：投递应答给等待中的反向请求（interaction-broker 的 race deferred）。
  *
@@ -82,6 +99,7 @@ async function resolveInteraction(
                       confirmed?: boolean;
                       value?: string;
                       cancelled?: boolean;
+                      content?: Record<string, unknown>;
                     }) => boolean;
                   };
                   publishUi?: () => void;
@@ -92,6 +110,7 @@ async function resolveInteraction(
   if (hosted) {
     const answer = payload.answer;
     const picked = askSelection(answer);
+    const questionnaire = questionnaireContent(answer.content);
     if (
       answer.action === "cancel" ||
       answer.action === "decline" ||
@@ -101,7 +120,14 @@ async function resolveInteraction(
       hosted.ui.respond({ id: payload.interactionId, cancelled: true });
     } else if (picked !== undefined) {
       // 问卷选项不能当成 confirm。丢掉原文后插件对不上选项，表现成用户取消。
-      hosted.ui.respond({ id: payload.interactionId, value: picked });
+      hosted.ui.respond({
+        id: payload.interactionId,
+        value: picked,
+        ...(questionnaire ? { content: questionnaire } : {}),
+      });
+    } else if (questionnaire) {
+      // 多题 ask 不能压成一个 value，否则问题和选项又缠回一段文本。
+      hosted.ui.respond({ id: payload.interactionId, content: questionnaire });
     } else if (
       answer.action === "accept" ||
       answer.optionId === "yes" ||

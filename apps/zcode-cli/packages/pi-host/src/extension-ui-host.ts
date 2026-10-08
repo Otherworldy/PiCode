@@ -115,6 +115,9 @@ export class ExtensionUiHost {
         }
         this.pending = [...this.pending, this.toConfirm(event)];
         break;
+      case "ask":
+        this.pending = [...this.pending, this.toAsk(event)];
+        break;
       case "select":
       case "input":
       case "editor":
@@ -194,6 +197,47 @@ export class ExtensionUiHost {
     };
   }
 
+  private toAsk(event: PiExtensionUiEvent): PendingInteraction {
+    const questions = (event.questions ?? []).flatMap((question) => {
+      const text = question.question.trim();
+      const options = question.options.flatMap((option) => {
+        const label = option.label.trim();
+        if (!label) return [];
+        const description = option.description?.trim();
+        const preview = option.preview?.trim();
+        return [
+          {
+            value: label,
+            label,
+            ...(description ? { description } : {}),
+            ...(preview ? { preview } : {}),
+          },
+        ];
+      });
+      if (!text || options.length === 0) return [];
+      return [
+        {
+          question: text,
+          header: question.header?.trim() || "Ask",
+          options,
+          ...(question.multiSelect ? { multiSelect: true } : {}),
+        },
+      ];
+    });
+    return {
+      interactionId: event.id,
+      kind: "userInput",
+      anchorRowId: null,
+      createdAt: Date.now(),
+      payload: {
+        kind: "userInput",
+        prompt: questions[0]?.question ?? "",
+        freeText: false,
+        ...(questions.length > 0 ? { questions } : {}),
+      },
+    };
+  }
+
   private toInput(event: PiExtensionUiEvent): PendingInteraction {
     const rawOptions = event.options ?? [];
     const options = rawOptions.map((label) => ({ optionId: label, label }));
@@ -224,7 +268,7 @@ function isApproval(item: PendingInteraction): boolean {
 
 const CUSTOM_OPTION = /^\d+\.\s+(?:自己输入|Type something\.)$/;
 
-/** Pi ask 的选项是 `1. 标签 — 说明`。拆开给问卷；value 仍是原行，回答才能对回去。 */
+/** Pi select 的选项是 `1. 标签 — 说明`。拆开给问卷；value 仍是原行，回答才能对回去。 */
 function askSelectQuestions(title: string, rawOptions: string[]) {
   const choices = rawOptions.filter((label) => !CUSTOM_OPTION.test(label));
   if (choices.length === 0) return undefined;

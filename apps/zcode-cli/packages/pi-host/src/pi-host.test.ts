@@ -656,6 +656,7 @@ test("extension ui request/response and empty custom registry", async () => {
   if (selectPayload?.kind === "userInput") {
     assert.equal(selectPayload.questions?.[0]?.options[0]?.value, "A");
     assert.equal(selectPayload.questions?.[0]?.options[1]?.label, "B");
+    assert.equal(selectPayload.questions?.[0]?.question, "Pick");
   }
   const waiting = ui.wait("q1");
   assert.equal(ui.respond({ id: "q1", value: "A" }), true);
@@ -677,6 +678,57 @@ test("extension ui request/response and empty custom registry", async () => {
     pluginId: "unknown",
   });
   assert.equal(custom.widgets[0]?.lines[0], "(unsupported plugin view)");
+});
+
+test("structured ask keeps the question apart from option previews", async () => {
+  const ui = new ExtensionUiHost();
+  const extensionUi = createHostExtensionUi(ui, (event) => {
+    ui.handle(event);
+  }) as ReturnType<typeof createHostExtensionUi> & {
+    ask: (
+      questions: Array<{
+        question: string;
+        header?: string;
+        options: Array<{ label: string; description?: string; preview?: string }>;
+      }>,
+    ) => Promise<
+      Array<{ question: string; answer: string; preview?: string; custom: boolean }> | undefined
+    >;
+  };
+  const pending = extensionUi.ask([
+    {
+      question: "固定出口怎么做？",
+      header: "出口",
+      options: [
+        { label: "多协议", description: "工作量大", preview: "curl socks" },
+        { label: "只管理", description: "只改入口", preview: "POST /api" },
+      ],
+    },
+  ]);
+  const payload = ui.snapshot().pending[0]?.payload;
+  assert.equal(payload?.kind, "userInput");
+  if (payload?.kind === "userInput") {
+    assert.equal(payload.questions?.[0]?.question, "固定出口怎么做？");
+    assert.equal(payload.questions?.[0]?.header, "出口");
+    assert.equal(payload.questions?.[0]?.options[0]?.label, "多协议");
+    assert.equal(payload.questions?.[0]?.options[0]?.description, "工作量大");
+    assert.equal(payload.questions?.[0]?.options[0]?.preview, "curl socks");
+    assert.equal(payload.questions?.[0]?.options[0]?.value, "多协议");
+    assert.equal(payload.prompt.includes("curl"), false);
+    assert.equal(payload.prompt.includes("preview"), false);
+  }
+  const id = ui.snapshot().pending[0]?.interactionId ?? "";
+  assert.equal(
+    ui.respond({
+      id,
+      content: { answer_0: "多协议", answers: { "固定出口怎么做？": "多协议" } },
+    }),
+    true,
+  );
+  const answers = await pending;
+  assert.equal(answers?.[0]?.answer, "多协议");
+  assert.equal(answers?.[0]?.preview, "curl socks");
+  assert.equal(answers?.[0]?.custom, false);
 });
 
 test("host extension theme is plain text so plan progress can be listed", () => {

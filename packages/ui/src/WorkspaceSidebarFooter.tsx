@@ -78,6 +78,10 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
   onSettingsButtonClick,
   settingsButtonMode = "settings",
   user,
+  // Bug 原因：类型和调用方都传了 workspacePath，但参数没解构。
+  // 侧栏 footer 渲染远控按钮时直接读这两个名字，抛 ReferenceError。
+  workspacePath,
+  workspaceIdentity,
   isDesktop = false,
   className,
 }: {

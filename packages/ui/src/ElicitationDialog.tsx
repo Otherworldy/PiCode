@@ -180,6 +180,7 @@ function normalizeElicitationQuestions(
       value: option.value,
       label: option.label || option.value,
       description: option.description,
+      ...(option.preview ? { preview: option.preview } : {}),
     })),
     ...(question.multiSelect ? { multiSelect: true } : {}),
   }));
@@ -328,6 +329,18 @@ function getElicitationQuestionAdvanceKind(
   return questionIndex >= questions.length - 1 ? "submit" : "next";
 }
 
+function elicitationOptionPreview(
+  question: NormalizedElicitationQuestion | undefined,
+  activeOptionIndex: number,
+  hoverOptionIndex: number,
+): string | undefined {
+  if (!question) return undefined;
+  const index = hoverOptionIndex >= 0 ? hoverOptionIndex : activeOptionIndex;
+  if (index >= question.options.length) return undefined;
+  if (index >= 0) return question.options[index]?.preview;
+  return question.options.find((option) => option.preview)?.preview;
+}
+
 export function ElicitationDialog(props: ElicitationDialogProps) {
   // 普通 AskUserQuestion 首次操作会把 autoResolution 从计时态更新为
   // snoozed，投影因此重建 request 对象，但业务 requestId 没变。若按 request/questions
@@ -352,6 +365,7 @@ function ElicitationDialogContent({
   const [activeOptionIndex, setActiveOptionIndex] = useState(() =>
     isPlanApprovalElicitationRequest(request) ? 0 : -1,
   );
+  const [hoverOptionIndex, setHoverOptionIndex] = useState(-1);
   const [drafts, setDrafts] = useState<DraftState>(
     () => initialFormDraft?.drafts ?? createInitialElicitationDrafts(questions, request),
   );
@@ -392,6 +406,7 @@ function ElicitationDialogContent({
 
   useEffect(() => {
     setIsQuestionExpanded(false);
+    setHoverOptionIndex(-1);
   }, [questionIndex]);
 
   const currentQuestion = questions[questionIndex];
@@ -759,6 +774,7 @@ function ElicitationDialogContent({
         tabIndex={isActive || (activeOptionIndex < 0 && index === 0) ? 0 : -1}
         onClick={() => selectOption(question, option.value)}
         onFocus={() => setActiveOptionIndex(index)}
+        onMouseEnter={() => setHoverOptionIndex(index)}
         onKeyDown={handleOptionKeyDown}
         className={cn(
           "flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left outline-none transition-colors focus-visible:bg-hover",
@@ -927,6 +943,11 @@ function ElicitationDialogContent({
   const titleQuestion = isPlanApproval
     ? intl.formatMessage({ id: "chat.permission.switchMode.placeholder" })
     : (currentQuestion?.question ?? intl.formatMessage({ id: "chat.elicitation.title" }));
+  const optionPreview = elicitationOptionPreview(
+    currentQuestion,
+    activeOptionIndex,
+    hoverOptionIndex,
+  );
   const shouldOfferQuestionCollapse = titleQuestion.length > 80 || titleQuestion.includes("\n");
   const questionCollapseLabel = intl.formatMessage({
     id: isQuestionExpanded
@@ -1074,10 +1095,16 @@ function ElicitationDialogContent({
 
             {currentQuestion ? (
               <div className="space-y-3">
+                {optionPreview ? (
+                  <div className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border px-3 py-2 text-ui-base leading-normal text-foreground-subtle">
+                    {optionPreview}
+                  </div>
+                ) : null}
                 <div
                   role={currentQuestion.multiSelect ? "group" : "listbox"}
                   aria-label={titleQuestion}
                   className="space-y-1"
+                  onMouseLeave={() => setHoverOptionIndex(-1)}
                 >
                   {currentQuestion.options.map((option, index) =>
                     renderOption(currentQuestion, option, index),

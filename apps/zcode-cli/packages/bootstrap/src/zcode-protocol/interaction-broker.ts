@@ -510,11 +510,46 @@ function normalizePlanApprovalAnswer(
 function createInteractionRegistrationOptions(
   request: PermissionBrokerRequest,
   kind: V4InteractionRegistrationOptions["kind"],
+  context?: ZCodeProtocolAgentServerContext,
+  initialAutoResolution?: V4InteractionRegistrationOptions["initialAutoResolution"],
 ): V4InteractionRegistrationOptions {
+  // 原因：AskUserQuestion 的调用已经读出持久化倒计时并传入 context，
+  // 但注册选项此前丢掉这两个参数，重启后无法恢复，阶段变化也不会写回 runtime。
   return {
     sessionId: String(request.sessionId),
     kind,
+    ...(initialAutoResolution ? { initialAutoResolution } : {}),
+    ...(context
+      ? {
+          onAutoResolutionUpdated: (state) =>
+            persistUserInputAutoResolution(context, request, state),
+        }
+      : {}),
   };
+}
+
+async function persistUserInputAutoResolution(
+  context: ZCodeProtocolAgentServerContext,
+  request: PermissionBrokerRequest,
+  autoResolution: NonNullable<V4InteractionRegistrationOptions["initialAutoResolution"]>,
+): Promise<void> {
+  const record = context.sessions.get(String(request.sessionId));
+  if (!record) return;
+  try {
+    await record.app.runtime.recordUserInputAutoResolutionUpdate({
+      interactionId: request.requestId,
+      toolCallId: request.toolCallId,
+      autoResolution,
+    });
+  } catch (error) {
+    context.logger?.warn("Failed to record user input auto-resolution state", {
+      error: error instanceof Error ? error.message : String(error),
+      event: "zcode_protocol.user_input_auto_resolution_record_failed",
+      interactionId: request.requestId,
+      module: "bootstrap.zcode_protocol",
+      sessionId: request.sessionId,
+    });
+  }
 }
 
 function normalizeAnswerValue(value: unknown): string | undefined {

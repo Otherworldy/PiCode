@@ -680,6 +680,8 @@ export interface ZCodeElicitationOption {
   value: string;
   label: string;
   description?: string;
+  /** 选项聚焦时的示意。不进问题正文。 */
+  preview?: string;
 }
 /** PiCode Elicitation 响应事件 */
 export interface ZCodeElicitationResponse {

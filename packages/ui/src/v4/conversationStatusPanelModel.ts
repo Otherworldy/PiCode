@@ -1,14 +1,14 @@
 import type { GitRepositorySummary } from "@zcode/shared";
-import type {
-  BackgroundWorkSummary,
-  GoalState,
-  PlanState,
-  RunningSubagentSummary,
-  ToolCallRow,
-  WorkflowRunState,
+import {
+  workflowRunStepCounts,
+  type BackgroundWorkSummary,
+  type GoalState,
+  type PlanState,
+  type RunningSubagentSummary,
+  type ToolCallRow,
+  type WorkflowRunState,
 } from "@zcode/shared/zcode-protocol-v4";
 import { extractPlanToolCallContent, getPlanDirectoryTitle } from "../lib/planToolCall.js";
-import { workflowRunStepCounts } from "./workflowRunCardJoin.js";
 
 export interface ConversationStatusPanelGitModel {
   branchName: string | null;
@@ -256,6 +256,14 @@ function buildSessionPlansModel(
  *   这条兜底的全部理由是：**cancel 入口在任何偏斜下都不许消失**；因此降级行只收 running
  *   的 work——既没有 run、work 也已结束的那条没有任何可操作的东西，显示它就是一条死行。
  */
+function mapWorkflowRunStepCounts(run: WorkflowRunState): {
+  nodesSettled: number;
+  nodesTotal: number;
+} {
+  const { settled, total } = workflowRunStepCounts(run);
+  return { nodesSettled: settled, nodesTotal: total };
+}
+
 function buildRunningWorkflowRuns(
   runs: readonly WorkflowRunState[] | undefined,
   workflowWorkByWorkId: ReadonlyMap<string, BackgroundWorkSummary>,
@@ -272,8 +280,8 @@ function buildRunningWorkflowRuns(
       runId: run.runId,
       ...(run.toolCallId ? { toolCallId: run.toolCallId } : {}),
       status: run.status,
-      // 计数与聊天紧凑卡同源（唯一实现在 workflowRunCardJoin.ts）。
-      ...workflowRunStepCounts(run),
+      // 步数只走 shared 的 workflowRunStepCounts；返回的是 settled/total，面板行字段是 nodesSettled/nodesTotal。
+      ...mapWorkflowRunStepCounts(run),
       ...(work ? { title: work.title, startedAt: work.startedAt } : {}),
       ...(work?.status === "running"
         ? {

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import type { ExtensionUiHost } from "./extension-ui-host.js";
-import type { PiExtensionUiEvent } from "./types.js";
+import type { HostAskAnswer, HostAskQuestion, PiExtensionUiEvent } from "./types.js";
 
 // Pi RPC 的 theme.fg 会写 ANSI。GUI 只存纯文本。
 // 缺 theme 时 Plannotator 读 ctx.ui.theme.fg 崩溃，清单和 mark_done 都出不去。
@@ -60,6 +60,15 @@ export function createHostExtensionUi(
       const response = await waiting;
       if ("cancelled" in response) return undefined;
       return "value" in response ? response.value : undefined;
+    },
+    async ask(questions: HostAskQuestion[]): Promise<HostAskAnswer[] | undefined> {
+      const id = randomUUID();
+      const waiting = host.wait(id);
+      send({ id, method: "ask", questions });
+      const response = await waiting;
+      if ("cancelled" in response) return undefined;
+      if (!("content" in response) || !response.content) return undefined;
+      return mapHostAskAnswers(questions, response.content);
     },
     async confirm(title: string, message: string) {
       const id = randomUUID();
@@ -126,4 +135,54 @@ export function createHostExtensionUi(
     theme: plainTheme,
   };
   return ui as unknown as ExtensionUIContext;
+}
+
+function mapHostAskAnswers(
+  questions: HostAskQuestion[],
+  content: Record<string, unknown>,
+): HostAskAnswer[] {
+  return questions.map((question, index) => {
+    const values = answerValues(content, index, question.question);
+    const labels = new Set(question.options.map((option) => option.label));
+    const selected = values.filter((value) => labels.has(value));
+    const customValues = values.filter((value) => !labels.has(value));
+    if (question.multiSelect) {
+      const preview = question.options.find(
+        (option) => option.preview && selected.includes(option.label),
+      )?.preview;
+      return {
+        question: question.question,
+        answer: [...selected, ...customValues].join(", "),
+        custom: selected.length === 0 && customValues.length > 0,
+        ...(selected.length > 0 ? { selected } : {}),
+        ...(preview ? { preview } : {}),
+      };
+    }
+    const answer = values[0] ?? "";
+    const chosen = question.options.find((option) => option.label === answer);
+    return {
+      question: question.question,
+      answer,
+      custom: !chosen && answer.length > 0,
+      ...(chosen?.preview ? { preview: chosen.preview } : {}),
+    };
+  });
+}
+
+function answerValues(
+  content: Record<string, unknown>,
+  index: number,
+  question: string,
+): string[] {
+  const raw = content[`answer_${index}`];
+  if (Array.isArray(raw)) {
+    return raw.flatMap((item) =>
+      typeof item === "string" && item.trim() ? [item.trim()] : [],
+    );
+  }
+  if (typeof raw === "string" && raw.trim()) return [raw.trim()];
+  const answers = content.answers;
+  if (!answers || typeof answers !== "object" || Array.isArray(answers)) return [];
+  const text = (answers as Record<string, unknown>)[question];
+  return typeof text === "string" && text.trim() ? [text.trim()] : [];
 }

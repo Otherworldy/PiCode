@@ -194,6 +194,7 @@ function piSessionFileName(sessionId: string, at = new Date()): string {
 function permissionAllowed(response: PiExtensionUiResponse): boolean {
   if ("cancelled" in response) return false;
   if ("confirmed" in response) return response.confirmed;
+  if (!("value" in response)) return false;
   return response.value !== "deny" && response.value !== "no" && response.value !== "";
 }
 
