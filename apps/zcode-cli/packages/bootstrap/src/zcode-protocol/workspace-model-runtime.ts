@@ -3,10 +3,14 @@ import { createInMemorySessionEventStore } from "@zcode/adapters/storage";
 import type { ModelSelection } from "@zcode/contracts";
 import {
   checkPiPluginUpdates,
+  forgetPiPluginUpdate,
   listPiCatalog,
   listPiPluginConfigs,
   listPiPlugins,
   mutatePiCatalog,
+  piPluginUpdateCacheKey,
+  readPiPluginUpdateCache,
+  savePiPluginUpdateCache,
   setPiPluginEnabled,
   updatePiPlugin,
   writePiPluginConfig,
@@ -79,6 +83,7 @@ export async function mutatePiModels(rawParams: unknown) {
 export async function mutatePiPlugins(rawParams: unknown) {
   const params = parseParams(zcodePiPluginsParamsSchema, rawParams);
   const cwd = params.workspace?.workspacePath || process.cwd();
+  const cacheKey = piPluginUpdateCacheKey(cwd, params.workspace?.workspaceIdentity);
   if (params.action === "setEnabled") {
     if (!params.id || params.enabled === undefined) {
       throw new Error("Pi plugin toggle requires id and enabled");
@@ -90,12 +95,16 @@ export async function mutatePiPlugins(rawParams: unknown) {
   } else if (params.action === "update") {
     if (!params.id) throw new Error("Pi plugin update requires id");
     await updatePiPlugin(cwd, params.id);
+    await forgetPiPluginUpdate(cacheKey, params.id);
   }
-  const updates = params.action === "checkUpdates" ? await checkPiPluginUpdates(cwd) : undefined;
+  const cached =
+    params.action === "checkUpdates"
+      ? await savePiPluginUpdateCache(cacheKey, await checkPiPluginUpdates(cwd))
+      : await readPiPluginUpdateCache(cacheKey);
   return {
     plugins: await listPiPlugins(cwd),
     configs: await listPiPluginConfigs(),
-    ...(updates ? { updates } : {}),
+    ...(cached ? { updates: cached.updates, updatesCheckedAt: cached.checkedAt } : {}),
   };
 }
 
