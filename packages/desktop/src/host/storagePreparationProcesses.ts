@@ -106,6 +106,74 @@ export function prepareHostStorage(
   });
 }
 
+const SESSION_STORAGE_WORKER_ATTEMPTS = 3;
+const SESSION_STORAGE_WORKER_RETRY_MS = [300, 1_000];
+
+/** stderr 可能含本机路径；只留短诊断，不把原文路径带进启动失败。 */
+export function redactStorageWorkerDiagnostic(text: string): string {
+  return text
+    .replaceAll("\u0000", "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .slice(0, 6)
+    .join("\n")
+    .replace(/[A-Za-z]:[\\/][^\s'"`)\]]+/g, "[path]")
+    .replace(/\/(?:Users|home|tmp|var|opt|usr)\/[^\s'"`)\]]+/g, "[path]")
+    .slice(0, 400);
+}
+
+/** 还没收到 storagePath 就退出：数据库没打开，同一次启动里再拉起 Worker 不会重复迁移。 */
+export function shouldRetrySessionStorageWorker(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const value = error as { kind?: unknown; code?: unknown; storageWorkerBeforePath?: unknown };
+  if (value.storageWorkerBeforePath !== true) return false;
+  if (value.kind === "transport_closed") return true;
+  return (
+    value.code === "EBUSY" ||
+    value.code === "EPERM" ||
+    value.code === "EACCES" ||
+    value.code === "EPIPE" ||
+    value.code === "UNKNOWN"
+  );
+}
+
+function annotateStorageWorkerFailure(
+  error: unknown,
+  details: {
+    exitCode: number;
+    beforePath: boolean;
+    diagnostic: string;
+  },
+): unknown {
+  const failure = error instanceof Error ? error : statusError("transport_closed");
+  const summary = details.diagnostic.split("\n")[0] ?? "";
+  const suffix = summary ? `exit ${details.exitCode}: ${summary}` : `exit ${details.exitCode}`;
+
+  if (!failure.message.includes(suffix)) failure.message = `${failure.message} (${suffix})`;
+  return Object.assign(failure, {
+    storageWorkerBeforePath: details.beforePath,
+    storageWorkerExitCode: details.exitCode,
+    ...(details.diagnostic ? { storageWorkerDiagnostic: details.diagnostic } : {}),
+  });
+}
+
+function waitForStorageWorkerRetry(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.reject(statusError("transport_closed"));
+  return new Promise((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout>;
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(statusError("transport_closed"));
+    };
+    timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 /** 在 Host 所属 Worker 运行同一 CLI bundle 的存储入口；Host 退出不会留下持锁孤儿进程。 */
 export async function prepareSessionStorage(options: {
   cwd: string;
@@ -126,7 +194,44 @@ export async function prepareSessionStorage(options: {
   if (!command?.supportsStorageStartup || !command.storagePreparationEntry)
     throw statusError("unsupported_runtime");
   const entry = command.storagePreparationEntry;
-  await new Promise<void>((resolve, reject) => {
+  // 覆盖安装后第一次冷启动，会话 Worker 常在写出 storagePath 之前退出（耗时与冷加载
+  // zcode.cjs 一致，约 800ms）。数据库还没打开，同一次启动再拉起不会重复迁移；热缓存后同一条路径能走完。
+  for (let attempt = 0; attempt < SESSION_STORAGE_WORKER_ATTEMPTS; attempt += 1) {
+    try {
+      await runSessionStorageWorker(entry, command, options);
+      return;
+    } catch (error) {
+      if (
+        attempt === SESSION_STORAGE_WORKER_ATTEMPTS - 1 ||
+        options.signal.aborted ||
+        !shouldRetrySessionStorageWorker(error)
+      )
+        throw error;
+      await waitForStorageWorkerRetry(
+        SESSION_STORAGE_WORKER_RETRY_MS[attempt] ?? 1_000,
+        options.signal,
+      );
+    }
+  }
+  throw statusError("transport_closed");
+}
+
+function runSessionStorageWorker(
+  entry: string,
+  command: NonNullable<ReturnType<typeof resolveDefaultZCodeAgentCommand>>,
+  options: {
+    cwd: string;
+    env?: Record<string, string>;
+    signal: AbortSignal;
+    report: (
+      phase: Phase,
+      details?: { databaseId: string; migration?: DatabaseMigrationFacts },
+    ) => void;
+    preparedPaths?: Set<string>;
+    observePath: (path: string) => Promise<void>;
+  },
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
     const child = new Worker(entry, {
       argv: ["app-server", "--stdio", "--prepare-storage", "--cwd", command.cwd ?? options.cwd],
       env: { ...process.env, ...options.env, ...command.env },
@@ -141,6 +246,7 @@ export async function prepareSessionStorage(options: {
     let pathReceived = false;
     let preparedPath: string | undefined;
     let failure: unknown;
+    let stderr = "";
     const terminate = () => {
       void child.terminate();
     };
@@ -153,13 +259,17 @@ export async function prepareSessionStorage(options: {
       terminate();
     }, 30_000);
     options.signal.addEventListener("abort", abort, { once: true });
-    // stdout 只有有界控制帧，stderr 排空但不把可能含本地路径的原始文本上报。
-    child.stderr.resume();
+    // stdout 只有有界控制帧。stderr 只留一份截断诊断，避免把本机路径推进启动状态。
+    child.stderr.on("data", (chunk: Buffer | string) => {
+      if (stderr.length >= 4096) return;
+      stderr += typeof chunk === "string" ? chunk : chunk.toString("utf8");
+    });
     input.on("error", (error) => {
       failure ??= error;
       terminate();
     });
     lines.on("line", (line) => {
+      if (settled) return;
       try {
         if (line.length > 65536) throw statusError("transport_closed");
         const frame = zcodeStoragePreparationFrameSchema.parse(JSON.parse(line));
@@ -210,11 +320,22 @@ export async function prepareSessionStorage(options: {
       settled = true;
       clearTimeout(firstStateTimer);
       options.signal.removeEventListener("abort", abort);
-      lines.close();
-      if (code === 0 && prepared && !failure) {
-        if (preparedPath) options.preparedPaths?.add(preparedPath);
-        resolve();
-      } else reject(failure ?? statusError("transport_closed"));
+      // 退出事件可能先于最后一行 stdout。等一个 turn，避免把已经写出的失败帧看成失联。
+      setImmediate(() => {
+        lines.close();
+        if (code === 0 && prepared && !failure) {
+          if (preparedPath) options.preparedPaths?.add(preparedPath);
+          resolve();
+          return;
+        }
+        reject(
+          annotateStorageWorkerFailure(failure ?? statusError("transport_closed"), {
+            exitCode: code,
+            beforePath: !pathReceived,
+            diagnostic: redactStorageWorkerDiagnostic(stderr),
+          }),
+        );
+      });
     });
     if (options.signal.aborted) abort();
   });
