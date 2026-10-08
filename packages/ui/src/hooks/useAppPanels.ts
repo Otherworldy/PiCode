@@ -7,6 +7,10 @@ import type { CodeViewerSource } from "@/lib/codeViewer.js";
 // 关闭 terminal tab 时必须显式 release，杀掉 PTY，避免常驻 registry 造成孤儿进程。
 import { sidePaneTerminalSessionRegistry } from "@/terminal/sidePaneTerminalSessionRegistry.js";
 import {
+  allocateTerminalTitle,
+  resolveTerminalDisplayLabel,
+} from "@/terminal/terminalPanelState.js";
+import {
   buildTaskSidePaneMemoryKey,
   getSidePaneCollapsedPreference,
   readTaskSidePaneMemoryState,
@@ -106,26 +110,17 @@ const RECENT_CLOSED_SIDE_PANE_TAB_LIMIT = 8;
 
 function createTerminalSidePaneTitle(
   current: WorkspaceSidePaneState | null,
-  workspaceAbsPath: string,
+  cwd: string,
+  branchName: string | null,
 ): string {
-  const baseTitle = getPathLeaf(workspaceAbsPath) || "Terminal";
+  const baseTitle = resolveTerminalDisplayLabel(branchName, getPathLeaf(cwd) || "Terminal");
   const usedTitles = new Set(
     current?.tabs
       .filter((tab) => tab.type === "terminal")
       .map((tab) => tab.title.trim())
       .filter(Boolean) ?? [],
   );
-
-  if (!usedTitles.has(baseTitle)) {
-    return baseTitle;
-  }
-
-  for (let index = 2; ; index += 1) {
-    const candidate = `${baseTitle} ${index}`;
-    if (!usedTitles.has(candidate)) {
-      return candidate;
-    }
-  }
+  return allocateTerminalTitle(baseTitle, usedTitles);
 }
 
 export function useAppPanels(options: {
@@ -147,6 +142,8 @@ export function useAppPanels(options: {
   isWorkspaceVisible?: boolean;
   supportsEmbeddedBrowser?: boolean;
   defaultWhiteboardNamePrefix: string;
+  /** 点击时读取。会话在 worktree 上时 cwd 必须是那个目录，不能用主工作区。 */
+  resolveTerminalTarget?: () => { cwd: string; branchName: string | null };
   platform?: Pick<
     IPlatformService,
     | "onOpenBrowserUrl"
@@ -170,6 +167,7 @@ export function useAppPanels(options: {
     supportsEmbeddedBrowser: explicitSupportsEmbeddedBrowser,
     defaultWhiteboardNamePrefix,
     platform,
+    resolveTerminalTarget,
   } = options;
   const supportsEmbeddedBrowser = explicitSupportsEmbeddedBrowser ?? Boolean(isDesktop);
   const activeWorkspaceKey = workspaceIdentity?.trim() || workspaceAbsPath;
@@ -789,15 +787,17 @@ export function useAppPanels(options: {
   const handleOpenTerminalTab = useCallback(() => {
     if (isOfficeMode) return;
     revealSidePaneForCurrentOwner();
+    // 以前右侧终端固定开在项目根。To-Do 会话的代码在 worktree，页签却是项目目录名，看不出打开的是哪条分支。
+    const target = resolveTerminalTarget?.() ?? { cwd: workspaceAbsPath, branchName: null };
     commitOpenedSidePaneState((current) => {
-      const title = createTerminalSidePaneTitle(current, workspaceAbsPath);
+      const title = createTerminalSidePaneTitle(current, target.cwd, target.branchName);
       const next = openTerminalSidePane(current, {
         title,
-        cwd: workspaceAbsPath,
+        cwd: target.cwd,
         remoteSessionId: workspaceRemoteSessionId,
       });
       logger.info(
-        `[App] 新建右侧终端 tab=${title} workspace=${workspaceAbsPath} tabs=${next.tabs.length}`,
+        `[App] 新建右侧终端 tab=${title} cwd=${target.cwd} branch=${target.branchName ?? ""} tabs=${next.tabs.length}`,
       );
       return next;
     });
@@ -805,6 +805,7 @@ export function useAppPanels(options: {
     isOfficeMode,
     commitOpenedSidePaneState,
     revealSidePaneForCurrentOwner,
+    resolveTerminalTarget,
     workspaceAbsPath,
     workspaceRemoteSessionId,
   ]);

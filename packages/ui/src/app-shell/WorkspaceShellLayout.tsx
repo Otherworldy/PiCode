@@ -1,5 +1,13 @@
 /* eslint-disable max-lines -- workspace shell 当前集中编排 sidebar、chat、terminal 和 browser pane 的布局联动，先保持单文件收口，避免为满足行数限制打散关键布局状态。*/
-import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
@@ -11,6 +19,7 @@ import { TID_APP_HEADER } from "@zcode/shared";
 // 保活：workspace tab 真正关闭时，按 workspaceKey 回收 side pane terminal 的常驻 PTY/xterm。
 // 对称下侧 Terminal.tsx 的 openWorkspaceKeys 回收。
 import { sidePaneTerminalSessionRegistry } from "@/terminal/sidePaneTerminalSessionRegistry.js";
+import { terminalBranchNameForCwd } from "@/terminal/terminalPanelState.js";
 import { V4ChatPane } from "@/v4/V4ChatPane.js";
 import { V4WorkspaceChatArea } from "@/v4/V4WorkspaceChatArea.js";
 import {
@@ -374,6 +383,10 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
     sessionWorkingDirectory && isWorkspaceWorktree(workspaceAbsPath, sessionWorkingDirectory)
       ? sessionWorkingDirectory
       : undefined;
+  const terminalBranchName = terminalBranchNameForCwd(
+    gitState.summary,
+    executionCwd ?? workspaceAbsPath,
+  );
   const screenshotSurfaceRequest = useBrowserScreenshotSurfaceRequest(sidePaneState?.tabs ?? []);
   const screenshotSurfaceTab = screenshotSurfaceRequest
     ? findScreenshotSurfaceTabForRender(sidePaneState?.tabs ?? [], screenshotSurfaceRequest)
@@ -1761,15 +1774,15 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                     ) : null}
                     <div className="min-h-0 flex-1 overflow-hidden">
                       {workspaceMainView === "todos" ? (
-                      <main className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
-                        {isDesktop ? (
-                          <div className="flex h-12 shrink-0 items-center justify-end px-1 [app-region:drag]">
-                            {usesInlineWindowControls ? <DesktopWindowControls /> : null}
-                          </div>
-                        ) : null}
-                        <TodoListPane onOpenSession={handleSelectTaskInChat} />
-                      </main>
-                    ) : workspaceMainView === "automations" ? (
+                        <main className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
+                          {isDesktop ? (
+                            <div className="flex h-12 shrink-0 items-center justify-end px-1 [app-region:drag]">
+                              {usesInlineWindowControls ? <DesktopWindowControls /> : null}
+                            </div>
+                          ) : null}
+                          <TodoListPane onOpenSession={handleSelectTaskInChat} />
+                        </main>
+                      ) : workspaceMainView === "automations" ? (
                         <main
                           id={AUTOMATIONS_TOAST_ANCHOR_ID}
                           className="flex h-full min-h-0 flex-1 flex-col bg-background"
@@ -1921,6 +1934,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                     services={services}
                     workspaceAbsPath={workspaceAbsPath}
                     executionCwd={executionCwd}
+                    branchName={terminalBranchName}
                     workspaceIdentity={workspaceIdentity}
                     openWorkspaceKeys={openWorkspaceKeys}
                     isVisible={isTerminalVisible}
