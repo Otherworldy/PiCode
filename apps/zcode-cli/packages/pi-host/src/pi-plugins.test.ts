@@ -3,12 +3,14 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import type { SpawnOptions } from "node:child_process";
 import {
   applyZcodePluginPlan,
   isPlannotatorPiExtension,
   listPiPlugins,
   piPluginPackageSource,
   setPiPluginEnabled,
+  silencePackageManagerStdout,
   updatePiPlugin,
   zcodePluginSourceId,
 } from "./pi-plugins.js";
@@ -43,6 +45,34 @@ test("plan mode matches only an enabled plannotator pi extension", () => {
   );
 });
 
+test("plugin update spawn does not inherit protocol stdout", () => {
+  const seen: Array<{ command: string; args: readonly string[]; options: SpawnOptions }> = [];
+  const manager: {
+    spawnCommand: (command: string, args: string[], options?: { cwd?: string }) => unknown;
+  } = {
+    spawnCommand() {
+      throw new Error("inherit");
+    },
+  };
+  silencePackageManagerStdout(manager, (command, args, options) => {
+    seen.push({ command, args, options });
+    return { on() {} } as never;
+  });
+  manager.spawnCommand("npm", ["install", "pkg@latest", "--prefix", "C:\\Users\\a b\\npm"]);
+  manager.spawnCommand("git", ["pull"], { cwd: "repo" });
+  assert.equal(seen[0]?.options.stdio, "ignore");
+  assert.equal(seen[0]?.options.windowsHide, true);
+  assert.equal(seen[0]?.options.shell, process.platform === "win32");
+  assert.equal(
+    seen[0]?.args.at(-1),
+    process.platform === "win32" ? '"C:\\Users\\a b\\npm"' : "C:\\Users\\a b\\npm",
+  );
+  assert.equal(seen[1]?.options.shell, false);
+  assert.equal(seen[1]?.options.stdio, "ignore");
+  assert.equal(seen[1]?.options.cwd, "repo");
+  assert.deepEqual(seen[1]?.args, ["pull"]);
+});
+
 test("only package ids can be updated", async () => {
   assert.deepEqual(piPluginPackageSource("pkg:user:npm:@scope/pkg"), {
     scope: "user",
@@ -63,10 +93,7 @@ test("lists and toggles Pi packages and extension files", async () => {
   await mkdir(cwd, { recursive: true });
   await mkdir(pkgDir, { recursive: true });
   await writeFile(join(agentDir, "extensions", "demo.ts"), "export default function () {}\n");
-  await writeFile(
-    join(agentDir, "settings.json"),
-    JSON.stringify({ packages: [pkgDir] }),
-  );
+  await writeFile(join(agentDir, "settings.json"), JSON.stringify({ packages: [pkgDir] }));
 
   const listed = await listPiPlugins(cwd, agentDir, root);
   const pkg = listed.find((row) => row.kind === "package");
@@ -80,10 +107,9 @@ test("lists and toggles Pi packages and extension files", async () => {
   await setPiPluginEnabled(cwd, ext!.id, false, agentDir, root);
   const saved = await readFile(join(agentDir, "settings.json"), "utf8");
   assert.equal(saved, JSON.stringify({ packages: [pkgDir] }));
-  const switches = JSON.parse(await readFile(join(root, "pi-plugin-switches.json"), "utf8")) as Record<
-    string,
-    boolean
-  >;
+  const switches = JSON.parse(
+    await readFile(join(root, "pi-plugin-switches.json"), "utf8"),
+  ) as Record<string, boolean>;
   assert.equal(switches[pkg!.id], false);
   assert.equal(switches[ext!.id], false);
 

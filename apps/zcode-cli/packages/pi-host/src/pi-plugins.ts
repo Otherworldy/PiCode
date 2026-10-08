@@ -1,4 +1,5 @@
 import { ensureAppDataDir } from "@zcode/shared/node";
+import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -266,12 +267,56 @@ export function piPluginPackageSource(id: string): { scope: PiPluginScope; sourc
   return { scope, source };
 }
 
+type PackageCommandSpawn = (
+  command: string,
+  args: readonly string[],
+  options: SpawnOptions,
+) => ChildProcess;
+
+const WINDOWS_SHELL_COMMAND = /^(?:npm|pnpm|bun)(?:\.(?:cmd|exe))?$/iu;
+
+function needsWindowsShell(command: string): boolean {
+  if (process.platform !== "win32") return false;
+  const base = command.slice(Math.max(command.lastIndexOf("\\"), command.lastIndexOf("/")) + 1);
+  return WINDOWS_SHELL_COMMAND.test(base) || /\.(?:cmd|bat)$/iu.test(base);
+}
+
+function quoteCmdArg(arg: string): string {
+  return /[\s"&|<>^]/u.test(arg) ? `"${arg.replaceAll('"', '""')}"` : arg;
+}
+
+/**
+ * Pi `PackageManager.update` 默认 `stdio: "inherit"`。
+ * app-server 的 stdout 是协议帧，npm 打出 `changed 1 package` 会让 Host 解析失败并关掉 Agent。
+ * 只换掉这次检查/更新用的实例，让子进程丢掉输出；Windows 的 npm shim 仍走 shell。
+ */
+export function silencePackageManagerStdout(
+  manager: object,
+  spawnImpl: PackageCommandSpawn = spawn,
+): void {
+  const target = manager as {
+    spawnCommand?: (command: string, args: string[], options?: { cwd?: string }) => ChildProcess;
+  };
+  target.spawnCommand = (command, args, options) => {
+    const shell = needsWindowsShell(command);
+    return spawnImpl(shell ? quoteCmdArg(command) : command, shell ? args.map(quoteCmdArg) : args, {
+      cwd: options?.cwd,
+      env: process.env,
+      stdio: "ignore",
+      windowsHide: true,
+      shell,
+    });
+  };
+}
+
 async function openPackageManager(cwd: string, agentDir?: string) {
   await ensurePiSdk();
   const { DefaultPackageManager: PackageManager, SettingsManager, getAgentDir } = piCoding();
   const dir = agentDir ?? getAgentDir();
   const settings = SettingsManager.create(cwd, dir);
-  return new PackageManager({ cwd, agentDir: dir, settingsManager: settings });
+  const packages = new PackageManager({ cwd, agentDir: dir, settingsManager: settings });
+  silencePackageManagerStdout(packages);
+  return packages;
 }
 
 export async function checkPiPluginUpdates(cwd: string, agentDir?: string) {
