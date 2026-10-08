@@ -2999,6 +2999,20 @@ export function createZCodeTaskServiceAdapter(
       }
     },
 
+    async summarizeTaskTitle(params): Promise<ZCodeTaskMeta> {
+      const summarized = await options.zcodeAgentService.summarizeSessionTitle({
+        workspacePath: params.workspacePath,
+        ...(params.workspaceIdentity ? { workspaceIdentity: params.workspaceIdentity } : {}),
+        sessionId: params.taskId,
+      });
+      return service.renameTask({
+        taskId: params.taskId,
+        workspacePath: params.workspacePath,
+        ...(params.workspaceIdentity ? { workspaceIdentity: params.workspaceIdentity } : {}),
+        title: summarized.title,
+      });
+    },
+
     async setTaskPinned(params): Promise<ZCodeTaskMeta> {
       setOverlay(params, { pinned: params.pinned });
       const meta = await updateIndexedTaskState(params, {

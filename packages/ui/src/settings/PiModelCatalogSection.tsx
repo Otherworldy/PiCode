@@ -9,6 +9,7 @@ import { logger } from "@/logger.js";
 import { SettingsSegmentedTabs } from "@/settings/SettingsSegmentedTabs.js";
 import {
   DefaultModelCatalogTab,
+  TITLE_SUMMARY_FOLLOW_VALUE,
   type FlatModelEntry,
 } from "@/settings/DefaultModelCatalogTab.js";
 import {
@@ -133,7 +134,9 @@ export function PiModelCatalogSection({
   );
 
   const defaultValue =
-    view?.defaultProvider && view.defaultModel ? `${view.defaultProvider}/${view.defaultModel}` : "";
+    view?.defaultProvider && view.defaultModel
+      ? `${view.defaultProvider}/${view.defaultModel}`
+      : "";
 
   const handleDefaultModelChange = (value: string) => {
     const slash = value.indexOf("/");
@@ -164,6 +167,38 @@ export function PiModelCatalogSection({
     });
   };
 
+  const titleSummaryValue =
+    view?.titleSummaryProvider &&
+    view.titleSummaryModel &&
+    allModels.some(
+      (entry) =>
+        entry.providerId === view.titleSummaryProvider && entry.model.id === view.titleSummaryModel,
+    )
+      ? `${view.titleSummaryProvider}/${view.titleSummaryModel}`
+      : TITLE_SUMMARY_FOLLOW_VALUE;
+
+  const handleTitleSummaryEnabledChange = (enabled: boolean) => {
+    void mutate({ action: "setDefault", titleSummaryEnabled: enabled });
+  };
+
+  const handleTitleSummaryModelChange = (value: string) => {
+    if (value === TITLE_SUMMARY_FOLLOW_VALUE) {
+      void mutate({
+        action: "setDefault",
+        titleSummaryProvider: "",
+        titleSummaryModel: "",
+      });
+      return;
+    }
+    const slash = value.indexOf("/");
+    if (slash <= 0) return;
+    void mutate({
+      action: "setDefault",
+      titleSummaryProvider: value.slice(0, slash),
+      titleSummaryModel: value.slice(slash + 1),
+    });
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between pb-1">
@@ -191,8 +226,12 @@ export function PiModelCatalogSection({
           currentDefault={currentDefault}
           defaultValue={defaultValue}
           defaultThought={view?.defaultThought}
+          titleSummaryEnabled={view?.titleSummaryEnabled !== false}
+          titleSummaryValue={titleSummaryValue}
           onDefaultModelChange={handleDefaultModelChange}
           onDefaultThoughtChange={handleDefaultThoughtChange}
+          onTitleSummaryEnabledChange={handleTitleSummaryEnabledChange}
+          onTitleSummaryModelChange={handleTitleSummaryModelChange}
           onGoToProviders={() => setActiveTab("providers")}
           onAddProvider={() => {
             setActiveTab("providers");

@@ -28,6 +28,7 @@ import { useTaskListItemContextActions } from "@/useTaskListItemContextActions.j
 import { useFeedbackStore } from "@/feedback/feedbackStore.js";
 import { getSessionLivePhase, subscribeSessionLivePhase } from "@/v4/sessionLivePhase.js";
 import { getTaskListAttention, getTaskListRowActivity } from "@/v4/taskListRowActivity.js";
+import { SessionTitleSummaryMark } from "@/sessionTitleSummaryPending.js";
 import { GroupedTaskContextMenuContent } from "@/workspace-grouped-tasks/task-context-menu-content.js";
 import { TaskRowActionButton } from "@/workspace-grouped-tasks/task-row-action-button.js";
 import { TaskInteractionBadge } from "@/TaskInteractionBadge.js";
@@ -183,6 +184,10 @@ function GroupedTaskRowComponent({
       )}
     >
       <span className={TASK_GROUP_ROW_LINE_CLASS}>
+        <SessionTitleSummaryMark
+          task={task}
+          label={intl.formatMessage({ id: "taskList.summarizingTitle" })}
+        />
         <TaskTitleOverflowText
           as="span"
           className="text-foreground"
@@ -387,6 +392,10 @@ function GroupedTaskRowComponent({
       )}
     >
       <span className={TASK_GROUP_ROW_LINE_CLASS}>
+        <SessionTitleSummaryMark
+          task={task}
+          label={intl.formatMessage({ id: "taskList.summarizingTitle" })}
+        />
         <TaskTitleOverflowText as="span" className="text-foreground" title={taskTitle}>
           {/* grouped task 标题超出时不要显示省略号，右侧渐隐能保留标题连续性，避免和右侧状态元信息挤在一起。*/}
           {taskTitle}
@@ -511,6 +520,7 @@ function GroupedTaskRowComponent({
         // 右键菜单内容带 Radix Presence/Portal，拖拽重排时常驻挂载会触发嵌套更新循环；仅在菜单打开时挂载内容，配合路径懒加载避免拖拽过程刷 task path RPC。
         <GroupedTaskContextMenuContent
           task={task}
+          remoteSessionId={remoteSessionId}
           currentGroupId={currentGroupId}
           groups={groups}
           intl={intl}

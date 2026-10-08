@@ -41,7 +41,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 - Pi 拒 prompt（preflight false）：ACK 失败，不造假 turn。rewind 之后、重发完成之前的任何失败，都用 jsonl 把原对话行画回去。
 - `getModel()` 返回 `provider/model`。旧 snapshot 把裸模型 id 当成非法选择，会在截断之后把编辑打失败。
-- 新建会话的 Pi 投影增量写入 sessions-index。只跳过纯文本流式 delta。第一条用户消息同时成为侧栏标题。
+- 新建会话的 Pi 投影增量写入 sessions-index。只跳过纯文本流式 delta。第一条用户消息先成为侧栏标题。首轮正常结束后，若标题总结开着、标题不是用户手改的、且 jsonl 还没有 `session_info` 名字，再用总结模型换成短标题并写入 `session_info`。没配总结模型就用这一轮的对话模型。失败或关闭时保留截断标题。子会话不总结。用户重命名同样写入 `session_info`，之后自动标题不再覆盖。侧栏「总结标题」是另一次显式请求：不受自动开关和手改保护限制，读当前会话或 jsonl 后返回标题，由壳按重命名写入。
 - 打开中的会话，侧栏转圈以该 pane 的 conversation snapshot `control.phase` 为准。sessions-index 还停在上一轮 completed 时，正在跑的这一行仍要转。未读点只在没有这份实时 phase 时盖过转圈。
 - 流中途失败：turn `failed`，已写出的 row 保留。
 - 模型失败只把一句摘要写进回复和 `lastError.message`；原始 JSON 放 `lastError.detail`。
@@ -150,7 +150,7 @@ SDK 来源是 `AppSettings.piSdkSource`。缺省 `builtin`，用打进 `zcode.cj
 设置页通过 `pi/models` 读写 `~/.pi/agent/models.json`（apiKey 明文回读，输入框不脱敏；保存时空字符串清掉密钥，请求不带 `apiKey` 则保留原值）和 `settings.json` 默认模型与思考等级；保存后 `registerProvider`/`unregisterProvider` 更新活着的 `ModelRuntime`。渠道的 `api` 是默认请求格式。模型项没写 `api` 时补成渠道的；写成另一种驱动时保留，运行时用模型项上的 `api`。壳不另写 PiCode 供应商库。PiCode 账号登录、升级套餐、Coding Plan 额度不再作为产品面。
 
 模型设置界面包含两个标签页：「默认模型」与「供应商管理」：
-- 「默认模型」页提供全局默认模型（供应商+模型ID）及默认思考等级（Reasoning Level）的直观选择与持久化，展示当前默认模型详细规格，并提供跳转至「供应商管理」的快捷入口；若未配置任何供应商或模型，展示空状态与前往添加供应商的操作。
+- 「默认模型」页提供全局默认模型（供应商+模型ID）及默认思考等级（Reasoning Level）的直观选择与持久化，展示当前默认模型详细规格，并提供跳转至「供应商管理」的快捷入口；若未配置任何供应商或模型，展示空状态与前往添加供应商的操作。同页还有标题总结开关和可选的总结模型。开关缺省开启；总结模型留空表示跟随当前对话模型。这两项写在 `~/.pi/agent/zcode-title-summary.json`，不进 Pi 的 `settings.json`。
 - 「供应商管理」页提供供应商与模型的增删改查、测试连接等管理能力。
 
 设置页「使用统计」只恢复应用用量。事实源是本机 Pi 会话 jsonl：`~/.pi/agent/sessions` 和旧的 `~/.PiCode/pi-host-sessions`，含子目录里的子会话。只读，不写回旧 usage 表。每个文件只计当前叶子；分叉抄来的同一条消息按 id 只计一次。时间窗外的消息不计。Pi 的 `input` 不含缓存，汇总时把 cache 加进 input，命中率才不会超过 1。没有首 token 耗时和工具耗时，这两项留空。

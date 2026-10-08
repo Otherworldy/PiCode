@@ -9,8 +9,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select.js";
+import { Switch } from "@/components/ui/switch.js";
 import { SettingsGroupCard, SettingsRow } from "@/settings/SettingsPageParts.js";
 import { thoughtLevelLabelId } from "@/chat-input-toolbar/thoughtLevelOptions.js";
+
+export const TITLE_SUMMARY_FOLLOW_VALUE = "__follow__";
 
 export interface FlatModelEntry {
   providerId: string;
@@ -26,8 +29,12 @@ export function DefaultModelCatalogTab({
   currentDefault,
   defaultValue,
   defaultThought,
+  titleSummaryEnabled,
+  titleSummaryValue,
   onDefaultModelChange,
   onDefaultThoughtChange,
+  onTitleSummaryEnabledChange,
+  onTitleSummaryModelChange,
   onGoToProviders,
   onAddProvider,
 }: {
@@ -37,8 +44,12 @@ export function DefaultModelCatalogTab({
   currentDefault: FlatModelEntry | null;
   defaultValue: string;
   defaultThought?: string;
+  titleSummaryEnabled: boolean;
+  titleSummaryValue: string;
   onDefaultModelChange: (value: string) => void;
   onDefaultThoughtChange: (thought: string) => void;
+  onTitleSummaryEnabledChange: (enabled: boolean) => void;
+  onTitleSummaryModelChange: (value: string) => void;
   onGoToProviders: () => void;
   onAddProvider: () => void;
 }) {
@@ -125,6 +136,48 @@ export function DefaultModelCatalogTab({
             }
           />
         ) : null}
+      </SettingsGroupCard>
+
+      <SettingsGroupCard>
+        <SettingsRow
+          label={intl.formatMessage({ id: "settings.modelProvider.pi.titleSummary" })}
+          description={intl.formatMessage({ id: "settings.modelProvider.pi.titleSummaryDesc" })}
+          control={
+            <Switch
+              aria-label={intl.formatMessage({ id: "settings.modelProvider.pi.titleSummary" })}
+              checked={titleSummaryEnabled}
+              onCheckedChange={onTitleSummaryEnabledChange}
+            />
+          }
+        />
+        <SettingsRow
+          label={intl.formatMessage({ id: "settings.modelProvider.pi.titleSummaryModel" })}
+          description={intl.formatMessage({
+            id: "settings.modelProvider.pi.titleSummaryModelDesc",
+          })}
+          controlLayout="wide"
+          control={
+            <Select
+              value={titleSummaryValue}
+              onValueChange={onTitleSummaryModelChange}
+              disabled={!titleSummaryEnabled}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TITLE_SUMMARY_FOLLOW_VALUE}>
+                  {intl.formatMessage({ id: "settings.modelProvider.pi.titleSummaryFollow" })}
+                </SelectItem>
+                {allModels.map(({ providerId, providerName, model }) => (
+                  <SelectItem key={`${providerId}/${model.id}`} value={`${providerId}/${model.id}`}>
+                    {providerName}/{model.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          }
+        />
       </SettingsGroupCard>
 
       {currentDefault ? (

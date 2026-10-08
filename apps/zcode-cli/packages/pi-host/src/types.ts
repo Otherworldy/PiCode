@@ -247,6 +247,7 @@ export interface PiSessionPort {
   setThinkingLevel?(level: PiThinkingLevel): void;
   setSteeringMode?(mode: "all" | "one-at-a-time"): void;
   setFollowUpMode?(mode: "all" | "one-at-a-time"): void;
+  readonly sessionName?: string;
   setSessionName?(name: string): Promise<void> | void;
   bindUi?(ui: unknown): Promise<void>;
   subscribe(listener: (event: PiHostEvent) => void): () => void;

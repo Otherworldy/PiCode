@@ -57,6 +57,7 @@ import {
 } from "./server-operations.js";
 import { listChildProcesses } from "./process-child-processes.js";
 import { ProtocolRuntimeResources } from "./runtime-resources.js";
+import { summarizeSessionTitle } from "./session-title-summary.js";
 import {
   mutatePiModels,
   mutatePiPlugins,
@@ -672,6 +673,8 @@ export class ZCodeProtocolAgentServer {
         return await closeSession(this.context, request.params);
       case zcodeProtocolMethods.sessionDelete:
         return await deleteStoredSession(this.context, request.params);
+      case zcodeProtocolMethods.sessionSummarizeTitle:
+        return await summarizeSessionTitle(this.context, request.params);
       case zcodeProtocolMethods.workspaceReadPresentation:
         return await readWorkspacePresentation(this.context, request.params);
       case zcodeProtocolMethods.piModelsMutate:

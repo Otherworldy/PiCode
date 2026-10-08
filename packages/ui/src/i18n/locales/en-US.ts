@@ -1796,6 +1796,9 @@ const enUS: Record<string, string> = {
   "taskList.pin": "Pin task",
   "taskList.unpin": "Unpin task",
   "taskList.rename": "Rename task",
+  "taskList.summarizeTitle": "Summarize title",
+  "taskList.summarizingTitle": "Summarizing title",
+  "taskList.summarizeTitleFailed": "Could not summarize the title",
   "taskList.archive": "Archive task",
   "taskList.archiveLocal": "Archive local task",
   "taskList.archiveRemote": "Archive remote task",
@@ -2657,11 +2660,21 @@ const enUS: Record<string, string> = {
   "settings.modelProvider.pi.defaultModel": "Default model",
   "settings.modelProvider.pi.tabDefaultModel": "Default Model",
   "settings.modelProvider.pi.tabProviders": "Providers",
-  "settings.modelProvider.pi.defaultModelDesc": "Configure the default model used for Agent sessions and tasks.",
+  "settings.modelProvider.pi.defaultModelDesc":
+    "Configure the default model used for Agent sessions and tasks.",
   "settings.modelProvider.pi.defaultThought": "Default reasoning level",
-  "settings.modelProvider.pi.defaultThoughtDesc": "Applies when the model supports thinking to set default reasoning effort.",
+  "settings.modelProvider.pi.defaultThoughtDesc":
+    "Applies when the model supports thinking to set default reasoning effort.",
+  "settings.modelProvider.pi.titleSummary": "Auto-summarize titles",
+  "settings.modelProvider.pi.titleSummaryDesc":
+    "After the first turn, replace the truncated prompt with a short title. When off, the truncated first message stays.",
+  "settings.modelProvider.pi.titleSummaryModel": "Summary model",
+  "settings.modelProvider.pi.titleSummaryModelDesc":
+    "When unset, use the model of that conversation.",
+  "settings.modelProvider.pi.titleSummaryFollow": "Follow conversation model",
   "settings.modelProvider.pi.manageProviders": "Manage Providers",
-  "settings.modelProvider.pi.noModelsConfigured": "No models configured yet. Please add an AI provider first.",
+  "settings.modelProvider.pi.noModelsConfigured":
+    "No models configured yet. Please add an AI provider first.",
   "settings.modelProvider.pi.goToAddProvider": "Add Provider",
   "settings.modelProvider.pi.currentModelSpecs": "Model Specifications",
   "settings.modelProvider.pi.providerId": "Provider ID",

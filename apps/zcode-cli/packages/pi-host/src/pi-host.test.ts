@@ -44,6 +44,10 @@ test("a bare slash command does not name the session", () => {
   assert.equal(projector.getSnapshot().meta.title, "修登录");
   assert.equal(projector.setTitle("/plannotator-plan-mode", "generated").length, 0);
   assert.equal(projector.getSnapshot().meta.title, "修登录");
+  projector.setTitle("手改标题", "custom");
+  assert.equal(projector.setTitle("自动标题", "generated").length, 0);
+  assert.equal(projector.getSnapshot().meta.title, "手改标题");
+  assert.equal(projector.getSnapshot().meta.titleSource, "custom");
 });
 
 test("first user message names the session and reload replaces rows", () => {

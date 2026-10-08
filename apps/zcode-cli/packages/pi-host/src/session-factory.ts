@@ -55,6 +55,11 @@ import {
   type PiModelConfigView,
   type PiProviderDraft,
 } from "./model-config-file.js";
+import {
+  applyTitleSummaryPatch,
+  readTitleSummarySettings,
+  writeTitleSummarySettings,
+} from "./session-title-summary.js";
 
 async function createIsolatedRuntime(delegate: DelegateProvider): Promise<ModelRuntime> {
   const runtime = await piCoding().ModelRuntime.create({
@@ -87,11 +92,13 @@ export async function completePiPrompt(input: {
   providerId: string;
   modelId: string;
   prompt: string;
+  system?: string;
   signal?: AbortSignal;
 }): Promise<string | null> {
   const providerId = input.providerId.trim();
   const modelId = input.modelId.trim();
   const prompt = input.prompt.trim();
+  const system = input.system?.trim();
   if (!providerId || !modelId || !prompt) return null;
   const runtime = await getProductionModelRuntime();
   const model = runtime.getModel(providerId, modelId);
@@ -100,7 +107,10 @@ export async function completePiPrompt(input: {
   let message: AssistantMessage | undefined;
   for await (const event of runtime.streamSimple(
     model,
-    { messages: [{ role: "user", content: prompt, timestamp: Date.now() }] },
+    {
+      ...(system ? { systemPrompt: system } : {}),
+      messages: [{ role: "user", content: prompt, timestamp: Date.now() }],
+    },
     {
       ...(thought === "off" ? {} : { reasoning: thought }),
       ...(input.signal ? { signal: input.signal } : {}),
@@ -156,11 +166,30 @@ export async function mutatePiCatalog(input: {
   defaultProvider?: string;
   defaultModel?: string;
   defaultThought?: string;
-}): Promise<PiModelConfigView & { discovered?: PiDiscoveredModel[] }> {
+  titleSummaryEnabled?: boolean;
+  titleSummaryProvider?: string;
+  titleSummaryModel?: string;
+}): Promise<
+  PiModelConfigView & {
+    discovered?: PiDiscoveredModel[];
+    titleSummaryEnabled: boolean;
+    titleSummaryProvider?: string;
+    titleSummaryModel?: string;
+  }
+> {
   await ensurePiSdk();
   const agentDir = piCoding().getAgentDir();
   const settings = piCoding().SettingsManager.create(process.cwd(), agentDir);
   let file = await loadModelsJson(agentDir);
+  const finish = async <T extends PiModelConfigView>(view: T) => {
+    const summary = await readTitleSummarySettings(agentDir);
+    return {
+      ...view,
+      titleSummaryEnabled: summary.enabled,
+      ...(summary.provider ? { titleSummaryProvider: summary.provider } : {}),
+      ...(summary.model ? { titleSummaryModel: summary.model } : {}),
+    };
+  };
 
   if (input.action === "upsert" && input.provider) {
     file = upsertProvider(file, input.provider);
@@ -174,32 +203,52 @@ export async function mutatePiCatalog(input: {
     const runtime = await getProductionModelRuntime();
     runtime.unregisterProvider(input.providerId);
   } else if (input.action === "setDefault") {
+    let defaultsChanged = false;
     if (input.defaultProvider && input.defaultModel) {
       settings.setDefaultModelAndProvider(input.defaultProvider, input.defaultModel);
+      defaultsChanged = true;
     }
     if (input.defaultThought) {
       settings.setDefaultThinkingLevel(mapThought(input.defaultThought));
+      defaultsChanged = true;
     }
-    await settings.flush();
+    if (defaultsChanged) await settings.flush();
+    if (
+      input.titleSummaryEnabled !== undefined ||
+      input.titleSummaryProvider !== undefined ||
+      input.titleSummaryModel !== undefined
+    ) {
+      const current = await readTitleSummarySettings(agentDir);
+      await writeTitleSummarySettings(
+        agentDir,
+        applyTitleSummaryPatch(current, {
+          ...(input.titleSummaryEnabled !== undefined ? { enabled: input.titleSummaryEnabled } : {}),
+          ...(input.titleSummaryProvider !== undefined ? { provider: input.titleSummaryProvider } : {}),
+          ...(input.titleSummaryModel !== undefined ? { model: input.titleSummaryModel } : {}),
+        }),
+      );
+    }
   } else if (input.action === "discover") {
     const baseUrl = input.provider?.baseUrl ?? "";
     const apiKey = input.provider?.apiKey || storedApiKey(file, input.providerId ?? input.provider?.id ?? "");
     const discovered = await discoverPiModels(baseUrl, apiKey);
-    return {
+    return finish({
       ...toPiModelConfigView(file, {
         defaultProvider: settings.getDefaultProvider(),
         defaultModel: settings.getDefaultModel(),
         defaultThought: settings.getDefaultThinkingLevel() ?? "medium",
       }),
       discovered,
-    };
+    });
   }
 
-  return toPiModelConfigView(file, {
-    defaultProvider: settings.getDefaultProvider(),
-    defaultModel: settings.getDefaultModel(),
-    defaultThought: settings.getDefaultThinkingLevel() ?? "medium",
-  });
+  return finish(
+    toPiModelConfigView(file, {
+      defaultProvider: settings.getDefaultProvider(),
+      defaultModel: settings.getDefaultModel(),
+      defaultThought: settings.getDefaultThinkingLevel() ?? "medium",
+    }),
+  );
 }
 
 export { branchPiSessionFile };
@@ -515,6 +564,12 @@ export function createSdkSessionFactory(options: {
           const current = selections.get(key);
           if (current) selections.set(key, { ...current, thought: level });
         }
+      },
+      get sessionName() {
+        return session.sessionName;
+      },
+      setSessionName: (name) => {
+        session.setSessionName(name);
       },
       bindUi: async (ui) => {
         try {

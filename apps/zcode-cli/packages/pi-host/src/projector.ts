@@ -349,6 +349,8 @@ export class PiToV4Projector {
   }
 
   setTitle(title: string, titleSource: ConversationSnapshot["meta"]["titleSource"] = "custom"): ConversationDelta[] {
+    // 手改标题之后，jsonl 重放和自动总结都只能再写 custom。否则侧栏会闪回生成标题。
+    if (titleSource !== "custom" && this.snapshot.meta.titleSource === "custom") return [];
     if (titleSource !== "custom" && isControlCommandTitle(title)) return [];
     return this.applyState({ meta: { title, titleSource } });
   }

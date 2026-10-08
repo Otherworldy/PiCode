@@ -1,5 +1,13 @@
 /* eslint-disable max-lines -- task item 同时承载默认列表和 timeline 两行布局的共享交互，先保持动作链路集中避免归档/置顶回归。 */
-import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   Archive,
   Clock,
@@ -39,6 +47,11 @@ import { useTaskListItemContextActions } from "@/useTaskListItemContextActions.j
 import { useFeedbackStore } from "@/feedback/feedbackStore.js";
 import { buildTaskFeedbackDescription } from "@/lib/taskFeedbackDraft.js";
 import { toast } from "@/components/ui/toast.js";
+import { useZCodeTaskService } from "@/hooks/useZCodeTaskService.js";
+import {
+  requestSessionTitleSummary,
+  SessionTitleSummaryMark,
+} from "@/sessionTitleSummaryPending.js";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
 import { useV4SplitPaneEntry } from "@/v4/splitPaneEntryContext.js";
 import { buildWorkbenchSessionKey, useWorkbenchGroupStore } from "@/v4/workbenchGroupStore.js";
@@ -639,6 +652,10 @@ export const MemoTaskItem = memo(function TaskListItem({
                 </span>
               </ControlHintTooltip>
             ) : null}
+            <SessionTitleSummaryMark
+              task={task}
+              label={intl.formatMessage({ id: "taskList.summarizingTitle" })}
+            />
             <TaskTitleOverflowText
               className="text-ui-base text-foreground"
               title={taskTitleWithChanges}
@@ -736,6 +753,10 @@ export const MemoTaskItem = memo(function TaskListItem({
                   </span>
                 </ControlHintTooltip>
               ) : null}
+              <SessionTitleSummaryMark
+                task={task}
+                label={intl.formatMessage({ id: "taskList.summarizingTitle" })}
+              />
               <TaskTitleOverflowText
                 className="text-ui-base text-foreground"
                 title={taskTitleWithChanges}
@@ -846,6 +867,20 @@ export function TaskListItemContextMenuContent({
     ? (disabledReason ?? intl.formatMessage({ id: "workspaceSidebar.unavailableLocalDirectory" }))
     : undefined;
   const deleteSession = useDeleteSessionAction(task, remoteSessionId);
+  const zcodeTaskService = useZCodeTaskService(
+    workspacePath,
+    remoteSessionId,
+    task.workspaceIdentity,
+  );
+  const handleSummarizeTitle = useCallback(() => {
+    requestSessionTitleSummary({
+      service: zcodeTaskService,
+      task,
+      onError: () => {
+        toast(intl.formatMessage({ id: "taskList.summarizeTitleFailed" }));
+      },
+    });
+  }, [intl, task, zcodeTaskService]);
   // 收尾：「在分屏打开」仅桌面 shell（context 由 WorkspaceShellLayout 提供；
   // 手机远控/无 Provider 环境默认 false → 菜单项整体不渲染）。
   const splitPaneEntry = useV4SplitPaneEntry();
@@ -937,6 +972,7 @@ export function TaskListItemContextMenuContent({
       onStartRenameTask={() => {
         onStartRenameTask(task.taskId, task.title);
       }}
+      onSummarizeTitle={handleSummarizeTitle}
       onArchiveTask={() => {
         onArchiveTask(task.taskId);
       }}

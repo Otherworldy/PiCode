@@ -627,6 +627,7 @@ export interface IZCodeAgentService {
     params: ZCodeAgentReadWorkspacePresentationParams,
   ): Promise<ZCodeWorkspacePresentation>;
   mutatePiModels(params: ZCodeAgentMutatePiModelsParams): Promise<ZCodePiModelsMutateResult>;
+  summarizeSessionTitle(params: ZCodeAgentSessionTarget): Promise<{ title: string }>;
   mutatePiPlugins(params: ZCodeAgentMutatePiPluginsParams): Promise<ZCodePiPluginsResult>;
   /** 无 task/session 的 Settings 预信任；Agent 会重新发现并校验 canonical snapshot。 */
   grantWorkspaceHookTrust(

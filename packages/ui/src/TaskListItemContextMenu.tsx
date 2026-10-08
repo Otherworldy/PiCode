@@ -14,6 +14,7 @@ export function TaskListItemContextMenu({
   taskNativeSessionLogFile,
   onTogglePinTask,
   onStartRenameTask,
+  onSummarizeTitle,
   onArchiveTask,
   onDeleteTask,
   onMarkTaskAsUnread,
@@ -42,6 +43,7 @@ export function TaskListItemContextMenu({
   };
   onTogglePinTask: () => void;
   onStartRenameTask: () => void;
+  onSummarizeTitle?: () => void;
   onArchiveTask: () => void;
   onDeleteTask?: () => void;
   onMarkTaskAsUnread: () => void;
@@ -71,6 +73,7 @@ export function TaskListItemContextMenu({
         Separator={ContextMenuSeparator}
         onTogglePinTask={onTogglePinTask}
         onStartRenameTask={onStartRenameTask}
+        onSummarizeTitle={onSummarizeTitle}
         onArchiveTask={onArchiveTask}
         onDeleteTask={onDeleteTask}
         onMarkTaskAsUnread={onMarkTaskAsUnread}

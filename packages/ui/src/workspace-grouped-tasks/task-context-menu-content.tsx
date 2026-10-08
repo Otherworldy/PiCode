@@ -7,11 +7,15 @@ import {
   ContextMenuSubContent,
   ContextMenuSubTrigger,
 } from "@/components/ui/context-menu.js";
+import { toast } from "@/components/ui/toast.js";
+import { useZCodeTaskService } from "@/hooks/useZCodeTaskService.js";
+import { requestSessionTitleSummary } from "@/sessionTitleSummaryPending.js";
 import { TaskGroupColorDot } from "@/workspace-grouped-tasks/colors.js";
 import type { TaskGroupMenuItem } from "@/workspace-grouped-tasks/types.js";
 
 export function GroupedTaskContextMenuContent({
   task,
+  remoteSessionId,
   currentGroupId,
   groups,
   intl,
@@ -30,6 +34,7 @@ export function GroupedTaskContextMenuContent({
   disabledReason,
 }: {
   task: ZCodeTaskMeta;
+  remoteSessionId?: string;
   currentGroupId?: string;
   groups: TaskGroupMenuItem[];
   intl: {
@@ -49,6 +54,20 @@ export function GroupedTaskContextMenuContent({
   onOpenTaskFeedback: () => void;
   disabledReason?: string;
 }) {
+  const zcodeTaskService = useZCodeTaskService(
+    task.workspacePath,
+    remoteSessionId,
+    task.workspaceIdentity,
+  );
+  const summarizeTitle = () => {
+    requestSessionTitleSummary({
+      service: zcodeTaskService,
+      task,
+      onError: () => {
+        toast(intl.formatMessage({ id: "taskList.summarizeTitleFailed" }));
+      },
+    });
+  };
   return (
     <ContextMenuContent className="w-56">
       <ContextMenuSub>
@@ -107,6 +126,15 @@ export function GroupedTaskContextMenuContent({
         }}
       >
         {intl.formatMessage({ id: "taskList.rename" })}
+      </ContextMenuItem>
+      <ContextMenuItem
+        disabled={Boolean(disabledReason)}
+        title={disabledReason}
+        onSelect={() => {
+          if (!disabledReason) summarizeTitle();
+        }}
+      >
+        {intl.formatMessage({ id: "taskList.summarizeTitle" })}
       </ContextMenuItem>
       <ContextMenuItem
         disabled={Boolean(disabledReason)}

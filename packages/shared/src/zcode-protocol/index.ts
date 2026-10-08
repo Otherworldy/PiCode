@@ -2252,6 +2252,23 @@ export const zcodeSessionDeleteResultSchema = z
   })
   .strict();
 export type ZCodeSessionDeleteResult = z.infer<typeof zcodeSessionDeleteResultSchema>;
+export const zcodeSessionSummarizeTitleParamsSchema = z
+  .object({
+    workspace: zcodeWorkspaceRefSchema,
+    sessionId: nonEmptyString,
+  })
+  .strict();
+export type ZCodeSessionSummarizeTitleParams = z.infer<
+  typeof zcodeSessionSummarizeTitleParamsSchema
+>;
+export const zcodeSessionSummarizeTitleResultSchema = z
+  .object({
+    title: z.string().min(1),
+  })
+  .strict();
+export type ZCodeSessionSummarizeTitleResult = z.infer<
+  typeof zcodeSessionSummarizeTitleResultSchema
+>;
 export const zcodeWorkspaceReadPresentationParamsSchema = z
   .object({ workspace: zcodeWorkspaceRefSchema })
   .strict();
@@ -2328,6 +2345,9 @@ export const zcodePiModelsMutateParamsSchema = z
     defaultProvider: z.string().min(1).optional(),
     defaultModel: z.string().min(1).optional(),
     defaultThought: z.string().optional(),
+    titleSummaryEnabled: z.boolean().optional(),
+    titleSummaryProvider: z.string().optional(),
+    titleSummaryModel: z.string().optional(),
   })
   .strict();
 export type ZCodePiModelsMutateParams = z.infer<typeof zcodePiModelsMutateParamsSchema>;
@@ -2347,6 +2367,9 @@ export const zcodePiModelsMutateResultSchema = z
     defaultProvider: z.string().optional(),
     defaultModel: z.string().optional(),
     defaultThought: z.string().optional(),
+    titleSummaryEnabled: z.boolean().optional(),
+    titleSummaryProvider: z.string().optional(),
+    titleSummaryModel: z.string().optional(),
     discovered: z.array(zcodePiDiscoveredModelSchema).optional(),
   })
   .strict();
@@ -4021,6 +4044,7 @@ export const zcodeProtocolMethods = {
   sessionGoal: "session/goal",
   sessionClose: "session/close",
   sessionDelete: "session/delete",
+  sessionSummarizeTitle: "session/summarizeTitle",
   // setModel 仍被 zcodeSessionService 的 desktop 旧链路消费；replayable
   // switchModelConfig 已直接由目标 Environment Registry 解析 Selection。
   sessionSetModel: "session/setModel",

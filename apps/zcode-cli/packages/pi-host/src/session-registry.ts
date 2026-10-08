@@ -27,6 +27,7 @@ import {
 import { mapThought } from "./model-delegate.js";
 import { PiToV4Projector } from "./projector.js";
 import type { ToolPermissionCheck } from "./permission-gate.js";
+import { scheduleLiveSessionTitleSummary } from "./session-title-live.js";
 import { runSessionResume } from "./session-tree.js";
 import {
   contextUsagePublish,
@@ -85,6 +86,9 @@ export interface HostedSession {
   reloadHistory(content: string): void;
   setModel(provider: string, modelId: string, thought?: string): Promise<void>;
   setThinkingLevel(level: string): void;
+  setSessionName(name: string): void;
+  /** 把手改标题写进投影并通知侧栏。只改 session 文件的话，当前列表仍显示旧标题。 */
+  publishCustomTitle(title: string): void;
   setFeedback(entityId: string, feedback: "like" | "dislike" | null): void;
   markTurnFilesReverted(turnId: string): void;
   requestConfirm(toolName: string, reason: string, args?: unknown): Promise<boolean>;
@@ -844,6 +848,27 @@ export class HostSessionRegistry {
           if (turnDone) {
             stopSubagentPoll();
             void publishSubagents();
+            // 重放出来的 agent_settled 不是这一轮的收口。只在真实 agent_end 上总结。
+            if (event.type === "agent_end") {
+              const snapshot = projector.getSnapshot();
+              scheduleLiveSessionTitleSummary({
+                sessionId: meta.sessionId,
+                parentSessionId: meta.parentSessionId,
+                titleSource: snapshot.meta.titleSource,
+                sessionName: pi.sessionName,
+                rows: snapshot.rows.window,
+                fallbackProvider: snapshot.config.provider,
+                fallbackModel: snapshot.config.model,
+                stillEligible: () => {
+                  const latest = projector.getSnapshot();
+                  return latest.meta.titleSource !== "custom" && !pi.sessionName?.trim();
+                },
+                commit: (title) => {
+                  pi.setSessionName?.(title);
+                  emit(projector.setTitle(title, "generated"));
+                },
+              });
+            }
           }
           void bridge.drainNext().then((drained) => {
             if (drained) projector.replaceQueue(queue.snapshot());
@@ -925,6 +950,13 @@ export class HostSessionRegistry {
       setThinkingLevel: (level) => {
         projector.setConfig({ thought: level });
         pi.setThinkingLevel?.(mapThought(level));
+      },
+      setSessionName: (name) => {
+        pi.setSessionName?.(name);
+      },
+      publishCustomTitle: (title) => {
+        emit(projector.setTitle(title, "custom"));
+        pi.setSessionName?.(title);
       },
       branchFrom: pi.branchFrom,
       noteBranchSummary: (active) => {

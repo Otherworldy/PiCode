@@ -82,6 +82,7 @@ import {
   zcodeProcessResourceSampleSchema,
   zcodeSessionCloseResultSchema,
   zcodeSessionDeleteResultSchema,
+  zcodeSessionSummarizeTitleResultSchema,
   zcodeRuntimeCapabilitiesSchema,
   zcodeSessionCompactResultSchema,
   zcodeSessionEventsResultSchema,
@@ -3830,6 +3831,18 @@ export function createZCodeAgentService(
       );
     },
 
+    async summarizeSessionTitle(params: ZCodeAgentSessionTarget) {
+      const client = await getClient(params);
+      return client.request(
+        zcodeProtocolMethods.sessionSummarizeTitle,
+        {
+          workspace: buildWorkspaceRef(params),
+          sessionId: params.sessionId,
+        },
+        zcodeSessionSummarizeTitleResultSchema,
+      );
+    },
+
     async mutatePiModels(params: ZCodeAgentMutatePiModelsParams) {
       const client = await getReadOnlyClient(params);
       const result = await client.request(
@@ -3842,6 +3855,15 @@ export function createZCodeAgentService(
           ...(params.defaultProvider ? { defaultProvider: params.defaultProvider } : {}),
           ...(params.defaultModel ? { defaultModel: params.defaultModel } : {}),
           ...(params.defaultThought !== undefined ? { defaultThought: params.defaultThought } : {}),
+          ...(params.titleSummaryEnabled !== undefined
+            ? { titleSummaryEnabled: params.titleSummaryEnabled }
+            : {}),
+          ...(params.titleSummaryProvider !== undefined
+            ? { titleSummaryProvider: params.titleSummaryProvider }
+            : {}),
+          ...(params.titleSummaryModel !== undefined
+            ? { titleSummaryModel: params.titleSummaryModel }
+            : {}),
         },
         zcodePiModelsMutateResultSchema,
       );

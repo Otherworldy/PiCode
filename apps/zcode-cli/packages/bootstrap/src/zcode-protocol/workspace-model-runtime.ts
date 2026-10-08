@@ -64,6 +64,15 @@ export async function mutatePiModels(rawParams: unknown) {
     ...(params.defaultProvider ? { defaultProvider: params.defaultProvider } : {}),
     ...(params.defaultModel ? { defaultModel: params.defaultModel } : {}),
     ...(params.defaultThought !== undefined ? { defaultThought: params.defaultThought } : {}),
+    ...(params.titleSummaryEnabled !== undefined
+      ? { titleSummaryEnabled: params.titleSummaryEnabled }
+      : {}),
+    ...(params.titleSummaryProvider !== undefined
+      ? { titleSummaryProvider: params.titleSummaryProvider }
+      : {}),
+    ...(params.titleSummaryModel !== undefined
+      ? { titleSummaryModel: params.titleSummaryModel }
+      : {}),
   });
 }
 

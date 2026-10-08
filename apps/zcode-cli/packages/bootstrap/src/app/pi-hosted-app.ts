@@ -140,7 +140,8 @@ export function createPiHostedApp(
     acquireForegroundPromotionLease: () => ({ kind: "acquired" as const }),
     releaseForegroundPromotionLease: () => undefined,
     setCustomSessionTitle: async ({ title }: { title: string }) => {
-      hosted.projector.setTitle(title, "custom");
+      // 直接 setTitle 的增量没人转发，侧栏 sessions-index 会一直停在旧标题。
+      hosted.publishCustomTitle(title);
     },
     getActiveTurnInfo: () =>
       hosted.projector.getSnapshot().control.phase === "running"

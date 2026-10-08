@@ -29,6 +29,7 @@ export function TaskActionMenuContent({
   Separator,
   onTogglePinTask,
   onStartRenameTask,
+  onSummarizeTitle,
   onArchiveTask,
   onDeleteTask,
   onMarkTaskAsUnread,
@@ -62,6 +63,7 @@ export function TaskActionMenuContent({
   Separator: React.ComponentType<TaskActionMenuSeparatorProps>;
   onTogglePinTask: () => void;
   onStartRenameTask: () => void;
+  onSummarizeTitle?: () => void;
   onArchiveTask: () => void;
   onDeleteTask?: () => void;
   onMarkTaskAsUnread: () => void;
@@ -102,6 +104,19 @@ export function TaskActionMenuContent({
       >
         {intl.formatMessage({ id: "taskList.rename" })}
       </Item>
+      {onSummarizeTitle ? (
+        <Item
+          disabled={taskTargetActionsDisabled}
+          title={disabledReason}
+          onSelect={() => {
+            if (!taskTargetActionsDisabled) {
+              onSummarizeTitle();
+            }
+          }}
+        >
+          {intl.formatMessage({ id: "taskList.summarizeTitle" })}
+        </Item>
+      ) : null}
       <Item
         disabled={taskTargetActionsDisabled}
         title={disabledReason}

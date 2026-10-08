@@ -564,6 +564,13 @@ export interface IZCodeTaskService {
     title: string;
   }): Promise<ZCodeTaskMeta>;
 
+  /** 用当前会话内容生成标题，并按重命名写入。 */
+  summarizeTaskTitle(params: {
+    taskId: string;
+    workspacePath: string;
+    workspaceIdentity?: string;
+  }): Promise<ZCodeTaskMeta>;
+
   /** 更新 task 置顶状态 */
   setTaskPinned(params: {
     taskId: string;
