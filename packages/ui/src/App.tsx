@@ -18,6 +18,7 @@ import { useAppKeyboard } from "@/hooks/useAppKeyboard.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useWorkspaceActiveTaskState } from "@/hooks/useWorkspaceActiveTaskState.js";
 import { useEnsureWorkspaceMcpLoaded } from "@/hooks/useEnsureWorkspaceMcpLoaded.js";
+import { usePiPluginUpdateWatch } from "@/hooks/usePiPluginUpdateWatch.js";
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceReadOnly, isWorkspaceTab } from "@/store/tabStore.js";
 import type { TaskChatMessage as TestChatMessage } from "@/lib/taskChatMessageTypes.js";
@@ -805,6 +806,7 @@ export function App({
   });
 
   useEnsureWorkspaceMcpLoaded(workspaceAbsPath, workspaceIdentity, workspaceRpcReady);
+  usePiPluginUpdateWatch(workspaceAbsPath, workspaceIdentity, workspaceRpcReady);
 
   const testActions = useMemo<TestActions>(
     () => ({
@@ -1248,7 +1250,6 @@ export function App({
           taskFindDialogProps={taskFindDialogProps}
         />
       </PluginUiWorkspaceProvider>
-
     </>
   );
 }

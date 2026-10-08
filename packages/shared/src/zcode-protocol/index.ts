@@ -2405,6 +2405,7 @@ export const zcodePiPluginsResultSchema = z
           .strict(),
       )
       .optional(),
+    updatesCheckedAt: z.number().optional(),
   })
   .strict();
 export type ZCodePiPluginsResult = z.infer<typeof zcodePiPluginsResultSchema>;

@@ -15,12 +15,13 @@ import { Switch } from "@/components/ui/switch.js";
 import { toast } from "@/components/ui/toast.js";
 import { useZCodeSessionService } from "@/hooks/useZCodeSessionService.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { piPluginUpdateWorkspaceKey } from "@/lib/piPluginUpdateCheck.js";
 import { logger } from "@/logger.js";
 import { SettingsGroupCard, SettingsRow } from "@/settings/SettingsPageParts.js";
+import { usePiPluginUpdateStore } from "@/store/piPluginUpdateStore.js";
 
 type PiPlugin = ZCodePiPluginsResult["plugins"][number];
 type PiPluginConfig = NonNullable<ZCodePiPluginsResult["configs"]>[number];
-type PiPluginUpdate = NonNullable<ZCodePiPluginsResult["updates"]>[number];
 type PiPluginConfigValue = PiPluginConfig["fields"][number]["value"];
 
 function draftOf(config: PiPluginConfig): Record<string, PiPluginConfigValue> {
@@ -38,7 +39,12 @@ function namesOf(plugin: PiPlugin): Set<string> {
     if (bare.endsWith("s")) keys.add(bare.slice(0, -1));
   };
   push(plugin.name);
-  push(plugin.detail.split(/[\\/:@]/u).filter(Boolean).at(-1) ?? "");
+  push(
+    plugin.detail
+      .split(/[\\/:@]/u)
+      .filter(Boolean)
+      .at(-1) ?? "",
+  );
   return keys;
 }
 
@@ -73,7 +79,9 @@ function configFor(plugin: PiPlugin, configs: PiPluginConfig[]): PiPluginConfig 
     return keys.has(id) || keys.has(bare) || (bare.endsWith("s") && keys.has(bare.slice(0, -1)));
   });
   if (exact.length > 0) {
-    return exact.find((config) => config.id.toLowerCase() === plugin.name.toLowerCase()) ?? exact[0];
+    return (
+      exact.find((config) => config.id.toLowerCase() === plugin.name.toLowerCase()) ?? exact[0]
+    );
   }
   const near = configs.filter(
     (config) => editDistance(plugin.name.toLowerCase(), config.id.toLowerCase()) === 1,
@@ -103,7 +111,10 @@ export function PiPluginsSection({
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
-  const [updates, setUpdates] = useState<PiPluginUpdate[]>([]);
+  const workspaceKey = piPluginUpdateWorkspaceKey(workspacePath, workspaceIdentity);
+  const updates = usePiPluginUpdateStore((state) =>
+    state.workspaceKey === workspaceKey ? state.updates : [],
+  );
   const workspace = useMemo(
     () => ({
       workspacePath,
@@ -117,12 +128,15 @@ export function PiPluginsSection({
       const result = await session.mutatePiPlugins({ ...workspace, action: "list" });
       setPlugins(result.plugins);
       setConfigs(result.configs ?? []);
+      usePiPluginUpdateStore
+        .getState()
+        .apply(workspaceKey, result.updates ?? [], result.updatesCheckedAt);
     } catch (error) {
       logger.warn("[pi-plugins] load failed", { error });
       setPlugins([]);
       toast(intl.formatMessage({ id: "settings.plugins.pi.failed" }));
     }
-  }, [intl, session, workspace]);
+  }, [intl, session, workspace, workspaceKey]);
 
   useEffect(() => {
     void load();
@@ -147,7 +161,7 @@ export function PiPluginsSection({
         const count = found.filter((item) => item.scope === scope).length;
         setPlugins(result.plugins);
         setConfigs(result.configs ?? []);
-        setUpdates(found);
+        usePiPluginUpdateStore.getState().apply(workspaceKey, found, result.updatesCheckedAt);
         toast(
           intl.formatMessage(
             {
@@ -165,7 +179,7 @@ export function PiPluginsSection({
         toast(intl.formatMessage({ id: "settings.plugins.pi.checkFailed" }));
       })
       .finally(() => setChecking(false));
-  }, [intl, scope, session, workspace]);
+  }, [intl, scope, session, workspace, workspaceKey]);
 
   return (
     <div className="mb-6">
@@ -226,8 +240,12 @@ export function PiPluginsSection({
                             .then((result) => {
                               setPlugins(result.plugins);
                               setConfigs(result.configs ?? []);
-                              setUpdates((current) =>
-                                current.filter((item) => item.id !== plugin.id),
+                              const state = usePiPluginUpdateStore.getState();
+                              state.apply(
+                                workspaceKey,
+                                result.updates ??
+                                  state.updates.filter((item) => item.id !== plugin.id),
+                                result.updatesCheckedAt ?? state.checkedAt,
                               );
                               toast(intl.formatMessage({ id: "settings.plugins.pi.updated" }));
                             })

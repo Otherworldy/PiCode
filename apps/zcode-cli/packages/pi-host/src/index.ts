@@ -48,6 +48,14 @@ export {
   writePiPluginConfig,
   type PiPluginConfigView,
 } from "./pi-plugin-config.js";
+export {
+  forgetPiPluginUpdate,
+  piPluginUpdateCacheKey,
+  readPiPluginUpdateCache,
+  savePiPluginUpdateCache,
+  type PiPluginUpdateCache,
+  type PiPluginUpdateRecord,
+} from "./pi-plugin-update-cache.js";
 export type { PiCapabilityPorts, ZcodeSubagentProfile } from "./host-capabilities.js";
 export type { PiMcpCompat, PiMcpRuntimeServer } from "./pi-mcp.js";
 export type { PiDiscoveredModel, PiModelConfigView, PiProviderDraft } from "./model-config-file.js";
