@@ -1,14 +1,14 @@
 import type { GitRepositorySummary } from "@zcode/shared";
-import type {
-  BackgroundWorkSummary,
-  GoalState,
-  PlanState,
-  RunningSubagentSummary,
-  ToolCallRow,
-  WorkflowRunState,
+import {
+  workflowRunStepCounts,
+  type BackgroundWorkSummary,
+  type GoalState,
+  type PlanState,
+  type RunningSubagentSummary,
+  type ToolCallRow,
+  type WorkflowRunState,
 } from "@zcode/shared/zcode-protocol-v4";
 import { extractPlanToolCallContent, getPlanDirectoryTitle } from "../lib/planToolCall.js";
-import { workflowRunStepCounts } from "./workflowRunCardJoin.js";
 
 export interface ConversationStatusPanelGitModel {
   branchName: string | null;
@@ -122,6 +122,8 @@ interface BuildConversationStatusPanelModelInput {
   gitSummary?: GitRepositorySummary | null;
   gitDirtyFileCount?: number;
   gitWorktreeChangeSummary?: { added: number; removed: number } | null;
+  /** 会话执行目录是父仓库 `.worktrees/` 下的副本。干净也保留 Git 工具。 */
+  keepCleanRepository?: boolean;
   goal?: GoalState | null;
   sessionPlans?: readonly ToolCallRow[];
   workspacePath?: string;
@@ -136,18 +138,19 @@ function buildGitModel({
   gitSummary,
   gitDirtyFileCount = 0,
   gitWorktreeChangeSummary,
+  keepCleanRepository = false,
 }: Pick<
   BuildConversationStatusPanelModelInput,
-  "gitSummary" | "gitDirtyFileCount" | "gitWorktreeChangeSummary"
+  "gitSummary" | "gitDirtyFileCount" | "gitWorktreeChangeSummary" | "keepCleanRepository"
 >): ConversationStatusPanelGitModel | null {
   if (!gitSummary?.isGitAvailable || !gitSummary.isRepository) {
     return null;
   }
   const added = gitWorktreeChangeSummary?.added ?? 0;
   const removed = gitWorktreeChangeSummary?.removed ?? 0;
-  // v4 之前只要是 Git repository 就创建 Git model，导致 clean repo
-  // 也挂出右上角状态卡；旧 ChatView 只在 worktree 有行级变化时展示 Git Tools。
-  if (added + removed <= 0) {
+  // 主工作区没有行级变化时不挂 Git 工具。To-Do 的改动在自己的 worktree 里，
+  // 提交后行级 diff 变成 0；再按这条藏起来，右上角分支和提交入口会一起消失。
+  if (!keepCleanRepository && added + removed <= 0) {
     return null;
   }
   const isClean =
@@ -272,7 +275,7 @@ function buildRunningWorkflowRuns(
       runId: run.runId,
       ...(run.toolCallId ? { toolCallId: run.toolCallId } : {}),
       status: run.status,
-      // 计数与聊天紧凑卡同源（唯一实现在 workflowRunCardJoin.ts）。
+      // 计数与聊天紧凑卡同源（唯一实现在 workflowRunStepCounts）。
       ...workflowRunStepCounts(run),
       ...(work ? { title: work.title, startedAt: work.startedAt } : {}),
       ...(work?.status === "running"
