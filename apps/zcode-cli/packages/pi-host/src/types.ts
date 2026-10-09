@@ -251,6 +251,10 @@ export interface PiSessionPort {
   setSessionName?(name: string): Promise<void> | void;
   bindUi?(ui: unknown): Promise<void>;
   subscribe(listener: (event: PiHostEvent) => void): () => void;
+  /**
+   * 助手消息写进会话树之后通知。此时 message_end 已经画完，entryId 才是分叉点。
+   */
+  notePersistedMessage?(listener: (notice: { role: string; entryId: string }) => void): () => void;
   dispose(): void;
 }
 

@@ -24,9 +24,11 @@ export type ResumeHereChoice = {
 export function ResumeHereMenu({
   children,
   onPick,
+  onFork,
 }: {
   children: ReactNode;
   onPick: (choice: ResumeHereChoice) => void;
+  onFork?: () => void;
 }) {
   const { intl } = useZCodeIntl();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -47,6 +49,12 @@ export function ResumeHereMenu({
       <ContextMenu onOpenChange={setMenuOpen}>
         <ContextMenuTrigger asChild>{trigger}</ContextMenuTrigger>
         <ContextMenuContent className="w-44">
+          {onFork ? (
+            <ContextMenuItem onSelect={onFork}>
+              <GitBranchIcon />
+              {intl.formatMessage({ id: "chat.tree.forkHere" })}
+            </ContextMenuItem>
+          ) : null}
           <ContextMenuItem onSelect={() => onPick({ summarize: false })}>
             <GitBranchIcon />
             {intl.formatMessage({ id: "chat.tree.skipSummary" })}

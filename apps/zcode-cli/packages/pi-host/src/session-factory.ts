@@ -414,6 +414,18 @@ export function createSdkSessionFactory(options: {
     });
     live = created.session;
     const session = created.session;
+    const persistedListeners = new Set<(notice: { role: string; entryId: string }) => void>();
+    // Bug：分叉把 row.entityId 当成树节点。Pi 的节点 id 在 appendMessage 才生成，
+    // 而且发生在 message_end 监听者返回之后。不在这里接住，实时会话永远 Entry not found。
+    const manager = session.sessionManager;
+    const appendMessage = manager.appendMessage.bind(manager);
+    manager.appendMessage = ((message: { role?: string }) => {
+      const entryId = appendMessage(message as never);
+      if (message?.role === "assistant") {
+        for (const listener of persistedListeners) listener({ role: "assistant", entryId });
+      }
+      return entryId;
+    }) as typeof manager.appendMessage;
     if (!ssh) {
       // Pi 默认不激活 grep/find/ls。fff 这类扩展按原名注册时它们才出现；
       // 扩展卸掉后内置定义还在，这里把没被占用的补进激活列表。
@@ -583,6 +595,12 @@ export function createSdkSessionFactory(options: {
           const mapped = asPiEvent(event);
           if (mapped) listener(mapped);
         }),
+      notePersistedMessage: (listener) => {
+        persistedListeners.add(listener);
+        return () => {
+          persistedListeners.delete(listener);
+        };
+      },
       dispose: () => session.dispose(),
     } satisfies PiSessionPort;
   };

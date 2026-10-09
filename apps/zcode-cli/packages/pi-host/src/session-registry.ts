@@ -198,6 +198,19 @@ function permissionAllowed(response: PiExtensionUiResponse): boolean {
   return response.value !== "deny" && response.value !== "no" && response.value !== "";
 }
 
+function branchedSessionTitle(parentTitle: string): string {
+  const title = parentTitle.trim();
+  return title ? `分支-${title}` : "分支";
+}
+
+function assertBranchSummaryIdle(projector: PiToV4Projector): void {
+  if (!projector.isBranchSummaryRunning()) return;
+  // 总结被丢下的分支时，这个会话不能再分叉或再开一条分支。停止不走这里。
+  throw Object.assign(new Error("Wait for the branch summary to finish"), {
+    reasonCode: "guard.sessionTreeBusy",
+  });
+}
+
 export class HostSessionRegistry {
   private readonly sessions = new Map<string, HostedSession>();
   private readonly children = new Map<string, Set<string>>();
@@ -263,9 +276,11 @@ export class HostSessionRegistry {
   async fork(parentId: string, entryId: string): Promise<HostedSession> {
     const parent = this.sessions.get(parentId);
     if (!parent) throw new Error(`pi-host parent not found: ${parentId}`);
+    assertBranchSummaryIdle(parent.projector);
+    const title = branchedSessionTitle(parent.projector.getSnapshot().meta.title);
     if (parent.branchFrom) {
       const branched = parent.branchFrom(entryId);
-      return this.openFile({
+      const child = await this.openFile({
         sessionId: branched.sessionId,
         identity: parent.identity,
         workspacePath: parent.workspacePath,
@@ -273,6 +288,8 @@ export class HostSessionRegistry {
         parentSessionId: parentId,
         viaRegistry: true,
       });
+      child.publishCustomTitle(title);
+      return child;
     }
     const sessionId = randomUUID();
     const dir = nativeSessionDir(
@@ -290,6 +307,7 @@ export class HostSessionRegistry {
       viaRegistry: true,
     });
     await hosted.navigateTree(entryId);
+    hosted.publishCustomTitle(title);
     return hosted;
   }
 
@@ -309,6 +327,7 @@ export class HostSessionRegistry {
   > {
     const parent = this.sessions.get(parentId);
     if (!parent) throw new Error(`pi-host parent not found: ${parentId}`);
+    assertBranchSummaryIdle(parent.projector);
     const leaf = parent.readSessionTree().find((node) => node.leaf);
     if (!leaf) {
       throw Object.assign(new Error("Entry not found"), {
@@ -816,6 +835,11 @@ export class HostSessionRegistry {
       pi.subscribeManagedProcesses?.((works) => {
         emit(projector.replaceManagedProcesses(works));
       }) ?? (() => undefined);
+    const unsubscribePersisted =
+      pi.notePersistedMessage?.((notice) => {
+        if (notice.role !== "assistant") return;
+        emit(projector.bindPersistedEntry(notice.entryId));
+      }) ?? (() => undefined);
     const unsubscribe = pi.subscribe((event: PiHostEvent) => {
       try {
         if (event.type === "extension_ui_request") {
@@ -981,10 +1005,12 @@ export class HostSessionRegistry {
         }),
       readSessionTree: () => pi.readTree?.() ?? [],
       labelSessionEntry: (entryId, label) => {
+        assertBranchSummaryIdle(projector);
         pi.labelEntry?.(entryId, label);
         return pi.readTree?.() ?? [];
       },
       deleteSessionBranch: (entryId) => {
+        assertBranchSummaryIdle(projector);
         if (pi.isCompacting || pi.isStreaming) {
           throw Object.assign(new Error("Wait for the current response to finish"), {
             reasonCode: "guard.sessionTreeBusy",
@@ -999,6 +1025,7 @@ export class HostSessionRegistry {
         return pi.readTree?.() ?? [];
       },
       navigateTree: async (targetId, options) => {
+        assertBranchSummaryIdle(projector);
         let entryId = targetId;
         // 冷恢复的行 id 是 Pi entry。实时行 id 是 row:N，得用原文对上树节点。
         if (pi.hasEntry && !pi.hasEntry(targetId)) {
@@ -1102,6 +1129,7 @@ export class HostSessionRegistry {
         stopSubagentPoll();
         unsubscribeLiveSubagents();
         unsubscribeProcesses();
+        unsubscribePersisted();
         unsubscribe();
         pi.dispose();
         // 常驻回收只关 runtime，不删 jsonl。注册表若留着这个实例，下次 create 直接返回它，不再读文件，订阅拿到空投影。

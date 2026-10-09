@@ -2236,6 +2236,14 @@ export function SessionPane({
     },
     [],
   );
+  // 正在总结被丢下的分支时，这个会话不能再开分支。停止键仍走 canStop。
+  const branchSummaryRunning =
+    snapshot?.rows.window.some(
+      (row) =>
+        row.kind === "timelineMarker" &&
+        row.marker.type === "branchSummary" &&
+        row.marker.status === "running",
+    ) === true;
   const rowContext = useMemo<ConversationRowRenderContext>(
     () => ({
       workspacePath,
@@ -2256,7 +2264,10 @@ export function SessionPane({
       toolGroupingTerminalEnabled,
       toolGroupingChangesEnabled,
       onNavigateToRow: handleNavigateToRow,
-      onResumeHere: readOnly || selectionSideChat || !sessionId ? undefined : handleResumeHere,
+      onResumeHere:
+        readOnly || selectionSideChat || !sessionId || branchSummaryRunning
+          ? undefined
+          : handleResumeHere,
       onOpenBrowserUrl,
       onOpenAutomationsMain,
       onOpenCodeViewer,
@@ -2317,6 +2328,7 @@ export function SessionPane({
       handleNavigateToRow,
       readOnly,
       selectionSideChat,
+      branchSummaryRunning,
       handleResumeHere,
       onOpenBrowserUrl,
       onOpenAutomationsMain,
@@ -3834,6 +3846,16 @@ export function SessionPane({
       label?: string;
     }) => {
       if (!sessionId) return;
+      const summarizing = snapshotRef.current?.rows.window.some(
+        (row) =>
+          row.kind === "timelineMarker" &&
+          row.marker.type === "branchSummary" &&
+          row.marker.status === "running",
+      );
+      if (summarizing) {
+        toast(intl.formatMessage({ id: "chat.tree.summaryBusy" }));
+        return;
+      }
       if (input.summarize) summarizingTreeRef.current = true;
       void dispatchCommand(
         "navigateSessionTree",
@@ -4006,7 +4028,8 @@ export function SessionPane({
     };
   }, [submitSessionResume]);
   // fork 可用性完全由 row.actions.canFork（CLI stable resolver 投影）裁决；pane 只提供命令回调。
-  const forkActionsEnabled = !readOnly && !selectionSideChat && Boolean(sessionId);
+  const forkActionsEnabled =
+    !readOnly && !selectionSideChat && Boolean(sessionId) && !branchSummaryRunning;
   // editUserQuery 已由 command 层防御 latest real user query，并在 running
   // 提交时先 stop barrier 再 rewind/rerun；UI 不应再用 completed gate 把入口整轮隐藏。
   const editActionsEnabled = !readOnly && !selectionSideChat && Boolean(sessionId);

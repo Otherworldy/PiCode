@@ -821,6 +821,74 @@ test("gateTool denies", async () => {
   await gateTool(async () => "allow", "read", {});
 });
 
+test("a running branch summary blocks another branch on the same session", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async (input) => new FakePiSession(input.sessionId, input.sessionFile),
+  });
+  const parent = await registry.create({ workspacePath: root });
+  parent.publishCustomTitle("原题");
+  parent.noteBranchSummary(true);
+  assert.equal(
+    parent.projector.getSnapshot().rows.window.some(
+      (row) =>
+        row.kind === "timelineMarker" &&
+        row.marker.type === "branchSummary" &&
+        row.marker.status === "running",
+    ),
+    true,
+  );
+  await assert.rejects(registry.fork(parent.sessionId, "a1"), (error: unknown) => {
+    assert.equal((error as { reasonCode?: string }).reasonCode, "guard.sessionTreeBusy");
+    return true;
+  });
+  await assert.rejects(registry.resumeIntoNewSession(parent.sessionId, { entryId: "u1", summarize: true }), (error: unknown) => {
+    assert.equal((error as { reasonCode?: string }).reasonCode, "guard.sessionTreeBusy");
+    return true;
+  });
+  assert.throws(() => parent.deleteSessionBranch("side"), (error: unknown) => {
+    assert.equal((error as { reasonCode?: string }).reasonCode, "guard.sessionTreeBusy");
+    return true;
+  });
+  parent.noteBranchSummary(false);
+  assert.equal(
+    parent.projector.getSnapshot().rows.window.some(
+      (row) =>
+        row.kind === "timelineMarker" &&
+        row.marker.type === "branchSummary" &&
+        row.marker.status === "running",
+    ),
+    false,
+  );
+  const child = await registry.fork(parent.sessionId, "a1");
+  assert.notEqual(child.sessionId, parent.sessionId);
+  assert.equal(child.projector.getSnapshot().meta.title, "分支-原题");
+  await rm(root, { recursive: true, force: true });
+});
+
+test("live assistant row adopts the persisted tree entry id", () => {
+  const projector = new PiToV4Projector("s", "e");
+  projector.apply({ type: "agent_start" });
+  projector.apply({ type: "message_start", message: { role: "user", content: "hi" } });
+  projector.apply({ type: "message_start", message: { role: "assistant" } });
+  projector.apply({
+    type: "message_update",
+    assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "yo" },
+  });
+  projector.apply({
+    type: "message_end",
+    message: { role: "assistant", content: [{ type: "text", text: "yo" }] },
+  });
+  const before = projector.getSnapshot().rows.window.find((row) => row.kind === "assistantText");
+  assert.equal(before?.entityId?.startsWith("row:"), true);
+  projector.bindPersistedEntry("entry-a");
+  const after = projector.getSnapshot().rows.window.find((row) => row.kind === "assistantText");
+  assert.equal(after && after.kind === "assistantText" ? after.entityId : "", "entry-a");
+  assert.equal(after && after.kind === "assistantText" ? after.text : "", "yo");
+});
+
 test("navigateTree truncates and fork copies jsonl", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-host-"));
   const registry = new HostSessionRegistry({

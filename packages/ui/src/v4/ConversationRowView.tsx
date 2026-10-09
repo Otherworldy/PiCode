@@ -142,11 +142,13 @@ function RowShell({
   children,
   className = "",
   onResume,
+  onFork,
 }: {
   rowId: number;
   children: React.ReactNode;
   className?: string;
   onResume?: (choice: ResumeHereChoice) => void;
+  onFork?: () => void;
 }) {
   const shell = (
     <div
@@ -158,7 +160,11 @@ function RowShell({
     </div>
   );
   if (!onResume) return shell;
-  return <ResumeHereMenu onPick={onResume}>{shell}</ResumeHereMenu>;
+  return (
+    <ResumeHereMenu onPick={onResume} onFork={onFork}>
+      {shell}
+    </ResumeHereMenu>
+  );
 }
 
 const ArtifactRowView = memo(function ArtifactRowView({ row }: { row: ArtifactRow }) {
@@ -1677,6 +1683,11 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
     <RowShell
       rowId={row.rowId}
       className="group/assistant-row"
+      onFork={
+        onFork && row.entityId
+          ? () => onFork({ rowId: row.rowId, entityId: row.entityId! })
+          : undefined
+      }
       onResume={
         context.onResumeHere && row.state !== "streaming" && (row.entityId || row.text.trim())
           ? (choice) =>
@@ -1939,6 +1950,7 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
   const summary = marker.type === "compact" ? marker.summary : undefined;
   const branchSummaryText =
     marker.type === "branchSummary" && marker.status !== "running" ? marker.summary.trim() : "";
+  const foldableSummary = summary || branchSummaryText;
   const summaryOpen = summaryRowId === row.rowId;
   const modelSelectionView = context.modelSelectionView ?? null;
   const view = useMemo((): {
@@ -1979,11 +1991,15 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
       }
       case "branchSummary": {
         const running = marker.status === "running";
+        const label = intl.formatMessage({
+          id: running ? "chat.tree.summarizing" : "chat.tree.summaryMarker",
+        });
         return {
           icon: MARKER_FORK_ICON,
-          label: intl.formatMessage({
-            id: running ? "chat.tree.summarizing" : "chat.tree.summaryMarker",
-          }),
+          label:
+            branchSummaryText && !running
+              ? `${label} · ${intl.formatMessage({ id: "chat.contextCompaction.viewSummary" })}`
+              : label,
           running,
         };
       }
@@ -2055,18 +2071,20 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
       default:
         return null;
     }
-  }, [intl, isOfficeMode, marker, modelSelectionView, summary]);
+  }, [branchSummaryText, intl, isOfficeMode, marker, modelSelectionView, summary]);
 
   // fork 跳父会话（Tier 1）：仅 forkNotice 且宿主提供 onNavigateToRow 时可点，
   // 切到 marker.parentSessionId（rowId 预留 Tier 2 精确滚动，当前恒 0 占位）。
   const onNavigate = context.onNavigateToRow;
   const handleClick = useMemo(() => {
-    if (summary) return () => setSummaryRowId((current) => (current === row.rowId ? null : row.rowId));
+    if (foldableSummary) {
+      return () => setSummaryRowId((current) => (current === row.rowId ? null : row.rowId));
+    }
     if (marker.type !== "forkNotice" || !onNavigate) {
       return undefined;
     }
     return () => onNavigate(marker.parentSessionId, marker.parentRowId);
-  }, [marker, onNavigate, row.rowId, summary]);
+  }, [foldableSummary, marker, onNavigate, row.rowId]);
 
   if (!view) {
     return null;
@@ -2092,14 +2110,9 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
       running={view.running}
       onClick={handleClick}
     />
-    {summaryOpen && summary ? (
+    {summaryOpen && foldableSummary ? (
       <div className="px-4 pb-2 text-ui-base whitespace-pre-wrap text-[var(--color-foreground)]">
-        {summary}
-      </div>
-    ) : null}
-    {branchSummaryText ? (
-      <div className="px-4 pb-2 text-ui-base whitespace-pre-wrap text-[var(--color-foreground)]">
-        {branchSummaryText}
+        {foldableSummary}
       </div>
     ) : null}
     </div>

@@ -202,6 +202,18 @@ export class PiToV4Projector {
     return this.commit([{ op: "row.upserted", row: next }]);
   }
 
+  /**
+   * Pi 把 message_end 交给监听者之后才 appendMessage。
+   * 这一行刚建出来时 entityId 是 row:N，分叉只认树节点 id，不换过来会 Entry not found。
+   */
+  bindPersistedEntry(entryId: string): ConversationDelta[] {
+    const rowId = this.streamingTextRowId;
+    if (rowId == null || !entryId) return [];
+    const row = this.snapshot.rows.window.find((item) => item.rowId === rowId);
+    if (!row || row.kind !== "assistantText" || row.entityId === entryId) return [];
+    return this.commit([{ op: "row.upserted", row: { ...row, entityId: entryId } }]);
+  }
+
   setFeedback(
     entityId: string,
     feedback: "like" | "dislike" | null,
@@ -260,6 +272,11 @@ export class PiToV4Projector {
     this.aborted = false;
   }
 
+  /** 进行中的分支总结还没写完。行在快照里，结束时才能对上并撤掉。 */
+  isBranchSummaryRunning(): boolean {
+    return this.branchSummaryRowId !== null;
+  }
+
   // ponytail: stopTargetKind 复用 compact，只为让停止键出现。进行中的摘要是单独一行。
   noteBranchSummary(active: boolean): ConversationDelta[] {
     const control = this.snapshot.control;
@@ -287,15 +304,22 @@ export class PiToV4Projector {
         marker: { type: "branchSummary", summary: "", status: "running" },
       };
       this.branchSummaryRowId = row.rowId;
-      return [...controlDeltas, { op: "row.appended", row }];
+      // 不写进快照的话，结束时对不上这一行，界面会一直停在「正在总结」。
+      return [...controlDeltas, ...this.commit([{ op: "row.appended", row }])];
     }
     const rowId = this.branchSummaryRowId;
     this.branchSummaryRowId = null;
     const row = rowId === null ? undefined : this.snapshot.rows.window.find((item) => item.rowId === rowId);
-    if (!row || row.kind !== "timelineMarker" || row.marker.type !== "branchSummary" || row.marker.status !== "running") {
+    if (
+      rowId === null ||
+      !row ||
+      row.kind !== "timelineMarker" ||
+      row.marker.type !== "branchSummary" ||
+      row.marker.status !== "running"
+    ) {
       return controlDeltas;
     }
-    return [...controlDeltas, { op: "row.removed", fromRowId: rowId! }];
+    return [...controlDeltas, ...this.commit([{ op: "row.removed", fromRowId: rowId }])];
   }
 
   appendBranchSummary(summary: string): ConversationDelta[] {
@@ -305,7 +329,7 @@ export class PiToV4Projector {
       lane: "turnTailBoundary",
       marker: { type: "branchSummary", summary, status: "done" },
     };
-    return [{ op: "row.appended", row }];
+    return this.commit([{ op: "row.appended", row }]);
   }
 
   replaceSubagents(subagents: ConversationSnapshot["subagents"]): ConversationDelta[] {
