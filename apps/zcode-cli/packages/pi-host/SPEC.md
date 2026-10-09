@@ -74,7 +74,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 `sendText` 的图片仍读成字节交给 Pi。其它附件不再在进模型前丢掉：文本文件把路径和最多 64KiB 正文附在 prompt 后面，PDF、视频和二进制只附路径。这段用 `<zcode-file>` 包住，用户气泡只留原文和附件芯片。
 
-模型请求失败后，输入框上方的错误横幅有重试。`continueAfterError` 不重发用户原文，也不截断会话：去掉最后一条 `stopReason: error` 的助手消息，再 `agent.continue()`，从失败前的用户或工具结果接着跑。还在生成时拒绝。
+模型请求失败后，输入框上方的错误横幅有重试。`continueAfterError` 不重发用户原文，也不截断会话。失败助手仍留在 jsonl 里，但下一次模型请求读的是 Pi session projection，不是内存里临时切掉的数组。只改 `agent.state.messages` 时，`prepareRequest` 会把末尾 `stopReason: error` 的助手消息装回请求；供应商把这条空助手当成已经说完，请求成功后立刻 stop，界面没有新输出。重试先对这些失败消息写 `appendContextEdit(id, null)`（与 Pi 自动重试的省略一样），再用 projection 刷回 `agent.state.messages`，然后 `agent.continue()`。尾部不是失败助手、或省略后仍停在已完成的助手上时拒绝。还在生成时拒绝。
 
 `deleteSessionBranch` 删掉侧枝上当前路径用不到的条目并重写 jsonl；当前分支、生成中、压缩中都拒绝。当前路径不变，不重建模型上下文，也不重放对话。
 

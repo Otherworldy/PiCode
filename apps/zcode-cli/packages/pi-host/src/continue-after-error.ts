@@ -1,3 +1,5 @@
+import type { SessionEntry, SessionManager } from "@earendil-works/pi-coding-agent";
+
 export interface ContinueMessage {
   role?: string;
   stopReason?: string;
@@ -7,14 +9,61 @@ export interface ContinueMessage {
 export function prepareContinueMessages<T extends ContinueMessage>(
   messages: readonly T[],
 ): { ok: true; messages: T[] } | { ok: false } {
-  let next = messages;
-  const last = next.at(-1);
-  if (last?.role === "assistant" && last.stopReason === "error") {
-    next = next.slice(0, -1);
+  let end = messages.length;
+  while (end > 0) {
+    const message = messages[end - 1];
+    if (message?.role !== "assistant" || message.stopReason !== "error") break;
+    end -= 1;
   }
+  const next = end === messages.length ? messages : messages.slice(0, end);
   const tail = next.at(-1);
   if (!tail || tail.role === "assistant" || tail.role === "system") return { ok: false };
   return { ok: true, messages: next.slice() };
+}
+
+export interface ContinueTranscript {
+  sessionManager: SessionManager;
+  replaceMessages(messages: ReturnType<SessionManager["buildSessionProjection"]>["messages"]): void;
+}
+
+/**
+ * 失败助手必须从 Pi session projection 里拿掉，不能只切内存数组。
+ * 下一次请求走 prepareRequest，上下文以 projection 为准。失败消息还在末尾时，
+ * 供应商把这条空助手当成已经说完，请求成功后立刻 stop，界面没有新输出。
+ * 依据：Pi 自动重试用 appendContextEdit(id, null) 做同样的省略。
+ */
+export function omitFailedAssistantForContinue(
+  session: ContinueTranscript,
+): { ok: true } | { ok: false } {
+  let previousLength = Number.POSITIVE_INFINITY;
+  for (;;) {
+    const projected = session.sessionManager.buildSessionProjection().messages;
+    const prepared = prepareContinueMessages(projected);
+    if (!prepared.ok) return { ok: false };
+    if (prepared.messages.length === projected.length) {
+      session.replaceMessages(projected);
+      return { ok: true };
+    }
+    if (projected.length >= previousLength) return { ok: false };
+    previousLength = projected.length;
+    const failed = projected.at(-1);
+    const targetId = failed
+      ? failedAssistantEntryId(session.sessionManager.getBranch(), failed)
+      : undefined;
+    if (!targetId) return { ok: false };
+    session.sessionManager.appendContextEdit(targetId, null);
+  }
+}
+
+function failedAssistantEntryId(
+  branch: readonly SessionEntry[],
+  message: ContinueMessage,
+): string | undefined {
+  for (let index = branch.length - 1; index >= 0; index -= 1) {
+    const entry = branch[index];
+    if (entry?.type === "message" && entry.message === message) return entry.id;
+  }
+  return undefined;
 }
 
 interface ContinuablePiSession {

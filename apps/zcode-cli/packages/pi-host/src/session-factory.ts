@@ -31,7 +31,7 @@ import {
 } from "./model-delegate.js";
 import { readProcessSshRemoteSpec, sshCodingToolOptions, sshWorkspacePrompt } from "./ssh-remote.js";
 import {
-  prepareContinueMessages,
+  omitFailedAssistantForContinue,
   runContinueAfterModelError,
 } from "./continue-after-error.js";
 import {
@@ -495,9 +495,13 @@ export function createSdkSessionFactory(options: {
       abort: () => session.abort(),
       continueAfterError: () => {
         if (session.isStreaming) return Promise.reject(new Error("still running"));
-        const prepared = prepareContinueMessages(session.agent.state.messages);
+        const prepared = omitFailedAssistantForContinue({
+          sessionManager: session.sessionManager,
+          replaceMessages: (messages) => {
+            session.agent.state.messages = messages;
+          },
+        });
         if (!prepared.ok) return Promise.reject(new Error("nothing to continue"));
-        session.agent.state.messages = prepared.messages;
         return new Promise<void>((resolve, reject) => {
           let settled = false;
           const stop = session.subscribe((event) => {
