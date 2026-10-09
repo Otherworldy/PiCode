@@ -125,6 +125,8 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 设置页拥有代理定义：用户 `~/.PiCode/agents`，项目 `<workspace>/.PiCode/agents`，内置 `general-purpose` / `Explore`。Pi 会话挂一个 `picode_subagent` 工具，按这份定义起子会话。子会话不再挂这个工具，也不挂 MCP。同名的 Pi 插件工具 `subagent` 在主会话上禁用，避免两套定义争用。
 
+子会话的模型以这份定义为准。定义写了 model（内置与插件的覆盖也算）就用这一份，包括它的思考档位。当前目录找不到这个模型时子会话直接失败，不改用父会话模型。没写 model（设置里的「继承默认」）时，用父会话当前的 provider、model 和思考档位。
+
 ## MCP
 
 用户 MCP 的主人是 Pi：用户级 `~/.pi/agent/mcp.json`，项目级 `<cwd>/.pi/mcp.json`，都是 `mcpServers`。设置页仍写这两个文件。目标文件还不存在时，把旧的 `~/.PiCode/cli/config.json` 或 `<cwd>/.PiCode/config.json` 里的 `mcp.servers` 拷过去一次；之后只认 Pi 文件。项目条目覆盖同名的用户条目。SSE 不连。`directTools: true` 写成 Pi 的 `exposure: "direct"`，没写则是 `codemode`。

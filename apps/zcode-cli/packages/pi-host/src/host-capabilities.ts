@@ -6,11 +6,74 @@ import { mapThought } from "./model-delegate.js";
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
 import { createPermissionExtension, gateTool, type ToolPermissionCheck } from "./permission-gate.js";
 
+export interface ZcodeSubagentModel {
+  providerId: string;
+  modelId: string;
+  thought?: string;
+}
+
 export interface ZcodeSubagentProfile {
   name: string;
   description: string;
   systemPrompt: string;
   tools?: readonly string[];
+  /** 缺席表示继承父会话当前模型。有值则必须用这一份，不能退回父会话。 */
+  model?: ZcodeSubagentModel;
+}
+
+export function toZcodeSubagentProfile(profile: {
+  name: string;
+  description: string;
+  systemPrompt: string;
+  tools?: readonly string[];
+  modelSelection?: {
+    providerId: string;
+    modelId: string;
+    options?: { reasoningLevel?: string };
+  };
+}): ZcodeSubagentProfile {
+  const selection = profile.modelSelection;
+  const thought = selection?.options?.reasoningLevel?.trim();
+  return {
+    name: profile.name,
+    description: profile.description,
+    systemPrompt: profile.systemPrompt,
+    ...(profile.tools ? { tools: profile.tools } : {}),
+    ...(selection?.providerId && selection.modelId
+      ? {
+          model: {
+            providerId: selection.providerId,
+            modelId: selection.modelId,
+            ...(thought ? { thought } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+/** 没写 model 才继承父会话；写了但目录没有就失败，避免指定模型被悄悄换掉。 */
+export function resolveZcodeSubagentLaunchModel<TModel>(input: {
+  profileModel?: ZcodeSubagentModel;
+  parentModel?: TModel;
+  parentThinkingLevel?: CreateAgentSessionOptions["thinkingLevel"];
+  getModel: (providerId: string, modelId: string) => TModel | null | undefined;
+}): {
+  model?: TModel;
+  thinkingLevel?: CreateAgentSessionOptions["thinkingLevel"];
+  error?: string;
+} {
+  const pinned = input.profileModel;
+  if (!pinned) {
+    return { model: input.parentModel, thinkingLevel: input.parentThinkingLevel };
+  }
+  const model = input.getModel(pinned.providerId, pinned.modelId);
+  if (!model) {
+    return { error: `model ${pinned.providerId}/${pinned.modelId} is not available` };
+  }
+  return {
+    model,
+    ...(pinned.thought ? { thinkingLevel: mapThought(pinned.thought) } : {}),
+  };
 }
 
 export interface PiCapabilityPorts {
@@ -103,6 +166,13 @@ export async function runZcodeSubagent(input: {
 }): Promise<string> {
   await ensurePiSdk();
   if (input.signal?.aborted) return "subagent cancelled";
+  const launchModel = resolveZcodeSubagentLaunchModel({
+    profileModel: input.profile.model,
+    parentModel: input.model,
+    parentThinkingLevel: input.thinkingLevel,
+    getModel: (providerId, modelId) => input.modelRuntime?.getModel(providerId, modelId),
+  });
+  if (launchModel.error) return `subagent failed: ${launchModel.error}`;
   const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } = piCoding();
   const allowed = piToolNamesForAgent(
     input.profile.tools,
@@ -130,8 +200,8 @@ export async function runZcodeSubagent(input: {
     cwd: input.cwd,
     agentDir: input.agentDir,
     modelRuntime: input.modelRuntime,
-    ...(input.model ? { model: input.model } : {}),
-    ...(input.thinkingLevel ? { thinkingLevel: input.thinkingLevel } : {}),
+    ...(launchModel.model ? { model: launchModel.model } : {}),
+    ...(launchModel.thinkingLevel ? { thinkingLevel: launchModel.thinkingLevel } : {}),
     tools: allowed,
     ...(input.sshTools
       ? { customTools: input.sshTools.filter((tool) => allowed.includes(tool.name)) as never }
