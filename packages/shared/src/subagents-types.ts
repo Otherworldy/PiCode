@@ -5,11 +5,37 @@ export type AgentScope = "built-in" | "workspace" | "user";
 
 export type AgentSource = "built-in" | "user" | "plugin";
 
-export type BuiltInSubagentName = "general-purpose" | "Explore";
+export const BUILT_IN_SUBAGENT_NAMES = [
+  "scout",
+  "researcher",
+  "evidence-auditor",
+  "worker",
+  "reviewer",
+  "oracle",
+  "delegate",
+] as const;
+
+export type BuiltInSubagentName = (typeof BUILT_IN_SUBAGENT_NAMES)[number];
 
 export type BuiltInSubagentModelSelectionOverrides = Partial<
   Record<BuiltInSubagentName, ModelSelection>
 >;
+
+const BUILT_IN_SUBAGENT_NAME_SET = new Set<string>(BUILT_IN_SUBAGENT_NAMES);
+
+/** 只保留当前内置角色的正式选择。旧的 general-purpose / Explore 覆盖不再套到新角色上。 */
+export function parseBuiltInSubagentModelSelectionOverrides(
+  value: unknown,
+): BuiltInSubagentModelSelectionOverrides {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: BuiltInSubagentModelSelectionOverrides = {};
+  for (const [name, candidate] of Object.entries(value)) {
+    if (!BUILT_IN_SUBAGENT_NAME_SET.has(name)) continue;
+    const selection = modelSelectionSchema.safeParse(candidate);
+    if (selection.success) result[name as BuiltInSubagentName] = selection.data;
+  }
+  return result;
+}
 
 export type PluginSubagentModelSelectionOverrides = Readonly<Record<string, ModelSelection>>;
 

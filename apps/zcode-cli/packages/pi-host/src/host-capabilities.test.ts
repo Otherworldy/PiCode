@@ -4,6 +4,7 @@ import {
   createCapabilityTools,
   piToolNamesForAgent,
   resolveZcodeSubagentLaunchModel,
+  subagentDefaultModelFromSettings,
   toZcodeSubagentProfile,
 } from "./host-capabilities.js";
 
@@ -68,6 +69,7 @@ test("subagent model selection replaces the parent model", () => {
   const pinned = { id: "pinned" };
   const resolved = resolveZcodeSubagentLaunchModel({
     profileModel: { providerId: "acme", modelId: "small", thought: "low" },
+    defaultModel: "acme/other",
     parentModel: { id: "parent" },
     parentThinkingLevel: "high",
     getModel: (providerId, modelId) =>
@@ -75,6 +77,39 @@ test("subagent model selection replaces the parent model", () => {
   });
   assert.equal(resolved.model, pinned);
   assert.equal(resolved.thinkingLevel, "low");
+});
+
+test("an unpinned subagent uses subagents.defaultModel before the parent", () => {
+  const fallback = { id: "flash" };
+  const resolved = resolveZcodeSubagentLaunchModel({
+    profileThought: "low",
+    defaultModel: "acme/flash:medium",
+    parentModel: { id: "parent" },
+    parentThinkingLevel: "high",
+    getModel: (providerId, modelId) =>
+      providerId === "acme" && modelId === "flash" ? fallback : undefined,
+  });
+  assert.equal(resolved.model, fallback);
+  assert.equal(resolved.thinkingLevel, "medium");
+});
+
+test("role thinking remains when neither override nor defaultModel sets it", () => {
+  const resolved = resolveZcodeSubagentLaunchModel({
+    profileThought: "low",
+    parentModel: { id: "parent" },
+    parentThinkingLevel: "high",
+    getModel: () => undefined,
+  });
+  assert.equal(resolved.model?.id, "parent");
+  assert.equal(resolved.thinkingLevel, "low");
+});
+
+test("subagents.defaultModel is read from Pi settings", () => {
+  assert.equal(
+    subagentDefaultModelFromSettings({ subagents: { defaultModel: " acme/flash " } }),
+    "acme/flash",
+  );
+  assert.equal(subagentDefaultModelFromSettings({}), undefined);
 });
 
 test("missing subagent model does not fall back to the parent", () => {
@@ -109,5 +144,14 @@ test("inherit stays unset and a saved selection keeps its thought level", () => 
       },
     }).model,
     { providerId: "acme", modelId: "small", thought: "low" },
+  );
+  assert.equal(
+    toZcodeSubagentProfile({
+      name: "scout",
+      description: "recon",
+      systemPrompt: "map",
+      thinking: "low",
+    }).thought,
+    "low",
   );
 });

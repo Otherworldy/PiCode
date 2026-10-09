@@ -104,7 +104,7 @@ function buildAgentProviderDescription(
     "",
     agentList,
     "",
-    "When using the Agent tool, specify a subagent_type parameter to select which agent type to use. If omitted, the general-purpose agent is used.",
+    "When using the Agent tool, specify a subagent_type parameter to select which agent type to use. If omitted, the delegate agent is used.",
     "",
     "## When to use",
     "",
@@ -173,7 +173,7 @@ function formatAgentOutputForModel(output: unknown): string {
 
 const agentHandler: ToolHandler = async (input, context) => {
   const parsed = AgentInputSchema.parse(input) as AgentInput;
-  const agentType = parsed.subagent_type ?? AgentType.GeneralPurpose;
+  const agentType = parsed.subagent_type ?? AgentType.Delegate;
 
   if (!context.subagentPort) {
     throw createCoreError(

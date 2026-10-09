@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { CreateAgentSessionOptions } from "@earendil-works/pi-coding-agent";
 import { trackLiveSubagent } from "./live-subagents.js";
@@ -17,15 +17,20 @@ export interface ZcodeSubagentProfile {
   description: string;
   systemPrompt: string;
   tools?: readonly string[];
-  /** 缺席表示继承父会话当前模型。有值则必须用这一份，不能退回父会话。 */
+  /** 设置里的角色覆盖。缺席才继续看 defaultModel 和父会话。 */
   model?: ZcodeSubagentModel;
+  /** 角色自己的思考档位。覆盖没带档位时仍用它。 */
+  thought?: string;
 }
+
+const THOUGHT_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 
 export function toZcodeSubagentProfile(profile: {
   name: string;
   description: string;
   systemPrompt: string;
   tools?: readonly string[];
+  thinking?: string;
   modelSelection?: {
     providerId: string;
     modelId: string;
@@ -34,11 +39,13 @@ export function toZcodeSubagentProfile(profile: {
 }): ZcodeSubagentProfile {
   const selection = profile.modelSelection;
   const thought = selection?.options?.reasoningLevel?.trim();
+  const roleThought = profile.thinking?.trim();
   return {
     name: profile.name,
     description: profile.description,
     systemPrompt: profile.systemPrompt,
     ...(profile.tools ? { tools: profile.tools } : {}),
+    ...(roleThought ? { thought: roleThought } : {}),
     ...(selection?.providerId && selection.modelId
       ? {
           model: {
@@ -51,29 +58,96 @@ export function toZcodeSubagentProfile(profile: {
   };
 }
 
-/** 没写 model 才继承父会话；写了但目录没有就失败，避免指定模型被悄悄换掉。 */
+export function subagentDefaultModelFromSettings(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const subagents = (value as { subagents?: { defaultModel?: unknown } }).subagents;
+  const model = subagents?.defaultModel;
+  return typeof model === "string" && model.trim() ? model.trim() : undefined;
+}
+
+async function readSubagentDefaultModel(agentDir: string): Promise<string | undefined> {
+  try {
+    return subagentDefaultModelFromSettings(
+      JSON.parse(await readFile(join(agentDir, "settings.json"), "utf8")) as unknown,
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+function splitModelThought(spec: string): { body: string; thought?: string } {
+  const index = spec.lastIndexOf(":");
+  if (index <= 0) return { body: spec };
+  const thought = spec.slice(index + 1).trim().toLowerCase();
+  if (!THOUGHT_LEVELS.has(thought)) return { body: spec };
+  return { body: spec.slice(0, index).trim(), thought };
+}
+
+function thinkingOf(
+  explicit: string | undefined,
+  fallback: CreateAgentSessionOptions["thinkingLevel"] | undefined,
+): CreateAgentSessionOptions["thinkingLevel"] | undefined {
+  return explicit?.trim() ? mapThought(explicit) : fallback;
+}
+
+/** 角色覆盖 > subagents.defaultModel > 父会话。写了但目录没有就失败。 */
 export function resolveZcodeSubagentLaunchModel<TModel>(input: {
   profileModel?: ZcodeSubagentModel;
+  profileThought?: string;
+  defaultModel?: string;
   parentModel?: TModel;
+  parentProviderId?: string;
   parentThinkingLevel?: CreateAgentSessionOptions["thinkingLevel"];
   getModel: (providerId: string, modelId: string) => TModel | null | undefined;
+  listModels?: () => readonly { providerId: string; modelId: string }[];
 }): {
   model?: TModel;
   thinkingLevel?: CreateAgentSessionOptions["thinkingLevel"];
   error?: string;
 } {
   const pinned = input.profileModel;
-  if (!pinned) {
-    return { model: input.parentModel, thinkingLevel: input.parentThinkingLevel };
+  if (pinned) {
+    const model = input.getModel(pinned.providerId, pinned.modelId);
+    if (!model) return { error: `model ${pinned.providerId}/${pinned.modelId} is not available` };
+    return {
+      model,
+      thinkingLevel: thinkingOf(pinned.thought || input.profileThought, input.parentThinkingLevel),
+    };
   }
-  const model = input.getModel(pinned.providerId, pinned.modelId);
-  if (!model) {
-    return { error: `model ${pinned.providerId}/${pinned.modelId} is not available` };
+  const fallback = resolveDefaultModel(input);
+  if (fallback.error) return { error: fallback.error };
+  if (fallback.model) {
+    return {
+      model: fallback.model,
+      thinkingLevel: thinkingOf(fallback.thought || input.profileThought, input.parentThinkingLevel),
+    };
   }
   return {
-    model,
-    ...(pinned.thought ? { thinkingLevel: mapThought(pinned.thought) } : {}),
+    model: input.parentModel,
+    thinkingLevel: thinkingOf(input.profileThought, input.parentThinkingLevel),
   };
+}
+
+function resolveDefaultModel<TModel>(input: {
+  defaultModel?: string;
+  parentProviderId?: string;
+  getModel: (providerId: string, modelId: string) => TModel | null | undefined;
+  listModels?: () => readonly { providerId: string; modelId: string }[];
+}): { model?: TModel; thought?: string; error?: string } {
+  const spec = input.defaultModel?.trim();
+  if (!spec) return {};
+  const { body, thought } = splitModelThought(spec);
+  const slash = body.indexOf("/");
+  if (slash > 0) {
+    const model = input.getModel(body.slice(0, slash), body.slice(slash + 1));
+    return model ? { model, thought } : { error: `model ${spec} is not available` };
+  }
+  const matches = (input.listModels?.() ?? []).filter((model) => model.modelId === body);
+  const chosen =
+    matches.find((model) => model.providerId === input.parentProviderId) ??
+    (matches.length === 1 ? matches[0] : undefined);
+  const model = chosen ? input.getModel(chosen.providerId, chosen.modelId) : undefined;
+  return model ? { model, thought } : { error: `model ${spec} is not available` };
 }
 
 export interface PiCapabilityPorts {
@@ -168,9 +242,17 @@ export async function runZcodeSubagent(input: {
   if (input.signal?.aborted) return "subagent cancelled";
   const launchModel = resolveZcodeSubagentLaunchModel({
     profileModel: input.profile.model,
+    profileThought: input.profile.thought,
+    defaultModel: await readSubagentDefaultModel(input.agentDir),
     parentModel: input.model,
+    parentProviderId: input.model?.provider,
     parentThinkingLevel: input.thinkingLevel,
     getModel: (providerId, modelId) => input.modelRuntime?.getModel(providerId, modelId),
+    listModels: () =>
+      input.modelRuntime?.getAvailableSnapshot().map((model) => ({
+        providerId: model.provider,
+        modelId: model.id,
+      })) ?? [],
   });
   if (launchModel.error) return `subagent failed: ${launchModel.error}`;
   const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } = piCoding();
@@ -259,7 +341,7 @@ export async function createCapabilityTools(input: {
   const catalog =
     agents.length > 0
       ? agents.map((agent) => `- ${agent.name}: ${agent.description}`).join("\n")
-      : "- general-purpose\n- Explore";
+      : "- scout\n- researcher\n- evidence-auditor\n- worker\n- reviewer\n- oracle\n- delegate";
   const subagent = tool<{ agent?: string; task?: string }>({
     name: "picode_subagent",
     label: "Subagent",
@@ -283,7 +365,9 @@ export async function createCapabilityTools(input: {
       const profiles = await input.ports.listSubagents(input.cwd).catch(() => agents);
       const profile = profiles.find((item) => item.name === agent);
       if (!profile) {
-        const names = profiles.map((item) => item.name).join(", ") || "general-purpose, Explore";
+        const names =
+          profiles.map((item) => item.name).join(", ") ||
+          "scout, researcher, evidence-auditor, worker, reviewer, oracle, delegate";
         return textResult(`Unknown subagent "${agent}". Available: ${names}`);
       }
       if (!task) return textResult("Subagent task is empty");

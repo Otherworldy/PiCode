@@ -20,7 +20,10 @@ import type {
   WorkspaceHookBundleSnapshot,
   WorkspaceId,
 } from "@zcode/contracts";
-import type { ZCodeProviderAccountAccess } from "@zcode/shared";
+import type {
+  BuiltInSubagentModelSelectionOverrides,
+  ZCodeProviderAccountAccess,
+} from "@zcode/shared";
 import type { EffectiveModelSelectionResult } from "@zcode/shared/model-selection";
 import type { RuntimeMessageEntry } from "../agent/message-history.js";
 import type {
@@ -146,7 +149,7 @@ export interface AgentRuntimeConfig {
     maxTurns?: number;
     outputRootDir?: string;
     profiles?: readonly AgentProfile[];
-    builtInModelSelectionOverrides?: Partial<Record<"general-purpose" | "Explore", ModelSelection>>;
+    builtInModelSelectionOverrides?: BuiltInSubagentModelSelectionOverrides;
   };
   toolAllowlist?: readonly string[];
   toolDisallowlist?: readonly string[];
