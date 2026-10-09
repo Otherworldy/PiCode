@@ -57,7 +57,11 @@ export {
   type PiPluginUpdateCache,
   type PiPluginUpdateRecord,
 } from "./pi-plugin-update-cache.js";
-export type { PiCapabilityPorts, ZcodeSubagentProfile } from "./host-capabilities.js";
+export {
+  toZcodeSubagentProfile,
+  type PiCapabilityPorts,
+  type ZcodeSubagentProfile,
+} from "./host-capabilities.js";
 export type { PiMcpCompat, PiMcpRuntimeServer } from "./pi-mcp.js";
 export type { PiDiscoveredModel, PiModelConfigView, PiProviderDraft } from "./model-config-file.js";
 export { gateTool, type ToolPermissionCheck } from "./permission-gate.js";

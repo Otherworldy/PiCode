@@ -13,6 +13,7 @@ import {
   type AgentsCapability,
   type AgentsListResult,
   type AgentSummary,
+  BUILT_IN_SUBAGENT_NAMES,
   type BuiltInSubagentName,
   type ModelSelection,
   type SubAgentConfig,
@@ -160,7 +161,9 @@ function getBuiltInSubagentName(agent: AgentSummary): BuiltInSubagentName | null
   if (!isBuiltInAgent(agent)) {
     return null;
   }
-  return agent.name === "general-purpose" || agent.name === "Explore" ? agent.name : null;
+  return (BUILT_IN_SUBAGENT_NAMES as readonly string[]).includes(agent.name)
+    ? (agent.name as BuiltInSubagentName)
+    : null;
 }
 
 function getKnownTools(values: readonly string[] | undefined): string[] {

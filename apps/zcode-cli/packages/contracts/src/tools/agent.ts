@@ -9,8 +9,7 @@ import type { ModelUsage } from "../model/index.js";
 import { toToolJsonSchema } from "./json-schema.js";
 
 export const AgentType = {
-  GeneralPurpose: "general-purpose",
-  Explore: "Explore",
+  Delegate: "delegate",
 } as const;
 
 export type AgentType = string;

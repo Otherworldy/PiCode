@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { createConfig, resolvePath } from "@zcode/adapters/config";
 import { normalizeAgentProfiles } from "@zcode/core";
 import { type Logger, type McpServerConfig } from "@zcode/contracts";
-import type { PiCapabilityPorts } from "@zcode/pi-host";
+import { toZcodeSubagentProfile, type PiCapabilityPorts } from "@zcode/pi-host";
 import { resolveHostBrowserCapability } from "../app/built-in-node-repl.js";
 import { getCliStorageRoot, getPluginStorageRoot } from "../app/paths.js";
 import { resolveStartupPlugins } from "../app/startup-marks.js";
@@ -152,12 +152,7 @@ export function createPiCapabilityPorts(
       });
       return normalizeAgentProfiles(loaded.profiles, {
         builtInModelSelectionOverrides: loaded.builtInModelSelectionOverrides,
-      }).map((profile) => ({
-        name: profile.name,
-        description: profile.description,
-        systemPrompt: profile.systemPrompt,
-        ...(profile.tools ? { tools: profile.tools } : {}),
-      }));
+      }).map(toZcodeSubagentProfile);
     },
   };
 }

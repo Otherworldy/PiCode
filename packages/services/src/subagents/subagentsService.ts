@@ -3,12 +3,14 @@ import { ensureAppDataDir } from "@zcode/shared/node";
 import { access, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import {
+  BUILT_IN_SUBAGENTS,
+  BUILT_IN_SUBAGENT_NAMES,
   createAgentStateId,
   createPluginAgentStateId,
+  parseBuiltInSubagentModelSelectionOverrides,
   parsePluginSubagentModelSelectionOverrides,
   DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS,
   ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID,
-  modelSelectionSchema,
   type AgentCreateParams,
   type AgentDeleteParams,
   type AgentDiagnostic,
@@ -81,7 +83,7 @@ interface PluginAgentDiscovery {
   runtimeAgents: AgentSummary[];
 }
 
-const BUILT_IN_AGENT_NAMES = new Set(["general-purpose", "Explore"]);
+const BUILT_IN_AGENT_NAMES = new Set<string>(BUILT_IN_SUBAGENT_NAMES);
 const PLUGIN_MANIFEST_PATHS = [
   join(".zcode-plugin", "plugin.json"),
   join(".claude-plugin", "plugin.json"),
@@ -91,52 +93,29 @@ const PLUGIN_MANIFEST_PATHS = [
 function createBuiltInAgents(
   modelSelectionOverrides: BuiltInSubagentModelSelectionOverrides = {},
 ): AgentSummary[] {
-  const generalPurposeOverride = modelSelectionOverrides["general-purpose"];
-  const exploreOverride = modelSelectionOverrides.Explore;
-  return [
-    {
+  return BUILT_IN_SUBAGENTS.map((agent) => {
+    const override = modelSelectionOverrides[agent.name];
+    return {
       id: createAgentStateId({
-        name: "general-purpose",
+        name: agent.name,
         scope: "built-in",
         source: "built-in",
       }),
-      name: "general-purpose",
-      description:
-        "General-purpose agent for researching complex questions, searching for code, and executing multi-step tasks.",
-      // 内置子智能体使用显式身份色，避免 UI 按名称 hash 后把 general-purpose 显示为红色。
-      color: "blue",
+      name: agent.name,
+      description: agent.description,
+      color: agent.color,
       injectAgentsMd: true,
-      modelSelection: generalPurposeOverride,
-      modelSelectionOverride: generalPurposeOverride,
-      systemPrompt: "",
-      tools: ["*"],
-      path: "built-in:general-purpose",
+      modelSelection: override,
+      modelSelectionOverride: override,
+      systemPrompt: agent.systemPrompt,
+      tools: [...agent.tools],
+      path: `built-in:${agent.name}`,
       scope: "built-in",
       source: "built-in",
       enabled: true,
       readOnly: true,
-    },
-    {
-      id: createAgentStateId({
-        name: "Explore",
-        scope: "built-in",
-        source: "built-in",
-      }),
-      name: "Explore",
-      description: "Read-only search agent for broad fan-out searches.",
-      color: "cyan",
-      injectAgentsMd: false,
-      modelSelection: exploreOverride,
-      modelSelectionOverride: exploreOverride,
-      systemPrompt: "",
-      tools: ["Bash", "Glob", "Grep", "Read", "WebFetch", "WebSearch"],
-      path: "built-in:Explore",
-      scope: "built-in",
-      source: "built-in",
-      enabled: true,
-      readOnly: true,
-    },
-  ];
+    };
+  });
 }
 
 function emptyAgentsState(): AgentsStateFile {
@@ -532,13 +511,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function normalizeBuiltInSelectionOverrides(
   structured: unknown,
 ): BuiltInSubagentModelSelectionOverrides {
-  const result: BuiltInSubagentModelSelectionOverrides = {};
-  const structuredRecord = isRecord(structured) ? structured : {};
-  const generalPurpose = modelSelectionSchema.safeParse(structuredRecord["general-purpose"]).data;
-  const explore = modelSelectionSchema.safeParse(structuredRecord.Explore).data;
-  if (generalPurpose) result["general-purpose"] = generalPurpose;
-  if (explore) result.Explore = explore;
-  return result;
+  return parseBuiltInSubagentModelSelectionOverrides(structured);
 }
 
 export function createSubagentsService(options?: SubagentsServiceOptions): ISubagentsService & {

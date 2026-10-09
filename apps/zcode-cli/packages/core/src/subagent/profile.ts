@@ -1,17 +1,18 @@
 import { basename } from "node:path";
-import { GENERAL_PURPOSE_AGENT_TYPE, buildGeneralPurposeSystemPrompt } from "./general-purpose.js";
 import { EXPLORE_AGENT_TYPE } from "./explore.js";
 import { formatExploreAllowedToolsForAgentDescription } from "./explore-tools.js";
 import { parseAgentFrontmatter, splitMarkdownFrontmatter } from "./profile-frontmatter.js";
 import { filterSubagentChildToolNames } from "./tool-policy.js";
-import type { ModelSelection } from "@zcode/shared";
+import {
+  BUILT_IN_SUBAGENTS,
+  type BuiltInSubagentModelSelectionOverrides,
+  type ModelSelection,
+} from "@zcode/shared";
 import { resolveProfileModelSelection } from "./profile-model-selection.js";
 
-export const DEFAULT_SUBAGENT_TYPE = GENERAL_PURPOSE_AGENT_TYPE;
+export type { BuiltInSubagentModelSelectionOverrides } from "@zcode/shared";
 
-export type BuiltInSubagentModelSelectionOverrides = Partial<
-  Record<typeof DEFAULT_SUBAGENT_TYPE | typeof EXPLORE_AGENT_TYPE, ModelSelection>
->;
+export const DEFAULT_SUBAGENT_TYPE = "delegate" as const;
 
 export type AgentPermissionMode = "auto" | "plan";
 
@@ -28,6 +29,8 @@ export interface AgentProfile {
   mcpServers?: readonly string[];
   memory?: AgentMemoryScope;
   modelSelection?: ModelSelection;
+  /** 角色默认思考档位。设置里的模型覆盖带了档位时，覆盖优先。 */
+  thinking?: string;
   name: string;
   path?: string;
   permissionMode?: AgentPermissionMode;
@@ -63,22 +66,6 @@ const VALID_PERMISSION_MODES = new Set<AgentPermissionMode>(["auto", "plan"]);
 
 const VALID_MEMORY_SCOPES = new Set<AgentMemoryScope>(["user", "project", "local"]);
 
-export function createBuiltInExploreAgentProfile(
-  options: { modelSelection?: ModelSelection } = {},
-): AgentProfile {
-  return {
-    name: EXPLORE_AGENT_TYPE,
-    description:
-      'Read-only search agent for broad fan-out searches - when answering means sweeping many files, directories, or naming conventions and you only need the conclusion, not the file dumps. It reads excerpts rather than whole files, so it locates code; it doesn\'t review or audit it. Specify search breadth: "medium" for moderate exploration, "very thorough" for multiple locations and naming conventions.',
-    color: "cyan",
-    injectAgentsMd: false,
-    ...(options.modelSelection ? { modelSelection: options.modelSelection } : {}),
-    source: "built-in",
-    systemPrompt: "",
-    tools: ["Bash", "Glob", "Grep", "Read", "WebFetch", "WebSearch"],
-  };
-}
-
 export function isBuiltInExploreAgentProfile(
   profile: Pick<AgentProfile, "name" | "source">,
 ): boolean {
@@ -94,39 +81,24 @@ export function normalizeAgentProfiles(
 ): AgentProfile[] {
   const overrides = options.builtInModelSelectionOverrides ?? {};
   const active = new Map<string, AgentProfile>();
-  active.set(
-    DEFAULT_SUBAGENT_TYPE,
-    createBuiltInGeneralPurposeAgentProfile({
-      modelSelection: overrides[DEFAULT_SUBAGENT_TYPE],
-    }),
-  );
-  active.set(
-    EXPLORE_AGENT_TYPE,
-    createBuiltInExploreAgentProfile({
-      modelSelection: overrides[EXPLORE_AGENT_TYPE],
-    }),
-  );
+  for (const agent of BUILT_IN_SUBAGENTS) {
+    const modelSelection = overrides[agent.name];
+    active.set(agent.name, {
+      name: agent.name,
+      description: agent.description,
+      color: agent.color,
+      injectAgentsMd: true,
+      ...(modelSelection ? { modelSelection } : {}),
+      ...(agent.thinking ? { thinking: agent.thinking } : {}),
+      source: "built-in",
+      systemPrompt: agent.systemPrompt,
+      tools: [...agent.tools],
+    });
+  }
   for (const profile of profiles) {
     active.set(profile.name, profile);
   }
   return Array.from(active.values());
-}
-
-export function createBuiltInGeneralPurposeAgentProfile(
-  options: { modelSelection?: ModelSelection } = {},
-): AgentProfile {
-  return {
-    name: DEFAULT_SUBAGENT_TYPE,
-    description:
-      "General-purpose agent for researching complex questions, searching for code, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries use this agent to perform the search for you.",
-    // 内置子智能体使用显式身份色，避免 UI 按名称 hash 后把 general-purpose 显示为红色。
-    color: "blue",
-    injectAgentsMd: true,
-    ...(options.modelSelection ? { modelSelection: options.modelSelection } : {}),
-    source: "built-in",
-    systemPrompt: buildGeneralPurposeSystemPrompt(),
-    tools: ["*"],
-  };
 }
 
 export function formatAgentProfilesForPrompt(
