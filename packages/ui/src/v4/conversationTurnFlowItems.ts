@@ -59,7 +59,10 @@ export function processEventSummary(text: string): string | null {
 
 function staysOutsideWorkFold(row: AssistantWorkRow): boolean {
   if (row.kind !== "toolCall") return false;
-  const name = row.toolName.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const name = row.toolName
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
   // 问卷收进折叠后会被卸掉，展开前看起来像调用丢了。
   return name === "ask_user_question" || name === "askuserquestion";
 }
@@ -127,12 +130,14 @@ export function buildConversationFlowItems(options: {
     if (tailRowIds.has(row.rowId)) continue;
     // 正文是折叠边界：中间回复也留在折叠外，把前后工具切成各自的块。
     // process 通知除外，它跟在工具后面，留在同一块里。
+    // 工具回合常带一段 "\n\n"。空白不是正文，切开会让连续终端各自成一块。
     if (
       isAssistantTextRow(row) &&
       !tailRowIds.has(row.rowId) &&
       !options.timelineOnly &&
       !isProcessEventText(row.text)
     ) {
+      if (!row.text.trim()) continue;
       items.push({
         kind: "assistantText",
         row,

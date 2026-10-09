@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
 import {
+  isSeparatelyFoldedFlowItem,
   splitCompactStatusRows,
   type AssistantWorkRow,
 } from "./conversationTurnFlowItems.js";
@@ -89,12 +90,83 @@ test("trailing compact marker stays outside collapsed work", () => {
     lane: "turnTailBoundary",
     marker: { type: "compact", origin: "manual", status: "running" },
   };
-  const unit = buildConversationTurnRenderUnits([header("completedSuccess"), ...workRows(true), marker])[0];
-  assert.equal(unit?.assistantTailRows.some((row) => row.rowId === 5), true);
+  const unit = buildConversationTurnRenderUnits([
+    header("completedSuccess"),
+    ...workRows(true),
+    marker,
+  ])[0];
+  assert.equal(
+    unit?.assistantTailRows.some((row) => row.rowId === 5),
+    true,
+  );
   assert.equal(
     unit?.workSegments?.[0]?.assistantFollowingRows.some((row) => row.rowId === 5),
     false,
   );
+});
+
+test("blank assistant text does not split consecutive terminal calls", () => {
+  const blank = (rowId: number): ConversationRow => ({
+    rowId,
+    turnId: "t1",
+    createdAt: rowId,
+    createdAtSeq: rowId,
+    kind: "assistantText",
+    text: "\n\n",
+    state: "complete",
+  });
+  const bash = (rowId: number): ConversationRow => ({
+    rowId,
+    turnId: "t1",
+    createdAt: rowId,
+    createdAtSeq: rowId,
+    kind: "toolCall",
+    toolCallId: `c${rowId}`,
+    toolName: "bash",
+    status: "success",
+    inputText: "{}",
+  });
+  const unit = buildConversationTurnRenderUnits([
+    header("running"),
+    ...workRows(false),
+    blank(4),
+    bash(5),
+    blank(6),
+    bash(7),
+  ])[0];
+  const folded = unit?.workSegments?.[0]?.flowItems.filter(isSeparatelyFoldedFlowItem) ?? [];
+  assert.equal(folded.length, 1);
+  const first = folded[0];
+  assert.equal(
+    first && "rows" in first ? first.rows.filter((row) => row.kind === "toolCall").length : 0,
+    3,
+  );
+});
+
+test("real assistant text still splits the surrounding tools", () => {
+  const said = (rowId: number): ConversationRow => ({
+    rowId,
+    turnId: "t1",
+    createdAt: rowId,
+    createdAtSeq: rowId,
+    kind: "assistantText",
+    text: "先看章节",
+    state: "complete",
+  });
+  const bash = (rowId: number): ConversationRow => ({
+    rowId,
+    turnId: "t1",
+    createdAt: rowId,
+    createdAtSeq: rowId,
+    kind: "toolCall",
+    toolCallId: `c${rowId}`,
+    toolName: "bash",
+    status: "success",
+    inputText: "{}",
+  });
+  const unit = buildConversationTurnRenderUnits([header("running"), bash(2), said(3), bash(4)])[0];
+  const folded = unit?.workSegments?.[0]?.flowItems.filter(isSeparatelyFoldedFlowItem) ?? [];
+  assert.equal(folded.length, 2);
 });
 
 test("compact status rows stay pinned when folded with tools", () => {
