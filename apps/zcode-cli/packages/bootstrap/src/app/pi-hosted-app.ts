@@ -91,7 +91,9 @@ export function createPiHostedApp(
     commandId = `cmd:${Date.now()}`,
     modelSelection?: ModelSelection,
   ): Promise<SendInputResult> => {
-    const streaming = hosted.projector.getSnapshot().control.phase === "running";
+    // 投影 phase 可能还停在上一轮结束，Pi 却仍在跑。只看 phase 会裸 prompt。
+    const streaming =
+      hosted.projector.getSnapshot().control.phase === "running" || hosted.isIdle === false;
     const thought = modelSelection?.options?.reasoningLevel;
     const attachments = typeof input === "string" ? undefined : input.attachments;
     const result = await hosted.bridge.admitSend({
@@ -137,7 +139,13 @@ export function createPiHostedApp(
       void hosted.abort();
       return { kind: "stopped" as const, foregroundExecutionId: hosted.sessionId };
     },
-    acquireForegroundPromotionLease: () => ({ kind: "acquired" as const }),
+    acquireForegroundPromotionLease: (options?: { mode?: "after-current" | "idle-only" }) => {
+      // 自动 drain 的 idle-only 租约不能在 Pi 还在跑时假装空闲，否则会再 prompt 一次。
+      if (options?.mode === "idle-only" && hosted.isIdle === false) {
+        return { kind: "busy" as const };
+      }
+      return { kind: "acquired" as const };
+    },
     releaseForegroundPromotionLease: () => undefined,
     setCustomSessionTitle: async ({ title }: { title: string }) => {
       // 直接 setTitle 的增量没人转发，侧栏 sessions-index 会一直停在旧标题。
@@ -252,7 +260,9 @@ export function createPiHostedApp(
       hosted.projector.getSnapshot().control.phase === "running" ||
       hosted.queue.snapshot().items.length > 0,
     getActiveForegroundExecutionId: () =>
-      hosted.projector.getSnapshot().control.phase === "running" ? hosted.sessionId : undefined,
+      hosted.projector.getSnapshot().control.phase === "running" || hosted.isIdle === false
+        ? hosted.sessionId
+        : undefined,
     ensureSessionPersistedForExternalActivity: async (title?: string) => {
       await options.persistSession?.(typeof title === "string" ? title : "");
     },

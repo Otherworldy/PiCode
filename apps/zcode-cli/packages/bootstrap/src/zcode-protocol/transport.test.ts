@@ -81,4 +81,56 @@ describe("MCP App NDJSON admission", () => {
     await transport.waitForClose();
     expect(order).toEqual(["session/create", "mcp/uiCancelCall", "session/read"]);
   });
+
+  it("admits settings catalog reads while a session command is still running", async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const started = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    const reads = Promise.withResolvers<void>();
+    const order: string[] = [];
+    const transport = new ZCodeProtocolNdjsonConnection({
+      input,
+      output,
+      async handleMessage(message) {
+        if (!("method" in message) || !("id" in message)) return;
+        const action =
+          "params" in message && message.params && typeof message.params === "object"
+            ? (message.params as { action?: string }).action
+            : undefined;
+        const label = action ? `${message.method}:${action}` : message.method;
+        order.push(label);
+        if (message.method === "session/send") {
+          started.resolve();
+          await finish.promise;
+        }
+        if (label === "pi/plugins:list") reads.resolve();
+        return { id: message.id, result: {} };
+      },
+    });
+    transport.start();
+    try {
+      input.write(
+        [
+          JSON.stringify({ id: 1, method: "session/send" }),
+          JSON.stringify({ id: 2, method: "pi/models", params: { action: "get" } }),
+          JSON.stringify({ id: 3, method: "pi/plugins", params: { action: "list" } }),
+          JSON.stringify({ id: 4, method: "pi/plugins", params: { action: "checkUpdates" } }),
+        ].join("\n") + "\n",
+      );
+      await started.promise;
+      await reads.promise;
+      expect(order).toEqual(["session/send", "pi/models:get", "pi/plugins:list"]);
+    } finally {
+      finish.resolve();
+      input.end();
+      await transport.waitForClose();
+    }
+    expect(order).toEqual([
+      "session/send",
+      "pi/models:get",
+      "pi/plugins:list",
+      "pi/plugins:checkUpdates",
+    ]);
+  });
 });

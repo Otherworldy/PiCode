@@ -28,6 +28,27 @@ export function isSeparatelyFoldedFlowItem(item: ConversationTurnFlowItem): bool
   return item.rows.some((row) => !isCompactStatusRow(row));
 }
 
+/**
+ * 只展开仍在进行的最后一块工具区。
+ * 段落不再跑，或这一块后面已经有正文，就全部收起。
+ */
+export function activeWorkingFoldIndex(
+  flowItems: readonly ConversationTurnFlowItem[],
+  segmentMayStayOpen: boolean,
+): number {
+  if (!segmentMayStayOpen) return -1;
+  let lastFolded = -1;
+  for (let index = 0; index < flowItems.length; index += 1) {
+    const item = flowItems[index];
+    if (item && isSeparatelyFoldedFlowItem(item)) lastFolded = index;
+  }
+  if (lastFolded < 0) return -1;
+  for (let index = lastFolded + 1; index < flowItems.length; index += 1) {
+    if (flowItems[index]?.kind === "assistantText") return -1;
+  }
+  return lastFolded;
+}
+
 function isUserInputRow(row: ConversationRow): row is UserInputRow {
   return row.kind === "userInput";
 }

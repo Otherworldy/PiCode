@@ -8,6 +8,7 @@ import {
   cleanSummarizedTitle,
   readTitleSummarySettings,
   scheduleSessionTitleSummary,
+  shouldAutoSummarizeTitle,
   titleExcerptFromJsonl,
   titleSummaryRequest,
   titleSummarySeed,
@@ -78,6 +79,55 @@ test("title summary settings default on and round-trip the model", async () => {
   const saved = await readFile(join(dir, "zcode-title-summary.json"), "utf8");
   assert.equal(saved.includes("provider"), false);
   assert.deepEqual(await readTitleSummarySettings(dir), { enabled: false });
+});
+
+test("auto title starts when the first user message lands", () => {
+  assert.equal(
+    shouldAutoSummarizeTitle({ type: "message_start", message: { role: "user" } }),
+    true,
+  );
+  assert.equal(
+    shouldAutoSummarizeTitle({ type: "message_start", message: { role: "assistant" } }),
+    false,
+  );
+  assert.equal(shouldAutoSummarizeTitle({ type: "agent_end" }), true);
+  assert.equal(shouldAutoSummarizeTitle({ type: "agent_end", willRetry: true }), false);
+  assert.equal(shouldAutoSummarizeTitle({ type: "agent_settled" }), false);
+});
+
+test("an in-flight first-message summary is not replaced when a second message arrives", async () => {
+  let committed = "";
+  const base = {
+    fallbackProvider: "lens",
+    fallbackModel: "glm",
+    readSettings: async () => ({ enabled: true }),
+    stillEligible: () => true,
+  };
+  scheduleSessionTitleSummary({
+    ...base,
+    sessionId: "summary-early",
+    rows: [{ kind: "userInput", origin: "realUser", text: "发送中途再发一条，会话结束了" }],
+    complete: async (request) => {
+      assert.match(request.prompt, /发送中途再发一条/);
+      return "中断后的标题";
+    },
+    commit: (title) => {
+      committed = title;
+    },
+  });
+  scheduleSessionTitleSummary({
+    ...base,
+    sessionId: "summary-early",
+    rows: [
+      { kind: "userInput", origin: "realUser", text: "发送中途再发一条，会话结束了" },
+      { kind: "userInput", origin: "realUser", text: "再发一条" },
+    ],
+    complete: async () => "不该用这条",
+    commit: () => {
+      committed = "overwritten";
+    },
+  });
+  await waitFor(() => committed === "中断后的标题");
 });
 
 test("scheduleSessionTitleSummary uses the conversation model and does not repeat", async () => {

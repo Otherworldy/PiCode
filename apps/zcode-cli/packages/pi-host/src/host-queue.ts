@@ -83,6 +83,11 @@ export class HostQueue {
     return first;
   }
 
+  /** drain 的 prompt 被拒时把刚取走的项放回队首，避免消息丢掉。 */
+  unshift(item: QueueItem): void {
+    this.items = [item, ...this.items];
+  }
+
   clear(): QueueState {
     this.items = [];
     return this.snapshot();

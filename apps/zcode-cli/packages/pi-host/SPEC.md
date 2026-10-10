@@ -41,7 +41,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 - Pi 拒 prompt（preflight false）：ACK 失败，不造假 turn。rewind 之后、重发完成之前的任何失败，都用 jsonl 把原对话行画回去。
 - `getModel()` 返回 `provider/model`。旧 snapshot 把裸模型 id 当成非法选择，会在截断之后把编辑打失败。
-- 新建会话的 Pi 投影增量写入 sessions-index。只跳过纯文本流式 delta。第一条用户消息先成为侧栏标题。首轮正常结束后，若标题总结开着、标题不是用户手改的、且 jsonl 还没有 `session_info` 名字，再用总结模型换成短标题并写入 `session_info`。没配总结模型就用这一轮的对话模型。失败或关闭时保留截断标题。子会话不总结。用户重命名同样写入 `session_info`，之后自动标题不再覆盖。侧栏「总结标题」是另一次显式请求：不受自动开关和手改保护限制，读当前会话或 jsonl 后返回标题，由壳按重命名写入。
+- 新建会话的 Pi 投影增量写入 sessions-index。只跳过纯文本流式 delta。第一条用户消息先成为侧栏标题。这条真实用户消息一落地就安排标题总结，不等首轮 `agent_end`：首轮被中断、会话被关掉，或进程在收口前退出时，否则标题会一直停在原文。重放出来的 `agent_settled` 不触发。若总结开着、标题不是用户手改的、且 jsonl 还没有 `session_info` 名字，就用总结模型换成短标题并写入 `session_info`。没配总结模型就用这一轮的对话模型。当时已经有的助手回复会一并送进去，但不等回复写完。失败或关闭时保留截断标题。同一会话只自动总结一次。子会话不总结。用户重命名同样写入 `session_info`，之后自动标题不再覆盖。侧栏「总结标题」是另一次显式请求：不受自动开关和手改保护限制，读当前会话或 jsonl 后返回标题，由壳按重命名写入。
 - 打开中的会话，侧栏转圈以该 pane 的 conversation snapshot `control.phase` 为准。sessions-index 还停在上一轮 completed 时，正在跑的这一行仍要转。未读点只在没有这份实时 phase 时盖过转圈。
 - 流中途失败：turn `failed`，已写出的 row 保留。
 - 模型失败只把一句摘要写进回复和 `lastError.message`；原始 JSON 放 `lastError.detail`。
@@ -52,6 +52,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 - 冷恢复重放 jsonl 时，行先落完，actions 只算一次。不能每条事件都扫整窗，否则几万行的会话订阅一直不返回。
 - 折叠的工具历史不挂载，时间线只保留视口附近的轮次。截断轮自动补齐最多 3 窗，其余靠上滚再拉。
 - abort：turn `completedInterrupted`，运行中工具 `cancelled`。用户已经停止后，重试再发的 `agent_start` / `auto_retry_start` 不能把这次停止清掉，要再 abort。Stop 同时拆掉还在飞的代理请求，避免重试里的 CONNECT 不看 abort 信号。
+- 上一轮还在跑时再发消息：进 HostQueue（guide 则 steer），不调用 `session.prompt`。投影 phase 已经不是 running、但 Pi 仍在 streaming 时也一样。Pi 对裸 prompt 抛 `already processing`；这个 rejection 没人接会把 agent 进程打退出，会话直接结束。drain 失败只记日志，并把取出的队列项放回队首。
 - `custom()` 无 adapter：降级 widget 文本，不卡循环。
 - 插件抛错：`extension_error` → notify，会话继续。
 - 本地会话不把 `read` / `bash` / `edit` / `write` / `grep` / `find` / `ls` / `powershell` 注册成 customTools，也不关 Pi 内置工具。Pi 默认只激活 `read` / `bash` / `edit` / `write`；Host 在本地会话里补上已注册的 `grep` / `find` / `ls`。扩展仍可按原名替换，例如 pi-fff。卸掉替换扩展后，内置实现还在。权限走 `tool_call`，不换工具实现。SSH 工作区仍用远端实现替换 `read` / `bash` / `edit` / `write`，不把本机的 `grep` / `find` / `ls` 打开，否则这些工具打到本机盘。
@@ -149,7 +150,7 @@ SDK 来源是 `AppSettings.piSdkSource`。缺省 `builtin`，用打进 `zcode.cj
 
 **目录所有者：** Pi `ModelRuntime.getAvailableSnapshot()`。CLI 在 `workspace/readPresentation` 上行目录；Host `IModelSelectionService` 只投影这份目录，不再用 PiCode Provider Registry 当聊天/设置页候选。投影必须把 `getView(input.selection)` 写成 `effectiveSelection`，否则 Composer 触发器拿不到当前草稿模型。Composer 与设置「模型设置」共用该视图。`switchModelConfig` 走 `session.setModel`。空闲时输入框里的模型属于下一次提交，在 `prompt`、steer 或手动 `/compact` 之前写入。压缩不读会话里的旧模型。会话已经在跑时，输入框一切模型或思考档位就立刻 `setModel`：已经发出的那次请求不中断，同一轮里的下一次模型请求用新的。排队项仍带着入队时的选择，出队再换。
 
-设置页通过 `pi/models` 读写 `~/.pi/agent/models.json`（apiKey 明文回读，输入框不脱敏；保存时空字符串清掉密钥，请求不带 `apiKey` 则保留原值）和 `settings.json` 默认模型与思考等级；保存后 `registerProvider`/`unregisterProvider` 更新活着的 `ModelRuntime`。渠道的 `api` 是默认请求格式。模型项没写 `api` 时补成渠道的；写成另一种驱动时保留，运行时用模型项上的 `api`。壳不另写 PiCode 供应商库。PiCode 账号登录、升级套餐、Coding Plan 额度不再作为产品面。
+设置页通过 `pi/models` 读写 `~/.pi/agent/models.json`（apiKey 明文回读，输入框不脱敏；保存时空字符串清掉密钥，请求不带 `apiKey` 则保留原值）和 `settings.json` 默认模型与思考等级；保存后 `registerProvider`/`unregisterProvider` 更新活着的 `ModelRuntime`。打开设置页的 `get` 只读这份目录，不等 `workspace/readPresentation`；改完模型后的展示刷新放到后台，不挡住设置页。`get` 和插件 `list` 在协议入口不跟会话命令排队。渠道的 `api` 是默认请求格式。模型项没写 `api` 时补成渠道的；写成另一种驱动时保留，运行时用模型项上的 `api`。壳不另写 PiCode 供应商库。PiCode 账号登录、升级套餐、Coding Plan 额度不再作为产品面。
 
 模型设置界面包含两个标签页：「默认模型」与「供应商管理」：
 - 「默认模型」页提供全局默认模型（供应商+模型ID）及默认思考等级（Reasoning Level）的直观选择与持久化，展示当前默认模型详细规格，并提供跳转至「供应商管理」的快捷入口；若未配置任何供应商或模型，展示空状态与前往添加供应商的操作。同页还有标题总结开关和可选的总结模型。开关缺省开启；总结模型留空表示跟随当前对话模型。这两项写在 `~/.pi/agent/zcode-title-summary.json`，不进 Pi 的 `settings.json`。
@@ -159,7 +160,7 @@ SDK 来源是 `AppSettings.piSdkSource`。缺省 `builtin`，用打进 `zcode.cj
 
 ## Pi 插件开关
 
-设置「插件」页只列 Pi 已配置的包和自动发现的扩展文件。列表来自 Pi `settings.json`（用户级 `~/.pi/agent/settings.json`，工作区级 `<cwd>/.pi/settings.json`），但开关不写回这两处。检查更新和更新都走 Pi 的 PackageManager，但更新用的那个实例不能让 npm/git 继承进程 stdout。app-server 的 stdout 只能是协议帧；npm 成功时打印的 `changed 1 package` 会被 Host 当成 JSON，解析失败后关掉 Agent，设置页就显示更新失败。子进程 stdio 用 ignore；Windows 上的 npm/pnpm/bun 仍经 shell 启动。检查更新仍用 Pi 自己的管道捕获。可更新结果按工作区落在 `~/.PiCode/pi-plugin-update-cache/`，键是 `workspaceIdentity?.trim() || workspacePath`。`list` 只读这份缓存，不访问网络，设置页因此能直接显示上次的更新按钮。`checkUpdates` 成功后覆盖该工作区的结果和检查时间。`update` 成功后立刻从缓存去掉这个插件，不改检查时间。缓存读不出来就当没查过。应用启动后，若当前工作区还没查过或距上次成功检查已满 24 小时，就自动检查；之后每 24 小时再查。自动检查只有发现可更新才提示，不提示已是最新。手动检查仍提示两种结果。PiCode 的开关注 `~/.PiCode/pi-plugin-switches.json`，只在 PiCode 创建会话时叠加：关掉的包或扩展文件从这次会话的 extensions、skills、prompts 里拿掉；Pi 里关着、PiCode 里开着的，只在 PiCode 会话额外加载。Pi TUI 仍只看自己的 `autoload` 和 `extensions`。没在 PiCode 里动过的插件，跟随 Pi 当前状态。已打开的会话不热更新，下一次创建会话才生效。不再把 PiCode 插件市场当能力源。`plugins/*` 协议方法已删除，设置页不再列、安装或开关 PiCode 插件。
+设置「插件」页只列 Pi 已配置的包和自动发现的扩展文件。`list` 是只读，协议入口不跟会话命令排队；`checkUpdates`、`update`、开关和写配置仍串行。列表来自 Pi `settings.json`（用户级 `~/.pi/agent/settings.json`，工作区级 `<cwd>/.pi/settings.json`），但开关不写回这两处。检查更新和更新都走 Pi 的 PackageManager，但更新用的那个实例不能让 npm/git 继承进程 stdout。app-server 的 stdout 只能是协议帧；npm 成功时打印的 `changed 1 package` 会被 Host 当成 JSON，解析失败后关掉 Agent，设置页就显示更新失败。子进程 stdio 用 ignore；Windows 上的 npm/pnpm/bun 仍经 shell 启动。检查更新仍用 Pi 自己的管道捕获。可更新结果按工作区落在 `~/.PiCode/pi-plugin-update-cache/`，键是 `workspaceIdentity?.trim() || workspacePath`。`list` 只读这份缓存，不访问网络，设置页因此能直接显示上次的更新按钮。`checkUpdates` 成功后覆盖该工作区的结果和检查时间。`update` 成功后立刻从缓存去掉这个插件，不改检查时间。缓存读不出来就当没查过。应用启动后，若当前工作区还没查过或距上次成功检查已满 24 小时，就自动检查；之后每 24 小时再查。自动检查只有发现可更新才提示，不提示已是最新。手动检查仍提示两种结果。PiCode 的开关注 `~/.PiCode/pi-plugin-switches.json`，只在 PiCode 创建会话时叠加：关掉的包或扩展文件从这次会话的 extensions、skills、prompts 里拿掉；Pi 里关着、PiCode 里开着的，只在 PiCode 会话额外加载。Pi TUI 仍只看自己的 `autoload` 和 `extensions`。没在 PiCode 里动过的插件，跟随 Pi 当前状态。已打开的会话不热更新，下一次创建会话才生效。不再把 PiCode 插件市场当能力源。`plugins/*` 协议方法已删除，设置页不再列、安装或开关 PiCode 插件。
 
 插件自己的设置不进 `settings.json`。能改的只有已经存在的 `~/.pi/agent/extensions/<名字>/config.json`。`list` 顺带这些文件里的顶层开关、数字和文本；`writeConfig` 只覆盖同名且同类型的顶层项，嵌套对象、数组和没出现过的键保持原样。不新建配置文件，也不执行插件代码去猜它的设置项。设置页不把这些表单铺在列表下面：能对上配置文件的插件，行内一个「设置」按钮，弹窗里改。改完同样从下一次新建会话生效。
 

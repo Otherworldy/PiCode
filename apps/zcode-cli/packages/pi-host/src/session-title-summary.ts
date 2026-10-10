@@ -219,6 +219,16 @@ export async function writeTitleSummarySettings(
   await writeFile(join(agentDir, TITLE_SUMMARY_FILE), `${JSON.stringify(body, null, 2)}\n`, "utf8");
 }
 
+/** 第一条用户消息就总结。只等 agent_end 的话，首轮被关掉或收口前进程退出，标题会一直停在原文。重放的 agent_settled 不算。 */
+export function shouldAutoSummarizeTitle(event: {
+  type: string;
+  willRetry?: boolean;
+  message?: { role?: string };
+}): boolean {
+  if (event.type === "message_start" && event.message?.role === "user") return true;
+  return event.type === "agent_end" && event.willRetry !== true;
+}
+
 export function scheduleSessionTitleSummary(input: {
   sessionId: string;
   parentSessionId?: string;

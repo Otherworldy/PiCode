@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
 import {
+  activeWorkingFoldIndex,
   isSeparatelyFoldedFlowItem,
   splitCompactStatusRows,
   type AssistantWorkRow,
@@ -167,6 +168,58 @@ test("real assistant text still splits the surrounding tools", () => {
   const unit = buildConversationTurnRenderUnits([header("running"), bash(2), said(3), bash(4)])[0];
   const folded = unit?.workSegments?.[0]?.flowItems.filter(isSeparatelyFoldedFlowItem) ?? [];
   assert.equal(folded.length, 2);
+});
+
+function foldedDefaultsOpen(rows: ConversationRow[]): boolean[] {
+  const segment = buildConversationTurnRenderUnits(rows)[0]?.workSegments?.[0];
+  const items = segment?.flowItems ?? [];
+  const active = activeWorkingFoldIndex(items, segment?.assistantHistoryDefaultOpen === true);
+  return items.flatMap((item, index) =>
+    isSeparatelyFoldedFlowItem(item) ? [index === active] : [],
+  );
+}
+
+function bash(rowId: number): ConversationRow {
+  return {
+    rowId,
+    turnId: "t1",
+    createdAt: rowId,
+    createdAtSeq: rowId,
+    kind: "toolCall",
+    toolCallId: `c${rowId}`,
+    toolName: "bash",
+    status: "success",
+    inputText: "{}",
+  };
+}
+
+function said(rowId: number, text = "先看章节"): ConversationRow {
+  return {
+    rowId,
+    turnId: "t1",
+    createdAt: rowId,
+    createdAtSeq: rowId,
+    kind: "assistantText",
+    text,
+    state: "complete",
+  };
+}
+
+test("only the latest working tool region stays open", () => {
+  assert.deepEqual(foldedDefaultsOpen([header("running"), bash(2)]), [true]);
+  assert.deepEqual(
+    foldedDefaultsOpen([header("running"), bash(2), said(3), bash(4)]),
+    [false, true],
+  );
+  assert.deepEqual(
+    foldedDefaultsOpen([header("running"), bash(2), said(3), bash(4), said(5), bash(6)]),
+    [false, false, true],
+  );
+  assert.deepEqual(foldedDefaultsOpen([header("running"), bash(2), said(3)]), [false]);
+  assert.deepEqual(
+    foldedDefaultsOpen([header("completedSuccess"), bash(2), said(3), bash(4)]),
+    [false, false],
+  );
 });
 
 test("compact status rows stay pinned when folded with tools", () => {

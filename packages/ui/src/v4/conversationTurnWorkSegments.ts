@@ -28,7 +28,7 @@ export interface ConversationTurnWorkSegment {
   workStatus?: ConversationTurnWorkStatus;
 }
 
-/** 只有还在跑才展开。中断、失败、做完都收起工具和思考。 */
+/** 这一段还在跑时，最后一块正在工作的工具区可以展开。中断、失败、做完都不再展开。 */
 export function assistantHistoryDefaultsOpen(input: {
   timelineOnly: boolean;
   running: boolean;

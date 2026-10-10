@@ -565,6 +565,51 @@ test("queued text is sent after compaction finishes", async () => {
   }
 });
 
+test("agent_end while Pi is still streaming does not prompt or crash", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const fakes = new Map<string, FakePiSession>();
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async (input) => {
+      const fake = new FakePiSession(input.sessionId, input.sessionFile);
+      fakes.set(input.sessionId, fake);
+      return fake;
+    },
+  });
+  const crashes: unknown[] = [];
+  const onCrash = (error: unknown) => {
+    crashes.push(error);
+  };
+  process.on("unhandledRejection", onCrash);
+  try {
+    const hosted = await registry.create({ workspacePath: root });
+    const fake = fakes.get(hosted.sessionId);
+    assert.ok(fake);
+    await hosted.bridge.admitSend({
+      text: "hi",
+      clientId: "c",
+      commandId: "q1",
+      delivery: "queue",
+      streaming: true,
+    });
+    fake.isStreaming = true;
+    fake.prompt = async () => {
+      throw new Error(
+        "Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.",
+      );
+    };
+    fake.emit({ type: "agent_end" });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(crashes, []);
+    assert.deepEqual(fake.prompts, []);
+    assert.equal(hosted.queue.snapshot().items[0]?.text, "hi");
+  } finally {
+    process.off("unhandledRejection", onCrash);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("queued text is visible and removable before it is sent", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-host-"));
   const registry = new HostSessionRegistry({
@@ -639,6 +684,48 @@ test("inbox routes prompt/steer/queue without pi queue_update", async () => {
   await bridge.compact();
   assert.equal(session.aborted, true);
   assert.equal(session.compacted, true);
+});
+
+test("a follow-up while Pi is still streaming is queued instead of prompting", async () => {
+  const session = new FakePiSession("s");
+  const queue = new HostQueue();
+  const bridge = new CommandBridge(session, queue);
+  session.isStreaming = true;
+  const queued = await bridge.admitSend({
+    text: "hi",
+    clientId: "c",
+    commandId: "2",
+    delivery: "startNow",
+    streaming: false,
+  });
+  assert.equal(queued.kind, "queued");
+  assert.deepEqual(session.prompts, []);
+  assert.equal(await bridge.drainNext(), false);
+  assert.equal(queue.snapshot().items.length, 1);
+  session.isStreaming = false;
+  assert.equal(await bridge.drainNext(), true);
+  assert.deepEqual(session.prompts, ["hi"]);
+});
+
+test("a rejected drain puts the message back on the queue", async () => {
+  const session = new FakePiSession("s");
+  const queue = new HostQueue();
+  const bridge = new CommandBridge(session, queue);
+  await bridge.admitSend({
+    text: "later",
+    clientId: "c",
+    commandId: "1",
+    delivery: "queue",
+    streaming: true,
+  });
+  session.isStreaming = false;
+  session.prompt = async () => {
+    throw new Error(
+      "Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.",
+    );
+  };
+  await assert.rejects(() => bridge.drainNext(), /already processing/);
+  assert.equal(queue.snapshot().items[0]?.text, "later");
 });
 
 test("extension ui request/response and empty custom registry", async () => {

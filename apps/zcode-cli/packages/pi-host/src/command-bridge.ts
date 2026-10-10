@@ -21,6 +21,15 @@ export function sendDelivery(input: {
   return "startNow";
 }
 
+/** Pi 自己还在跑。投影 phase 没跟上时也算忙，否则裸 prompt 会把进程打退出。 */
+export function piSessionBusy(session: {
+  isStreaming: boolean;
+  isCompacting?: boolean;
+  isIdle?: boolean;
+}): boolean {
+  return session.isStreaming || session.isCompacting === true || session.isIdle === false;
+}
+
 function queuedSelection(selection: SubmissionModel | undefined) {
   if (!selection?.providerId || !selection.modelId) return undefined;
   return {
@@ -61,12 +70,16 @@ export class CommandBridge {
   ) {}
 
   async admitSend(input: AdmitSendInput): Promise<AdmitSendResult> {
-    if (input.streaming && input.delivery === "guide") {
+    // 调用方的 streaming 只看投影 phase。Pi 仍在跑时这里必须自己再判一次，
+    // 否则会裸 prompt，Pi 抛 "already processing" 把进程打退出。
+    const busy = input.streaming || piSessionBusy(this.session);
+    // 压缩中不能 steer，只能排队。guide 只在这一轮真的还在流式输出时生效。
+    if (busy && input.delivery === "guide" && this.session.isStreaming) {
       await this.useModel(input.modelSelection);
       await this.promptNow("steer", input.text, input.attachments);
       return { kind: "steer" };
     }
-    if (input.streaming || input.delivery === "queue") {
+    if (busy || input.delivery === "queue") {
       const item = this.queue.createItem({
         sourceCommandId: input.commandId,
         clientId: input.clientId,
@@ -85,20 +98,26 @@ export class CommandBridge {
 
   async drainNext(): Promise<boolean> {
     if (!this.queue.autoDrain) return false;
+    if (piSessionBusy(this.session)) return false;
     const item = this.queue.shift();
     if (!item) return false;
     const selected = item.modelSelection;
-    await this.useModel(
-      selected
-        ? {
-            providerId: selected.providerId,
-            modelId: selected.modelId,
-            ...(selected.options?.reasoningLevel ? { thought: selected.options.reasoningLevel } : {}),
-          }
-        : undefined,
-    );
-    await this.promptNow("prompt", item.text, item.attachments);
-    return true;
+    try {
+      await this.useModel(
+        selected
+          ? {
+              providerId: selected.providerId,
+              modelId: selected.modelId,
+              ...(selected.options?.reasoningLevel ? { thought: selected.options.reasoningLevel } : {}),
+            }
+          : undefined,
+      );
+      await this.promptNow("prompt", item.text, item.attachments);
+      return true;
+    } catch (error) {
+      this.queue.unshift(item);
+      throw error;
+    }
   }
 
   private async promptNow(
@@ -113,6 +132,10 @@ export class CommandBridge {
     if (kind === "steer") {
       await this.session.steer(body, images.length > 0 ? images : undefined);
       return;
+    }
+    // 等附件的空档里上一轮可能又开始跑。这时不能再 prompt。
+    if (piSessionBusy(this.session)) {
+      throw new Error("pi prompt rejected: already streaming");
     }
     const accepted = await this.session.prompt(body, images.length > 0 ? { images } : undefined);
     if (!accepted) {

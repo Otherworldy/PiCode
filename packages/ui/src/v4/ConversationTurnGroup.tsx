@@ -78,6 +78,7 @@ import {
   type ConversationRowRenderContext,
 } from "@/v4/conversationRowContext.js";
 import {
+  activeWorkingFoldIndex,
   isSeparatelyFoldedFlowItem,
   splitCompactStatusRows,
 } from "@/v4/conversationTurnFlowItems.js";
@@ -670,6 +671,7 @@ function AssistantHistoryStatus({
   segment,
   open,
   plain = false,
+  toggleable = false,
   toolCount = 0,
   chunkDurationMs,
 }: {
@@ -677,6 +679,8 @@ function AssistantHistoryStatus({
   open: boolean;
   /** 没有可折叠的工具块时只显示时长，不挂触发器。 */
   plain?: boolean;
+  /** 这一块可以收起时才显示箭头。正在工作的第一块锁开，不给箭头。 */
+  toggleable?: boolean;
   toolCount?: number;
   chunkDurationMs?: number;
 }) {
@@ -710,7 +714,7 @@ function AssistantHistoryStatus({
       className="group/history-message inline-flex max-w-full items-center gap-2 text-left text-ui-base text-foreground-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-input-border-focused)]"
     >
       <span className="truncate">{label}</span>
-      {!plain && !segment.assistantHistoryDefaultOpen ? (
+      {!plain && toggleable ? (
         <ChevronRightIcon
           aria-hidden
           className={cn(
@@ -823,7 +827,7 @@ function WorkChunkFold({
   useEffect(() => {
     setStoredOpen(defaultOpen);
   }, [defaultOpen, chunkKey]);
-  // 第一块在跑的时候锁开，和原来的「工作中」一样。后面的「过程」可以单独收。
+  // 只有当前这一块还在干活时，第一块才锁开。结束的块收起，但可以再打开。
   const lockedOpen = header === "duration" && defaultOpen;
   const open = lockedOpen ? true : storedOpen;
   return (
@@ -832,6 +836,7 @@ function WorkChunkFold({
         <AssistantHistoryStatus
           segment={segment}
           open={open}
+          toggleable={!lockedOpen}
           toolCount={toolCount}
           chunkDurationMs={chunkDurationMs}
         />
@@ -883,6 +888,10 @@ function ConversationWorkSegmentFlow({
 }) {
   const shouldShowHistoryStatus = segment.workStatus !== undefined;
   const hasFold = segment.flowItems.some(isSeparatelyFoldedFlowItem);
+  const activeFoldIndex = activeWorkingFoldIndex(
+    segment.flowItems,
+    segment.assistantHistoryDefaultOpen,
+  );
   const firstAssistantFlowItemIndex = segment.flowItems.findIndex(
     (item) => item.kind !== "userInput",
   );
@@ -968,7 +977,7 @@ function ConversationWorkSegmentFlow({
           content = (
             <WorkChunkFold
               chunkKey={chunkKey}
-              defaultOpen={segment.assistantHistoryDefaultOpen}
+              defaultOpen={index === activeFoldIndex}
               header={header}
               segment={segment}
               toolCount={stats.toolCount}

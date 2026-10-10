@@ -3867,8 +3867,10 @@ export function createZCodeAgentService(
         },
         zcodePiModelsMutateResultSchema,
       );
-      if (params.action !== "discover") {
-        await this.readWorkspacePresentation(params).catch(() => undefined);
+      // get 只是设置页读目录。再等一次 workspace/readPresentation 会把「正在读取 Pi 模型目录」
+      // 挡在斜杠命令和 ModelRuntime 刷新后面。改模型后的展示刷新放到后台，设置页用这次返回值就能画。
+      if (params.action !== "discover" && params.action !== "get") {
+        void this.readWorkspacePresentation(params).catch(() => undefined);
       }
       return result;
     },

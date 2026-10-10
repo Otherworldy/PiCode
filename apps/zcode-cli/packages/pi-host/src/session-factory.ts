@@ -469,8 +469,14 @@ export function createSdkSessionFactory(options: {
       },
       prompt: (text, options) =>
         new Promise<boolean>((resolve, reject) => {
+          // 还在跑就不要进 Pi。裸 prompt 会抛 "already processing"，
+          // 推迟执行的那次 rejection 接不住，进程会直接退出。
+          if (session.isStreaming) {
+            reject(new Error("pi prompt rejected: already streaming"));
+            return;
+          }
           let settled = false;
-          lastTurn = session
+          const pending = session
             .prompt(text, {
               ...(options?.images?.length ? { images: options.images } : {}),
               preflightResult: () => {
@@ -481,9 +487,10 @@ export function createSdkSessionFactory(options: {
             .then(() => {
               if (!settled) resolve(true);
             })
-            .catch((error) => {
+            .catch((error: unknown) => {
               if (!settled) reject(error);
             });
+          lastTurn = pending;
         }),
       waitTurn: () => lastTurn,
       steer: async (text, images) => {

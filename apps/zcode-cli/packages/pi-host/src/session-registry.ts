@@ -28,6 +28,7 @@ import { mapThought } from "./model-delegate.js";
 import { PiToV4Projector } from "./projector.js";
 import type { ToolPermissionCheck } from "./permission-gate.js";
 import { scheduleLiveSessionTitleSummary } from "./session-title-live.js";
+import { shouldAutoSummarizeTitle } from "./session-title-summary.js";
 import { runSessionResume } from "./session-tree.js";
 import {
   contextUsagePublish,
@@ -869,35 +870,43 @@ export class HostSessionRegistry {
           event.type === "agent_settled" || (event.type === "agent_end" && !event.willRetry);
         // 手动压缩不发 agent_end。轮次里的自动压缩仍在 streaming，那时不能把队列提前 prompt。
         const compactDone = event.type === "compaction_end" && !pi.isStreaming;
+        // 用户消息落地就总结。等 agent_end 的话，这一轮被关掉就永远不会再跑。
+        if (shouldAutoSummarizeTitle(event)) {
+          const snapshot = projector.getSnapshot();
+          scheduleLiveSessionTitleSummary({
+            sessionId: meta.sessionId,
+            parentSessionId: meta.parentSessionId,
+            titleSource: snapshot.meta.titleSource,
+            sessionName: pi.sessionName,
+            rows: snapshot.rows.window,
+            fallbackProvider: snapshot.config.provider,
+            fallbackModel: snapshot.config.model,
+            stillEligible: () => {
+              const latest = projector.getSnapshot();
+              return latest.meta.titleSource !== "custom" && !pi.sessionName?.trim();
+            },
+            commit: (title) => {
+              pi.setSessionName?.(title);
+              emit(projector.setTitle(title, "generated"));
+            },
+          });
+        }
         if (turnDone || compactDone) {
           if (turnDone) {
             stopSubagentPoll();
             void publishSubagents();
-            // 重放出来的 agent_settled 不是这一轮的收口。只在真实 agent_end 上总结。
-            if (event.type === "agent_end") {
-              const snapshot = projector.getSnapshot();
-              scheduleLiveSessionTitleSummary({
-                sessionId: meta.sessionId,
-                parentSessionId: meta.parentSessionId,
-                titleSource: snapshot.meta.titleSource,
-                sessionName: pi.sessionName,
-                rows: snapshot.rows.window,
-                fallbackProvider: snapshot.config.provider,
-                fallbackModel: snapshot.config.model,
-                stillEligible: () => {
-                  const latest = projector.getSnapshot();
-                  return latest.meta.titleSource !== "custom" && !pi.sessionName?.trim();
-                },
-                commit: (title) => {
-                  pi.setSessionName?.(title);
-                  emit(projector.setTitle(title, "generated"));
-                },
-              });
-            }
           }
-          void bridge.drainNext().then((drained) => {
-            if (drained) projector.replaceQueue(queue.snapshot());
-          });
+          // 上一轮的 agent_end 可能先于 isStreaming 落下。这时 prompt 会抛
+          // "already processing"，没人接的 rejection 会把 agent 进程打退出。
+          if (pi.isStreaming || pi.isCompacting || pi.isIdle === false) return;
+          void bridge
+            .drainNext()
+            .then((drained) => {
+              if (drained) projector.replaceQueue(queue.snapshot());
+            })
+            .catch((error: unknown) => {
+              console.error("pi-host queue drain failed", error);
+            });
         }
       } catch (error) {
         console.error("pi-host event apply failed", event.type, error);
