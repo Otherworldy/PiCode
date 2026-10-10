@@ -139,6 +139,18 @@ export function createDesktopPlatform(options: {
     openInEditor: (editorId, path, editorOptions) =>
       window.zcode.openInEditor(editorId, path, editorOptions),
     executeDesktopCommand: (command) => window.zcode.executeDesktopCommand(command),
+    getAppUpdateState: window.zcode.getAppUpdateState
+      ? () => window.zcode.getAppUpdateState!()
+      : undefined,
+    checkAppUpdate: window.zcode.checkAppUpdate
+      ? () => window.zcode.checkAppUpdate!()
+      : undefined,
+    downloadAppUpdate: window.zcode.downloadAppUpdate
+      ? () => window.zcode.downloadAppUpdate!()
+      : undefined,
+    onAppUpdateStateChanged: window.zcode.onAppUpdateStateChanged
+      ? (handler) => window.zcode.onAppUpdateStateChanged!(handler)
+      : undefined,
     setApplicationLocale: (locale) => window.zcode.setApplicationLocale(locale),
     getSystemLocale: () =>
       window.zcode.getSystemLocale?.() ??

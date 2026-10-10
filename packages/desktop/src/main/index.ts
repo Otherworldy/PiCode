@@ -182,6 +182,7 @@ import {
 } from "./resourceManagerWindow.js";
 import { createDesktopHelpConfigReader } from "./desktopHelpConfig.js";
 import { registerPlatformIpcHandlers } from "./desktopMainIpcPlatform.js";
+import { registerAppUpdateIpc } from "./appUpdate/registerAppUpdateIpc.js";
 import {
   loadCliMcpFromUserDirectory,
   migrateLegacyCommonMcp,
@@ -1610,6 +1611,15 @@ app.whenReady().then(async () => {
       app.quit();
     },
     logger,
+  });
+
+  registerAppUpdateIpc({
+    logger,
+    quit: () => {
+      void prepareAppQuit("app-update").finally(() => {
+        app.quit();
+      });
+    },
   });
 
   registerPlatformIpcHandlers({

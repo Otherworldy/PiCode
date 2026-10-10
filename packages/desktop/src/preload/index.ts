@@ -46,6 +46,7 @@ import type {
   BrowserViewportSize,
   DesktopZoomState,
   DesktopWindowChromeState,
+  AppUpdateSnapshot,
   DesktopCommandId,
   DesktopTitleBarTheme,
   EmbeddedBrowserOpenUrlRequest,
@@ -716,6 +717,16 @@ contextBridge.exposeInMainWorld("zcode", {
   /** 执行桌面窗口级命令 */
   executeDesktopCommand: (command: DesktopCommandId) =>
     ipcRenderer.invoke(PlatformChannels.ExecuteDesktopCommand, command),
+  getAppUpdateState: (): Promise<AppUpdateSnapshot> =>
+    ipcRenderer.invoke(PlatformChannels.GetAppUpdateState),
+  checkAppUpdate: (): Promise<AppUpdateSnapshot> => ipcRenderer.invoke(PlatformChannels.CheckAppUpdate),
+  downloadAppUpdate: (): Promise<AppUpdateSnapshot> =>
+    ipcRenderer.invoke(PlatformChannels.DownloadAppUpdate),
+  onAppUpdateStateChanged: (callback: (snapshot: AppUpdateSnapshot) => void): (() => void) => {
+    const handler = (_event: unknown, snapshot: AppUpdateSnapshot) => callback(snapshot);
+    ipcRenderer.on(PlatformChannels.AppUpdateStateChanged, handler);
+    return () => ipcRenderer.removeListener(PlatformChannels.AppUpdateStateChanged, handler);
+  },
   /** 同步应用菜单语言 */
   setApplicationLocale: (locale: Locale) =>
     ipcRenderer.invoke(PlatformChannels.SetApplicationLocale, locale),

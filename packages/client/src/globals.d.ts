@@ -291,6 +291,14 @@ declare global {
       ): Promise<{ success: boolean; error?: string }>;
       /** 执行桌面窗口级命令 */
       executeDesktopCommand(command: DesktopCommandId): Promise<void>;
+      /** 读取桌面更新快照 */
+      getAppUpdateState?(): Promise<import("@zcode/shared").AppUpdateSnapshot>;
+      /** 检查公开 GitHub Release */
+      checkAppUpdate?(): Promise<import("@zcode/shared").AppUpdateSnapshot>;
+      /** 下载并安装已发现的桌面更新 */
+      downloadAppUpdate?(): Promise<import("@zcode/shared").AppUpdateSnapshot>;
+      /** 订阅桌面更新快照 */
+      onAppUpdateStateChanged?(handler: (snapshot: import("@zcode/shared").AppUpdateSnapshot) => void): () => void;
       /** 同步应用菜单语言 */
       setApplicationLocale(locale: Locale): Promise<void>;
       /** 读取宿主系统语言 */

@@ -5,6 +5,7 @@ import type {
   SSHConnectOptions,
   WSLConnectOptions,
 } from "./remoteTarget.js";
+import type { AppUpdateSnapshot } from "./appUpdate.js";
 import type { PluginSandboxPlatformPort } from "./mcp-apps/contract.js";
 import type {
   LoadCliMcpFromUserDirectoryRequest,
@@ -914,6 +915,18 @@ export interface IPlatformService {
     path: string,
     options?: OpenInEditorOptions,
   ): Promise<{ success: boolean; error?: string }>;
+
+  /** 读取桌面更新状态。只有桌面端实现。 */
+  getAppUpdateState?(): Promise<AppUpdateSnapshot>;
+
+  /** 检查公开 GitHub Release。只有桌面端实现。 */
+  checkAppUpdate?(): Promise<AppUpdateSnapshot>;
+
+  /** 下载并安装上次检查选中的安装包。只有桌面端实现。 */
+  downloadAppUpdate?(): Promise<AppUpdateSnapshot>;
+
+  /** 订阅桌面更新快照。只有桌面端实现。 */
+  onAppUpdateStateChanged?(handler: (snapshot: AppUpdateSnapshot) => void): () => void;
 
   /** 执行桌面窗口级命令（标题栏菜单、缩放、窗口控制等）。
    *  返回值直通 main 进程 handler 的 return（大多数命令无返回值；
