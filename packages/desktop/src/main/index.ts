@@ -1620,6 +1620,14 @@ app.whenReady().then(async () => {
         app.quit();
       });
     },
+    readNetworkSettings: async () => {
+      const settings = await mainSettingService.get();
+      return {
+        httpProxy: settings.httpProxy,
+        httpProxyNoProxy: settings.httpProxyNoProxy,
+        httpProxyCaCertPath: settings.httpProxyCaCertPath,
+      };
+    },
   });
 
   registerPlatformIpcHandlers({

@@ -4,12 +4,19 @@ import { readBuildMetadata } from "../about.js";
 import { createAppUpdateController } from "./appUpdateController.js";
 import { installDownloadedUpdate } from "./installDownloadedUpdate.js";
 import { readWorkspacePackageVersion, resolveDesktopProductVersion } from "./productVersion.js";
+import { createUpdateFetch, type UpdateNetworkSettings } from "./proxyFetch.js";
 
 export function registerAppUpdateIpc(options: {
   logger: { info: (...args: unknown[]) => void; warn: (...args: unknown[]) => void };
   quit: () => void;
+  readNetworkSettings?: () => Promise<UpdateNetworkSettings>;
 }): void {
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const settings = (await options.readNetworkSettings?.()) ?? {};
+    return createUpdateFetch(settings)(input, init);
+  };
   const controller = createAppUpdateController({
+    fetchImpl,
     currentVersion: resolveDesktopProductVersion({
       packageVersion: app.isPackaged ? undefined : readWorkspacePackageVersion(import.meta.dirname),
       metadataVersion: readBuildMetadata()?.appVersion,
