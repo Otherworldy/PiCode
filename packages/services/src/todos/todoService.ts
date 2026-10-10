@@ -13,7 +13,7 @@ import type {
 import { TodoRepo } from "#src/todos/todoRepo.js";
 import { TodoStateError, type ITodoService } from "#src/todos/todo.js";
 
-const STANDING_RULE = "可以在 To-Do 分支上提交。禁止合并、变基或推送基线分支。";
+const STANDING_RULE = "不要提交、合并、变基或推送。改动留在工作区，合并时再提交。";
 
 export interface TodoSessionPort {
   create(input: {
@@ -75,10 +75,6 @@ export class TodoService implements ITodoService {
       Partial<Pick<IGitService, "getChanges" | "generateCommitMessage" | "stagePaths" | "commit">>,
     private readonly sessions: TodoSessionPort,
   ) {}
-
-  recoverInterrupted(): Promise<number> {
-    return this.repo.failInterrupted();
-  }
 
   create(params: TodoCreateParams): Promise<TodoItem> {
     return this.repo.create(params);
@@ -182,6 +178,13 @@ export class TodoService implements ITodoService {
     }
   }
 
+  async alignSessions(sessions: readonly { sessionId: string; running: boolean }[]): Promise<void> {
+    for (const session of sessions) {
+      if (!session.sessionId) continue;
+      await this.repo.noteSessionActivity(session.sessionId, session.running);
+    }
+  }
+
   settle(sessionId: string, outcome: "completed" | "failed"): Promise<TodoItem | null> {
     return this.repo.settle(sessionId, outcome);
   }
@@ -206,6 +209,13 @@ export class TodoService implements ITodoService {
       expectedBaseBranch: item.baseBranch,
       baseCommit: item.baseCommit,
     };
+    try {
+      await this.commitWorktree(item);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await this.repo.setError(id, message);
+      throw new TodoStateError(message);
+    }
     let merged = await this.git.mergeBranch(request);
     if (!merged.success && merged.code === "dirty") {
       // mergeBranch 先报脏。提交前再对一次分支，避免把未提交改动写到非基线分支。
@@ -236,6 +246,40 @@ export class TodoService implements ITodoService {
       throw new TodoStateError(merged.message ?? "合并失败");
     }
     return (await this.repo.markDone(id))!;
+  }
+
+  private async worktreeChangePaths(item: TodoItem): Promise<string[]> {
+    const { getChanges } = this.git;
+    if (!getChanges || !item.worktreePath) return [];
+    const [unstaged, staged] = await Promise.all([
+      getChanges({ workspacePath: item.worktreePath, sourceId: "unstaged" }),
+      getChanges({ workspacePath: item.worktreePath, sourceId: "staged" }),
+    ]);
+    return [...new Set([...unstaged, ...staged].map((file) => file.path))];
+  }
+
+  /** 会话不提交。合并前把工作树差异写进 To-Do 分支，Git 工具在此之前仍能看到。 */
+  private async commitWorktree(item: TodoItem): Promise<void> {
+    const { generateCommitMessage, stagePaths, commit } = this.git;
+    const paths = await this.worktreeChangePaths(item);
+    if (paths.length === 0 || !item.worktreePath) return;
+    if (!stagePaths || !commit) throw new TodoStateError("Commit is not available.");
+    let message = item.title.trim() || "todo";
+    if (generateCommitMessage) {
+      try {
+        const generated = await generateCommitMessage({
+          workspacePath: item.worktreePath,
+          includeUnstaged: true,
+          ...(item.workspaceIdentity ? { workspaceIdentity: item.workspaceIdentity } : {}),
+        });
+        const text = generated.message.trim();
+        if (text) message = text;
+      } catch {
+        // 模型不可用时用标题，避免合并停在未提交差异上。
+      }
+    }
+    await stagePaths({ workspacePath: item.worktreePath, paths });
+    await commit({ workspacePath: item.worktreePath, message });
   }
 
   private async commitBaseline(item: TodoItem): Promise<void> {
@@ -270,6 +314,9 @@ export class TodoService implements ITodoService {
       branchName: item.branchName,
     });
     if (ahead > 0) throw new TodoStateError("已有提交，不能直接完成");
+    if ((await this.worktreeChangePaths(item)).length > 0) {
+      throw new TodoStateError("工作区还有未提交改动，请改用合并");
+    }
     return (await this.repo.markDone(id))!;
   }
 

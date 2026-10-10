@@ -14,6 +14,7 @@ import { useServices } from "@/hooks/useServices.js";
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceTab } from "@/store/tabStore.js";
 import { useTaskListMembershipVersion } from "@/v4/taskListMembershipVersion.js";
+import { useWorkspaceSessionsIndexItems } from "@/v4/useWorkspaceSessionsIndexItems.js";
 import {
   StatusChip,
   TODO_COLUMNS,
@@ -51,6 +52,20 @@ export function TodoListPane({
   const [draft, setDraft] = useState({ title: "", prompt: "" });
   const [now, setNow] = useState(() => Date.now());
   const membershipVersion = useTaskListMembershipVersion();
+  const sessionScopes = useMemo(
+    () =>
+      projects.map((tab) => ({
+        workspacePath: tab.workspacePath,
+        ...(tab.workspaceIdentity ? { workspaceIdentity: tab.workspaceIdentity } : {}),
+      })),
+    [projects],
+  );
+  const { items: sessionItems } = useWorkspaceSessionsIndexItems(sessionScopes);
+  const sessionActivityKey = sessionItems
+    .map((item) => `${item.taskId}:${item.status ?? ""}`)
+    .join("|");
+  const sessionItemsRef = useRef(sessionItems);
+  sessionItemsRef.current = sessionItems;
   const startingRef = useRef(new Set<string>());
   const [startingIds, setStartingIds] = useState<Set<string>>(new Set());
 
@@ -67,11 +82,25 @@ export function TodoListPane({
   }, [filter, showCanceled, todoService]);
 
   useEffect(() => {
-    // 删会话会先改行再 bump 这个版本。重拉才能在当前页看到失败或「会话已删除」。
-    void refresh().catch((cause: unknown) => {
-      setError(cause instanceof Error ? cause.message : String(cause));
+    // 删会话会先改行再 bump 这个版本。会话还在跑或已经结束时，先按会话对齐再重拉。
+    let cancelled = false;
+    void (async () => {
+      const sessions = sessionItemsRef.current
+        .filter(
+          (item) =>
+            item.status === "running" || item.status === "completed" || item.status === "error",
+        )
+        .map((item) => ({ sessionId: item.taskId, running: item.status === "running" }));
+      if (todoService && sessions.length > 0) await todoService.alignSessions(sessions);
+      if (cancelled) return;
+      await refresh();
+    })().catch((cause: unknown) => {
+      if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
     });
-  }, [refresh, membershipVersion]);
+    return () => {
+      cancelled = true;
+    };
+  }, [refresh, membershipVersion, sessionActivityKey, todoService]);
 
   const detail = items.find((item) => item.id === detailId) ?? null;
 
@@ -245,7 +274,9 @@ export function TodoListPane({
                       </span>
                     ) : null}
                     {item.error && (item.status === "failed" || item.status === "needs_review") ? (
-                      <span className="block truncate text-ui-xs text-destructive">{item.error}</span>
+                      <span className="block truncate text-ui-xs text-destructive">
+                        {item.error}
+                      </span>
                     ) : null}
                   </span>
                   <span className="truncate text-ui-xs text-foreground-subtle">

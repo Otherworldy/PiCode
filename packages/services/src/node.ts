@@ -2338,7 +2338,6 @@ export function createLocalServices(options: {
   // 在 services 层装配一个共享的 taskIndexRepo + syncer，session 任意入口都会唤醒
   // shadow 订阅，把 runtime 终态收敛进 sqlite。
   const taskIndexRepo = new TaskIndexRepo();
-  let settleTodo: ((sessionId: string, failed: boolean) => void) | undefined;
   const pendingRemovedSessionIds: string[] = [];
   let noteTodoSessionRemoved: ((sessionId: string) => Promise<void>) | undefined;
   const rememberTodoSessionRemoved = (sessionId: string): Promise<void> => {
@@ -2348,10 +2347,19 @@ export function createLocalServices(options: {
     }
     return noteTodoSessionRemoved(sessionId);
   };
+  type TodoSessionFact = { sessionId: string; running: boolean };
+  let alignTodos: ((sessions: readonly TodoSessionFact[]) => void) | undefined;
+  const pendingTodoSessions: TodoSessionFact[] = [];
   const zcodeTaskIndexSyncer = createZCodeTaskIndexSyncer({
     agentService: zcodeAgentService,
     taskIndexRepo,
-    onTurnSettled: (sessionId, failed) => settleTodo?.(sessionId, failed),
+    onTodoSessions: (sessions) => {
+      if (!alignTodos) {
+        pendingTodoSessions.push(...sessions);
+        return;
+      }
+      alignTodos(sessions);
+    },
     onSessionRemoved: (sessionId) => {
       void rememberTodoSessionRemoved(sessionId);
     },
@@ -2772,12 +2780,14 @@ export function createLocalServices(options: {
       }
     },
   });
-  settleTodo = (sessionId, failed) => {
-    void todoService.settle(sessionId, failed ? "failed" : "completed");
+  alignTodos = (sessions) => {
+    void todoService.alignSessions(sessions);
   };
-  noteTodoSessionRemoved = (sessionId) => todoService.noteSessionRemoved(sessionId).then(() => undefined);
-  for (const sessionId of pendingRemovedSessionIds.splice(0)) void noteTodoSessionRemoved(sessionId);
-  void todoService.recoverInterrupted();
+  if (pendingTodoSessions.length > 0) alignTodos(pendingTodoSessions.splice(0));
+  noteTodoSessionRemoved = (sessionId) =>
+    todoService.noteSessionRemoved(sessionId).then(() => undefined);
+  for (const sessionId of pendingRemovedSessionIds.splice(0))
+    void noteTodoSessionRemoved(sessionId);
   services.register(ITodoService, todoService);
   sharedSqliteRepos.set(services, sqliteReposToClose);
   return services;

@@ -337,15 +337,25 @@ export class TodoRepo {
     return this.get(id);
   }
 
-  async settle(sessionId: string, outcome: "completed" | "failed"): Promise<TodoItem | null> {
+  /** 还在跑则拉回进行中；已结束则进行中或失败进待审。待审上的合并错误保留。 */
+  async noteSessionActivity(sessionId: string, running: boolean): Promise<TodoItem | null> {
+    const current = await this.getBySession(sessionId);
+    if (!current) return null;
+    const matches = running
+      ? current.status === "needs_review" || current.status === "failed"
+      : current.status === "running" || current.status === "failed";
+    if (!matches) return current;
     const db = await this.ensure();
-    const next = outcome === "failed" ? "failed" : "needs_review";
-    const error = outcome === "failed" ? "会话失败" : null;
+    const from = running ? "('needs_review', 'failed')" : "('running', 'failed')";
     db.prepare(
-      `UPDATE todos SET status = ?, error = ?, updated_at = ?
-       WHERE session_id = ? AND status = 'running'`,
-    ).run(next, error, Date.now(), sessionId);
-    return this.getBySession(sessionId);
+      `UPDATE todos SET status = ?, error = NULL, updated_at = ?
+       WHERE id = ? AND session_id = ? AND status IN ${from}`,
+    ).run(running ? "running" : "needs_review", Date.now(), current.id, sessionId);
+    return this.get(current.id);
+  }
+
+  async settle(sessionId: string, _outcome: "completed" | "failed"): Promise<TodoItem | null> {
+    return this.noteSessionActivity(sessionId, false);
   }
 
   /** 会话没了。进行中改失败；待审只记一笔。工作树不动。 */
@@ -421,15 +431,5 @@ export class TodoRepo {
   async delete(id: string): Promise<void> {
     const db = await this.ensure();
     db.prepare("DELETE FROM todos WHERE id = ?").run(id);
-  }
-
-  async failInterrupted(): Promise<number> {
-    const db = await this.ensure();
-    const result = db
-      .prepare(
-        `UPDATE todos SET status = 'failed', error = '中断', updated_at = ? WHERE status = 'running'`,
-      )
-      .run(Date.now());
-    return Number(result.changes);
   }
 }

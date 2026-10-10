@@ -175,8 +175,8 @@ export interface ZCodeTaskIndexSyncer {
 interface CreateZCodeTaskIndexSyncerOptions {
   agentService: IZCodeAgentService;
   taskIndexRepo: TaskIndexRepo;
-  /** 会话终态时通知 To-Dos。没有对应行时由接收方空操作。 */
-  onTurnSettled?: (sessionId: string, failed: boolean) => void;
+  /** 会话是否还在跑。To-Dos 据此对齐进行中或待审；没有对应行时由接收方空操作。 */
+  onTodoSessions?: (sessions: readonly { sessionId: string; running: boolean }[]) => void;
   /** sessions-index 的 session.removed。侧栏删除也会再调一次，接收方要能重复调用。 */
   onSessionRemoved?: (sessionId: string) => void;
 }
@@ -184,6 +184,13 @@ interface CreateZCodeTaskIndexSyncerOptions {
 /** phase 终态集合（sessions-index 的 conflated 最新态里判定迁移用）。 */
 function isTerminalPhase(phase: SessionPhase): boolean {
   return phase === "completedSuccess" || phase === "completedInterrupted" || phase === "error";
+}
+
+/** draft 还不是一轮会话。running/prewarming 在跑，终态算结束。 */
+function todoSessionRunning(phase: SessionPhase): boolean | null {
+  if (phase === "running" || phase === "prewarming") return true;
+  if (isTerminalPhase(phase)) return false;
+  return null;
 }
 
 function resolveTerminalUnreadSignal(
@@ -558,7 +565,6 @@ export function createZCodeTaskIndexSyncer(
     const phase = summary.phase;
     const failed = phase === "error";
     // 顺序保持旧协议语义：先 turn 终态（收口当前 input），再 prompt ready（放行下一条）。
-    options.onTurnSettled?.(target.sessionId, failed);
     terminalEventEmitter.fire({
       target,
       kind: failed ? "turn.failed" : "turn.completed",
@@ -675,6 +681,11 @@ export function createZCodeTaskIndexSyncer(
     // draft 裁决：纯内存态、不落盘，也绝不进 task index sqlite。
     if (next.phase === "draft") {
       return;
+    }
+    const running = todoSessionRunning(next.phase);
+    const previousRunning = previous ? todoSessionRunning(previous.phase) : null;
+    if (running !== null && running !== previousRunning) {
+      options.onTodoSessions?.([{ sessionId: next.sessionId, running }]);
     }
     const target = sessionTargetFrom(state.target, next.sessionId);
     const becameVisibleTask = previous === undefined || previous.phase === "draft";
@@ -1075,6 +1086,11 @@ export function createZCodeTaskIndexSyncer(
         // 防止远端/新安装的空 sqlite 因纯 V4 路径永远没有存量。
         state.summaries = nextSummaries;
         state.seeded = true;
+        const todoSessions = [...nextSummaries.values()].flatMap((summary) => {
+          const running = todoSessionRunning(summary.phase);
+          return running === null ? [] : [{ sessionId: summary.sessionId, running }];
+        });
+        if (todoSessions.length > 0) options.onTodoSessions?.(todoSessions);
         void seedMissingRowsFromInitialSnapshot(state, nextSummaries.values());
         void replaceSlashCommandTitles(state, nextSummaries);
         const generation = state.indexSubscriptionGeneration;

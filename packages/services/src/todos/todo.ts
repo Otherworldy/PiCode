@@ -18,6 +18,8 @@ export interface ITodoService {
   listTags(): Promise<string[]>;
   /** 模型只用于这一次会话，不写进行里。 */
   start(id: string, modelSelection: ModelSelection): Promise<TodoItem>;
+  /** 按会话此刻是否还在跑对齐。未知会话不动。 */
+  alignSessions(sessions: readonly { sessionId: string; running: boolean }[]): Promise<void>;
   settle(sessionId: string, outcome: "completed" | "failed"): Promise<TodoItem | null>;
   /** 会话已删除。没有对应行则不动。 */
   noteSessionRemoved(sessionId: string): Promise<TodoItem | null>;
@@ -28,8 +30,6 @@ export interface ITodoService {
   /** 已放弃的行回到待开始，工作树和会话保留。 */
   restore(id: string): Promise<TodoItem>;
   delete(id: string): Promise<void>;
-  /** 启动时把残留 running 标为失败。 */
-  recoverInterrupted(): Promise<number>;
 }
 
 export const ITodoService = createServiceDescriptor<ITodoService>(ServiceChannels.Todo);

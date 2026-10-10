@@ -143,7 +143,8 @@ test("dirty baseline commits only after commitDirty and only on the base branch"
         async countCommitsAhead() {
           return 1;
         },
-        async getChanges() {
+        async getChanges(params) {
+          if (params.workspacePath.includes(".worktrees")) return [];
           return [{ path: "/proj/a/a.txt" }] as Awaited<ReturnType<IGitService["getChanges"]>>;
         },
         async generateCommitMessage() {
@@ -454,6 +455,101 @@ test("only an unstarted todo can change its text", async () => {
     );
     const kept = await repo.get(created.id);
     assert.equal(kept?.title, "b");
+  });
+});
+
+test("a live session stays in progress and an ended one waits for review", async () => {
+  await withRepo(async (repo) => {
+    const created = await repo.create({ title: "a", prompt: "p", workspacePath: "/proj/a" });
+    await repo.claim(created.id);
+    await repo.attachRun(created.id, {
+      baseBranch: "main",
+      baseCommit: "abc",
+      branchName: "todo-1",
+      worktreePath: "/proj/a/.worktrees/todo-1",
+      sessionId: "session-1",
+    });
+    await repo.markFailed(created.id, "中断");
+    const running = await repo.noteSessionActivity("session-1", true);
+    assert.equal(running?.status, "running");
+    assert.equal(running?.error, null);
+    const review = await repo.noteSessionActivity("session-1", false);
+    assert.equal(review?.status, "needs_review");
+    assert.equal(review?.error, null);
+    await repo.setError(created.id, "合并失败");
+    const kept = await repo.noteSessionActivity("session-1", false);
+    assert.equal(kept?.status, "needs_review");
+    assert.equal(kept?.error, "合并失败");
+    const again = await repo.noteSessionActivity("session-1", true);
+    assert.equal(again?.status, "running");
+    assert.equal(again?.error, null);
+    const settled = await repo.settle("session-1", "failed");
+    assert.equal(settled?.status, "needs_review");
+  });
+});
+
+test("merge commits worktree changes before merging the branch", async () => {
+  await withRepo(async (repo) => {
+    const created = await repo.create({ title: "fix pane", prompt: "p", workspacePath: "/proj/a" });
+    await repo.claim(created.id);
+    await repo.attachRun(created.id, {
+      baseBranch: "main",
+      baseCommit: "abc",
+      branchName: "todo-1",
+      worktreePath: "/proj/a/.worktrees/todo-1",
+      sessionId: "session-1",
+    });
+    await repo.settle("session-1", "completed");
+    const order: string[] = [];
+    const service = new TodoService(
+      repo,
+      {
+        async getRepositorySummary() {
+          throw new Error("unused");
+        },
+        async listWorktrees() {
+          return [];
+        },
+        async createWorktree() {
+          throw new Error("unused");
+        },
+        async removeWorktree() {},
+        async countCommitsAhead() {
+          return 1;
+        },
+        async getChanges(params) {
+          if (!params.workspacePath.includes(".worktrees")) return [];
+          return [{ path: "src/a.ts" }] as Awaited<ReturnType<IGitService["getChanges"]>>;
+        },
+        async generateCommitMessage() {
+          throw new Error("model down");
+        },
+        async stagePaths(params) {
+          order.push(`stage:${params.workspacePath}`);
+        },
+        async commit(params) {
+          order.push(`commit:${params.workspacePath}:${params.message}`);
+          return { commitHash: "def" } as Awaited<ReturnType<IGitService["commit"]>>;
+        },
+        async mergeBranch() {
+          order.push("merge");
+          return { success: true };
+        },
+      },
+      {
+        async create() {
+          return { sessionId: "session-1" };
+        },
+        async continue() {},
+      },
+    );
+    const done = await service.merge(created.id);
+    assert.deepEqual(order, [
+      "stage:/proj/a/.worktrees/todo-1",
+      "commit:/proj/a/.worktrees/todo-1:fix pane",
+      "merge",
+    ]);
+    assert.equal(done.status, "done");
   });
 });
 
