@@ -52,7 +52,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 - 冷恢复重放 jsonl 时，行先落完，actions 只算一次。不能每条事件都扫整窗，否则几万行的会话订阅一直不返回。
 - 折叠的工具历史不挂载，时间线只保留视口附近的轮次。截断轮自动补齐最多 3 窗，其余靠上滚再拉。
 - abort：turn `completedInterrupted`，运行中工具 `cancelled`。用户已经停止后，重试再发的 `agent_start` / `auto_retry_start` 不能把这次停止清掉，要再 abort。Stop 同时拆掉还在飞的代理请求，避免重试里的 CONNECT 不看 abort 信号。
-- 上一轮还在跑时再发消息：进 HostQueue（guide 则 steer），不调用 `session.prompt`。投影 phase 已经不是 running、但 Pi 仍在 streaming 时也一样。Pi 对裸 prompt 抛 `already processing`；这个 rejection 没人接会把 agent 进程打退出，会话直接结束。drain 失败只记日志，并把取出的队列项放回队首。
+- 上一轮还在跑时再发消息：进 HostQueue（guide 则 steer），不调用 `session.prompt`。投影 phase 已经不是 running、但 Pi 仍在 streaming 时也一样。Pi 对裸 prompt 抛 `already processing`；这个 rejection 没人接会把 agent 进程打退出，会话直接结束。编辑重发和插件仍可能在 `isStreaming` 还是 false 的窗口里撞上正在跑的那一轮：这种 rejection 改成 followUp，当前轮继续，不能退出进程。进程错误边界也不把这条当成致命错误。drain 失败只记日志，并把取出的队列项放回队首。
 - `custom()` 无 adapter：降级 widget 文本，不卡循环。
 - 插件抛错：`extension_error` → notify，会话继续。
 - 本地会话不把 `read` / `bash` / `edit` / `write` / `grep` / `find` / `ls` / `powershell` 注册成 customTools，也不关 Pi 内置工具。Pi 默认只激活 `read` / `bash` / `edit` / `write`；Host 在本地会话里补上已注册的 `grep` / `find` / `ls`。扩展仍可按原名替换，例如 pi-fff。卸掉替换扩展后，内置实现还在。权限走 `tool_call`，不换工具实现。SSH 工作区仍用远端实现替换 `read` / `bash` / `edit` / `write`，不把本机的 `grep` / `find` / `ls` 打开，否则这些工具打到本机盘。
@@ -89,7 +89,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 `applyFileRewind` 只退这一轮的文件，不截断聊天。真相是这一轮成功的 Pi 工具参数，不是旧 checkpoint。`edit` 要当前文件仍能唯一匹配 `newText` 才写回 `oldText`。`write` 要当前内容仍等于写入内容才删除该文件；覆盖掉的旧内容找不回来。对不上就整批不写。`bash` 只记为忽略，不阻止文件摘要上的撤销；编辑消息并选了回滚文件时，有忽略项仍拒绝。成功后把该轮 `fileChanges.state` 改成 `reverted`。SSH 工作区走和工具同一条远端读写。
 
-`switchCollaborationMode` 不恢复为 PiCode 协作模式机。危险工具仍走 PiCode `PermissionService`（Pi 无权限面）：allow 放行、deny 拒绝、ask 投影 `kind: permission` 给壳 PermissionDialog（Allow once / Allow for session / Block）。session allow 由 HostedSession 记忆。`mode=yolo` 直接放行全部工具，不再弹权限窗。输入框切换权限立刻写到这个会话，不等下一条消息。切到完全访问时，正在等的工具权限按允许关掉。插件 `confirm` 视为同意。`select` / `input` / `editor` 仍进底栏等人答，完全访问也不代答。`select` 把 `1. 标签 — 说明` 拆成问卷选项，回答仍回传原行。ask-me 在 GUI 上调用 `ui.ask(questions)`：问题、header、选项的 label / description / preview、multiSelect 按工具参数原样进问卷，不把示意拼进标题。没有 `ask` 的宿主仍走 `select` / `input`。其它模式的 `confirm/select` 同样走底栏 userInput，不用 viewport overlay。
+`switchCollaborationMode` 不恢复为 PiCode 协作模式机。危险工具仍走 PiCode `PermissionService`（Pi 无权限面）：allow 放行、deny 拒绝、ask 投影 `kind: permission` 给壳 PermissionDialog（Allow once / Allow for session / Block）。session allow 由 HostedSession 记忆。`mode=yolo` 直接放行全部工具，不再弹权限窗。输入框切换权限立刻写到这个会话，不等下一条消息。切到完全访问时，正在等的工具权限按允许关掉。模式写进会话记录。会话异常停止后重建 runtime 时先恢复这份模式，再跑工具；不能因为内存丢了就回到 `build` 继续弹窗。输入框已经是完全访问、投影却不是时，再写一次模式，不能因为选项没变就跳过。插件 `confirm` 视为同意。`select` / `input` / `editor` 仍进底栏等人答，完全访问也不代答。`select` 把 `1. 标签 — 说明` 拆成问卷选项，回答仍回传原行。ask-me 在 GUI 上调用 `ui.ask(questions)`：问题、header、选项的 label / description / preview、multiSelect 按工具参数原样进问卷，不把示意拼进标题。没有 `ask` 的宿主仍走 `select` / `input`。其它模式的 `confirm/select` 同样走底栏 userInput，不用 viewport overlay。
 
 ## 死面
 
@@ -131,6 +131,8 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 ## MCP
 
 用户 MCP 的主人是 Pi：用户级 `~/.pi/agent/mcp.json`，项目级 `<cwd>/.pi/mcp.json`，都是 `mcpServers`。设置页仍写这两个文件。目标文件还不存在时，把旧的 `~/.PiCode/cli/config.json` 或 `<cwd>/.PiCode/config.json` 里的 `mcp.servers` 拷过去一次；之后只认 Pi 文件。项目条目覆盖同名的用户条目。SSE 不连。`directTools: true` 写成 Pi 的 `exposure: "direct"`，没写则是 `codemode`。
+
+桌面 `--prepare-storage` 只解析会话库路径，不迁移、也不创建 Pi MCP 文件。这个 Worker 不能改 cwd，Windows 上继承到的目录经常是 `C:\Windows\System32`。在那里创建项目 `.pi` 会 EPERM，进程在写出库路径之前退出，桌面只能看到传输中断。迁移仍只发生在真正的会话进程里，并且用该工作区当项目目录。
 
 会话加载 Pi 的 `codemode`、`tool_search` 和 MCP 扩展，不再注册 PiCode 的 `mcp` 代理工具。插件 MCP 和内置 `node_repl` 不进这两个文件，会话创建时用 `registerMcpServer` 注册。子会话不挂这三个扩展。
 

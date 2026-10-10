@@ -157,6 +157,28 @@ export function acquireSessionsIndex(
   return store;
 }
 
+/**
+ * 侧栏已经订阅的 sessions-index 里，这个 workspace 是否还有回合或后台工作。
+ * 新建任务只把前台 activeTaskId 清掉，不能拿这一点当成“进程可以回收”。
+ */
+export function sessionsIndexHasActiveWork(workspaceKey: string): boolean {
+  const normalized = workspaceKey.trim();
+  if (!normalized) return false;
+  for (const entry of registry.values()) {
+    if (entry.key.split("\0")[1] !== normalized) continue;
+    for (const summary of entry.store.getState().sessions.values()) {
+      if (
+        summary.phase === "running" ||
+        summary.phase === "prewarming" ||
+        summary.hasBackgroundWork
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /** refCount--，归零则 close + 移除（退订 + 解监听）。 */
 export function releaseSessionsIndex(
   scope: Pick<SessionsIndexScope, "workspaceKey" | "endpointKey">,

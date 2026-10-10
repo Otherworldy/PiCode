@@ -38,11 +38,10 @@ High-level methods return their payload directly. Actions return `undefined` on 
 
 ## API use behavior
 
-- Recreate the same selected browser wrapper in every fresh REPL call; do not silently change backend. Before each new
-  logical tab operation batch, call `tabs.list()` in a dedicated JS cell and return the complete result to the model.
-  After inspecting it, use the next fresh JS call to match the intended id/url/title and call `tabs.get(id)`; no old
-  Browser or Tab JavaScript binding exists across calls. Continuous actions in the same JS cell may reuse the
-  just-validated Tab.
+- Recreate the same selected browser wrapper in every fresh REPL call; do not silently change backend. Before switching
+  tabs, call `tabs.list()` in a dedicated JS cell and return the complete result to the model. After inspecting it, use
+  the next fresh JS call to match the intended id/url/title and call `tabs.get(id)`. When this turn already verified the
+  tab id, the same JS call may `tabs.get(id)`, `refSnapshot()`, and `refBatch()`.
 - For URL navigation, prefer `await agent.browsers.open(url)`: it reuses an existing same-site controlled tab (same
   hostname), activates it so the user sees it, and navigates in place instead of stacking new tabs. Pass
   `{ reuseTab: false }` or use `browser.tabs.new()` only when a parallel independent tab is genuinely needed.
@@ -53,7 +52,7 @@ High-level methods return their payload directly. Actions return `undefined` on 
 - A snapshot-proven heading or visible text does not need a `link` or `button` role to be clicked. Do not replace a
   snapshot-proven `heading` with a guessed `link` role. If the user authorized navigation and that real target is unique,
   click it directly; a JavaScript card handler may receive the bubbled event.
-- Use at most one state-changing action per observation cycle. An unchanged source-tab URL does not prove the click failed.
+- A locator action is at most one state-changing action per observation cycle. `refBatch` is one command and may include several fills and clicks; follow it with `refDiff()` instead of a full DOM snapshot. An unchanged source-tab URL does not prove the click failed.
   Judge an action by whether its expected effect appeared, not by whether `browser.tabs.list()` is non-empty. An
   existing source tab or unrelated controlled tab is not an action effect. When an action may open a popup/new tab and
   the source tab does not show the expected effect, read `browser.tabs.list()` and `browser.user.openTabs()`

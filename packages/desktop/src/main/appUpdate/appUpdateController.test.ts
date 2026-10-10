@@ -61,6 +61,27 @@ describe("app update controller", () => {
     expect(finished.phase).toBe("upToDate");
   });
 
+  it("downloads an update without installing until asked", async () => {
+    const installImpl = vi.fn(async () => "quit-for-installer" as const);
+    const controller = createAppUpdateController({
+      currentVersion: "3.14.3",
+      runtime: { platform: "win32", arch: "x64" },
+      isPackaged: true,
+      tempDir: "C:/tmp",
+      fetchImpl: vi.fn(async () => releaseResponse(latest)),
+      downloadImpl: vi.fn(async () => undefined),
+      installImpl,
+      fileExists: () => true,
+    });
+    await controller.check();
+    const downloaded = await controller.download();
+    expect(downloaded.phase).toBe("downloaded");
+    expect(installImpl).not.toHaveBeenCalled();
+    const installed = await controller.downloadAndInstall();
+    expect(installed.installKind).toBe("quit-for-installer");
+    expect(installImpl).toHaveBeenCalledOnce();
+  });
+
   it("refuses to download when the app is not packaged", async () => {
     const downloadImpl = vi.fn(async () => undefined);
     const controller = createAppUpdateController({

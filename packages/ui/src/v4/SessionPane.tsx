@@ -96,6 +96,7 @@ import {
 } from "@/v4/composer/useDraftConfigControl.js";
 import type { ModelSelectionSource } from "@/v4/composer/V4ComposerToolbar.js";
 import { formatModelChangeLabel } from "@/v4/composer/modelTriggerDisplay.js";
+import { collaborationModeMismatch } from "@/v4/composer/collaborationModeSync.js";
 import { resolveAppFollowupMode } from "@/v4/composer/followupModeSettings.js";
 import {
   createComposerSubmissionConfig,
@@ -2166,10 +2167,7 @@ export function SessionPane({
     [dispatchCommand, sessionId],
   );
   const handleSetRunningSubagentModel = useCallback(
-    (
-      childSessionId: string,
-      next: { provider: string; model: string; thought: string },
-    ) => {
+    (childSessionId: string, next: { provider: string; model: string; thought: string }) => {
       if (!sessionId) return;
       return dispatchCommand(
         "setRunningSubagentModel",
@@ -3593,6 +3591,31 @@ export function SessionPane({
   ensureDraftPrewarmConfigBeforeSendRef.current = ensureDraftPrewarmConfigBeforeSend;
 
   const followupModeSyncKeyRef = useRef<string | null>(null);
+  const collaborationModeSyncKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sessionId || snapshot?.sessionId !== sessionId) return;
+    const mode = collaborationModeMismatch(draftConfig.mode, snapshot.config.mode);
+    if (!mode) {
+      collaborationModeSyncKeyRef.current = null;
+      return;
+    }
+    // 会话重建后投影回到 build，输入框仍显示完全访问。再点同一项不会发命令，
+    // 工具闸继续按 build 弹窗。投影和草稿不一致时要把草稿写回 Host。
+    const syncKey = `${sessionId}:${mode}:${snapshot.revision}`;
+    if (collaborationModeSyncKeyRef.current === syncKey) return;
+    collaborationModeSyncKeyRef.current = syncKey;
+    void configCommandBarrier.enqueue(() =>
+      dispatchConfigCas("switchCollaborationMode", { mode }, { targetSessionId: sessionId }),
+    );
+  }, [
+    configCommandBarrier,
+    dispatchConfigCas,
+    draftConfig.mode,
+    sessionId,
+    snapshot?.config.mode,
+    snapshot?.revision,
+    snapshot?.sessionId,
+  ]);
   useEffect(() => {
     const targetSessionId = sessionId ?? prewarmSessionId;
     if (!targetSessionId || !appFollowupMode || snapshotRevision === null) return;
@@ -3874,7 +3897,11 @@ export function SessionPane({
             toast(ack.message || intl.formatMessage({ id: "chat.tree.failed" }));
             return;
           }
-          if (ack.result?.type !== "navigateSessionTree" || ack.result.cancelled || !ack.result.sessionId) {
+          if (
+            ack.result?.type !== "navigateSessionTree" ||
+            ack.result.cancelled ||
+            !ack.result.sessionId
+          ) {
             if (ack.result?.type === "navigateSessionTree" && ack.result.cancelled) {
               toast(intl.formatMessage({ id: "chat.tree.cancelled" }));
             }
@@ -3894,7 +3921,9 @@ export function SessionPane({
           onSessionCreated?.(createdSessionId);
         })
         .catch((error: unknown) => {
-          toast(error instanceof Error ? error.message : intl.formatMessage({ id: "chat.tree.failed" }));
+          toast(
+            error instanceof Error ? error.message : intl.formatMessage({ id: "chat.tree.failed" }),
+          );
         })
         .finally(() => {
           summarizingTreeRef.current = false;
@@ -4005,7 +4034,8 @@ export function SessionPane({
 
   // subscribe ACK 会先把 store 置 live，initial snapshot 稍后才到；只看
   // status 会在无投影窗口提前启用编辑器。正式 session 必须等首个 snapshot 才可输入。
-  const connecting = sessionId !== null && (state.status === "connecting" || snapshot === null);
+  // 重连时旧投影还在，对话已经画出来，不能再因为 status===connecting 把输入框锁死。
+  const connecting = sessionId !== null && snapshot === null;
   const queueEditActiveForCurrentComposer =
     queueEditOperation?.sessionId === sessionId && queueEditOperation.workspaceKey === workspaceKey;
   const errored = sessionId !== null && state.status === "error";
@@ -4765,7 +4795,7 @@ export function SessionPane({
       autoFocusEnabled={focused}
       disabled={
         connecting ||
-        draftRuntimeRebuilding ||
+        (sessionId === null && draftRuntimeRebuilding) ||
         queueEditActiveForCurrentComposer ||
         quotaBanner.state.blocksSubmit
       }
@@ -5107,9 +5137,7 @@ export function SessionPane({
               onCancelBackgroundWork={readOnly ? undefined : handleCancelBackgroundWork}
               modelSelectionView={modelSelectionView}
               modelProvider={provider}
-              onSetRunningSubagentModel={
-                readOnly ? undefined : handleSetRunningSubagentModel
-              }
+              onSetRunningSubagentModel={readOnly ? undefined : handleSetRunningSubagentModel}
               onOpenSubagentSession={onOpenSubagentSession ? handleOpenSubagentSession : undefined}
               onOpenSubagentDirectory={
                 onOpenSubagentDirectory ? handleOpenSubagentDirectory : undefined

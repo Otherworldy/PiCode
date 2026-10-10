@@ -18,6 +18,7 @@ interface DraftRuntimeRebuildGateState {
 type DraftRuntimeRebuildGateEvent =
   | { type: "runtimeRestart"; prewarmSessionId: string | null }
   | { type: "prewarmSessionChanged"; prewarmSessionId: string | null }
+  | { type: "leftDraft" }
   | { type: "rebuildTimeout" };
 
 const DRAFT_RUNTIME_REBUILD_GATE_IDLE: DraftRuntimeRebuildGateState = {
@@ -46,6 +47,11 @@ function reduceDraftRuntimeRebuildGate(
     case "rebuildTimeout":
       if (!state.rebuilding) return state;
       return { ...state, rebuilding: false };
+    case "leftDraft":
+      // 离开草稿后预热 id 变成 null，prewarmSessionChanged 会把重建锁留到超时。
+      // 这把锁只约束草稿输入框，不能跟着进已打开的会话。
+      if (!state.rebuilding && state.pendingFrom === null) return state;
+      return { ...DRAFT_RUNTIME_REBUILD_GATE_IDLE, epoch: state.epoch };
   }
 }
 
@@ -121,6 +127,11 @@ export function useDraftRuntimeRebuildGate(params: {
   useEffect(() => {
     dispatch({ prewarmSessionId, type: "prewarmSessionChanged" });
   }, [prewarmSessionId]);
+
+  useEffect(() => {
+    if (enabled) return;
+    dispatch({ type: "leftDraft" });
+  }, [enabled]);
 
   // 依赖 epoch 而非 rebuilding：重建中再次换代时 rebuilding 保持 true，
   // 只有 epoch 变化才能让计时器重新起算。

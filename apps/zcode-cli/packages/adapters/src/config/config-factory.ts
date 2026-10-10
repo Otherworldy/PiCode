@@ -50,6 +50,11 @@ export interface ConfigFactoryOptions {
   cliOverrides?: RuntimeConfigPatch;
   /** Skip loading user config file */
   skipUserConfig?: boolean;
+  /**
+   * 不创建、不导入 Pi MCP 文件。存储准备 Worker 不能改 cwd，
+   * Windows 上这个目录经常是 System32，mkdir 项目 `.pi` 会 EPERM。
+   */
+  skipPiMcpMigration?: boolean;
   /** Optional logger factory for tests or embedding runtimes. Defaults to the node JSONL logger. */
   loggerFactory?: LoggerFactory;
 }
@@ -243,6 +248,7 @@ export function createConfig(options: ConfigFactoryOptions = {}): ConfigResult {
     cwd: workspacePath,
     envConfig,
     projectConfig: projectConfigResult.config,
+    skipPiMcpMigration: options.skipPiMcpMigration,
     userConfig: userConfigResult.config,
   });
   merged.mcp = {
@@ -377,6 +383,7 @@ function resolveEffectiveMcpServers(input: {
   cwd: string;
   envConfig: RuntimeConfigPatch;
   projectConfig: RuntimeConfigPatch;
+  skipPiMcpMigration?: boolean;
   userConfig: RuntimeConfigPatch;
 }): {
   servers: Record<string, McpServerConfig>;
@@ -391,15 +398,21 @@ function resolveEffectiveMcpServers(input: {
     }
   };
 
-  const userFile = piUserMcpFile();
-  const projectFile = piProjectMcpFile(input.cwd);
-  const pi = readPiMcpServers(dirname(userFile), input.cwd);
-  if (existsSync(userFile) || existsSync(projectFile)) {
-    for (const server of pi.servers) {
-      servers[server.name] = server.config as unknown as McpServerConfig;
-      sources[server.name] = server.scope === "project" ? "project" : "user";
+  // readPiMcpServers 会在 cwd 下 mkdir `.pi`。存储准备不要这个副作用。
+  let appliedPiFiles = false;
+  if (!input.skipPiMcpMigration) {
+    const userFile = piUserMcpFile();
+    const projectFile = piProjectMcpFile(input.cwd);
+    const pi = readPiMcpServers(dirname(userFile), input.cwd);
+    if (existsSync(userFile) || existsSync(projectFile)) {
+      appliedPiFiles = true;
+      for (const server of pi.servers) {
+        servers[server.name] = server.config as unknown as McpServerConfig;
+        sources[server.name] = server.scope === "project" ? "project" : "user";
+      }
     }
-  } else {
+  }
+  if (!appliedPiFiles) {
     apply("system", DefaultRuntimeConfig);
     apply("project", input.projectConfig);
     apply("user", input.userConfig);

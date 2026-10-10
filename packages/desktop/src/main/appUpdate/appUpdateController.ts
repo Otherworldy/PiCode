@@ -59,14 +59,33 @@ export function createAppUpdateController(deps: AppUpdateControllerDeps) {
   };
 
   const check = async (): Promise<AppUpdateSnapshot> => {
+    const readyDownload =
+      snapshot.phase === "downloaded" && filePath && fileExists(filePath)
+        ? {
+            snapshot: { ...snapshot },
+            filePath,
+            assetUrl,
+            assetSize,
+          }
+        : undefined;
     generation += 1;
     const currentGeneration = generation;
-    abort?.abort();
-    abort = undefined;
-    assetUrl = undefined;
-    assetSize = 0;
-    filePath = undefined;
-    publish({ phase: "checking", currentVersion: deps.currentVersion });
+    if (!readyDownload) {
+      abort?.abort();
+      abort = undefined;
+      assetUrl = undefined;
+      assetSize = 0;
+      filePath = undefined;
+      publish({ phase: "checking", currentVersion: deps.currentVersion });
+    }
+    const restoreReadyDownload = (): AppUpdateSnapshot | undefined => {
+      if (!readyDownload || currentGeneration !== generation) return undefined;
+      assetUrl = readyDownload.assetUrl;
+      assetSize = readyDownload.assetSize;
+      filePath = readyDownload.filePath;
+      publish(readyDownload.snapshot);
+      return snapshot;
+    };
     try {
       const response = await (deps.fetchImpl ?? fetch)(githubLatestReleaseUrl(deps.repository), {
         headers: {
@@ -76,11 +95,11 @@ export function createAppUpdateController(deps: AppUpdateControllerDeps) {
         },
       });
       if (currentGeneration !== generation) return snapshot;
-      if (response.status === 404) return fail("no-release");
-      if (!response.ok) return fail("network");
+      if (response.status === 404) return restoreReadyDownload() ?? fail("no-release");
+      if (!response.ok) return restoreReadyDownload() ?? fail("network");
       const release = readGitHubLatestRelease(await response.json());
       if (currentGeneration !== generation) return snapshot;
-      if (!release) return fail("network");
+      if (!release) return restoreReadyDownload() ?? fail("network");
       if (compareNumericVersions(deps.currentVersion, release.version) >= 0) {
         publish({
           phase: "upToDate",
@@ -100,6 +119,13 @@ export function createAppUpdateController(deps: AppUpdateControllerDeps) {
         });
         return snapshot;
       }
+      if (
+        readyDownload &&
+        readyDownload.snapshot.latestVersion === release.version &&
+        readyDownload.snapshot.assetName === asset.name
+      ) {
+        return restoreReadyDownload() ?? snapshot;
+      }
       assetUrl = asset.url;
       assetSize = asset.size;
       publish({
@@ -112,19 +138,30 @@ export function createAppUpdateController(deps: AppUpdateControllerDeps) {
       return snapshot;
     } catch {
       if (currentGeneration !== generation) return snapshot;
-      return fail("network");
+      return restoreReadyDownload() ?? fail("network");
     }
   };
 
-  const downloadAndInstall = (): Promise<AppUpdateSnapshot> => {
-    if (downloadOperation) return downloadOperation;
-    downloadOperation = runDownloadAndInstall().finally(() => {
-      downloadOperation = null;
+  const download = (): Promise<AppUpdateSnapshot> => startTransfer(false);
+
+  const downloadAndInstall = (): Promise<AppUpdateSnapshot> => startTransfer(true);
+
+  const startTransfer = (installAfterDownload: boolean): Promise<AppUpdateSnapshot> => {
+    const operation = (downloadOperation ??= runDownloadAndInstall(installAfterDownload).finally(
+      () => {
+        downloadOperation = null;
+      },
+    ));
+    if (!installAfterDownload) return operation;
+    return operation.then((result) => {
+      if (result.phase !== "downloaded" || !filePath || result.installKind) return result;
+      return installDownloaded(filePath, generation);
     });
-    return downloadOperation;
   };
 
-  const runDownloadAndInstall = async (): Promise<AppUpdateSnapshot> => {
+  const runDownloadAndInstall = async (
+    installAfterDownload: boolean,
+  ): Promise<AppUpdateSnapshot> => {
     if (!deps.isPackaged) return fail("unpackaged");
     if (!assetUrl || !snapshot.assetName || !snapshot.latestVersion) return fail("no-asset");
     if (snapshot.phase === "downloading" || snapshot.phase === "installing") return snapshot;
@@ -136,7 +173,9 @@ export function createAppUpdateController(deps: AppUpdateControllerDeps) {
       snapshot.installKind !== "quit-for-installer" &&
       snapshot.installKind !== "relaunch"
     ) {
-      return installDownloaded(filePath, currentGeneration);
+      return installAfterDownload
+        ? installDownloaded(filePath, currentGeneration)
+        : snapshot;
     }
     const target = join(deps.tempDir, safeFileName(snapshot.latestVersion, snapshot.assetName));
     filePath = target;
@@ -181,7 +220,7 @@ export function createAppUpdateController(deps: AppUpdateControllerDeps) {
       totalBytes: undefined,
       errorCode: undefined,
     });
-    return installDownloaded(target, currentGeneration);
+    return installAfterDownload ? installDownloaded(target, currentGeneration) : snapshot;
   };
 
   const installDownloaded = async (
@@ -203,6 +242,7 @@ export function createAppUpdateController(deps: AppUpdateControllerDeps) {
   return {
     snapshot: () => snapshot,
     check,
+    download,
     downloadAndInstall,
   };
 }

@@ -232,6 +232,25 @@ const FALLBACK_MANIFEST: BrowserApiManifest = {
           command: "playwright",
         },
         {
+          name: "refSnapshot",
+          kind: "method",
+          signature: "refSnapshot(): Promise<string>",
+          command: "playwright",
+        },
+        {
+          name: "refDiff",
+          kind: "method",
+          signature: "refDiff(): Promise<string>",
+          command: "playwright",
+        },
+        {
+          name: "refBatch",
+          kind: "method",
+          signature:
+            "refBatch(actions: { actions: Array<{ op: 'click', ref: string } | { op: 'fill', ref: string, value: string }> }): Promise<{ applied: number }>",
+          command: "playwright",
+        },
+        {
           name: "elementInfo",
           kind: "method",
           signature: "elementInfo(options: ElementInfoOptions): Promise<ElementInfo[]>",

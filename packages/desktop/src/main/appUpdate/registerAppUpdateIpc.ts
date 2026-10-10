@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import { PlatformChannels, ZCODE_VERSION, type AppUpdateSnapshot } from "@zcode/shared";
 import { readBuildMetadata } from "../about.js";
 import { createAppUpdateController } from "./appUpdateController.js";
+import { startAppUpdateScheduler } from "./appUpdateScheduler.js";
 import { installDownloadedUpdate } from "./installDownloadedUpdate.js";
 import { readWorkspacePackageVersion, resolveDesktopProductVersion } from "./productVersion.js";
 import { createUpdateFetch, type UpdateNetworkSettings } from "./proxyFetch.js";
@@ -55,6 +56,10 @@ export function registerAppUpdateIpc(options: {
       assetName: snapshot.assetName,
     });
   };
+
+  if (app.isPackaged) {
+    startAppUpdateScheduler(controller);
+  }
 
   ipcMain.handle(PlatformChannels.GetAppUpdateState, () => controller.snapshot());
   ipcMain.handle(PlatformChannels.CheckAppUpdate, async () => {

@@ -194,8 +194,8 @@ export async function prepareSessionStorage(options: {
   if (!command?.supportsStorageStartup || !command.storagePreparationEntry)
     throw statusError("unsupported_runtime");
   const entry = command.storagePreparationEntry;
-  // 覆盖安装后第一次冷启动，会话 Worker 常在写出 storagePath 之前退出（耗时与冷加载
-  // zcode.cjs 一致，约 800ms）。数据库还没打开，同一次启动再拉起不会重复迁移；热缓存后同一条路径能走完。
+  // 还没打开数据库就退出时可以再拉起，不会重复迁移。
+  // 不可写 cwd 上的确定性失败不靠重试；存储准备自己不会去创建项目 .pi。
   for (let attempt = 0; attempt < SESSION_STORAGE_WORKER_ATTEMPTS; attempt += 1) {
     try {
       await runSessionStorageWorker(entry, command, options);

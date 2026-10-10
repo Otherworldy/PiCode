@@ -84,7 +84,13 @@ export async function runZCodeProtocolAgent(
   options: RunZCodeProtocolAgentOptions = {},
 ): Promise<void> {
   if (options.prepareStorageOnly) {
-    const config = createConfig({ env: options.env });
+    // Worker 不能 chdir。Windows 上宿主 cwd 经常是 System32，在那里迁移项目 MCP 会
+    // mkdir `.pi` 并 EPERM；库路径还没写出，桌面就只能看到 transport_closed。
+    const config = createConfig({
+      env: options.env,
+      skipPiMcpMigration: true,
+      workingDirectory: options.cwd,
+    });
     await prepareProtocolStartupStorage({
       dbPath: getSessionDbPath(config, options.cwd),
       input: options.input ?? process.stdin,

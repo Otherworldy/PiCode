@@ -3,11 +3,13 @@ import type { IServiceAccessor } from "@zcode/services";
 import type { TaskChatMessage as TestChatMessage } from "@/lib/taskChatMessageTypes.js";
 import type { BrowserNavigationRequest } from "@/hooks/useAppPanels.js";
 import { logger } from "@/logger.js";
+import { useTabStoreApi } from "@/store/TabStoreProvider.js";
 import {
   getWorkspaceDisplayedTaskState,
   getWorkspaceInitState,
   useZCodeSessionStore,
 } from "@/store/zcodeSessionStore.js";
+import { sessionsIndexHasActiveWork } from "@/v4/sessionsIndexRegistry.js";
 
 export function useWorkspaceShellLifecycle({
   workspaceAbsPath,
@@ -23,6 +25,7 @@ export function useWorkspaceShellLifecycle({
   setTestMessages: Dispatch<SetStateAction<TestChatMessage[] | null>>;
 }) {
   const previousWorkspaceAbsPathRef = useRef(workspaceAbsPath);
+  const tabStore = useTabStoreApi();
 
   useEffect(() => {
     if (previousWorkspaceAbsPathRef.current === workspaceAbsPath) {
@@ -43,14 +46,28 @@ export function useWorkspaceShellLifecycle({
 
   useEffect(() => {
     return () => {
+      const tabs = tabStore.getState();
+      const shellIdentity = workspaceIdentity?.trim() || undefined;
+      const activeIdentity = tabs.activeWorkspaceIdentity?.trim() || undefined;
+      // 依赖变化（service 换代、identity 空白）也会跑这里。还停在这个 workspace 上时不能回收，
+      // 否则新建任务把 activeTaskId 清空后，再点任一条会话都会把整个 Agent 进程杀掉。
+      if (tabs.activeWorkspacePath === workspaceAbsPath && activeIdentity === shellIdentity) {
+        return;
+      }
+
       const currentWorkspaceState = useZCodeSessionStore
         .getState()
-        .getWorkspaceState(workspaceAbsPath);
+        .getWorkspaceState(workspaceAbsPath, workspaceIdentity);
       const displayedTaskState = getWorkspaceDisplayedTaskState(currentWorkspaceState);
+      const backgroundRunning = Object.values(currentWorkspaceState.taskRuntimeByTaskId).some(
+        (runtime) => runtime.status === "creating" || runtime.status === "streaming",
+      );
       if (
         currentWorkspaceState.activeTaskId ||
         displayedTaskState.taskStatus === "creating" ||
-        displayedTaskState.taskStatus === "streaming"
+        displayedTaskState.taskStatus === "streaming" ||
+        backgroundRunning ||
+        sessionsIndexHasActiveWork(shellIdentity || workspaceAbsPath)
       ) {
         return;
       }
@@ -89,5 +106,5 @@ export function useWorkspaceShellLifecycle({
           );
         });
     };
-  }, [services.zcodeTaskService, workspaceIdentity, workspaceAbsPath]);
+  }, [services.zcodeTaskService, tabStore, workspaceIdentity, workspaceAbsPath]);
 }

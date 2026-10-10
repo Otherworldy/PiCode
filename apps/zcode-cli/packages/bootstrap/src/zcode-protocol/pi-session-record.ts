@@ -15,6 +15,10 @@ import {
 import { isBareSlashCommandTitle, type ZCodeWorkspaceRef } from "@zcode/shared";
 import { projectIdFromDirectory } from "../app/paths.js";
 import { createPiHostedApp } from "../app/pi-hosted-app.js";
+import {
+  permissionWithCollaborationMode,
+  storedCollaborationMode,
+} from "./hosted-collaboration-mode.js";
 import type { ZCodeProtocolMcpServer } from "@zcode/shared";
 import type {
   ZCodeProtocolAgentServerContext,
@@ -47,6 +51,7 @@ export async function bindHostedSession(
       // 计划模式的第一条 admission 是 /plannotator-plan-mode。写进 first_input 后，
       // 侧栏会一直显示这条命令，直到点开会话才按 jsonl 重算。
       const visibleTitle = compact && !isBareSlashCommandTitle(compact) ? compact.slice(0, 60) : "";
+      const existing = await store.getSession(sessionId);
       await store.createSession({
         id: sessionId,
         projectID: projectIdFromDirectory(workspace.workspacePath),
@@ -59,9 +64,17 @@ export async function bindHostedSession(
         title: visibleTitle || "Untitled session",
         titleSource: "first_input",
         version: context.deps.version ?? "0.0.0",
-        permission: { mode: "build" },
+        // 冲突更新会整份换掉 permission。写死 build 会把已经保存的完全访问抹掉，
+        // 进程重启后工具闸回到 build，输入框却还显示完全访问。
+        permission: permissionWithCollaborationMode(
+          existing?.permission,
+          hosted.projector.getSnapshot().config.mode,
+        ),
         traceID: createRootTraceContext({ sessionId }).traceId,
       });
+    },
+    onCollaborationMode: (mode) => {
+      void persistHostedCollaborationMode(context, sessionId, mode);
     },
   });
   const summary = summarizePiJsonl(await readFile(hosted.sessionFile, "utf8").catch(() => ""));
@@ -102,6 +115,8 @@ export async function bindHostedSession(
     workspace,
     persistence: summary ? "immediate" : "deferred",
   };
+  // 必须先恢复模式再入注册表。命令进来时若还是 build，完全访问下的工具会先弹窗。
+  await restoreHostedCollaborationMode(context, hosted);
   // 历史 delta 在订阅时一次性吐出。必须先入注册表，sessions-index 才能按 workspace 挂上侧栏。
   context.sessions.set(sessionId, record);
   const unsubscribeDeltas = hosted.onDeltas((deltas) => {
@@ -136,6 +151,43 @@ export async function bindHostedSession(
     });
   }
   return record;
+}
+
+/** 模式只活在内存里的话，进程退出后重建的会话会回到 build，完全访问仍会弹窗。 */
+async function persistHostedCollaborationMode(
+  context: ZCodeProtocolAgentServerContext,
+  sessionId: SessionId,
+  mode: string,
+): Promise<void> {
+  const store = context.deps.sessionStore;
+  const stored = storedCollaborationMode(mode);
+  if (!store || !stored) return;
+  try {
+    const existing = await store.getSession(sessionId);
+    if (!existing || existing.permission?.mode === stored) return;
+    await store.updateSession({
+      id: sessionId,
+      permission: permissionWithCollaborationMode(existing.permission, stored),
+    });
+  } catch (error) {
+    context.logger?.warn("pi-host collaboration mode was not persisted", {
+      error: error instanceof Error ? error.message : String(error),
+      mode: stored,
+      sessionId,
+    });
+  }
+}
+
+async function restoreHostedCollaborationMode(
+  context: ZCodeProtocolAgentServerContext,
+  hosted: HostedSession,
+): Promise<void> {
+  const store = context.deps.sessionStore;
+  if (!store) return;
+  const existing = await store.getSession(hosted.sessionId as SessionId);
+  const mode = storedCollaborationMode(existing?.permission?.mode);
+  if (!mode || mode === hosted.projector.getSnapshot().config.mode) return;
+  hosted.setCollaborationMode(mode);
 }
 
 export async function createPiSessionRecord(

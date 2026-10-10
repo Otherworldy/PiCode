@@ -43,7 +43,13 @@ export function AboutSettingsSection() {
       if (cancelled) return;
       apply(current);
       // 重新进入本页时不要再检查：检查会作废正在进行的下载，进度就丢了。
-      if (current.phase === "downloading" || current.phase === "installing") return;
+      if (
+        current.phase === "downloading" ||
+        current.phase === "installing" ||
+        current.phase === "downloaded"
+      ) {
+        return;
+      }
       const checked = await checkAppUpdate();
       if (!cancelled) apply(checked);
     })();

@@ -54,6 +54,7 @@ interface PendingEntry {
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 function mayHaveSideEffects(command: BrowserCommand): boolean {
+  if (command.method === "playwright" && command.action.name === "refBatch") return true;
   if (command.method === "playwright" && command.action.name === "locator") {
     return [
       "click",

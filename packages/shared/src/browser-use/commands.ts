@@ -213,6 +213,28 @@ const browserPlaywrightSelectOptionSchema = z
  */
 export const browserPlaywrightActionSchema = z.discriminatedUnion("name", [
   z.object({ name: z.literal("domSnapshot") }).strict(),
+  z.object({ name: z.literal("refSnapshot") }).strict(),
+  z.object({ name: z.literal("refDiff") }).strict(),
+  z
+    .object({
+      name: z.literal("refBatch"),
+      actions: z
+        .array(
+          z.discriminatedUnion("op", [
+            z.object({ op: z.literal("click"), ref: z.string().min(1) }).strict(),
+            z
+              .object({
+                op: z.literal("fill"),
+                ref: z.string().min(1),
+                value: z.string(),
+              })
+              .strict(),
+          ]),
+        )
+        .min(1)
+        .max(8),
+    })
+    .strict(),
   z
     .object({
       name: z.literal("elementInfo"),

@@ -13,8 +13,7 @@ controlledTabs;
 
 After inspecting that output, use the next JS call to match the intended page by stable id or verified URL/title facts,
 then call `tabs.get(id)` to activate it. Never select `[0]` merely because the list is non-empty. If no controlled tab
-matches, inspect user tabs and claim the matching page. This is the pre-action target-selection protocol; action-result
-popup observation uses the combined cell in step 5:
+matches, inspect user tabs and claim the matching page. This is the pre-action target-selection protocol when switching tabs. When this turn already verified the tab id, the same JS call may `tabs.get(id)`, `refSnapshot()`, and `refBatch()`. Action-result popup observation uses the combined cell in step 5:
 
 ```js
 const browser = await agent.browsers.getDefault();
@@ -37,7 +36,7 @@ await tab.playwright.domSnapshot();
 
 After every successful `tab.goto(url)`, explicitly call `await tab.playwright.waitForLoadState({ state: "domcontentloaded" })` before the first title, URL, or DOM observation. Keep this explicit confirmation in the model-visible trajectory even when the backend navigation has already settled. Do not replace it with `networkidle` or a fixed sleep; routine URL/load-state waits remain capped at 3000ms.
 
-3. Read the page from `playwright.domSnapshot()`. It returns the AI/ARIA tree with computed roles, accessible names, state and expanded iframe content when available. Construct Playwright locators only from facts present in the latest relevant snapshot. When the snapshot already contains the target, use it directly instead of writing `evaluate()` code to search related elements, enumerate inputs, dump HTML, or walk the DOM. Never guess a label, accessible name, placeholder, selector, or URL pattern, and never spend timeout budget using a guessed locator as an exploratory probe.
+3. For ordinary buttons, links, and fields, call `playwright.refSnapshot()` and then one `playwright.refBatch({ actions })` with the printed refs. When the tab id is already verified, do that in the same JS call as `tabs.get(id)`. The list includes one level of same-origin iframe content. After the batch, call `playwright.refDiff()` and use only the added and removed lines. Refs stay on the same accessibility node across DOM reorders until navigation. Cross-origin and nested iframes are omitted. If a ref is missing or the snapshot is stale, take another `refSnapshot()`. Use `playwright.domSnapshot()` when the ref list is not enough: it returns the AI/ARIA tree with computed roles, accessible names, state and expanded iframe content when available. Construct Playwright locators only from facts present in the latest relevant snapshot. When the snapshot already contains the target, use it directly instead of writing `evaluate()` code to search related elements, enumerate inputs, dump HTML, or walk the DOM. Never guess a label, accessible name, placeholder, selector, or URL pattern, and never spend timeout budget using a guessed locator as an exploratory probe.
 
 A snapshot-proven heading or visible text does not need a `link` or `button` role to be clicked. Do not replace a
 snapshot-proven `heading` with a guessed `link` role. When the user has authorized navigation and the actual
@@ -54,7 +53,7 @@ await input.fill("hello");
 await input.press("Enter");
 ```
 
-5. After an action, collect the cheapest observation that answers the next question. Prefer a targeted locator state check; take another `domSnapshot()` when you need new locator ground truth. Use at most one state-changing action per observation cycle. An unchanged source-tab URL does not prove the click failed. Judge an action by whether its expected effect appeared, not by whether `browser.tabs.list()` is non-empty. An existing source tab or unrelated controlled tab is not an action effect. The expected effect may be a source-page state change or a tab whose verified URL/title matches the intended result.
+5. After an action, collect the cheapest observation that answers the next question. Prefer a targeted locator state check; take another `domSnapshot()` when you need new locator ground truth. A locator action is at most one state-changing action per observation cycle. `refBatch` is one command; observe it with `refDiff()`. An unchanged source-tab URL does not prove the click failed. Judge an action by whether its expected effect appeared, not by whether `browser.tabs.list()` is non-empty. An existing source tab or unrelated controlled tab is not an action effect. The expected effect may be a source-page state change or a tab whose verified URL/title matches the intended result.
 
 When an action may open a popup/new tab and the source tab does not show the expected effect, read `browser.tabs.list()` and `browser.user.openTabs()` unconditionally in the same observation cell:
 

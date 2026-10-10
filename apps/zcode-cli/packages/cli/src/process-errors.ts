@@ -76,6 +76,16 @@ export function installCliProcessErrorBoundary(
       }
       return;
     }
+    // 编辑重发会在上一轮还没退出时再 prompt。Pi 抛 already processing，
+    // 调用方常常没有 await。这不是进程已坏，退出会把刚开始的那一轮一起打掉。
+    if (isAgentAlreadyProcessing(reason)) {
+      try {
+        stderr.write("[zcode] ignored already-processing prompt rejection\n");
+      } catch {
+        // 诊断输出失败不再升级成进程退出。
+      }
+      return;
+    }
     reportFatal("unhandledRejection", "unhandledRejection", reason);
   };
 
@@ -94,6 +104,11 @@ export function installCliProcessErrorBoundary(
 function isStaleExtensionContext(reason: unknown): boolean {
   const message = reason instanceof Error ? reason.message : String(reason);
   return message.includes("This extension ctx is stale after session replacement or reload");
+}
+
+function isAgentAlreadyProcessing(reason: unknown): boolean {
+  const message = reason instanceof Error ? reason.message : String(reason);
+  return message.includes("already processing");
 }
 
 function writeProcessErrorDiagnostic(

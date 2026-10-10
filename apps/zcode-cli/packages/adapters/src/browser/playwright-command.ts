@@ -255,5 +255,9 @@ export async function executeManagedPlaywrightAction(
     case "downloadPath":
     case "fileChooserSetFiles":
       throw new Error(`Playwright action '${action.name}' is unavailable`);
+    case "refSnapshot":
+    case "refDiff":
+    case "refBatch":
+      throw new Error(`Playwright action '${action.name}' is only implemented for the in-app browser`);
   }
 }

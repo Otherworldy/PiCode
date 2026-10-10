@@ -149,6 +149,14 @@ export type BrowserPlaywrightLocatorOperation =
   | "waitFor";
 export type BrowserPlaywrightAction =
   | { name: "domSnapshot" }
+  | { name: "refSnapshot" }
+  | { name: "refDiff" }
+  | {
+      name: "refBatch";
+      actions: Array<
+        { op: "click"; ref: string } | { op: "fill"; ref: string; value: string }
+      >;
+    }
   | { name: "elementInfo"; x: number; y: number; includeNonInteractable?: boolean }
   | { name: "elementScreenshot"; x: number; y: number; includeNonInteractable?: boolean }
   | {

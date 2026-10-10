@@ -369,6 +369,7 @@ function toRestoredShell(
 }
 
 function isSideEffecting(command: BrowserCommand): boolean {
+  if (command.method === "playwright" && command.action.name === "refBatch") return true;
   if (command.method === "playwright" && command.action.name === "locator") {
     return [
       "click",

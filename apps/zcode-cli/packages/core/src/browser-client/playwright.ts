@@ -16,6 +16,9 @@ const setObjectWrapper = Symbol("zcode.playwright.setObjectWrapper");
 const publicMembers: Record<string, ReadonlySet<string>> = {
   PlaywrightAPI: new Set([
     "domSnapshot",
+    "refSnapshot",
+    "refDiff",
+    "refBatch",
     "elementInfo",
     "elementScreenshot",
     "evaluate",
@@ -773,6 +776,20 @@ export class PlaywrightAPI {
 
   domSnapshot(): Promise<string> {
     return runValue(this.run, { name: "domSnapshot" });
+  }
+
+  refSnapshot(): Promise<string> {
+    return runValue(this.run, { name: "refSnapshot" });
+  }
+
+  refDiff(): Promise<string> {
+    return runValue(this.run, { name: "refDiff" });
+  }
+
+  refBatch(actions: {
+    actions: Array<{ op: "click"; ref: string } | { op: "fill"; ref: string; value: string }>;
+  }): Promise<{ applied: number }> {
+    return runValue(this.run, { name: "refBatch", actions: actions.actions });
   }
 }
 

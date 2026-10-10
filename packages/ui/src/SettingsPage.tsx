@@ -86,6 +86,7 @@ import type { Theme } from "@/useTheme.js";
 import { WindowsTopLeftLogo } from "@/WindowsTopLeftLogo.js";
 
 import { DesktopWindowControls } from "@/DesktopWindowControls.js";
+import { AppUpdateReadyButton } from "@/AppUpdateReadyButton.js";
 import { WorkspaceHelpMenuButton } from "@/WorkspaceHelpMenuButton.js";
 import { WorkspaceSidebarFooter } from "@/WorkspaceSidebarFooter.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
@@ -1222,6 +1223,7 @@ export function SettingsPage({
               {/* Windows/Linux 设置页仍保留旧 caption 下箭头，与主界面和 macOS 的帮助入口不一致。
                   统一复用问号帮助按钮，并让它在普通 flex 流中紧邻自绘窗控。
                   Settings 的独立标题层还需计入 4px 外层留白和 1px 边框，才能与 Workspace 控制组对齐。 */}
+              <AppUpdateReadyButton />
               <WorkspaceHelpMenuButton isDesktop={Boolean(isDesktop)} />
               <DesktopWindowControls />
             </div>
@@ -1394,11 +1396,11 @@ export function SettingsPage({
                 <div
                   className={cn(
                     // Settings 使用和 new task 一致的问号定位：在内容面板内定位，外层让出自绘窗口按钮区，内层保持 top-2.5/right-2.5。
-                    "absolute top-0 z-50 h-10 w-10 pointer-events-auto [app-region:no-drag]",
-                    "right-0",
+                    "absolute top-2.5 right-2.5 z-50 flex h-10 items-center gap-0.5 pointer-events-auto [app-region:no-drag]",
                   )}
                 >
-                  <div className="absolute right-2.5 top-2.5 pointer-events-auto [app-region:no-drag]">
+                  <div className="flex items-center gap-0.5 pointer-events-auto [app-region:no-drag]">
+                    <AppUpdateReadyButton />
                     <WorkspaceHelpMenuButton
                       className="relative z-50 [app-region:no-drag]"
                       isDesktop={Boolean(isDesktop)}

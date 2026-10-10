@@ -53,7 +53,9 @@ describe("install downloaded update", () => {
       spawnImpl: deps.spawnImpl,
     });
     expect(kind).toBe("quit-for-installer");
-    expect(deps.calls).toEqual([{ command: "C:/tmp/PiCode.exe", args: [] }]);
+    expect(deps.calls).toEqual([
+      { command: "C:/tmp/PiCode.exe", args: ["/S", "--updated", "--force-run"] },
+    ]);
     expect(deps.quit).toHaveBeenCalledOnce();
   });
 });

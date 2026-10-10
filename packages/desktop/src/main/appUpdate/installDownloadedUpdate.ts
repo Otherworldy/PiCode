@@ -42,7 +42,8 @@ export async function installDownloadedUpdate(options: {
     return "opened-installer";
   }
 
-  launch(options.filePath, []);
+  // assisted NSIS 只有同时静默且 --force-run 才会跳过向导，并在结束后重新打开应用。
+  launch(options.filePath, ["/S", "--updated", "--force-run"]);
   options.quit();
   return "quit-for-installer";
 }

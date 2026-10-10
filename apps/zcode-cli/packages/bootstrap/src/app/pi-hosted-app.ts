@@ -72,10 +72,15 @@ export function createPiHostedApp(
   options: {
     abortWork?: (workId: string) => Promise<boolean>;
     persistSession?: (title: string) => Promise<void>;
+    onCollaborationMode?: (mode: string) => void;
   } = {},
 ): ZCodeApp {
   setInflightNetworkAbort(abortInflightNetworkFetches);
   const sessionId = hosted.sessionId as SessionId;
+  const applyCollaborationMode = (mode: string) => {
+    hosted.setCollaborationMode(mode);
+    options.onCollaborationMode?.(mode);
+  };
   const dummyCompletion = (turnId: string) =>
     Promise.resolve({
       response: "",
@@ -268,7 +273,7 @@ export function createPiHostedApp(
     },
     setExecutionState: async (input?: { mode?: string; planEnabled?: boolean }) => {
       if (!input?.mode) return;
-      hosted.setCollaborationMode(input.mode);
+      applyCollaborationMode(input.mode);
     },
     getProjection: async () => ({
       id: sessionId,
@@ -332,7 +337,7 @@ export function createPiHostedApp(
     async setMode(mode: CollaborationMode) {
       const previousMode =
         (hosted.projector.getSnapshot().config.mode as CollaborationMode) || ("build" as CollaborationMode);
-      hosted.setCollaborationMode(mode);
+      applyCollaborationMode(mode);
       return { mode, previousMode, traceId: "pi-host" };
     },
     getModel: () => {

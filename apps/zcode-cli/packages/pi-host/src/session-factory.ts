@@ -255,6 +255,11 @@ export { branchPiSessionFile };
 
 const BUILTIN_SEARCH_TOOLS = ["grep", "find", "ls"] as const;
 
+function isAgentAlreadyProcessing(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("already processing");
+}
+
 /** Pi 默认不激活这些工具。扩展卸掉后，只要定义还在就补上。 */
 export function withBuiltinSearchTools(
   active: readonly string[],
@@ -414,6 +419,18 @@ export function createSdkSessionFactory(options: {
     });
     live = created.session;
     const session = created.session;
+    // 编辑历史消息会先 abort 再 prompt。abort 的 agent_settled 和插件仍可能在
+    // isStreaming 落下之前再进一次 prompt。Pi 抛 already processing，调用方经常不 await，
+    // 进程错误边界会把 agent 打退出：模型第一句刚写出会话就没了。这里改成 followUp。
+    const rawPrompt = session.prompt.bind(session);
+    session.prompt = (async (text: string, options?: Parameters<typeof session.prompt>[1]) => {
+      try {
+        return await rawPrompt(text, options);
+      } catch (error) {
+        if (options?.streamingBehavior || !isAgentAlreadyProcessing(error)) throw error;
+        return rawPrompt(text, { ...options, streamingBehavior: "followUp" });
+      }
+    }) as typeof session.prompt;
     const persistedListeners = new Set<(notice: { role: string; entryId: string }) => void>();
     // Bug：分叉把 row.entityId 当成树节点。Pi 的节点 id 在 appendMessage 才生成，
     // 而且发生在 message_end 监听者返回之后。不在这里接住，实时会话永远 Entry not found。

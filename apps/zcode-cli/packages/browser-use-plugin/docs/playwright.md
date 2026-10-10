@@ -28,7 +28,7 @@ Before click, fill, press, select, check, or another state-changing locator acti
 2. Build the most stable locator supported by those facts.
 3. If uniqueness is not self-evident, call `count()` once and retain the result.
 4. Continue only when the locator resolves to exactly one intended element.
-5. Perform the action once, then collect only the targeted state or fresh snapshot needed for the next decision. Use at most one state-changing action per observation cycle.
+5. Perform the locator action once, then collect only the targeted state or fresh snapshot needed for the next decision. A locator action is at most one state-changing action per observation cycle. `refBatch` is exempt: it is one command, and the next observation should be `refDiff()`.
 
 If `count() === 0`, do not perform the action and do not wait on that locator. Take a fresh snapshot and rebuild it. If the count is greater than one, scope to a stable container or stronger attribute; do not use `first()`, `last()`, or `nth()` as an ambiguity shortcut.
 
