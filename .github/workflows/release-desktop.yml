@@ -44,6 +44,7 @@ jobs:
             target_arch: arm64
     env:
       HUSKY: "0"
+      ZCODE_ENV: production
       ZCODE_SKIP_REMOTE_ASSETS: "1"
       ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
       ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
