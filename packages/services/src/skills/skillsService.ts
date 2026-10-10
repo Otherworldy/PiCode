@@ -30,6 +30,7 @@ import { DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS } from "@zcode/shared";
 import type { ISkillsService } from "./skills.js";
 import { SKILL_FILE_NAME, walkSkillMarkdownPaths } from "./skillDiscoveryWalk.js";
 import { readInstalledPluginRoots } from "#src/plugins/installedPluginRoots.js";
+import { listEnabledPiPackageSkillRoots } from "./piPackageSkillRoots.js";
 
 interface DiscoverResult {
   skills: SkillSummary[];
@@ -862,6 +863,21 @@ async function discoverSkills(params: {
   }
   // PiCode 插件技能不进 Pi 会话，设置页不再列。
   void resolvePluginSkillRootDescriptors;
+  // Pi 包技能会进会话，但之前设置页只扫固定目录，包里的 skills 看不见。
+  const seenRootPaths = new Set(roots.map((root) => root.rootPath));
+  for (const packageSkill of await listEnabledPiPackageSkillRoots({
+    workspacePath: params.workspacePath,
+    includeUserPackages: params.includeUserSkills,
+  })) {
+    if (seenRootPaths.has(packageSkill.path)) continue;
+    seenRootPaths.add(packageSkill.path);
+    roots.push({
+      scope: "plugin",
+      rootPath: packageSkill.path,
+      pluginName: packageSkill.pluginName,
+      pluginId: packageSkill.pluginId,
+    });
+  }
 
   const diagnostics: SkillDiagnostic[] = [];
   const skills: SkillSummary[] = [];

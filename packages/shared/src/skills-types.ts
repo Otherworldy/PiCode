@@ -1,5 +1,18 @@
 export type SkillScope = "workspace" | "user" | "plugin";
 
+/**
+ * Pi 包技能在设置页的归属。
+ * `pluginId` 与插件开关同形：`pkg:user:<source>` / `pkg:project:<source>`。
+ * source 本身可以带盘符冒号，所以只看前缀，不按冒号再切。
+ */
+export function piPackageSkillSettingsScope(
+  pluginId: string | undefined,
+): "user" | "workspace" | undefined {
+  if (pluginId?.startsWith("pkg:user:")) return "user";
+  if (pluginId?.startsWith("pkg:project:")) return "workspace";
+  return undefined;
+}
+
 export interface SkillMetadata {
   slug?: string;
   version?: string;

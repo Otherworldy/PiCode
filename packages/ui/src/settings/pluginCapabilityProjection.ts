@@ -2,12 +2,13 @@ import {
   resolveManagedPluginDisplay,
   type StorePluginItem,
 } from "@/settings/pluginStoreListing.js";
-import type {
-  SkillSummary,
-  ZCodeCommand,
-  ZCodeInstalledPluginSummary,
-  ZCodePluginInfo,
-  ZCodePluginScope,
+import {
+  piPackageSkillSettingsScope,
+  type SkillSummary,
+  type ZCodeCommand,
+  type ZCodeInstalledPluginSummary,
+  type ZCodePluginInfo,
+  type ZCodePluginScope,
 } from "@zcode/shared";
 import { compareDocumentPluginPriority, isPluginCommand, isUserCommand } from "@zcode/shared";
 import { pluginSearchMatches } from "@/settings/pluginSearch.js";
@@ -97,6 +98,10 @@ export function selectSkillsForScope(
     if (skill.scope !== "plugin") {
       return skill.scope === scope;
     }
+    // Pi 包技能不在旧插件市场列表里。按包的用户/项目范围进对应分组，
+    // 否则设置页会把已经扫到的包技能整组丢掉。
+    const packageScope = piPackageSkillSettingsScope(skill.pluginId);
+    if (packageScope) return packageScope === scope;
     if (skill.pluginId) return scopedPluginIds.has(skill.pluginId);
     const matchingIds = skill.pluginName
       ? scopedPluginIdsByName.get(canonicalPluginName(skill.pluginName))
