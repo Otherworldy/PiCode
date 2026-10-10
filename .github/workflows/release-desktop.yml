@@ -104,7 +104,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          # 上一个版本标签到这次标签的提交要全在，否则说明只能看到当前一个提交。
+          fetch-depth: 0
 
       - name: Download installers
         uses: actions/download-artifact@v4
@@ -113,6 +114,12 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      - name: Write release notes
+        env:
+          TAG: ${{ github.ref_name }}
+          GH_REPO: ${{ github.repository }}
+        run: node scripts/release-notes.mjs --tag "$TAG" --repo "$GH_REPO" --out release-notes.md
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -120,13 +127,6 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          cat > release-notes.md <<EOF
-          桌面安装包，未签名。
-
-          - Windows x64 / arm64
-          - macOS arm64 / x64
-          - Linux x64 / arm64（AppImage、deb、rpm、pacman）
-          EOF
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" \
               --title "$TAG" \
@@ -134,4 +134,5 @@ jobs:
               --draft
           fi
           gh release upload "$TAG" release-assets/* --clobber
-          gh release edit "$TAG" --draft=false
+          # 重跑也要覆盖旧说明。只在 create 时写一次会把上一版的固定文案留下。
+          gh release edit "$TAG" --notes-file release-notes.md --draft=false
