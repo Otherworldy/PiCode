@@ -110,16 +110,83 @@ export function readSessionTree(source: Pick<SessionTreeSource, "getLeafId" | "g
   return out;
 }
 
+type VisibleEditEntry = {
+  id?: string;
+  type?: string;
+  targetId?: string;
+  replacement?: { content?: unknown } | null;
+  message?: { content?: unknown };
+};
+
+/** 非空的 context_edit 改的是画面也要看见的正文。空替换只让模型省略，失败助手仍留在画面上。 */
+export function entriesWithVisibleContextEdits<T extends VisibleEditEntry>(entries: readonly T[]): T[] {
+  const edits = new Map<string, unknown>();
+  for (const entry of entries) {
+    if (entry.type !== "context_edit" || !entry.targetId) continue;
+    const replacement = entry.replacement;
+    if (!replacement || !("content" in replacement)) continue;
+    edits.set(entry.targetId, replacement.content);
+  }
+  if (edits.size === 0) return [...entries];
+  return entries.flatMap((entry) => {
+    if (entry.type === "context_edit") return [];
+    const content = entry.id ? edits.get(entry.id) : undefined;
+    if (content === undefined || !entry.message) return [entry];
+    return [{ ...entry, message: { ...entry.message, content } }];
+  });
+}
+
 export function contextEventsOf(source: Pick<SessionTreeSource, "buildContextEntries">): PiHostEvent[] {
-  return readPiJsonl(source.buildContextEntries().map((entry) => JSON.stringify(entry)).join("\n")).events;
+  const entries = entriesWithVisibleContextEdits(
+    source.buildContextEntries() as VisibleEditEntry[],
+  );
+  return readPiJsonl(entries.map((entry) => JSON.stringify(entry)).join("\n")).events;
+}
+
+function isToolCallPart(part: object): boolean {
+  const type = "type" in part ? part.type : undefined;
+  return type === "toolCall" || type === "tool_use" || type === "tool_call";
+}
+
+function toolCallPartId(part: object): string {
+  if ("id" in part && typeof part.id === "string") return part.id;
+  if ("toolCallId" in part && typeof part.toolCallId === "string") return part.toolCallId;
+  return "";
+}
+
+function sameToolId(left: string, right: string): boolean {
+  if (!left || !right) return false;
+  if (left === right) return true;
+  const leaf = (id: string) => id.slice(id.lastIndexOf("|") + 1);
+  return leaf(left) === leaf(right);
+}
+
+/** 同一条助手消息里，工具调用之后的工具和回复正文都不留。画面把这条消息的正文排在全部工具后面。 */
+export function trimAssistantContentAtToolCall(content: unknown, toolCallId: string): unknown[] | undefined {
+  if (!Array.isArray(content)) return undefined;
+  const kept: unknown[] = [];
+  let seen = false;
+  for (const part of content) {
+    if (!part || typeof part !== "object") continue;
+    if (isToolCallPart(part)) {
+      if (seen) continue;
+      kept.push(part);
+      if (sameToolId(toolCallPartId(part), toolCallId)) seen = true;
+      continue;
+    }
+    const type = "type" in part ? part.type : undefined;
+    if (type === "text" || type === "thinking") continue;
+    if (!seen) kept.push(part);
+  }
+  if (!seen) return undefined;
+  return kept;
 }
 
 function contentHasToolCall(content: unknown, id: string): boolean {
   if (!Array.isArray(content)) return false;
   return content.some((part) => {
     if (!part || typeof part !== "object") return false;
-    const record = part as { type?: unknown; id?: unknown };
-    return (record.type === "toolCall" || record.type === "tool_call") && record.id === id;
+    return isToolCallPart(part) && sameToolId(toolCallPartId(part), id);
   });
 }
 
@@ -137,7 +204,7 @@ export function resolveSessionEntry(
       if (!entry?.message) continue;
       if (entry.message.id === id) return entry.id;
       // 工具卡的 id 是 toolCallId。结果条目比发出调用的助手消息更靠后，优先停在结果上。
-      if (entry.message.toolCallId === id) return entry.id;
+      if (sameToolId(entry.message.toolCallId ?? "", id)) return entry.id;
       if (!callEntry && contentHasToolCall(entry.message.content, id)) callEntry = entry.id;
     }
     if (callEntry) return callEntry;
@@ -299,6 +366,8 @@ export async function runSessionResume(input: {
     });
     const cancelled = Boolean(result && result.cancelled);
     if (!cancelled) {
+      // 工具行分叉停在该次调用。同一条助手消息里更后面的工具和回复不能跟着进来。
+      if (input.request.role === "tool") input.pi.trimAssistantAtToolCall?.(input.request.entryId);
       if (!input.pi.contextEvents) throw new Error("session tree replay missing");
       input.reload(input.pi.contextEvents());
       input.publishContext();

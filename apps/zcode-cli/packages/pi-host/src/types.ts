@@ -14,7 +14,11 @@ export type PiAssistantDelta =
   | { type: "thinking_end"; contentIndex: number; content?: string }
   | { type: "toolcall_start"; contentIndex: number; id: string; toolName?: string }
   | { type: "toolcall_delta"; contentIndex: number; delta: string }
-  | { type: "toolcall_end"; contentIndex: number; toolCall?: { id: string; name: string; arguments?: unknown } };
+  | {
+      type: "toolcall_end";
+      contentIndex: number;
+      toolCall?: { id: string; name: string; arguments?: unknown };
+    };
 
 export type PiToolResult = {
   content?: Array<{ type?: string; text?: string }>;
@@ -33,7 +37,11 @@ export type PiHostEvent =
     }
   | { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string }
   | { type: "agent_settled"; at?: number }
-  | { type: "message_start"; at?: number; message: { role: string; content?: unknown; id?: string } }
+  | {
+      type: "message_start";
+      at?: number;
+      message: { role: string; content?: unknown; id?: string };
+    }
   | {
       type: "message_end";
       at?: number;
@@ -216,6 +224,17 @@ export interface PiSessionPort {
   contextUsage?(): PiContextUsage | null;
   readonly isCompacting?: boolean;
   abortBranchSummary?(): void;
+  /** 裁切前记下将被丢掉的路径。没有可总结的内容时不返回。 */
+  captureAbandonedBranch?(request: {
+    entryId: string;
+    text?: string;
+    role?: "user" | "assistant" | "tool";
+  }): { entries: readonly unknown[] } | undefined;
+  /** 当前叶子已经是新分支之后，再把丢掉的路径写成摘要。 */
+  summarizeAbandonedBranch?(
+    captured: { entries: readonly unknown[] },
+    options?: { customInstructions?: string; label?: string },
+  ): Promise<{ cancelled: boolean; summary?: string }>;
   navigateTree?(
     targetId: string,
     options?: {
@@ -234,6 +253,8 @@ export interface PiSessionPort {
   labelEntry?(id: string, label?: string): void;
   deleteBranch?(entryId: string): void;
   contextEvents?(): PiHostEvent[];
+  /** 从工具调用分叉后，裁掉同一条助手消息里这个工具之后的内容。 */
+  trimAssistantAtToolCall?(toolCallId: string): void;
   resolveEntry?(
     id: string,
     hint?: { text?: string; role?: "user" | "assistant" | "tool" },
@@ -263,6 +284,8 @@ export interface CreatePiSessionInput {
   cwd: string;
   sessionFile: string;
   parentSessionId?: string;
+  /** 子会话不挂 codemode、tool_search、MCP。对话分叉即使有 parentSessionId 也不要设。 */
+  omitHostExtensions?: boolean;
   loadExtensions: boolean;
   checkPermission?: ToolPermissionCheck;
 }

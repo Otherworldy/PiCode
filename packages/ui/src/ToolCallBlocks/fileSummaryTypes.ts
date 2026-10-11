@@ -204,6 +204,8 @@ export interface WorkflowDraftPosition {
 export interface ToolCallBlockRenderContext {
   isOfficeMode?: boolean;
   toolCallNode: TaskChatToolCallTreeNode;
+  /** 分组里的子工具行补分叉按钮。toolId 是工具调用 id。缺省则不画。 */
+  resumeMenuForToolId?: (toolId: string) => ReactNode;
   workspacePath: string;
   /**
    * 插件 UI：scope 是沙箱登记需要的 session 范围，onOpenSidePane 是"在侧栏打开"回调；

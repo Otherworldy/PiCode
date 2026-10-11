@@ -2,6 +2,7 @@
 // 共同点：都以 {rowId, entityId} 定位历史实体，经 host 的 v4 投影翻译面换成 transcript messageId
 // （翻译是 v4 原生决策，翻译不到直接 reject，绝不静默兜底 latestCheckpoint——会错点）。
 // - editUserQuery = 换文本的 retryTurn：rewind 截断该 turn → 原生 prompt turn 重发新文本。
+//   restoreToInput 只做同一条裁切，不重发、不回滚文件，原文由 UI 填回输入框。
 // - retryTurn = rewind 截断 + 重发原 user prompt（原文必须在 rewind 前解析，截断后拿不到）。
 // - forkAssistant = stable resolver + conversation-only copy；running parent 与 workspace 不动。
 import type { ModelSelection } from "@zcode/shared";
@@ -145,6 +146,40 @@ async function editUserQuery(
     throw new V4EditTargetNotLatestError(payload.target.rowId);
   }
   const editTarget = resolution.editTarget;
+  if (payload.restoreToInput) {
+    // 回退到此处和编辑重发共用 navigateTree 裁切，但用户还没发出新内容。
+    // 不入输入队列、不回滚文件；裁切失败时按编辑同一条路径把 jsonl 画回去。
+    if (record.activeAbortController) {
+      await preemptActiveTurnAndWait(host, record, {
+        abortMessage: "v4 editUserQuery restore preempts active turn",
+        goalPausedMutationReason: "edit_user_query_goal_paused",
+      });
+    }
+    let rewound = false;
+    try {
+      rewound = true;
+      await submitConversationRewind(host, record, editTarget.transcriptMessageId, summary);
+    } catch (error) {
+      if (rewound) await record.app.restoreRewoundConversation?.();
+      throw error;
+    }
+    host.logger?.info?.("v4 editUserQuery restored to input", {
+      ...traceContextToLogContext(record.traceContext),
+      clientId: envelope.clientId,
+      commandId: envelope.commandId,
+      event: "conversation.command.edit_user_query.restored_to_input",
+      module: CONVERSATION_COMMAND_LOG_MODULE,
+      sessionId: record.app.sessionId,
+      status: "completed",
+      targetEntityId: payload.target.entityId,
+      targetRowId: payload.target.rowId,
+    });
+    return {
+      type: "editUserQuery",
+      disposition: "rewind",
+      sessionId: record.app.sessionId,
+    };
+  }
   const attachmentRefs = payload.attachments ?? stableAttachmentRefs(editTarget);
   // attachments 缺省与 [] 语义不同；必须基于 effective refs 校验，
   // 才能同时允许 attachment-only edit，并在正文和附件都被清空时于 rewind 前拒绝。

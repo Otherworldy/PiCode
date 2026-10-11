@@ -1,7 +1,9 @@
 /* eslint-disable max-lines */
 import { localTtftContextSchema, localTtftClockSchema } from "../localTtft.js";
 // Command 层：信封 / ACK / 命令全集 payload。
-// conversation rewind 无独立命令（裁决：= editUserQuery 的 UI 入口）；
+// conversation rewind 无独立命令。
+// 重发 = editUserQuery。回退到输入框 = editUserQuery { restoreToInput: true }：
+// 同一条裁切，不重发、不入队、不回滚文件。
 // workspace-only 文件撤销走 applyFileRewind，不截断聊天历史。
 import { z } from "zod";
 import { conversationRowTargetSchema, timestampSchema } from "./core.js";
@@ -174,6 +176,8 @@ export const commandPayloadSchemas = {
     // 缺省不总结。true 时与从此处继续一样，先总结将被裁掉的分支再重发。
     summarize: z.boolean().optional(),
     customInstructions: z.string().max(8000).optional(),
+    // true：只裁切并把原文交给输入框。不重发、不入输入队列、不回滚文件。
+    restoreToInput: z.literal(true).optional(),
   }),
   retryTurn: z.object({ target: conversationRowTargetSchema }),
   // （2026-09-12）：原 setToolWidgetState / setSessionPluginUiState 已删除——插件 UI widgetState

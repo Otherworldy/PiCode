@@ -1,5 +1,23 @@
-import type { KeyboardEvent, ReactNode } from "react";
+import { createContext, useContext, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronRightIcon } from "lucide-react";
+
+/** 工具摘要行末尾的分叉按钮。摘要缩到文字宽度，按钮跟在这里才紧贴正文。 */
+export const ToolSummaryTrailingContext = createContext<ReactNode>(null);
+
+function ToolSummaryTrailingSlot() {
+  const trailing = useContext(ToolSummaryTrailingContext);
+  if (trailing == null) return null;
+  return (
+    <span
+      className="absolute top-0 left-full z-10 ml-0.5 inline-flex"
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
+    >
+      {trailing}
+    </span>
+  );
+}
 import { testId, TID_TOOL_SUMMARY_TRIGGER } from "@zcode/shared";
 import { cn } from "@/components/lib/utils.js";
 import { CollapsibleTrigger } from "@/components/ui/collapsible.js";
@@ -163,6 +181,7 @@ function SummaryContent({
 
 export function ToolSummaryRow(props: ToolSummaryRowProps) {
   const { action, canToggle, forceOpen, isExpanded, title, toggleAriaLabel, toolId } = props;
+  const hasTrailing = useContext(ToolSummaryTrailingContext) != null;
   const sharedContent = (
     <>
       <SummaryLeadingContent {...props} />
@@ -179,10 +198,11 @@ export function ToolSummaryRow(props: ToolSummaryRowProps) {
         aria-label={action.ariaLabel}
         onClick={action.onActivate}
         onKeyDown={(event) => handleToolSummaryActionKeyDown(event, action.onActivate)}
-        className="group/tool-summary inline-flex max-w-full cursor-pointer items-center gap-2 self-start text-left text-ui-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-input-border-focused"
+        className="group/tool-summary relative inline-flex max-w-full cursor-pointer items-center gap-2 self-start text-left text-ui-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-input-border-focused"
         title={title}
       >
         {sharedContent}
+        <ToolSummaryTrailingSlot />
       </div>
     );
   }
@@ -206,7 +226,7 @@ export function ToolSummaryRow(props: ToolSummaryRowProps) {
             event.preventDefault();
             event.currentTarget.click();
           }}
-          className="group/tool-summary inline-flex max-w-full cursor-pointer items-center gap-2 self-start text-left text-ui-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-input-border-focused"
+          className="group/tool-summary relative inline-flex max-w-full cursor-pointer items-center gap-2 self-start text-left text-ui-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-input-border-focused"
           title={title}
         >
           {sharedContent}
@@ -218,6 +238,7 @@ export function ToolSummaryRow(props: ToolSummaryRowProps) {
               forceOpen && "opacity-100",
             )}
           />
+          <ToolSummaryTrailingSlot />
         </div>
       </CollapsibleTrigger>
     );
@@ -226,10 +247,14 @@ export function ToolSummaryRow(props: ToolSummaryRowProps) {
   return (
     <div
       data-testid={testId(TID_TOOL_SUMMARY_TRIGGER, toolId)}
-      className="group/tool-summary cursor-default flex w-full items-center gap-2 text-left text-ui-base transition-colors focus-visible:outline-none"
+      className={cn(
+        "group/tool-summary cursor-default items-center gap-2 text-left text-ui-base transition-colors focus-visible:outline-none",
+        hasTrailing ? "relative inline-flex max-w-full self-start" : "flex w-full",
+      )}
       title={title}
     >
       {sharedContent}
+      <ToolSummaryTrailingSlot />
     </div>
   );
 }

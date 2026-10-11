@@ -16,7 +16,10 @@ export class FakePiSession implements PiSessionPort {
   navigatedTo: string[] = [];
   navigateOptions?: { summarize?: boolean; customInstructions?: string };
   holdNavigate = false;
+  holdSummary = false;
   summaryAborted = false;
+  summaryStarted = false;
+  abandonedEntries: readonly unknown[] = [{ id: "dropped" }];
   editorText?: string;
   contextEventsList: PiHostEvent[] = [];
   isCompacting = false;
@@ -74,6 +77,24 @@ export class FakePiSession implements PiSessionPort {
 
   abortBranchSummary(): void {
     this.summaryAborted = true;
+  }
+
+  captureAbandonedBranch(): { entries: readonly unknown[] } | undefined {
+    return this.abandonedEntries.length > 0 ? { entries: this.abandonedEntries } : undefined;
+  }
+
+  async summarizeAbandonedBranch(
+    _captured: { entries: readonly unknown[] },
+    options?: { customInstructions?: string },
+  ): Promise<{ cancelled: boolean; summary?: string }> {
+    this.summaryStarted = true;
+    this.navigateOptions = {
+      summarize: true,
+      ...(options?.customInstructions ? { customInstructions: options.customInstructions } : {}),
+    };
+    if (this.holdSummary) await new Promise((resolve) => setTimeout(resolve, 20));
+    if (this.summaryAborted) return { cancelled: true };
+    return { cancelled: false, summary: "dropped the rest" };
   }
 
   readTree(): PiSessionTreeNode[] {

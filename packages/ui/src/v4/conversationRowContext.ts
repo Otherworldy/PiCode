@@ -21,6 +21,7 @@ import type {
   OpenSubagentSideTabRequest,
 } from "@/lib/workspaceSidePane.js";
 import type {
+  AttachmentRef,
   CommandAck,
   ConversationRowTarget,
   TurnHeaderRow,
@@ -76,7 +77,9 @@ export interface ConversationRowRenderContext {
    * 需保持引用稳定（rowContext 的 memo 依赖）。
    */
   onNavigateToRow?: (sessionId: string, rowId: number) => void;
-  /** 右键这条消息，按总结方式建成左侧新会话。工具行的 entryId 是 toolCallId。 */
+  /** 正在总结被丢下的分支时，点这一行的停止。与输入框停止键同一条路。 */
+  onStop?: () => void;
+  /** 行右侧分叉按钮：按总结方式建成左侧新会话。工具行的 entryId 是 toolCallId。 */
   onResumeHere?: (target: {
     entryId: string;
     role: "user" | "assistant" | "tool";
@@ -84,6 +87,20 @@ export interface ConversationRowRenderContext {
     summarize: boolean;
     customInstructions?: string;
   }) => void;
+  /** 输入框已有草稿时返回 false，调用方不要打开回退选择。 */
+  prepareRewindHere?: () => boolean;
+  /**
+   * 用户消息回退到此处：先由行内选总结，再裁切这条及之后的内容。
+   * 不重发。成功后宿主把原文填进当前输入框。false 表示没裁切。
+   */
+  onRewindHere?: (target: {
+    rowId: number;
+    entityId: string;
+    text: string;
+    attachments?: readonly AttachmentRef[];
+    summarize: boolean;
+    customInstructions?: string;
+  }) => Promise<boolean | void> | boolean | void;
   /** Assistant Preview Cards：Website 卡片预览入口，由 app shell 注入 side pane 行为。 */
   onOpenBrowserUrl?: (url: string) => void;
   onOpenAutomationsMain?: OpenAutomationsMain;

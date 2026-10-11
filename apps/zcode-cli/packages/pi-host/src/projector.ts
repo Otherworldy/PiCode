@@ -14,7 +14,13 @@ import {
 } from "@zcode/shared/zcode-protocol-v4";
 import { summarizeTurnFileChanges } from "./file-rewind.js";
 import { PI_PROCESS_WORK_PREFIX } from "./pi-process-bridge.js";
-import { bashDisplay, editDisplay, mapPiToolName, toolInputPath, toolResultText } from "./presentation.js";
+import {
+  bashDisplay,
+  editDisplay,
+  mapPiToolName,
+  toolInputPath,
+  toolResultText,
+} from "./presentation.js";
 import { createEmptySnapshot, emptyAvailability } from "./snapshot.js";
 import { isControlCommandTitle } from "./jsonl-history.js";
 import type { PiAssistantDelta, PiHostEvent } from "./types.js";
@@ -214,10 +220,7 @@ export class PiToV4Projector {
     return this.commit([{ op: "row.upserted", row: { ...row, entityId: entryId } }]);
   }
 
-  setFeedback(
-    entityId: string,
-    feedback: "like" | "dislike" | null,
-  ): ConversationDelta[] {
+  setFeedback(entityId: string, feedback: "like" | "dislike" | null): ConversationDelta[] {
     const row = this.snapshot.rows.window.find(
       (item) => item.kind === "assistantText" && item.entityId === entityId,
     );
@@ -254,11 +257,15 @@ export class PiToV4Projector {
     return this.applyState({ pendingInteractions });
   }
 
-  replaceWidgets(widgets: NonNullable<ConversationSnapshot["extensionWidgets"]>): ConversationDelta[] {
+  replaceWidgets(
+    widgets: NonNullable<ConversationSnapshot["extensionWidgets"]>,
+  ): ConversationDelta[] {
     return this.applyState({ extensionWidgets: widgets });
   }
 
-  replaceStatuses(statuses: NonNullable<ConversationSnapshot["extensionStatuses"]>): ConversationDelta[] {
+  replaceStatuses(
+    statuses: NonNullable<ConversationSnapshot["extensionStatuses"]>,
+  ): ConversationDelta[] {
     return this.applyState({ extensionStatuses: statuses });
   }
 
@@ -309,7 +316,8 @@ export class PiToV4Projector {
     }
     const rowId = this.branchSummaryRowId;
     this.branchSummaryRowId = null;
-    const row = rowId === null ? undefined : this.snapshot.rows.window.find((item) => item.rowId === rowId);
+    const row =
+      rowId === null ? undefined : this.snapshot.rows.window.find((item) => item.rowId === rowId);
     if (
       rowId === null ||
       !row ||
@@ -372,7 +380,10 @@ export class PiToV4Projector {
     return this.applyState({ backgroundWorks: next });
   }
 
-  setTitle(title: string, titleSource: ConversationSnapshot["meta"]["titleSource"] = "custom"): ConversationDelta[] {
+  setTitle(
+    title: string,
+    titleSource: ConversationSnapshot["meta"]["titleSource"] = "custom",
+  ): ConversationDelta[] {
     // 手改标题之后，jsonl 重放和自动总结都只能再写 custom。否则侧栏会闪回生成标题。
     if (titleSource !== "custom" && this.snapshot.meta.titleSource === "custom") return [];
     if (titleSource !== "custom" && isControlCommandTitle(title)) return [];
@@ -500,7 +511,7 @@ export class PiToV4Projector {
               ...this.base(this.turnId || "branch"),
               kind: "timelineMarker",
               lane: "turnTailBoundary",
-              marker: { type: "branchSummary", summary: event.summary },
+              marker: { type: "branchSummary", summary: event.summary, status: "done" },
             },
           },
         ];
@@ -534,9 +545,14 @@ export class PiToV4Projector {
     };
   }
 
-  private noteRetry(event: Extract<PiHostEvent, { type: "auto_retry_start" }>): ConversationDelta[] {
+  private noteRetry(
+    event: Extract<PiHostEvent, { type: "auto_retry_start" }>,
+  ): ConversationDelta[] {
     const presented = presentModelError(event.errorMessage);
-    this.retryFailures = [...this.retryFailures, { attempt: event.attempt, message: presented.message }].slice(-20);
+    this.retryFailures = [
+      ...this.retryFailures,
+      { attempt: event.attempt, message: presented.message },
+    ].slice(-20);
     return [
       {
         op: "state.updated",
@@ -613,7 +629,9 @@ export class PiToV4Projector {
     ];
   }
 
-  noteUserAttachments(attachments: Extract<ConversationRow, { kind: "userInput" }>["attachments"]): void {
+  noteUserAttachments(
+    attachments: Extract<ConversationRow, { kind: "userInput" }>["attachments"],
+  ): void {
     this.pendingUserAttachments = attachments?.length ? attachments : undefined;
   }
 
@@ -662,7 +680,8 @@ export class PiToV4Projector {
       return this.appendStream("text", delta.delta ?? "", paths.text, "reasoning");
     }
     if (delta.type === "text_end" || delta.type === "thinking_end") {
-      const rowId = delta.type === "text_end" ? this.streamingTextRowId : this.streamingReasoningRowId;
+      const rowId =
+        delta.type === "text_end" ? this.streamingTextRowId : this.streamingReasoningRowId;
       if (rowId == null) return [];
       const row = this.snapshot.rows.window.find((item) => item.rowId === rowId);
       if (!row || (row.kind !== "assistantText" && row.kind !== "reasoning")) return [];
@@ -708,7 +727,13 @@ export class PiToV4Projector {
           : JSON.stringify(delta.toolCall.arguments ?? {});
       this.streamingToolId = null;
       this.toolArgs.set(delta.toolCall.id, inputText);
-      return this.ensureToolRow(delta.toolCall.id, delta.toolCall.name, "inputStreaming", inputText, true);
+      return this.ensureToolRow(
+        delta.toolCall.id,
+        delta.toolCall.name,
+        "inputStreaming",
+        inputText,
+        true,
+      );
     }
     return [];
   }
@@ -719,13 +744,15 @@ export class PiToV4Projector {
     stream: boolean,
     kind: "assistantText" | "reasoning",
   ): ConversationDelta[] {
-    const currentId = kind === "assistantText" ? this.streamingTextRowId : this.streamingReasoningRowId;
+    const currentId =
+      kind === "assistantText" ? this.streamingTextRowId : this.streamingReasoningRowId;
     if (currentId == null) {
       const row: ConversationRow =
         kind === "assistantText"
           ? { ...this.base(), kind, text: stream ? append : "", state: "streaming" }
           : { ...this.base(), kind, text: stream ? append : "", state: "streaming" };
-      if (kind === "assistantText" && this.assistantMessageId) row.entityId = this.assistantMessageId;
+      if (kind === "assistantText" && this.assistantMessageId)
+        row.entityId = this.assistantMessageId;
       if (kind === "assistantText") this.streamingTextRowId = row.rowId;
       else this.streamingReasoningRowId = row.rowId;
       if (!stream) {
@@ -763,7 +790,9 @@ export class PiToV4Projector {
       this.toolRowId.set(toolCallId, row.rowId);
       return [{ op: "row.appended", row }];
     }
-    return replace || existing != null ? [{ op: "row.upserted", row: { ...row, rowId: existing } }] : [];
+    return replace || existing != null
+      ? [{ op: "row.upserted", row: { ...row, rowId: existing } }]
+      : [];
   }
 
   /** 流式 id 是 `fc_…`，执行 id 是 `call-…|fc_…`。对到同一行，否则完整参数会留在还没 success 的那行。 */
@@ -795,7 +824,9 @@ export class PiToV4Projector {
     return this.toolArgs.get(id) ?? "";
   }
 
-  private toolStart(event: Extract<PiHostEvent, { type: "tool_execution_start" }>): ConversationDelta[] {
+  private toolStart(
+    event: Extract<PiHostEvent, { type: "tool_execution_start" }>,
+  ): ConversationDelta[] {
     // 执行 id 常是 `call-…|fc_…`，流式 id 只是后半。对不上就会另起一行，完整 edit 留在还没 success 的那行里，汇总就只看到最后一小段。
     const id = this.canonicalToolId(event.toolCallId);
     const inputText = this.rememberArgs(id, event.args);
@@ -804,7 +835,9 @@ export class PiToV4Projector {
     return deltas;
   }
 
-  private toolUpdate(event: Extract<PiHostEvent, { type: "tool_execution_update" }>): ConversationDelta[] {
+  private toolUpdate(
+    event: Extract<PiHostEvent, { type: "tool_execution_update" }>,
+  ): ConversationDelta[] {
     const rowId = this.toolRowId.get(this.canonicalToolId(event.toolCallId));
     if (rowId == null) return [];
     const row = this.snapshot.rows.window.find((item) => item.rowId === rowId);
@@ -830,13 +863,14 @@ export class PiToV4Projector {
     return [{ op: "row.upserted", row: next }];
   }
 
-  private toolEnd(event: Extract<PiHostEvent, { type: "tool_execution_end" }>): ConversationDelta[] {
+  private toolEnd(
+    event: Extract<PiHostEvent, { type: "tool_execution_end" }>,
+  ): ConversationDelta[] {
     const id = this.canonicalToolId(event.toolCallId);
     const rowId = this.toolRowId.get(id);
     const existing = this.snapshot.rows.window.find((item) => item.rowId === rowId);
     const inputText =
-      this.toolArgs.get(id) ||
-      (existing && existing.kind === "toolCall" ? existing.inputText : "");
+      this.toolArgs.get(id) || (existing && existing.kind === "toolCall" ? existing.inputText : "");
     this.aliasToolId(event.toolCallId, id);
     if (rowId == null) {
       return this.ensureToolRow(id, event.toolName, event.isError ? "error" : "success", inputText);
@@ -858,7 +892,9 @@ export class PiToV4Projector {
       status: this.aborted ? "cancelled" : event.isError ? "error" : "success",
       output: {
         text,
-        ...(display ? { display: display as NonNullable<NonNullable<ToolCallRow["output"]>["display"]> } : {}),
+        ...(display
+          ? { display: display as NonNullable<NonNullable<ToolCallRow["output"]>["display"]> }
+          : {}),
       },
       ...(event.isError ? { error: { code: "tool.error", message: text || "tool failed" } } : {}),
       outputPreview: undefined,
@@ -915,12 +951,14 @@ export class PiToV4Projector {
     };
     // 只收口这次正在跑的压缩。倒序碰到的任意 marker 可能是模型切换，
     // 盖上去会让失败从时间线上消失。
-    const existing = [...this.snapshot.rows.window].reverse().find(
-      (item) =>
-        item.kind === "timelineMarker" &&
-        item.marker.type === "compact" &&
-        item.marker.status === "running",
-    );
+    const existing = [...this.snapshot.rows.window]
+      .reverse()
+      .find(
+        (item) =>
+          item.kind === "timelineMarker" &&
+          item.marker.type === "compact" &&
+          item.marker.status === "running",
+      );
     const deltas: ConversationDelta[] = [
       existing && existing.kind === "timelineMarker"
         ? { op: "row.upserted", row: { ...existing, marker } }
@@ -1039,12 +1077,17 @@ export class PiToV4Projector {
     const presented = errorText ? presentModelError(errorText) : undefined;
     if (presented) {
       const attempt = (this.retryFailures.at(-1)?.attempt ?? 0) + 1;
-      this.retryFailures = [...this.retryFailures, { attempt, message: presented.message }].slice(-20);
+      this.retryFailures = [...this.retryFailures, { attempt, message: presented.message }].slice(
+        -20,
+      );
     }
     const state = this.aborted ? "completedInterrupted" : "completedSuccess";
-    const failureLines = this.retryFailures.map((failure) => `${failure.attempt}. ${failure.message}`);
+    const failureLines = this.retryFailures.map(
+      (failure) => `${failure.attempt}. ${failure.message}`,
+    );
     if (presented?.detail) failureLines.push(presented.detail);
-    const detail = failureLines.length > 1 || presented?.detail ? failureLines.join("\n") : undefined;
+    const detail =
+      failureLines.length > 1 || presented?.detail ? failureLines.join("\n") : undefined;
     const deltas: ConversationDelta[] = [];
     for (const row of this.snapshot.rows.window) {
       if (row.kind === "turnHeader" && row.turnId === this.turnId && row.state === "running") {
@@ -1059,12 +1102,21 @@ export class PiToV4Projector {
         });
       }
       if (row.kind === "assistantText" && row.state === "streaming") {
-        deltas.push({ op: "row.upserted", row: { ...row, state: this.aborted ? "interrupted" : "complete" } });
+        deltas.push({
+          op: "row.upserted",
+          row: { ...row, state: this.aborted ? "interrupted" : "complete" },
+        });
       }
       if (row.kind === "reasoning" && row.state === "streaming") {
-        deltas.push({ op: "row.upserted", row: { ...row, state: this.aborted ? "interrupted" : "complete" } });
+        deltas.push({
+          op: "row.upserted",
+          row: { ...row, state: this.aborted ? "interrupted" : "complete" },
+        });
       }
-      if (row.kind === "toolCall" && (row.status === "running" || row.status === "inputStreaming")) {
+      if (
+        row.kind === "toolCall" &&
+        (row.status === "running" || row.status === "inputStreaming")
+      ) {
         deltas.push({
           op: "row.upserted",
           row: { ...row, status: this.aborted ? "cancelled" : "error", endedAt: Date.now() },
@@ -1124,9 +1176,7 @@ export class PiToV4Projector {
       }
       if (row.kind !== "userInput" && row.kind !== "assistantText") continue;
       const forkable =
-        !running &&
-        row.kind === "assistantText" &&
-        forkRowByTurn.get(row.turnId) === row.rowId;
+        !running && row.kind === "assistantText" && forkRowByTurn.get(row.turnId) === row.rowId;
       const nextActions =
         !running && row.kind === "userInput" && row.origin === "realUser"
           ? { canEdit: true as const, editDisposition: "rewind" as const }
@@ -1153,7 +1203,8 @@ export class PiToV4Projector {
           additions: summary.additions,
           deletions: summary.deletions,
           files: summary.files,
-          state: row.fileChanges?.state === "reverted" ? ("reverted" as const) : ("active" as const),
+          state:
+            row.fileChanges?.state === "reverted" ? ("reverted" as const) : ("active" as const),
         }
       : undefined;
     const actions = { ...row.actions };

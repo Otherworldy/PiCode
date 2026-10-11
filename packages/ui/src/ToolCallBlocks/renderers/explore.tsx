@@ -425,6 +425,7 @@ export function ExploreToolCallBlock(context: ToolCallBlockRenderContext) {
           {childToolCalls.map((childToolCallNode) => (
             <ToolCallBlock
               key={childToolCallNode.toolCall.toolId}
+              summaryTrailing={context.resumeMenuForToolId?.(childToolCallNode.toolCall.toolId)}
               toolCallNode={childToolCallNode}
               workspacePath={context.workspacePath}
               showIcon={false}
@@ -440,6 +441,7 @@ export function ExploreToolCallBlock(context: ToolCallBlockRenderContext) {
     [
       childToolCalls,
       context.onLoadFullToolCallFields,
+      context.resumeMenuForToolId,
       context.onOpenAutomationsMain,
       context.onOpenBrowserUrl,
       context.onOpenCodeViewer,

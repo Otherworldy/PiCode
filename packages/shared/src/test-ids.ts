@@ -189,6 +189,8 @@ export const TID_SSH_CANCEL_BUTTON = "ssh-cancel-button";
 // Sidebar
 /** 侧边栏容器 */
 export const TID_SIDEBAR = "sidebar";
+/** 侧栏顶部「自动化」入口。打开的主视图也包含工作流标签。 */
+export const TID_SIDEBAR_AUTOMATIONS = "sidebar-automations";
 /** 侧边栏打开工作区按钮 */
 export const TID_WORKSPACE_OPEN_BUTTON = "workspace-open-button";
 /** 侧边栏工作区列表 */
@@ -562,6 +564,10 @@ export const TID_V4_HOOK_DETAILS_TRIGGER = "v4-hook-details-trigger";
 export const TID_V4_HOOK_DETAILS_CONTENT = "v4-hook-details-content";
 /** v4 user 行 edit 按钮（动态后缀为 rowId） */
 export const TID_V4_EDIT = "v4-edit";
+/** v4 user 行回退到此处（动态后缀为 rowId） */
+export const TID_V4_REWIND = "v4-rewind";
+/** v4 行右侧分叉菜单按钮（动态后缀为 rowId） */
+export const TID_V4_RESUME_MENU = "v4-resume-menu";
 /** v4 user query 编辑输入框（动态后缀为 rowId） */
 export const TID_V4_EDIT_INPUT = "v4-edit-input";
 /** v4 user query 编辑提交按钮（动态后缀为 rowId） */

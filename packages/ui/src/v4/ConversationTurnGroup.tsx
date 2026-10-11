@@ -29,6 +29,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible.js";
 import { ToolCallBlock } from "@/ToolCallBlocks.js";
+import { ResumeHereButton, type ResumeHereChoice } from "@/v4/ResumeHereMenu.js";
 import {
   CronCreateAutomationCard,
   isCronAutomationCardToolCall,
@@ -163,7 +164,11 @@ function TurnChatLoadingSlot({
   if (visibleRetryStatus && failures.length > 0) {
     return (
       <div data-zcode-chat-loading-slot="true" className="min-h-5 text-ui-base">
-        <button type="button" className="text-left" onClick={() => setFailuresOpen((open) => !open)}>
+        <button
+          type="button"
+          className="text-left"
+          onClick={() => setFailuresOpen((open) => !open)}
+        >
           <ChatApiRetryStatus apiRetry={visibleRetryStatus} intl={intl} locale={locale} />
         </button>
         {failuresOpen ? (
@@ -196,6 +201,29 @@ function TurnChatLoadingSlot({
   );
 }
 
+function toolResumeMenu(
+  rows: readonly { rowId: number; toolCallId: string; toolName: string }[],
+  onResumeHere: ConversationRowRenderContext["onResumeHere"],
+  toolId: string,
+) {
+  if (!onResumeHere) return null;
+  const row = rows.find((candidate) => candidate.toolCallId === toolId);
+  if (!row) return null;
+  return (
+    <ResumeHereButton
+      rowId={row.rowId}
+      onPick={(choice: ResumeHereChoice) =>
+        onResumeHere({
+          entryId: row.toolCallId,
+          role: "tool",
+          text: row.toolName,
+          ...choice,
+        })
+      }
+    />
+  );
+}
+
 function ConversationExploreGroupRow({
   item,
   context,
@@ -203,6 +231,10 @@ function ConversationExploreGroupRow({
   item: Extract<ConversationAssistantWorkRenderItem, { kind: "exploreGroup" }>;
   context: ConversationRowRenderContext;
 }) {
+  const resumeMenuForToolId = useCallback(
+    (toolId: string) => toolResumeMenu(item.rows, context.onResumeHere, toolId),
+    [context.onResumeHere, item.rows],
+  );
   // explore 分组行已经处在 turn 容器的统一边距内，单独再加 px-4
   // 会让同一串工具调用有的内缩、有的不内缩。
   return (
@@ -213,6 +245,7 @@ function ConversationExploreGroupRow({
     >
       <ToolCallBlock
         toolCallNode={item.node}
+        resumeMenuForToolId={resumeMenuForToolId}
         workspacePath={context.workspacePath}
         theme={context.theme}
         codePreviewSettings={context.codePreviewSettings}
@@ -264,6 +297,11 @@ function ConversationToolGroupRow({
         : undefined,
     [context, item],
   );
+  const resumeMenuForToolId = useCallback(
+    (toolId: string) =>
+      item.kind === "cuaGroup" ? null : toolResumeMenu(item.rows, context.onResumeHere, toolId),
+    [context.onResumeHere, item],
+  );
   return (
     <div
       data-row-id={item.rowId}
@@ -272,6 +310,7 @@ function ConversationToolGroupRow({
     >
       <ToolCallBlock
         toolCallNode={item.node}
+        resumeMenuForToolId={resumeMenuForToolId}
         workspacePath={context.workspacePath}
         theme={context.theme}
         codePreviewSettings={context.codePreviewSettings}

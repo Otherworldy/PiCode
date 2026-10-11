@@ -12,6 +12,7 @@ import {
   type SetStateAction,
 } from "react";
 import {
+  AlarmClock,
   Archive,
   Clock3,
   Cloud,
@@ -53,6 +54,7 @@ import {
   TID_PROJECT_ADD,
   TID_PROJECT_SECTION,
   TID_SIDEBAR,
+  TID_SIDEBAR_AUTOMATIONS,
   TID_WORKSPACE_LIST,
 } from "@zcode/shared";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
@@ -258,7 +260,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
   onOpenTodos,
   todosActive = false,
   onOpenPluginStore: _onOpenPluginStore,
-  automationsActive: _automationsActive = false,
+  automationsActive = false,
   pluginStoreActive: _pluginStoreActive = false,
   onFileTreeOpenChange,
 }: {
@@ -1291,6 +1293,20 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
             >
               <ListTodo className="h-4 w-4 shrink-0" />
               <span className="truncate">To-Dos</span>
+            </button>
+            <button
+              type="button"
+              data-testid={TID_SIDEBAR_AUTOMATIONS}
+              onClick={() => onOpenAutomations?.()}
+              className={cn(
+                "inline-flex h-8 w-full shrink-0 cursor-pointer items-center gap-2 overflow-hidden rounded-lg pl-2.5 pr-2.5 text-ui-base hover:bg-surface-hover hover:text-foreground",
+                automationsActive && "bg-surface-hover text-foreground",
+              )}
+            >
+              <AlarmClock className="h-4 w-4 shrink-0" />
+              <span className="truncate">
+                {intl.formatMessage({ id: "workspaceSidebar.automations" })}
+              </span>
             </button>
             <Button
               variant="ghost"

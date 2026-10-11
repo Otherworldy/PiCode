@@ -1543,6 +1543,7 @@ const enUS: Record<string, string> = {
     "You selected a WSL path:\n{path}\n\nWe recommend opening it through WSL connection, though you can still continue with the path.",
   "workspace.wslUncPrompt.openWsl": "Open WSL connection",
   "workspace.wslUncPrompt.continuePath": "Continue with path",
+  "workspaceSidebar.automations": "Automations",
   "workspaceSidebar.workspaces": "Tasks",
   "workspaceSidebar.archivedTasks": "Archived",
   "workspaceSidebar.taskViewOptions": "Filter and sort",
@@ -2074,8 +2075,10 @@ const enUS: Record<string, string> = {
   "appUpdate.action": "Update",
   "appUpdate.restartTitle": "Restart required to update",
   "appUpdate.openTitle": "Update ready",
-  "appUpdate.openDescription": "Version {version} has been downloaded. Confirm to open the disk image, then drag PiCode into Applications.",
-  "appUpdate.restartDescription": "Version {version} has been downloaded. PiCode will close, finish installing, and reopen.",
+  "appUpdate.openDescription":
+    "Version {version} has been downloaded. Confirm to open the disk image, then drag PiCode into Applications.",
+  "appUpdate.restartDescription":
+    "Version {version} has been downloaded. PiCode will close, finish installing, and reopen.",
   "appUpdate.confirm": "Update now",
   "appUpdate.cancel": "Cancel",
   "settings.about.title": "About",
@@ -2090,7 +2093,8 @@ const enUS: Record<string, string> = {
   "settings.about.downloading": "Downloading {progress}",
   "settings.about.installing": "Installing…",
   "settings.about.desktopOnly": "Installing updates is available in the desktop app.",
-  "settings.about.quitHint": "PiCode will close, finish installing in the background, and reopen. Confirm once if Windows asks for permission.",
+  "settings.about.quitHint":
+    "PiCode will close, finish installing in the background, and reopen. Confirm once if Windows asks for permission.",
   "settings.about.openedHint":
     "The disk image is open. Drag PiCode to Applications, then reopen it.",
   "settings.about.relaunchHint": "The AppImage was replaced and is reopening.",
@@ -4618,6 +4622,10 @@ const enUS: Record<string, string> = {
   "chat.send": "Send",
   "chat.scrollToBottom": "Scroll to bottom",
   "chat.message.edit": "Edit",
+  "chat.message.rewindHere": "Rewind to here",
+  "chat.message.rewindDraftConflict":
+    "Send or clear the current draft before rewinding to this message.",
+  "chat.message.rewindFailed": "Could not rewind to this message.",
   "chat.message.restore": "Restore",
   "chat.message.copy": "Copy",
   "chat.message.copy.copied": "Copied",

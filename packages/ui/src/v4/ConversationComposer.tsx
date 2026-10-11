@@ -308,6 +308,8 @@ export interface ComposerRestoreRequest {
   text: string;
   attachments: readonly AttachmentRef[];
   config?: Pick<V4ComposerDraft, "mode" | "planEnabled" | "modelSelection">;
+  /** 回退已经裁掉原文。输入框里后来打的字也要让位，否则这段话两边都没了。 */
+  replaceDraft?: boolean;
 }
 
 function applyComposerRestoreRequestToComposer({
@@ -341,7 +343,7 @@ function applyComposerRestoreRequestToComposer({
   if (
     request.sessionId !== currentSessionId ||
     request.workspaceKey !== currentWorkspaceKey ||
-    hasDraftContent ||
+    (hasDraftContent && request.replaceDraft !== true) ||
     !inputApi
   ) {
     return appliedRequestId;
@@ -1165,7 +1167,15 @@ function ConversationComposerImpl({
     attachmentsReady &&
     submissionReady;
   // 旧 UI 状态机：streaming + 空草稿 → Stop；有草稿 → 发送键（入队）。
-  const showStopControl = canStop && !hasDraftToSubmit;
+  // 分支总结不是一轮对话。草稿不能把这次停止换成发送，否则总结停不下来。
+  const branchSummaryRunning =
+    snapshot?.rows.window.some(
+      (row) =>
+        row.kind === "timelineMarker" &&
+        row.marker.type === "branchSummary" &&
+        row.marker.status === "running",
+    ) === true;
+  const showStopControl = branchSummaryRunning || (canStop && !hasDraftToSubmit);
 
   useEffect(() => {
     if (!canSend) setSendTooltipOpen(false);

@@ -3,7 +3,12 @@ import { GenUiMessageResponse } from "@/gen-ui/index.js";
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { compactFailureText } from "@/v4/compactFailureText.js";
 import { processEventSummary } from "@/v4/conversationTurnFlowItems.js";
-import { ResumeHereMenu, type ResumeHereChoice } from "@/v4/ResumeHereMenu.js";
+import {
+  ResumeHereAfterText,
+  ResumeHereButton,
+  ResumeHereMenu,
+  type ResumeHereChoice,
+} from "@/v4/ResumeHereMenu.js";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArchiveIcon,
@@ -15,6 +20,8 @@ import {
   GitBranchIcon,
   GoalIcon,
   PencilIcon,
+  Undo2Icon,
+  SquareIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
   TrendingUpDownIcon,
@@ -22,6 +29,7 @@ import {
 } from "lucide-react";
 import {
   TID_V4_EDIT,
+  TID_V4_REWIND,
   TID_V4_EDIT_ATTACHMENT_REMOVE,
   TID_V4_EDIT_CANCEL,
   TID_V4_EDIT_INPUT,
@@ -73,12 +81,7 @@ import {
 } from "@/components/ai-elements/reasoning.js";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog.js";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { WorkflowToolSummary } from "@/v4/WorkflowToolSummary.js";
 import {
@@ -89,6 +92,7 @@ import { WorkflowRetuneRow } from "@/ToolCallBlocks/renderers/WorkflowRetuneRow.
 import { workflowRunSettingsCeiling } from "@/components/workflow-timeline/workflowRunSettings.js";
 import { isAmendWorkflowToolCall } from "@/lib/workflowToolNames.js";
 import { ToolCallBlock } from "@/ToolCallBlocks.js";
+import { ToolSummaryTrailingContext } from "@/ToolCallBlocks/ToolSummaryRow.js";
 import { resolveWorkflowRunOpenToolCallId } from "@/v4/workflowRunCardJoin.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useOptionalPlatform } from "@/hooks/usePlatform.js";
@@ -161,7 +165,12 @@ function RowShell({
   );
   if (!onResume) return shell;
   return (
-    <ResumeHereMenu onPick={onResume} onFork={onFork}>
+    <ResumeHereMenu
+      onPick={onResume}
+      onFork={onFork}
+      rowId={rowId}
+      align={className.includes("items-end") ? "end" : "start"}
+    >
       {shell}
     </ResumeHereMenu>
   );
@@ -919,6 +928,10 @@ const UserInputRowView = memo(function UserInputRowView({
   const [conflictPreview, setConflictPreview] =
     useState<V4ConversationFileRewindPreviewResult | null>(null);
   const [conflictOpen, setConflictOpen] = useState(false);
+  const [rewindOpen, setRewindOpen] = useState(false);
+  const [rewindCustom, setRewindCustom] = useState(false);
+  const [rewindInstructions, setRewindInstructions] = useState("");
+  const [rewindSubmitting, setRewindSubmitting] = useState(false);
   const inputApiRef = useRef<LexicalChatInputHandle | null>(null);
   const editContextCount = countComposerPromptContexts(editPromptContexts);
   const canSubmit = draft.trim().length > 0 || editAttachments.length > 0 || editContextCount > 0;
@@ -990,6 +1003,8 @@ const UserInputRowView = memo(function UserInputRowView({
     if (!onEdit) {
       setEditing(false);
       setSubmitting(false);
+      setRewindOpen(false);
+      setRewindSubmitting(false);
     }
   }, [onEdit]);
 
@@ -1067,6 +1082,40 @@ const UserInputRowView = memo(function UserInputRowView({
       void handleSubmitEdit(pending.text, pending.workspaceMode, choice);
     },
     [handleSubmitEdit, pendingSend],
+  );
+  const rewindLabel = intl.formatMessage({ id: "chat.message.rewindHere" });
+  const handleOpenRewind = useCallback(() => {
+    if (context.prepareRewindHere && !context.prepareRewindHere()) return;
+    setRewindCustom(false);
+    setRewindInstructions("");
+    setRewindOpen(true);
+  }, [context.prepareRewindHere]);
+  const confirmRewind = useCallback(
+    async (choice: ResumeHereChoice) => {
+      if (!context.onRewindHere || !row.entityId) return;
+      // 总结要等模型写完才返回。对话框留着的话，生成过程就像发生在弹窗里。
+      setRewindOpen(false);
+      setRewindCustom(false);
+      setRewindSubmitting(true);
+      try {
+        await context.onRewindHere({
+          rowId: row.rowId,
+          entityId: row.entityId,
+          text: parsedShareContext.visibleContent,
+          ...(row.attachments ? { attachments: row.attachments } : {}),
+          ...choice,
+        });
+      } finally {
+        setRewindSubmitting(false);
+      }
+    },
+    [
+      context.onRewindHere,
+      parsedShareContext.visibleContent,
+      row.attachments,
+      row.entityId,
+      row.rowId,
+    ],
   );
   const rewindWorkspaceDisabled = submitting || editWorkspaceRewindAvailability?.enabled !== true;
   const rewindWorkspaceButton = (
@@ -1314,21 +1363,7 @@ const UserInputRowView = memo(function UserInputRowView({
   }
 
   return (
-    <RowShell
-      rowId={row.rowId}
-      className="group/user-row flex flex-col items-end"
-      onResume={
-        context.onResumeHere && (row.entityId || row.text.trim())
-          ? (choice) =>
-              context.onResumeHere?.({
-                entryId: row.entityId || row.text,
-                role: "user",
-                text: row.text,
-                ...choice,
-              })
-          : undefined
-      }
-    >
+    <RowShell rowId={row.rowId} className="group/user-row flex flex-col items-end">
       {hasAttachmentArea ? (
         <div
           data-v4-user-input-attachments="true"
@@ -1459,7 +1494,100 @@ const UserInputRowView = memo(function UserInputRowView({
             <PencilIcon className="size-3.5" />
           </MessageAction>
         ) : null}
+        {onEdit && row.entityId && context.onRewindHere ? (
+          <MessageAction
+            label={rewindLabel}
+            tooltip={rewindLabel}
+            data-testid={testId(TID_V4_REWIND, String(row.rowId))}
+            onClick={handleOpenRewind}
+          >
+            <Undo2Icon className="size-3.5" />
+          </MessageAction>
+        ) : null}
+        {context.onResumeHere && (row.entityId || row.text.trim()) ? (
+          <ResumeHereButton
+            toolbar
+            rowId={row.rowId}
+            onPick={(choice) =>
+              context.onResumeHere?.({
+                entryId: row.entityId || row.text,
+                role: "user",
+                text: row.text,
+                ...choice,
+              })
+            }
+          />
+        ) : null}
       </MessageActions>
+      <Dialog
+        open={rewindOpen}
+        onOpenChange={(open) => {
+          if (rewindSubmitting) return;
+          setRewindOpen(open);
+          if (!open) setRewindCustom(false);
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{rewindLabel}</DialogTitle>
+          </DialogHeader>
+          {rewindCustom ? (
+            <>
+              <textarea
+                className="h-24 w-full rounded-md border border-border bg-surface px-2 py-1 text-ui-sm"
+                value={rewindInstructions}
+                placeholder={intl.formatMessage({ id: "chat.tree.customPlaceholder" })}
+                onChange={(event) => setRewindInstructions(event.target.value)}
+              />
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!rewindInstructions.trim() || rewindSubmitting}
+                  onClick={() =>
+                    void confirmRewind({
+                      summarize: true,
+                      customInstructions: rewindInstructions.trim(),
+                    })
+                  }
+                >
+                  {intl.formatMessage({ id: "chat.tree.confirm" })}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={rewindSubmitting}
+                onClick={() => void confirmRewind({ summarize: false })}
+              >
+                {intl.formatMessage({ id: "chat.tree.skipSummary" })}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={rewindSubmitting}
+                onClick={() => void confirmRewind({ summarize: true })}
+              >
+                {intl.formatMessage({ id: "chat.tree.summarize" })}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={rewindSubmitting}
+                onClick={() => {
+                  setRewindInstructions("");
+                  setRewindCustom(true);
+                }}
+              >
+                {intl.formatMessage({ id: "chat.tree.custom" })}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </RowShell>
   );
 });
@@ -1631,6 +1759,42 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
   );
 });
 
+function AssistantMessageBody({
+  row,
+  visibleText,
+  streaming,
+  isOfficeMode,
+  context,
+}: {
+  row: AssistantTextRow;
+  visibleText: string;
+  streaming: boolean;
+  isOfficeMode: boolean;
+  context: ConversationRowRenderContext;
+}) {
+  return (
+    <GenUiMessageResponse
+      completed={row.state === "complete"}
+      messageKey={`${row.rowId}:${row.entityId ?? ""}`}
+      renderZCodeFileCitations
+      streaming={streaming}
+      workspacePath={context.workspacePath}
+      workspaceIdentity={context.workspaceIdentity}
+      workspaceRemoteSessionId={context.workspaceRemoteSessionId}
+      theme={context.theme}
+      codePreviewSettings={context.codePreviewSettings}
+      forceCodeWrap={isOfficeMode}
+      onOpenCodeViewer={context.onOpenCodeViewer}
+      onOpenFileLink={context.onOpenFileLink}
+      onOpenExternalUrl={context.onOpenBrowserUrl}
+      sessionId={context.sessionId ?? undefined}
+      readAttachment={context.readAttachment}
+    >
+      {visibleText}
+    </GenUiMessageResponse>
+  );
+}
+
 const AssistantTextRowView = memo(function AssistantTextRowView({
   row,
   context,
@@ -1671,6 +1835,24 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
     [projectsCodeComments, row.text, streaming],
   );
   const visiblePreviewCards = previewCards && previewCards.length > 0 ? previewCards : null;
+  const showsTailActions = row.state === "complete" && !hideActions && !deferActions;
+  const resumeChoice =
+    !showsTailActions &&
+    context.onResumeHere &&
+    row.state !== "streaming" &&
+    (row.entityId || row.text.trim())
+      ? (choice: ResumeHereChoice) =>
+          context.onResumeHere?.({
+            entryId: row.entityId || row.text,
+            role: "assistant",
+            text: row.text,
+            ...choice,
+          })
+      : undefined;
+  const forkHere =
+    onFork && row.entityId
+      ? () => onFork({ rowId: row.rowId, entityId: row.entityId! })
+      : undefined;
   const processSummary = processEventSummary(row.text);
   if (processSummary) {
     return (
@@ -1680,51 +1862,32 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
     );
   }
   return (
-    <RowShell
-      rowId={row.rowId}
-      className="group/assistant-row"
-      onFork={
-        onFork && row.entityId
-          ? () => onFork({ rowId: row.rowId, entityId: row.entityId! })
-          : undefined
-      }
-      onResume={
-        context.onResumeHere && row.state !== "streaming" && (row.entityId || row.text.trim())
-          ? (choice) =>
-              context.onResumeHere?.({
-                entryId: row.entityId || row.text,
-                role: "assistant",
-                text: row.text,
-                ...choice,
-              })
-          : undefined
-      }
-    >
+    <RowShell rowId={row.rowId} className="group/assistant-row">
       {/* assistant 文本走 streamdown（MessageResponse），
           markdown/代码块正式渲染；streaming 模式对未闭合 markdown 容错。 */}
       {/* MessageResponse 只消费自身声明的 props，不会把 data-* 透传到真实 DOM，
           导致 assistant 正文虽然在 JSX 上标了 selectable，框选逻辑却永远找不到该区域。
           selectable 语义必须放在稳定的 DOM 包装层上，完成态和 streaming 共用同一路径。 */}
       <div data-conversation-selectable="true" className="w-full text-ui-base">
-        <GenUiMessageResponse
-          completed={row.state === "complete"}
-          messageKey={`${row.rowId}:${row.entityId ?? ""}`}
-          renderZCodeFileCitations
-          streaming={streaming}
-          workspacePath={context.workspacePath}
-          workspaceIdentity={context.workspaceIdentity}
-          workspaceRemoteSessionId={context.workspaceRemoteSessionId}
-          theme={context.theme}
-          codePreviewSettings={context.codePreviewSettings}
-          forceCodeWrap={isOfficeMode}
-          onOpenCodeViewer={context.onOpenCodeViewer}
-          onOpenFileLink={context.onOpenFileLink}
-          onOpenExternalUrl={context.onOpenBrowserUrl}
-          sessionId={context.sessionId ?? undefined}
-          readAttachment={context.readAttachment}
-        >
-          {visibleText}
-        </GenUiMessageResponse>
+        {resumeChoice ? (
+          <ResumeHereAfterText onPick={resumeChoice} onFork={forkHere} rowId={row.rowId}>
+            <AssistantMessageBody
+              row={row}
+              visibleText={visibleText}
+              streaming={streaming}
+              isOfficeMode={isOfficeMode}
+              context={context}
+            />
+          </ResumeHereAfterText>
+        ) : (
+          <AssistantMessageBody
+            row={row}
+            visibleText={visibleText}
+            streaming={streaming}
+            isOfficeMode={isOfficeMode}
+            context={context}
+          />
+        )}
       </div>
       {codeCommentCardsEnabled && codeCommentCards && codeCommentCards.length > 0 ? (
         <div className="mt-3">
@@ -1754,7 +1917,7 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
       ) : null}
       {/* 完成态动作行悬停显现（对齐旧 MessageActions）：复制 + fork（图标 ghost）。
           一轮对用户是一个回复：action 只在轮尾段（hideActions 由 TurnGroup 裁决），
-          复制内容 = 整轮全部 text 段合并（copyText 覆盖）。分支走右键，不放在正文下面。 */}
+          复制内容 = 整轮全部 text 段合并（copyText 覆盖）。轮尾已有底栏分叉，不再在正文后面画一颗。 */}
       {row.state === "complete" && !hideActions && !deferActions ? (
         <ConversationAssistantTextActions
           rowId={row.rowId}
@@ -1792,7 +1955,9 @@ const ReasoningRowView = memo(function ReasoningRowView({
   // autoCollapseKey 仍保证状态边界不会覆盖已经发生过的用户交互。
   const resolvedDurationMs = streaming ? undefined : (row.durationMs ?? durationMs);
   const durationSeconds =
-    resolvedDurationMs !== undefined ? Math.max(1, Math.ceil(resolvedDurationMs / 1000)) : undefined;
+    resolvedDurationMs !== undefined
+      ? Math.max(1, Math.ceil(resolvedDurationMs / 1000))
+      : undefined;
   if (streaming && row.text.length === 0) {
     return null;
   }
@@ -1866,6 +2031,8 @@ function MarkerDividerRow({
   label,
   running = false,
   onClick,
+  stopLabel,
+  onStop,
 }: {
   rowId: number;
   markerType: TimelineMarkerRow["marker"]["type"];
@@ -1877,6 +2044,8 @@ function MarkerDividerRow({
   running?: boolean;
   /** 传入即整行可点（fork→跳父会话）；不传为静态分隔线。 */
   onClick?: () => void;
+  stopLabel?: string;
+  onStop?: () => void;
 }) {
   const clickable = Boolean(onClick);
   const rowClassName =
@@ -1891,6 +2060,20 @@ function MarkerDividerRow({
         >
           {label}
         </span>
+        {onStop && stopLabel ? (
+          <button
+            type="button"
+            aria-label={stopLabel}
+            title={stopLabel}
+            className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-[var(--color-foreground)] hover:bg-surface-hover"
+            onClick={(event) => {
+              event.stopPropagation();
+              onStop();
+            }}
+          >
+            <SquareIcon className="size-3 fill-current" />
+          </button>
+        ) : null}
       </span>
       <div aria-hidden="true" className="h-px min-w-8 flex-1 bg-border/50" />
     </>
@@ -1991,15 +2174,11 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
       }
       case "branchSummary": {
         const running = marker.status === "running";
-        const label = intl.formatMessage({
-          id: running ? "chat.tree.summarizing" : "chat.tree.summaryMarker",
-        });
         return {
           icon: MARKER_FORK_ICON,
-          label:
-            branchSummaryText && !running
-              ? `${label} · ${intl.formatMessage({ id: "chat.contextCompaction.viewSummary" })}`
-              : label,
+          label: intl.formatMessage({
+            id: running ? "chat.tree.summarizing" : "chat.tree.summaryMarker",
+          }),
           running,
         };
       }
@@ -2077,7 +2256,7 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
   // 切到 marker.parentSessionId（rowId 预留 Tier 2 精确滚动，当前恒 0 占位）。
   const onNavigate = context.onNavigateToRow;
   const handleClick = useMemo(() => {
-    if (foldableSummary) {
+    if (foldableSummary && marker.type !== "branchSummary") {
       return () => setSummaryRowId((current) => (current === row.rowId ? null : row.rowId));
     }
     if (marker.type !== "forkNotice" || !onNavigate) {
@@ -2091,30 +2270,40 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
   }
   return (
     <div>
-    <MarkerDividerRow
-      rowId={row.rowId}
-      markerType={marker.type}
-      markerStatus={
-        marker.type === "compact"
-          ? marker.status
-          : marker.type === "goalVerify"
-            ? marker.outcome
-            : marker.type === "forkNotice"
-              ? "created"
-              : "applied"
-      }
-      markerOrigin={marker.type === "compact" ? marker.origin : undefined}
-      markerSourceCommandId={row.sourceCommandId}
-      icon={view.icon}
-      label={view.label}
-      running={view.running}
-      onClick={handleClick}
-    />
-    {summaryOpen && foldableSummary ? (
-      <div className="px-4 pb-2 text-ui-base whitespace-pre-wrap text-[var(--color-foreground)]">
-        {foldableSummary}
-      </div>
-    ) : null}
+      <MarkerDividerRow
+        rowId={row.rowId}
+        markerType={marker.type}
+        markerStatus={
+          marker.type === "compact"
+            ? marker.status
+            : marker.type === "goalVerify"
+              ? marker.outcome
+              : marker.type === "forkNotice"
+                ? "created"
+                : "applied"
+        }
+        markerOrigin={marker.type === "compact" ? marker.origin : undefined}
+        markerSourceCommandId={row.sourceCommandId}
+        icon={view.icon}
+        label={view.label}
+        running={view.running}
+        onClick={handleClick}
+        stopLabel={
+          marker.type === "branchSummary" && view.running
+            ? intl.formatMessage({ id: "chat.stop" })
+            : undefined
+        }
+        onStop={marker.type === "branchSummary" && view.running ? context.onStop : undefined}
+      />
+      {marker.type === "branchSummary" && branchSummaryText ? (
+        <div className="px-4 pb-2 text-ui-base whitespace-pre-wrap text-[var(--color-foreground)]">
+          {branchSummaryText}
+        </div>
+      ) : summaryOpen && foldableSummary ? (
+        <div className="px-4 pb-2 text-ui-base whitespace-pre-wrap text-[var(--color-foreground)]">
+          {foldableSummary}
+        </div>
+      ) : null}
     </div>
   );
 });
@@ -2160,23 +2349,27 @@ const ToolCallRowView = memo(function ToolCallRowView({
     const workflowName = readWorkflowName(row.input);
     const sessionId = context.sessionId;
     return (
-      <RowShell rowId={row.rowId} className="py-0" onResume={onResume}>
-        <WorkflowToolSummary
-          toolCallId={row.toolCallId}
-          summary={workflowRun}
-          amend={isAmendWorkflowToolCall(row)}
-          onOpen={
-            context.onOpenWorkflowRun && sessionId
-              ? () =>
-                  context.onOpenWorkflowRun?.({
-                    parentSessionId: sessionId,
-                    toolCallId: resolveWorkflowRunOpenToolCallId(row.toolCallId, workflowRun),
-                    runId: workflowRun.runId,
-                    ...(workflowName === undefined ? {} : { workflowName }),
-                  })
-              : undefined
-          }
-        />
+      <RowShell rowId={row.rowId} className="py-0">
+        <ToolSummaryTrailingContext.Provider
+          value={onResume ? <ResumeHereButton onPick={onResume} rowId={row.rowId} /> : null}
+        >
+          <WorkflowToolSummary
+            toolCallId={row.toolCallId}
+            summary={workflowRun}
+            amend={isAmendWorkflowToolCall(row)}
+            onOpen={
+              context.onOpenWorkflowRun && sessionId
+                ? () =>
+                    context.onOpenWorkflowRun?.({
+                      parentSessionId: sessionId,
+                      toolCallId: resolveWorkflowRunOpenToolCallId(row.toolCallId, workflowRun),
+                      runId: workflowRun.runId,
+                      ...(workflowName === undefined ? {} : { workflowName }),
+                    })
+                : undefined
+            }
+          />
+        </ToolSummaryTrailingContext.Provider>
       </RowShell>
     );
   }
@@ -2223,9 +2416,12 @@ const ToolCallRowView = memo(function ToolCallRowView({
   // 工具行去掉纵向内边距（对齐 z-code-2 无 per-tool padding）；连续工具间距由
   // ConversationAssistantWorkItems 的 gap-4 组容器统一给。
   return (
-    <RowShell rowId={row.rowId} className="py-0" onResume={onResume}>
+    <RowShell rowId={row.rowId} className="py-0">
       <div data-conversation-selectable="true">
         <ToolCallBlock
+          summaryTrailing={
+            onResume ? <ResumeHereButton onPick={onResume} rowId={row.rowId} /> : undefined
+          }
           toolCallNode={toolCallNode}
           workspacePath={context.workspacePath}
           theme={context.theme}

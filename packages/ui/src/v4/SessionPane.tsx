@@ -1120,6 +1120,10 @@ export function SessionPane({
   const [composerRestoreRequest, setComposerRestoreRequest] =
     useState<ComposerRestoreRequest | null>(null);
   const summarizingTreeRef = useRef(false);
+  const stopActionRef = useRef<(() => void) | undefined>(undefined);
+  const stopBranchSummary = useCallback(() => {
+    stopActionRef.current?.();
+  }, []);
   const resumeHereRef = useRef<
     (target: {
       entryId: string;
@@ -2234,6 +2238,80 @@ export function SessionPane({
     },
     [],
   );
+  const rewindDraftBlocked = useCallback(() => {
+    if (composerDraftStateRef.current.hasContent || composerDraftStateRef.current.busy) {
+      toast(intl.formatMessage({ id: "chat.message.rewindDraftConflict" }));
+      return true;
+    }
+    return false;
+  }, [intl]);
+  const handlePrepareRewindHere = useCallback(() => !rewindDraftBlocked(), [rewindDraftBlocked]);
+  const handleRewindHere = useCallback(
+    async (input: {
+      rowId: number;
+      entityId: string;
+      text: string;
+      attachments?: readonly AttachmentRef[];
+      summarize: boolean;
+      customInstructions?: string;
+    }) => {
+      if (rewindDraftBlocked()) return false;
+      const current = snapshotRef.current;
+      if (!sessionId || current === null) return false;
+      try {
+        const ack = await dispatchCommand(
+          "editUserQuery",
+          {
+            target: { rowId: input.rowId, entityId: input.entityId },
+            newText: input.text,
+            restoreToInput: true,
+            workspaceMode: "preserve",
+            ...(input.summarize
+              ? {
+                  summarize: true,
+                  ...(input.customInstructions
+                    ? { customInstructions: input.customInstructions }
+                    : {}),
+                }
+              : {}),
+          },
+          sessionId,
+          current.revision,
+          current.logEpoch,
+        );
+        if (ack.status !== "accepted" && ack.status !== "duplicate") {
+          toast(
+            ack.reasonCode === "guard.branchSummaryCancelled"
+              ? intl.formatMessage({ id: "chat.tree.cancelled" })
+              : ack.message || intl.formatMessage({ id: "chat.message.rewindFailed" }),
+          );
+          logger.warn(`[v4-pane] 回退被拒绝: ${ack.status} ${ack.reasonCode ?? ""}`);
+          return false;
+        }
+        setComposerRestoreRequest({
+          requestId: nextComposerRestoreRequestIdRef.current++,
+          sessionId,
+          workspaceKey,
+          inputKind: "sendText",
+          text: input.text,
+          attachments: input.attachments ?? [],
+          replaceDraft: true,
+        });
+        return true;
+      } catch (error: unknown) {
+        logger.warn("[v4-pane] 回退提交失败", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        toast(
+          error instanceof Error
+            ? error.message
+            : intl.formatMessage({ id: "chat.message.rewindFailed" }),
+        );
+        return false;
+      }
+    },
+    [dispatchCommand, intl, rewindDraftBlocked, sessionId, workspaceKey],
+  );
   // 正在总结被丢下的分支时，这个会话不能再开分支。停止键仍走 canStop。
   const branchSummaryRunning =
     snapshot?.rows.window.some(
@@ -2262,10 +2340,19 @@ export function SessionPane({
       toolGroupingTerminalEnabled,
       toolGroupingChangesEnabled,
       onNavigateToRow: handleNavigateToRow,
+      onStop: readOnly || selectionSideChat ? undefined : stopBranchSummary,
       onResumeHere:
         readOnly || selectionSideChat || !sessionId || branchSummaryRunning
           ? undefined
           : handleResumeHere,
+      prepareRewindHere:
+        readOnly || selectionSideChat || !sessionId || branchSummaryRunning
+          ? undefined
+          : handlePrepareRewindHere,
+      onRewindHere:
+        readOnly || selectionSideChat || !sessionId || branchSummaryRunning
+          ? undefined
+          : handleRewindHere,
       onOpenBrowserUrl,
       onOpenAutomationsMain,
       onOpenCodeViewer,
@@ -2324,10 +2411,13 @@ export function SessionPane({
       toolGroupingTerminalEnabled,
       toolGroupingChangesEnabled,
       handleNavigateToRow,
+      stopBranchSummary,
       readOnly,
       selectionSideChat,
       branchSummaryRunning,
       handleResumeHere,
+      handlePrepareRewindHere,
+      handleRewindHere,
       onOpenBrowserUrl,
       onOpenAutomationsMain,
       onOpenCodeViewer,
@@ -3835,7 +3925,17 @@ export function SessionPane({
   const handleStop = useCallback(
     (source: "button" | "escape") => {
       const current = snapshotRef.current;
-      if (!sessionId || !current || (!current.control.canStop && !summarizingTreeRef.current)) {
+      const summaryRunning = current?.rows.window.some(
+        (row) =>
+          row.kind === "timelineMarker" &&
+          row.marker.type === "branchSummary" &&
+          row.marker.status === "running",
+      );
+      if (
+        !sessionId ||
+        !current ||
+        (!current.control.canStop && !summarizingTreeRef.current && !summaryRunning)
+      ) {
         logger.lifecycle.info("[v4-pane] stop 命令被跳过（无可停执行）", {
           source,
           sessionId: sessionId ?? "",
@@ -3973,6 +4073,7 @@ export function SessionPane({
   // 直接写 onStop={() => handleStop("button")} 每次 render 都换引用，memo 白做，而 composer
   // 恰好是每次输入都可能重渲染的组件。这里固定 button 版的引用，不动 handleStop 的双入口设计。
   const handleStopFromButton = useCallback(() => handleStop("button"), [handleStop]);
+  stopActionRef.current = handleStopFromButton;
 
   const handleRetrySubscribe = useCallback(() => {
     void lease?.store.retry();

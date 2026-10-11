@@ -6,6 +6,7 @@ import {
   deleteSessionBranch,
   readSessionTree,
   resolveSessionEntry,
+  trimAssistantContentAtToolCall,
   withoutBranch,
   type SessionTreeSource,
 } from "./session-tree.js";
@@ -215,6 +216,48 @@ test("resolveSessionEntry maps a tool call id to the result, else the call", () 
   assert.equal(resolveSessionEntry(tree, "call-1", { role: "tool" }), "t");
   assert.equal(resolveSessionEntry(tree, "call-2", { role: "tool" }), "b");
   assert.equal(resolveSessionEntry(tree, "missing", { role: "tool" }), undefined);
+});
+
+test("forking at a tool call drops later calls and the reply in that assistant message", () => {
+  const content = [
+    { type: "toolCall", id: "a1", name: "read" },
+    { type: "toolCall", id: "a2", name: "read" },
+    { type: "toolCall", id: "a3", name: "read" },
+    { type: "text", text: "回复B" },
+  ];
+  const trimmed = trimAssistantContentAtToolCall(content, "call|a2");
+  assert.deepEqual(
+    trimmed?.map((part) => (part as { id?: string; text?: string }).id ?? (part as { text?: string }).text),
+    ["a1", "a2"],
+  );
+  const events = contextEventsOf({
+    buildContextEntries: () => [
+      {
+        id: "user",
+        type: "message",
+        message: { role: "user", content: "hi" },
+      },
+      {
+        id: "asst",
+        type: "message",
+        message: { role: "assistant", content },
+      },
+      {
+        id: "edit",
+        type: "context_edit",
+        targetId: "asst",
+        replacement: { content: trimmed },
+      },
+    ],
+  });
+  assert.deepEqual(
+    events.flatMap((event) => (event.type === "tool_execution_start" ? [event.toolCallId] : [])),
+    ["a1", "a2"],
+  );
+  assert.equal(
+    events.some((event) => JSON.stringify(event).includes("回复B")),
+    false,
+  );
 });
 
 test("context events keep a branch summary on the active path", () => {

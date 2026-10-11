@@ -72,13 +72,23 @@ export interface HostedSession {
     model: string;
     thought: string;
   }): Promise<boolean>;
-  readManagedProcessOutput(workId: string): Promise<import("@zcode/shared").BackgroundBashOutputResult>;
+  readManagedProcessOutput(
+    workId: string,
+  ): Promise<import("@zcode/shared").BackgroundBashOutputResult>;
   compact(): Promise<void>;
   navigateTree(
     targetId: string,
     options?: { summarize?: boolean; customInstructions?: string },
   ): Promise<{ cancelled?: boolean } | void>;
   resumeAt(request: SessionResumeRequest): Promise<SessionResumeResult>;
+  captureAbandonedBranch(
+    request: SessionResumeRequest,
+  ): { entries: readonly unknown[] } | undefined;
+  /** 叶子已经裁好。摘要写在这个会话上，取消只撤掉「正在总结」。 */
+  summarizeAbandoned(
+    captured: { entries: readonly unknown[] },
+    request: SessionResumeRequest,
+  ): Promise<void>;
   noteBranchSummary(active: boolean): void;
   readSessionTree(): PiSessionTreeNode[];
   labelSessionEntry(entryId: string, label?: string): PiSessionTreeNode[];
@@ -103,7 +113,9 @@ export interface HostedSession {
   dispose(): void;
   hydrateHistory(content: string): void;
   onDeltas(listener: (deltas: ConversationDelta[]) => void): () => void;
-  onNotify(listener: (message: string, notifyType: "info" | "warning" | "error") => void): () => void;
+  onNotify(
+    listener: (message: string, notifyType: "info" | "warning" | "error") => void,
+  ): () => void;
 }
 
 export type PiStoredSummary = {
@@ -230,6 +242,7 @@ export class HostSessionRegistry {
     sessionId?: string;
     parentSessionId?: string;
     viaRegistry?: boolean;
+    omitHostExtensions?: boolean;
   }): Promise<HostedSession> {
     if (input.sessionId) {
       const existing = this.sessions.get(input.sessionId);
@@ -244,6 +257,7 @@ export class HostSessionRegistry {
           sessionFile: stored.sessionFile,
           parentSessionId: input.parentSessionId,
           viaRegistry: input.viaRegistry,
+          omitHostExtensions: input.omitHostExtensions,
         });
       }
     }
@@ -260,6 +274,7 @@ export class HostSessionRegistry {
       sessionFile: join(dir, piSessionFileName(sessionId)),
       parentSessionId: input.parentSessionId,
       viaRegistry: input.viaRegistry,
+      omitHostExtensions: input.omitHostExtensions,
     });
   }
 
@@ -271,6 +286,7 @@ export class HostSessionRegistry {
       workspacePath: parent.workspacePath,
       parentSessionId: parentId,
       viaRegistry: true,
+      omitHostExtensions: true,
     });
   }
 
@@ -337,14 +353,25 @@ export class HostSessionRegistry {
     }
     const child = await this.fork(parentId, leaf.id);
     child.applyAccessFrom(parent);
+    // 先记下丢掉的路径，再裁切。裁完叶子已经停在目标上，再收集就空了。
+    const captured = request.summarize ? child.captureAbandonedBranch(request) : undefined;
     const previousAbort = parent.abort;
+    const restoreAbort = () => {
+      parent.abort = previousAbort;
+    };
     parent.abort = () => child.abort();
-    if (request.summarize) parent.noteBranchSummary(true);
     try {
-      const result = await child.resumeAt(request);
+      const result = await child.resumeAt({ ...request, summarize: false });
       if (result.cancelled) {
+        restoreAbort();
         await this.delete(child.sessionId);
         return { cancelled: true };
+      }
+      if (captured) {
+        // 回执先返回，界面才能先进入新会话。摘要接着写在新会话里。
+        void child.summarizeAbandoned(captured, request).finally(restoreAbort);
+      } else {
+        restoreAbort();
       }
       return {
         cancelled: false,
@@ -354,11 +381,9 @@ export class HostSessionRegistry {
         tree: result.tree,
       };
     } catch (error) {
+      restoreAbort();
       await this.delete(child.sessionId).catch(() => undefined);
       throw error;
-    } finally {
-      parent.abort = previousAbort;
-      if (request.summarize) parent.noteBranchSummary(false);
     }
   }
 
@@ -451,6 +476,7 @@ export class HostSessionRegistry {
     sessionFile: string;
     parentSessionId?: string;
     viaRegistry?: boolean;
+    omitHostExtensions?: boolean;
   }): Promise<HostedSession> {
     const live = this.sessions.get(input.sessionId);
     if (live) return live;
@@ -459,6 +485,7 @@ export class HostSessionRegistry {
       cwd: input.cwd ?? input.workspacePath,
       sessionFile: input.sessionFile,
       parentSessionId: input.parentSessionId,
+      omitHostExtensions: input.omitHostExtensions,
       loadExtensions: this.options.loadExtensions ?? true,
       checkPermission: async (request) => {
         const check = this.toolChecks.get(input.sessionId);
@@ -645,7 +672,9 @@ export class HostSessionRegistry {
       workId: meta.workId,
     });
     const deltaListeners = new Set<(deltas: ConversationDelta[]) => void>();
-    const notifyListeners = new Set<(message: string, notifyType: "info" | "warning" | "error") => void>();
+    const notifyListeners = new Set<
+      (message: string, notifyType: "info" | "warning" | "error") => void
+    >();
     const pendingDeltas: ConversationDelta[] = [];
     const sessionAllowed = new Set<string>();
     const setCollaborationMode = (mode: string) => {
@@ -738,7 +767,8 @@ export class HostSessionRegistry {
       }).catch(() => [] as PiSubagentChild[]);
       if (gen !== subagentPublishGen) return;
       const running = children.filter(
-        (child) => child.status === "running" || child.status === "waiting" || child.status === "blocked",
+        (child) =>
+          child.status === "running" || child.status === "waiting" || child.status === "blocked",
       );
       for (const id of cancelledSubagents) {
         const child = children.find((item) => item.childSessionId === id);
@@ -746,7 +776,9 @@ export class HostSessionRegistry {
         if (child && !running.includes(child)) cancelledSubagents.delete(id);
       }
       // 用户已经按下停止。磁盘状态还没落成终态时，不要把它留在「正在运行」。
-      const visibleRunning = running.filter((child) => !cancelledSubagents.has(child.childSessionId));
+      const visibleRunning = running.filter(
+        (child) => !cancelledSubagents.has(child.childSessionId),
+      );
       const next = {
         revision: piSubagentRevision(children),
         childSessionIds: children.map((child) => child.childSessionId),
@@ -1012,6 +1044,41 @@ export class HostSessionRegistry {
           },
           publishContext,
         }),
+      captureAbandonedBranch: (request) => pi.captureAbandonedBranch?.(request),
+      summarizeAbandoned: (captured, request) => {
+        summarizingBranch = true;
+        emit(projector.noteBranchSummary(true));
+        return (async () => {
+          let summaryText = "";
+          try {
+            const result = await pi.summarizeAbandonedBranch?.(captured, {
+              ...(request.customInstructions
+                ? { customInstructions: request.customInstructions }
+                : {}),
+              ...(request.label ? { label: request.label } : {}),
+            });
+            if (!result || result.cancelled) return;
+            summaryText = result.summary?.trim() ?? "";
+          } catch (error) {
+            console.error("pi-host branch summary failed", error);
+          } finally {
+            summarizingBranch = false;
+            // 先撤掉「正在总结」。这一行的删除会裁掉它后面的内容，摘要得等它撤完再补。
+            emit(projector.noteBranchSummary(false));
+          }
+          if (!summaryText) return;
+          if (pi.contextEvents) emit(projector.reload(pi.contextEvents()));
+          const alreadyShown = projector
+            .getSnapshot()
+            .rows.window.some(
+              (row) =>
+                row.kind === "timelineMarker" &&
+                row.marker.type === "branchSummary" &&
+                row.marker.summary === summaryText,
+            );
+          if (!alreadyShown) emit(projector.appendBranchSummary(summaryText));
+        })();
+      },
       readSessionTree: () => pi.readTree?.() ?? [],
       labelSessionEntry: (entryId, label) => {
         assertBranchSummaryIdle(projector);
@@ -1038,10 +1105,16 @@ export class HostSessionRegistry {
         let entryId = targetId;
         // 冷恢复的行 id 是 Pi entry。实时行 id 是 row:N，得用原文对上树节点。
         if (pi.hasEntry && !pi.hasEntry(targetId)) {
-          const row = projector.getSnapshot().rows.window.find((item) => item.entityId === targetId);
+          const row = projector
+            .getSnapshot()
+            .rows.window.find((item) => item.entityId === targetId);
           const text = row && "text" in row && typeof row.text === "string" ? row.text : "";
           const role =
-            row?.kind === "userInput" ? "user" : row?.kind === "assistantText" ? "assistant" : undefined;
+            row?.kind === "userInput"
+              ? "user"
+              : row?.kind === "assistantText"
+                ? "assistant"
+                : undefined;
           // 实时行的 entityId 是 message.id，不是树节点 id。先按消息 id 对上 entry，对不上再用原文。
           entryId =
             pi.resolveEntry?.(targetId, {
@@ -1078,12 +1151,14 @@ export class HostSessionRegistry {
           // 先收起「正在总结」，再补正文。反过来会把刚补上的摘要一起裁掉。
           if (summarize) emit(projector.noteBranchSummary(false));
           const summaryText = result?.summaryEntry?.summary?.trim() ?? "";
-          const alreadyShown = projector.getSnapshot().rows.window.some(
-            (row) =>
-              row.kind === "timelineMarker" &&
-              row.marker.type === "branchSummary" &&
-              row.marker.summary === summaryText,
-          );
+          const alreadyShown = projector
+            .getSnapshot()
+            .rows.window.some(
+              (row) =>
+                row.kind === "timelineMarker" &&
+                row.marker.type === "branchSummary" &&
+                row.marker.summary === summaryText,
+            );
           if (summaryText && !alreadyShown) emit(projector.appendBranchSummary(summaryText));
           return { cancelled: false };
         } finally {

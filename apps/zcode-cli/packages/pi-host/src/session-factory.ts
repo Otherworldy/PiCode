@@ -16,8 +16,10 @@ import {
 } from "./host-capabilities.js";
 import { readPiContextUsage } from "./context-breakdown.js";
 import { createPermissionExtension } from "./permission-gate.js";
+import { captureAbandonedBranch, summarizeAbandonedBranch } from "./branch-summary.js";
 import {
   contextEventsOf,
+  trimAssistantContentAtToolCall,
   deleteSessionBranch,
   labelSessionEntry,
   readSessionTree,
@@ -29,7 +31,11 @@ import {
   type DelegateProvider,
   type ZCodeModelStreamPort,
 } from "./model-delegate.js";
-import { readProcessSshRemoteSpec, sshCodingToolOptions, sshWorkspacePrompt } from "./ssh-remote.js";
+import {
+  readProcessSshRemoteSpec,
+  sshCodingToolOptions,
+  sshWorkspacePrompt,
+} from "./ssh-remote.js";
 import {
   omitFailedAssistantForContinue,
   runContinueAfterModelError,
@@ -75,12 +81,11 @@ async function createIsolatedRuntime(delegate: DelegateProvider): Promise<ModelR
 let productionRuntime: Promise<ModelRuntime> | undefined;
 
 function getProductionModelRuntime(): Promise<ModelRuntime> {
-  productionRuntime ??=
-    ensurePiSdk().then(async () => {
-      const coding = piCoding();
-      await alignStoredModelApi(coding.getAgentDir());
-      return coding.ModelRuntime.create();
-    });
+  productionRuntime ??= ensurePiSdk().then(async () => {
+    const coding = piCoding();
+    await alignStoredModelApi(coding.getAgentDir());
+    return coding.ModelRuntime.create();
+  });
   return productionRuntime;
 }
 
@@ -222,15 +227,20 @@ export async function mutatePiCatalog(input: {
       await writeTitleSummarySettings(
         agentDir,
         applyTitleSummaryPatch(current, {
-          ...(input.titleSummaryEnabled !== undefined ? { enabled: input.titleSummaryEnabled } : {}),
-          ...(input.titleSummaryProvider !== undefined ? { provider: input.titleSummaryProvider } : {}),
+          ...(input.titleSummaryEnabled !== undefined
+            ? { enabled: input.titleSummaryEnabled }
+            : {}),
+          ...(input.titleSummaryProvider !== undefined
+            ? { provider: input.titleSummaryProvider }
+            : {}),
           ...(input.titleSummaryModel !== undefined ? { model: input.titleSummaryModel } : {}),
         }),
       );
     }
   } else if (input.action === "discover") {
     const baseUrl = input.provider?.baseUrl ?? "";
-    const apiKey = input.provider?.apiKey || storedApiKey(file, input.providerId ?? input.provider?.id ?? "");
+    const apiKey =
+      input.provider?.apiKey || storedApiKey(file, input.providerId ?? input.provider?.id ?? "");
     const discovered = await discoverPiModels(baseUrl, apiKey);
     return finish({
       ...toPiModelConfigView(file, {
@@ -276,18 +286,29 @@ export function withBuiltinSearchTools(
   return next;
 }
 
-export function createSdkSessionFactory(options: {
-  delegate?: DelegateProvider;
-  stream?: ZCodeModelStreamPort["stream"];
-  defaultSelection?: { providerId: string; modelId: string; thought?: string };
-  agentDir?: string;
-  capabilities?: PiCapabilityPorts;
-  /** Plugin and node_repl servers, plus official-auth hooks. User servers stay in Pi mcp.json. */
-  mcpCompat?: PiMcpCompat;
-  skillPaths?: (cwd: string) => string[];
-  /** 测试注入。生产路径仍用 Pi 的 ModelRuntime。 */
-  modelRuntime?: ModelRuntime;
-} = {}): CreatePiSession {
+/** 子会话才省略。对话分叉有父会话 id，仍要挂 codemode / tool_search / MCP。 */
+export function mountPiHostExtensions(input: {
+  isolated: boolean;
+  loadExtensions: boolean;
+  omitHostExtensions?: boolean;
+}): boolean {
+  return !input.isolated && input.loadExtensions && input.omitHostExtensions !== true;
+}
+
+export function createSdkSessionFactory(
+  options: {
+    delegate?: DelegateProvider;
+    stream?: ZCodeModelStreamPort["stream"];
+    defaultSelection?: { providerId: string; modelId: string; thought?: string };
+    agentDir?: string;
+    capabilities?: PiCapabilityPorts;
+    /** Plugin and node_repl servers, plus official-auth hooks. User servers stay in Pi mcp.json. */
+    mcpCompat?: PiMcpCompat;
+    skillPaths?: (cwd: string) => string[];
+    /** 测试注入。生产路径仍用 Pi 的 ModelRuntime。 */
+    modelRuntime?: ModelRuntime;
+  } = {},
+): CreatePiSession {
   const isolated = Boolean(options.delegate || options.stream);
   const selections = new Map<string, { providerId: string; modelId: string; thought?: string }>();
   const inner =
@@ -314,10 +335,9 @@ export function createSdkSessionFactory(options: {
   const runtime = () => {
     const injected = options.modelRuntime;
     if (injected) return ensurePiSdk().then(() => injected);
-    runtimePromise ??=
-      ensurePiSdk().then(() =>
-        isolated && delegate ? createIsolatedRuntime(delegate) : getProductionModelRuntime(),
-      );
+    runtimePromise ??= ensurePiSdk().then(() =>
+      isolated && delegate ? createIsolatedRuntime(delegate) : getProductionModelRuntime(),
+    );
     return runtimePromise;
   };
 
@@ -330,14 +350,24 @@ export function createSdkSessionFactory(options: {
       ? piCoding().SettingsManager.inMemory({ retry: { enabled: false } })
       : piCoding().SettingsManager.create(input.cwd, agentDir);
     const ssh = readProcessSshRemoteSpec(input.cwd);
-    const pluginExtras = !isolated && input.loadExtensions
-      ? await zcodePluginLoaderExtras(input.cwd, agentDir, options.skillPaths?.(input.cwd) ?? [])
-      : undefined;
+    const pluginExtras =
+      !isolated && input.loadExtensions
+        ? await zcodePluginLoaderExtras(input.cwd, agentDir, options.skillPaths?.(input.cwd) ?? [])
+        : undefined;
     const processes = !isolated && input.loadExtensions ? createPiProcessBridge() : undefined;
-    const usePiMcp = !isolated && input.loadExtensions && !input.parentSessionId;
+    // 分叉会带 parentSessionId，用来记父会话。以前用它关掉 codemode / tool_search / MCP，
+    // 分支请求里就没有 codemode 和 mcp__node_repl__js。只有子会话显式省略这些扩展。
+    const usePiMcp = mountPiHostExtensions({
+      isolated,
+      loadExtensions: input.loadExtensions,
+      omitHostExtensions: input.omitHostExtensions,
+    });
     const mcpRuntime = usePiMcp
       ? registerableMcpServers(
-          (await options.mcpCompat?.runtimeServers({ cwd: input.cwd, sessionId: input.sessionId })) ?? [],
+          (await options.mcpCompat?.runtimeServers({
+            cwd: input.cwd,
+            sessionId: input.sessionId,
+          })) ?? [],
         )
       : [];
     const codingForMcp = usePiMcp ? piCoding() : undefined;
@@ -350,7 +380,12 @@ export function createSdkSessionFactory(options: {
         createPermissionExtension(input.checkPermission),
         ...(usePiMcp && codingForMcp
           ? [
-              (pi: { registerMcpServer(name: string, config: (typeof mcpRuntime)[number]["config"]): void }) => {
+              (pi: {
+                registerMcpServer(
+                  name: string,
+                  config: (typeof mcpRuntime)[number]["config"],
+                ): void;
+              }) => {
                 for (const server of mcpRuntime) pi.registerMcpServer(server.name, server.config);
               },
               codingForMcp.createCodemodeExtension(),
@@ -562,6 +597,13 @@ export function createSdkSessionFactory(options: {
         await session.compact();
       },
       contextUsage: () => readPiContextUsage(session, piCoding().formatSkillsForPrompt),
+      captureAbandonedBranch: (request) => captureAbandonedBranch(session, request),
+      summarizeAbandonedBranch: (captured, options) =>
+        summarizeAbandonedBranch(
+          session,
+          captured as Parameters<typeof summarizeAbandonedBranch>[1],
+          options,
+        ),
       navigateTree: (targetId, options) => session.navigateTree(targetId, options),
       abortBranchSummary: () => {
         session.abortBranchSummary();
@@ -577,6 +619,24 @@ export function createSdkSessionFactory(options: {
         deleteSessionBranch(session, entryId);
       },
       contextEvents: () => contextEventsOf(session.sessionManager),
+      trimAssistantAtToolCall: (toolCallId: string) => {
+        const manager = session.sessionManager;
+        for (const entry of manager.getBranch()) {
+          if (entry.type !== "message" || entry.message.role !== "assistant") continue;
+          const trimmed = trimAssistantContentAtToolCall(entry.message.content, toolCallId);
+          if (!trimmed || JSON.stringify(trimmed) === JSON.stringify(entry.message.content))
+            continue;
+          manager.appendContextEdit(entry.id, {
+            content: trimmed as Extract<
+              NonNullable<Parameters<typeof manager.appendContextEdit>[1]>,
+              { content: unknown }
+            >["content"],
+          });
+          // navigateTree 已经按未裁切的消息刷过模型上下文。这里再刷一次，下一次请求才停在这个工具。
+          session.agent.state.messages = manager.buildSessionProjection().messages;
+          return;
+        }
+      },
       resolveEntry: (id, hint) => resolveSessionEntry(session.sessionManager, id, hint),
       branchFrom: (entryId) => {
         const file = session.sessionFile;
@@ -584,7 +644,8 @@ export function createSdkSessionFactory(options: {
         return branchPiSessionFile(file, entryId);
       },
       hasEntry: (id) => session.sessionManager.getEntry(id) != null,
-      matchUserEntry: (text) => resolveSessionEntry(session.sessionManager, "", { text, role: "user" }),
+      matchUserEntry: (text) =>
+        resolveSessionEntry(session.sessionManager, "", { text, role: "user" }),
       setModel: async (provider, modelId, thought) => {
         if (isolated) {
           const next = { providerId: provider, modelId, thought };

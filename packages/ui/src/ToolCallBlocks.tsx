@@ -12,6 +12,7 @@ import {
 } from "@/lib/toolCallSummary.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import { CuaGroupToolCallBlock } from "@/ToolCallBlocks/renderers/cua-group.js";
+import { ToolSummaryTrailingContext } from "@/ToolCallBlocks/ToolSummaryRow.js";
 import { resolveToolCallRenderer } from "@/ToolCallBlocks/resolveRenderer.js";
 import * as PluginUi from "@/plugin-ui/index.js";
 import { resolveToolCallIdentity } from "@/lib/toolIdentity.js";
@@ -104,6 +105,8 @@ function ToolCallBlockComponent({
   cuaGroupEvents,
   renderCuaAssistantMessage,
   renderCuaReasoning,
+  resumeMenuForToolId,
+  summaryTrailing,
 }: {
   toolCallNode: TaskChatToolCallTreeNode;
   depth?: number;
@@ -153,6 +156,8 @@ function ToolCallBlockComponent({
   renderCuaReasoning?: (
     event: Extract<ConversationCuaGroupEvent, { kind: "reasoning" }>,
   ) => ReactNode;
+  resumeMenuForToolId?: (toolId: string) => ReactNode;
+  summaryTrailing?: ReactNode;
 }) {
   const inheritedPluginUi = PluginUi.usePluginUiToolBinding(toolCallNode.toolCall.toolId);
   const pluginUi = providedPluginUi ?? inheritedPluginUi;
@@ -247,6 +252,7 @@ function ToolCallBlockComponent({
           {childToolCalls.map((childToolCallNode) => (
             <ToolCallBlock
               key={childToolCallNode.toolCall.toolId}
+              summaryTrailing={resumeMenuForToolId?.(childToolCallNode.toolCall.toolId)}
               toolCallNode={childToolCallNode}
               depth={depth + 1}
               workspacePath={workspacePath}
@@ -273,6 +279,7 @@ function ToolCallBlockComponent({
     [
       childToolCalls,
       depth,
+      resumeMenuForToolId,
       onLoadFullToolCallFields,
       onOpenAutomationsMain,
       onOpenBrowserUrl,
@@ -329,6 +336,7 @@ function ToolCallBlockComponent({
       workflowRun,
       workflowDraft,
       onLoadFullToolCallFields,
+      resumeMenuForToolId,
     }),
     [
       isOfficeMode,
@@ -354,6 +362,7 @@ function ToolCallBlockComponent({
       onOpenWorkflowArtifact,
       onOpenFileLink,
       rawFileSummaries,
+      resumeMenuForToolId,
       showIcon,
       showTodoToolCalls,
       sourceLabel,
@@ -374,25 +383,27 @@ function ToolCallBlockComponent({
     return null;
   }
   return (
-    <div
-      className="w-full"
-      data-testid={testId(TID_CHAT_TOOL_CALL_BLOCK, toolCall.toolId)}
-      data-tool-call-id={toolCall.toolId}
-      data-tool-name={toolCall.toolName ?? toolCall.kind ?? ""}
-      data-status={toolCall.status}
-      data-zcode-tool-stream-animate={shouldPlayEntranceAnimation ? "true" : undefined}
-    >
-      {toolCall.kind === "cuaGroup" ? (
-        <CuaGroupToolCallBlock
-          {...renderContext}
-          events={cuaGroupEvents}
-          renderAssistantMessage={renderCuaAssistantMessage}
-          renderReasoning={renderCuaReasoning}
-        />
-      ) : (
-        <ToolCallRenderer {...renderContext} />
-      )}
-    </div>
+    <ToolSummaryTrailingContext.Provider value={summaryTrailing ?? null}>
+      <div
+        className="w-full"
+        data-testid={testId(TID_CHAT_TOOL_CALL_BLOCK, toolCall.toolId)}
+        data-tool-call-id={toolCall.toolId}
+        data-tool-name={toolCall.toolName ?? toolCall.kind ?? ""}
+        data-status={toolCall.status}
+        data-zcode-tool-stream-animate={shouldPlayEntranceAnimation ? "true" : undefined}
+      >
+        {toolCall.kind === "cuaGroup" ? (
+          <CuaGroupToolCallBlock
+            {...renderContext}
+            events={cuaGroupEvents}
+            renderAssistantMessage={renderCuaAssistantMessage}
+            renderReasoning={renderCuaReasoning}
+          />
+        ) : (
+          <ToolCallRenderer {...renderContext} />
+        )}
+      </div>
+    </ToolSummaryTrailingContext.Provider>
   );
 }
 

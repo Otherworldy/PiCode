@@ -267,6 +267,7 @@ export function ChangesGroupToolCallBlock(context: ToolCallBlockRenderContext) {
         {childToolCalls.map((child) => (
           <ToolCallBlock
             key={child.toolCall.toolId}
+            summaryTrailing={context.resumeMenuForToolId?.(child.toolCall.toolId)}
             toolCallNode={child}
             workspacePath={context.workspacePath}
             theme={context.theme}
@@ -289,6 +290,7 @@ export function ChangesGroupToolCallBlock(context: ToolCallBlockRenderContext) {
       context.onOpenFileLink,
       context.onOpenAutomationsMain,
       context.onLoadFullToolCallFields,
+      context.resumeMenuForToolId,
       context.theme,
       context.codePreviewSettings,
       context.workspacePath,

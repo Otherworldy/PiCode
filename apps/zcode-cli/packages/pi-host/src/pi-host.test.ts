@@ -151,7 +151,13 @@ test("projects text, tools, abort, compact", () => {
   });
   projector.apply({ type: "agent_settled" });
   const kinds = projector.getSnapshot().rows.window.map((row) => row.kind);
-  assert.deepEqual(kinds, ["turnHeader", "userInput", "assistantText", "toolCall", "timelineMarker"]);
+  assert.deepEqual(kinds, [
+    "turnHeader",
+    "userInput",
+    "assistantText",
+    "toolCall",
+    "timelineMarker",
+  ]);
   const tool = projector.getSnapshot().rows.window.find((row) => row.kind === "toolCall");
   assert.equal(tool && tool.kind === "toolCall" ? tool.toolName : "", "Read");
   const header = projector.getSnapshot().rows.window[0];
@@ -171,7 +177,10 @@ test("idle compaction can be stopped and then clears the stop control", () => {
   assert.equal(projector.getSnapshot().control.canStop, true);
   assert.equal(projector.getSnapshot().control.stopTargetKind, "compact");
   const running = projector.getSnapshot().rows.window.find((row) => row.kind === "timelineMarker");
-  assert.equal(running && running.kind === "timelineMarker" ? running.lane : "", "turnTailBoundary");
+  assert.equal(
+    running && running.kind === "timelineMarker" ? running.lane : "",
+    "turnTailBoundary",
+  );
   projector.apply({ type: "compaction_end", aborted: true });
   assert.equal(projector.getSnapshot().control.canStop, false);
   assert.equal(projector.getSnapshot().control.stopTargetKind, "unknown");
@@ -205,10 +214,7 @@ test("compact failure keeps the Pi reason on the marker and the composer banner"
     "Nothing to compact (session too small)",
   );
   assert.equal(projector.getSnapshot().control.lastError?.code, "fault.compact");
-  assert.match(
-    projector.getSnapshot().control.lastError?.message ?? "",
-    /Nothing to compact/,
-  );
+  assert.match(projector.getSnapshot().control.lastError?.message ?? "", /Nothing to compact/);
 });
 
 test("retry keeps one working turn and shows the final error", () => {
@@ -272,14 +278,20 @@ test("retry shows a count and the final error stays one sentence", () => {
   assert.equal(mid.control.apiRetry?.attempt, 1);
   assert.equal(mid.control.apiRetry?.maxAttempts, 4);
   assert.equal(mid.control.apiRetry?.failures?.[0]?.message, "503 Gateway routing failed");
-  assert.equal(mid.rows.window.some((row) => row.kind === "assistantText"), false);
+  assert.equal(
+    mid.rows.window.some((row) => row.kind === "assistantText"),
+    false,
+  );
   projector.apply({
     type: "message_end",
     message: { role: "assistant", stopReason: "error", errorMessage: raw },
   });
   projector.apply({ type: "agent_end" });
   const done = projector.getSnapshot();
-  assert.equal(done.rows.window.some((row) => row.kind === "assistantText"), false);
+  assert.equal(
+    done.rows.window.some((row) => row.kind === "assistantText"),
+    false,
+  );
   assert.equal(done.control.lastError?.message, "503 Gateway routing failed");
   assert.match(done.control.lastError?.detail ?? "", /1\. 503 Gateway routing failed/);
   assert.match(done.control.lastError?.detail ?? "", /Gateway routing failed","request_id"/);
@@ -343,11 +355,16 @@ test("replayable streams tool progress not inputText", () => {
     }),
     ...projector.apply({
       type: "message_update",
-      assistantMessageEvent: { type: "toolcall_start", contentIndex: 1, id: "c1", toolName: "bash" },
+      assistantMessageEvent: {
+        type: "toolcall_start",
+        contentIndex: 1,
+        id: "c1",
+        toolName: "bash",
+      },
     }),
     ...projector.apply({
       type: "message_update",
-      assistantMessageEvent: { type: "toolcall_delta", contentIndex: 1, delta: "{\"c\":1}" },
+      assistantMessageEvent: { type: "toolcall_delta", contentIndex: 1, delta: '{"c":1}' },
     }),
     ...projector.apply({
       type: "tool_execution_start",
@@ -512,7 +529,11 @@ test("dragged text files are included in the model prompt", async () => {
     ]);
     projector.apply({
       type: "message_start",
-      message: { role: "user", content: [{ type: "text", text: session.prompts[0] ?? "" }], id: "u1" },
+      message: {
+        role: "user",
+        content: [{ type: "text", text: session.prompts[0] ?? "" }],
+        id: "u1",
+      },
     });
     const row = projector.getSnapshot().rows.window.find((item) => item.kind === "userInput");
     assert.equal(row?.kind === "userInput" ? row.text : "", "look");
@@ -624,7 +645,8 @@ test("queued text is visible and removable before it is sent", async () => {
       for (const delta of deltas) {
         const parsed = conversationDeltaSchema.safeParse(delta);
         assert.equal(parsed.success, true);
-        if (!parsed.success || parsed.data.op !== "state.updated" || !parsed.data.patch.queue) continue;
+        if (!parsed.success || parsed.data.op !== "state.updated" || !parsed.data.patch.queue)
+          continue;
         queuedTexts.push(parsed.data.patch.queue.items.map((item) => item.text));
       }
     });
@@ -901,10 +923,7 @@ test("switching the session to full access allows the waiting tool", async () =>
 });
 
 test("gateTool denies", async () => {
-  await assert.rejects(
-    () => gateTool(async () => "deny", "bash", {}),
-    /permission denied/,
-  );
+  await assert.rejects(() => gateTool(async () => "deny", "bash", {}), /permission denied/);
   await gateTool(async () => "allow", "read", {});
 });
 
@@ -919,34 +938,44 @@ test("a running branch summary blocks another branch on the same session", async
   parent.publishCustomTitle("原题");
   parent.noteBranchSummary(true);
   assert.equal(
-    parent.projector.getSnapshot().rows.window.some(
-      (row) =>
-        row.kind === "timelineMarker" &&
-        row.marker.type === "branchSummary" &&
-        row.marker.status === "running",
-    ),
+    parent.projector
+      .getSnapshot()
+      .rows.window.some(
+        (row) =>
+          row.kind === "timelineMarker" &&
+          row.marker.type === "branchSummary" &&
+          row.marker.status === "running",
+      ),
     true,
   );
   await assert.rejects(registry.fork(parent.sessionId, "a1"), (error: unknown) => {
     assert.equal((error as { reasonCode?: string }).reasonCode, "guard.sessionTreeBusy");
     return true;
   });
-  await assert.rejects(registry.resumeIntoNewSession(parent.sessionId, { entryId: "u1", summarize: true }), (error: unknown) => {
-    assert.equal((error as { reasonCode?: string }).reasonCode, "guard.sessionTreeBusy");
-    return true;
-  });
-  assert.throws(() => parent.deleteSessionBranch("side"), (error: unknown) => {
-    assert.equal((error as { reasonCode?: string }).reasonCode, "guard.sessionTreeBusy");
-    return true;
-  });
+  await assert.rejects(
+    registry.resumeIntoNewSession(parent.sessionId, { entryId: "u1", summarize: true }),
+    (error: unknown) => {
+      assert.equal((error as { reasonCode?: string }).reasonCode, "guard.sessionTreeBusy");
+      return true;
+    },
+  );
+  assert.throws(
+    () => parent.deleteSessionBranch("side"),
+    (error: unknown) => {
+      assert.equal((error as { reasonCode?: string }).reasonCode, "guard.sessionTreeBusy");
+      return true;
+    },
+  );
   parent.noteBranchSummary(false);
   assert.equal(
-    parent.projector.getSnapshot().rows.window.some(
-      (row) =>
-        row.kind === "timelineMarker" &&
-        row.marker.type === "branchSummary" &&
-        row.marker.status === "running",
-    ),
+    parent.projector
+      .getSnapshot()
+      .rows.window.some(
+        (row) =>
+          row.kind === "timelineMarker" &&
+          row.marker.type === "branchSummary" &&
+          row.marker.status === "running",
+      ),
     false,
   );
   const child = await registry.fork(parent.sessionId, "a1");
@@ -1027,7 +1056,10 @@ test("navigateTree truncates and fork copies jsonl", async () => {
     false,
   );
   const assistant = assistants[1];
-  assert.equal(assistant && assistant.kind === "assistantText" ? assistant.actions?.canRetry : false, true);
+  assert.equal(
+    assistant && assistant.kind === "assistantText" ? assistant.actions?.canRetry : false,
+    true,
+  );
   const userRows = parent.projector
     .getSnapshot()
     .rows.window.filter((row) => row.kind === "userInput");
@@ -1037,7 +1069,9 @@ test("navigateTree truncates and fork copies jsonl", async () => {
     true,
   );
   parent.projector.setFeedback(assistant?.entityId ?? "", "like");
-  const liked = parent.projector.getSnapshot().rows.window.find((row) => row.entityId === assistant?.entityId);
+  const liked = parent.projector
+    .getSnapshot()
+    .rows.window.find((row) => row.entityId === assistant?.entityId);
   assert.equal(liked && liked.kind === "assistantText" ? liked.feedback : undefined, "like");
   const child = await registry.fork(parent.sessionId, "a1");
   assert.ok(child.sessionId !== parent.sessionId);
@@ -1077,7 +1111,9 @@ test("summarized navigate reloads the branch summary and cancel keeps the leaf",
     summarize: true,
     customInstructions: "keep the decision",
   });
-  const marker = parent.projector.getSnapshot().rows.window.find((row) => row.kind === "timelineMarker");
+  const marker = parent.projector
+    .getSnapshot()
+    .rows.window.find((row) => row.kind === "timelineMarker");
   assert.equal(
     marker && marker.kind === "timelineMarker" && marker.marker.type === "branchSummary"
       ? marker.marker.summary
@@ -1096,16 +1132,20 @@ test("summarized navigate reloads the branch summary and cancel keeps the leaf",
   const cancelled = await parent.navigateTree("u3", { summarize: true });
   assert.equal(cancelled?.cancelled, true);
   assert.equal(
-    parent.projector.getSnapshot().rows.window.some((row) => row.kind === "userInput" && row.text === "stay"),
+    parent.projector
+      .getSnapshot()
+      .rows.window.some((row) => row.kind === "userInput" && row.text === "stay"),
     true,
   );
   assert.equal(
-    parent.projector.getSnapshot().rows.window.some(
-      (row) =>
-        row.kind === "timelineMarker" &&
-        row.marker.type === "branchSummary" &&
-        row.marker.status === "running",
-    ),
+    parent.projector
+      .getSnapshot()
+      .rows.window.some(
+        (row) =>
+          row.kind === "timelineMarker" &&
+          row.marker.type === "branchSummary" &&
+          row.marker.status === "running",
+      ),
     false,
   );
   await rm(root, { recursive: true, force: true });
@@ -1164,7 +1204,9 @@ test("resumeAt replays the live leaf and stop only cancels the summary", async (
   assert.equal(fake.summaryAborted, true);
   assert.equal(fake.aborted, false);
   assert.equal(
-    parent.projector.getSnapshot().rows.window.some((row) => row.kind === "userInput" && row.text === "stay"),
+    parent.projector
+      .getSnapshot()
+      .rows.window.some((row) => row.kind === "userInput" && row.text === "stay"),
     true,
   );
   assert.equal(parent.projector.getSnapshot().control.canStop, false);
@@ -1196,27 +1238,31 @@ test("resumeIntoNewSession keeps the parent and cancels on its stop", async () =
           sessionFile: join(root, "child-1.jsonl"),
         });
       }
-      if (input.sessionId === "child-1" && !fakes.has("child-1")) fake.holdNavigate = true;
+      if (input.sessionId === "child-1" && !fakes.has("child-1")) fake.holdSummary = true;
       fakes.set(input.sessionId, fake);
       return fake;
     },
   });
   const parent = await registry.create({ workspacePath: root });
-  const pending = registry.resumeIntoNewSession(parent.sessionId, {
+  const created = await registry.resumeIntoNewSession(parent.sessionId, {
     entryId: "u1",
     role: "user",
     text: "later",
     summarize: true,
   });
-  await new Promise((resolve) => setTimeout(resolve, 5));
-  assert.equal(parent.projector.getSnapshot().control.canStop, true);
-  assert.equal(fakes.get(parent.sessionId)?.navigatedTo.length, 0);
-  await parent.abort();
-  const cancelled = await pending;
-  assert.equal(cancelled.cancelled, true);
-  assert.equal(registry.get("child-1"), undefined);
-  assert.equal(fakes.get("child-1")?.summaryAborted, true);
+  assert.equal(created.cancelled, false);
+  if (created.cancelled) throw new Error("expected the branch to open before the summary");
   assert.equal(parent.projector.getSnapshot().control.canStop, false);
+  assert.equal(created.hosted.projector.getSnapshot().control.canStop, true);
+  assert.equal(fakes.get(parent.sessionId)?.navigatedTo.length, 0);
+  assert.deepEqual(fakes.get("child-1")?.navigatedTo, ["u1"]);
+  assert.equal(fakes.get("child-1")?.summaryStarted, true);
+  await created.hosted.abort();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(registry.get("child-1"), created.hosted);
+  assert.equal(fakes.get("child-1")?.summaryAborted, true);
+  assert.equal(created.hosted.projector.getSnapshot().control.canStop, false);
+  await registry.delete("child-1");
 
   parent.projector.setConfig({ mode: "yolo" });
   parent.sessionAllows.add("bash");
@@ -1234,6 +1280,96 @@ test("resumeIntoNewSession keeps the parent and cancels on its stop", async () =
   assert.equal(again.editorText, undefined);
   assert.deepEqual(fakes.get("child-1")?.navigatedTo, ["u1"]);
   assert.equal(fakes.get(parent.sessionId)?.navigatedTo.length, 0);
+  await rm(root, { recursive: true, force: true });
+});
+
+test("a finished branch summary stays on the new session", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const fakes = new Map<string, FakePiSession>();
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async (input) => {
+      const fake = new FakePiSession(input.sessionId, input.sessionFile);
+      if (fakes.size === 0) {
+        fake.tree = [
+          {
+            id: "leaf",
+            parentId: null,
+            role: "assistant",
+            preview: "yo",
+            depth: 0,
+            active: true,
+            leaf: true,
+          },
+        ];
+        fake.branchFrom = () => ({
+          sessionId: "child-summary",
+          sessionFile: join(root, "child-summary.jsonl"),
+        });
+      }
+      fake.contextEventsList = [
+        { type: "message_start", message: { role: "user", id: "kept", content: "kept" } },
+      ];
+      fakes.set(input.sessionId, fake);
+      return fake;
+    },
+  });
+  const parent = await registry.create({ workspacePath: root });
+  const created = await registry.resumeIntoNewSession(parent.sessionId, {
+    entryId: "u1",
+    summarize: true,
+  });
+  if (created.cancelled) throw new Error("expected a new session");
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  const marker = created.hosted.projector
+    .getSnapshot()
+    .rows.window.find(
+      (row) => row.kind === "timelineMarker" && row.marker.type === "branchSummary",
+    );
+  assert.equal(
+    marker && marker.kind === "timelineMarker" && marker.marker.type === "branchSummary"
+      ? marker.marker.summary
+      : "",
+    "dropped the rest",
+  );
+  assert.equal(
+    created.hosted.projector.getSnapshot().rows.window.some((row) => row.kind === "userInput"),
+    true,
+  );
+  await rm(root, { recursive: true, force: true });
+});
+
+test("conversation fork keeps host extensions that spawn omits", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const seen: Array<{ sessionId: string; parentSessionId?: string; omitHostExtensions?: boolean }> =
+    [];
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async (input) => {
+      seen.push({
+        sessionId: input.sessionId,
+        parentSessionId: input.parentSessionId,
+        omitHostExtensions: input.omitHostExtensions,
+      });
+      const fake = new FakePiSession(input.sessionId, input.sessionFile);
+      fake.branchFrom = () => ({
+        sessionId: "branched",
+        sessionFile: join(root, "branched.jsonl"),
+      });
+      return fake;
+    },
+  });
+  const parent = await registry.create({ workspacePath: root });
+  const child = await registry.fork(parent.sessionId, "a1");
+  const spawned = await registry.spawn(parent.sessionId);
+  assert.equal(child.parentSessionId, parent.sessionId);
+  assert.equal(child.sessionId, "branched");
+  assert.equal(seen[1]?.parentSessionId, parent.sessionId);
+  assert.equal(seen[1]?.omitHostExtensions, undefined);
+  assert.equal(spawned.parentSessionId, parent.sessionId);
+  assert.equal(seen[2]?.omitHostExtensions, true);
   await rm(root, { recursive: true, force: true });
 });
 
@@ -1285,7 +1421,10 @@ test("list skips empty jsonl and hydrateHistory rebuilds rows", async () => {
     ].join("\n"),
   );
   const listed = await registry.list(root);
-  assert.equal(listed.some((item) => item.sessionId === empty.sessionId), false);
+  assert.equal(
+    listed.some((item) => item.sessionId === empty.sessionId),
+    false,
+  );
   assert.equal(listed.map((item) => item.sessionId).join(","), "01fork,sess_chat");
   assert.equal(listed.find((item) => item.sessionId === "sess_chat")?.title, "hello pi");
   const found = await registry.find("sess_chat");
@@ -1391,10 +1530,7 @@ test("ssh sessions stay under the remote identity and still list the old drive-l
     ].join("\n"),
   );
   const listed = await registry.list(identity);
-  assert.deepEqual(
-    listed.map((item) => item.sessionId).sort(),
-    ["sess_old", "sess_ssh"],
-  );
+  assert.deepEqual(listed.map((item) => item.sessionId).sort(), ["sess_old", "sess_ssh"]);
   await rm(root, { recursive: true, force: true });
 });
 

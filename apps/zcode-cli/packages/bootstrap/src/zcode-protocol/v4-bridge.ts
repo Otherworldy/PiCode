@@ -1548,6 +1548,13 @@ export function createConversationV4Gateway(
       }
       if (!isConversationInputAdmissionCommand(envelope.type)) return null;
       if (!envelope.sessionId) return null;
+      // 回退到输入框只裁切，不能写成一条待发送输入，否则队列会把原文再发出去。
+      if (
+        envelope.type === "editUserQuery" &&
+        (envelope.payload as { restoreToInput?: boolean }).restoreToInput === true
+      ) {
+        return null;
+      }
       return (await coreHost.admitInputCommand?.(envelope, envelope.sessionId, admission)) ?? null;
     },
     cancelCommandInput: async (envelope, queueItemId, reason) => {

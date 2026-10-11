@@ -67,9 +67,9 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 保留：`createSession`、`createSelectionSideSession`、`sendText`、`stop`、`continueAfterError`、`compact`、`forkAssistant`、`editUserQuery`、`retryTurn`、队列五件套、`setFollowupMode`、`switchModelConfig`、`resolveInteraction`、`snoozeInteractionAutoResolution`、`cancelBackgroundWork`、`renameSession`、`deleteSession`、`setAssistantFeedback`、`applyFileRewind`、`readSessionTree`、`navigateSessionTree`、`labelSessionEntry`。
 
-消息上不再提供 `forkAssistant`。从此处继续走 `navigateSessionTree`，结果是左侧列表里的新会话，不是同一份 jsonl 里换叶子。标题旁不再切分支。
+助手行底栏仍可一键 `forkAssistant`。行右侧分叉按钮里的「从这分叉」走同一条命令，只在这条助手消息可以分叉时出现。从此处继续（不总结、总结、自定义提示词）走 `navigateSessionTree`，结果是左侧列表里的新会话，不是同一份 jsonl 里换叶子。标题旁不再切分支。
 
-`navigateSessionTree` 先按当前叶子 `createBranchedSession` 复制出新文件，再只在新会话上走 Pi `navigateTree`。原会话叶子不动。不总结、总结、自定义提示词仍传给这次导航。助手节点停在该条；用户节点回到父节点，原文只在新会话输入框为空时写回，不自动发送。成功后回执带新 `sessionId`，界面切过去，并立刻把新会话补进当前 sessions-index，不等重启重扫 jsonl。新会话沿用原会话的协作模式和已允许的工具：完全访问不再重新弹权限。总结成功后在新文件追加 `branch_summary`。导航后按内存里的 `getLeafId()` / `buildContextEntries()` 重放。不带 `label`。入口是消息上的右键。用户、助手和工具行都可以。工具行带的是 `toolCallId`。右键菜单或自定义提示词对话框开着时，这条消息用选中底色标出。压缩进行中拒绝。正在生成不打断原会话。总结进行中 Stop 打到原会话，转给新会话的 `abortBranchSummary()`，不切过去，新文件删掉。不回滚工作区文件。`editUserQuery` 仍走原来的 `navigateTree` 裁切，不进这条命令。
+`navigateSessionTree` 先按当前叶子 `createBranchedSession` 复制出新文件，再只在新会话上走 Pi `navigateTree`。原会话叶子不动。不总结、总结、自定义提示词仍传给这次导航。助手节点停在该条；用户节点回到父节点，原文只在新会话输入框为空时写回，不自动发送。成功后回执带新 `sessionId`，界面切过去，并立刻把新会话补进当前 sessions-index，不等重启重扫 jsonl。新会话沿用原会话的协作模式、已允许的工具，以及 `codemode`、`tool_search` 和 MCP（含内置 `node_repl`）：完全访问不再重新弹权限。分叉仍记下父会话，但不能因此当成子会话把这些扩展拿掉。总结成功后在新文件追加 `branch_summary`。导航后按内存里的 `getLeafId()` / `buildContextEntries()` 重放。不带 `label`。用户消息的分叉按钮在该行底部工具条里，和复制、编辑、回退放在一起，不浮在气泡旁边。其它行的入口是紧跟可见文字末尾的分叉按钮，不固定在行的右侧。点开仍是从这分叉、不总结、总结、自定义提示词，不再用右键。用户、还没有底栏的助手文本、单独的工具行都可以。一轮的最终回复已经有底栏分叉，不再画这颗按钮。收进查阅、执行、改动分组里的每条工具行也各有一颗；分组标题不是工具行，没有这颗按钮。工具行带的是 `toolCallId`。从工具调用分叉时，叶叶点是该工具结果；同一条助手消息里这个工具之后的工具调用和回复正文不进新会话。菜单或自定义提示词对话框开着时，这条消息用选中底色标出。压缩进行中拒绝。正在生成不打断原会话。选了总结或自定义提示词时，新会话先裁到目标并立刻切过去，摘要在新会话里生成。摘要正文直接留在时间线上，不收进「查看摘要」。原会话不显示「正在总结」。摘要进行时，输入框即使有草稿也要能停止，「正在总结」这一行也能点停止。Stop 打到新会话的 `abortBranchSummary()`，新会话留着，只是没有摘要。行上的分叉按钮和底栏分叉用同一枚图标。总结失败同样留着新会话。不回滚工作区文件。`editUserQuery` 仍走原来的 `navigateTree` 裁切，不进这条命令。
 
 `readSessionTree` 把 `getTree()` 压成平铺节点，放在命令回执里，不进每条快照。压平用循环：一条几万层的父链用递归，打开会话时会栈溢出。`labelSessionEntry` 写 Pi 的 label，再回一份树。
 
@@ -86,6 +86,8 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 任意一条真实用户消息都能编辑重发，不限最后一条。会话还在生成时全部不可编辑。编辑仍从该条 `navigateTree` 裁切当前叶子并重发，这条之后的消息不再留在这条叶子上。
 
 点发送或按回车后才选总结，不另加按钮。选项和从此处继续一样：不总结、总结、自定义提示词。选了总结时，时间线上先出现「正在总结被丢下的内容」，完成后再把摘要正文留在原处，然后重发。关掉选择则不发送。取消进行中的总结则不裁切、不重发。
+
+用户消息在编辑旁边有「回退到此处」。先选不总结、总结或自定义提示词，和编辑后点发送一样。选完立刻关掉这个对话框，再发 `editUserQuery` 且 `restoreToInput` 为 true。总结进行时不留弹窗，进度只在时间线上。与编辑同一条 `navigateTree` 裁切当前叶子，不重发、不进入输入队列、不回滚文件。成功后把这条消息当时可见的原文和附件填进当前会话输入框，不自动发送。关掉选择则不裁切。输入框已有草稿或正在提交时拒绝，不覆盖、不裁切。取消进行中的总结则不裁切、不填入。
 
 `applyFileRewind` 只退这一轮的文件，不截断聊天。真相是这一轮成功的 Pi 工具参数，不是旧 checkpoint。`edit` 要当前文件仍能唯一匹配 `newText` 才写回 `oldText`。`write` 要当前内容仍等于写入内容才删除该文件；覆盖掉的旧内容找不回来。对不上就整批不写。`bash` 只记为忽略，不阻止文件摘要上的撤销；编辑消息并选了回滚文件时，有忽略项仍拒绝。成功后把该轮 `fileChanges.state` 改成 `reverted`。SSH 工作区走和工具同一条远端读写。
 
@@ -134,7 +136,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 桌面 `--prepare-storage` 只解析会话库路径，不迁移、也不创建 Pi MCP 文件。这个 Worker 不能改 cwd，Windows 上继承到的目录经常是 `C:\Windows\System32`。在那里创建项目 `.pi` 会 EPERM，进程在写出库路径之前退出，桌面只能看到传输中断。迁移仍只发生在真正的会话进程里，并且用该工作区当项目目录。
 
-会话加载 Pi 的 `codemode`、`tool_search` 和 MCP 扩展，不再注册 PiCode 的 `mcp` 代理工具。插件 MCP 和内置 `node_repl` 不进这两个文件，会话创建时用 `registerMcpServer` 注册。子会话不挂这三个扩展。
+会话加载 Pi 的 `codemode`、`tool_search` 和 MCP 扩展，不再注册 PiCode 的 `mcp` 代理工具。插件 MCP 和内置 `node_repl` 不进这两个文件，会话创建时用 `registerMcpServer` 注册。`picode_subagent` 拉起的子会话不挂这三个扩展。对话分叉不是子会话：新会话仍加载它们，`codemode` 和 `mcp__node_repl__js` 不会因为带了父会话 id 而消失。
 
 浏览器和官方鉴权仍走这条 Pi 连接。`node_repl` 的每次请求带 `com.zcode/request-context.session_id`。官方 HTTP 仍用现有的逐请求 JWT fetch；官方 stdio 仍把身份头放进 `_meta`。设置页刷新连接状态仍可能再打开一份 `McpPort`，与会话里的 Pi 连接不是同一个客户端。
 
@@ -168,7 +170,7 @@ SDK 来源是 `AppSettings.piSdkSource`。缺省 `builtin`，用打进 `zcode.cj
 
 技能设置读写 Pi 会加载的目录：用户 `~/.pi/agent/skills`，工作区 `<cwd>/.pi/skills`，仍列出 Pi 同样会读的 `.agents/skills`。已启用的 Pi 包技能也列出：读包里的 `pi.skills`，没有这份清单时用包内 `skills/` 目录。用户包出现在个人范围，项目包出现在当前工作区，归在包名下，不能单独删除或用技能开关关掉。Pi 里 `autoload: false` 的包，以及 PiCode 插件开关关掉的包，不列。设置页不执行扩展代码，扩展只在运行时 `resources_discover` 上报的技能不在这里。包设置里非空的 `skills` 过滤模式不重复解释；`skills: []` 仍表示这个包不贡献技能。斜杠菜单不另扫一套：已打开的会话用 Pi 已经加载的技能（含用户目录、沿 git 根的 `.agents/skills`、已启用的包技能）；没有会话时走 Pi 的包解析，不加载扩展。命令区只留 GUI 能用的：`/compact`、提示词命令，以及扩展注册的命令。扩展命令单独一组，不和原生命令混在一起。终端专属内置命令（`/copy`、`/new`、`/resume`、设置、模型选择、退出等）不展示，打出来也不发给模型。Pi 把技能注册成 `skill:` 命令；GUI 不收录，技能仍在原来的技能区。`/side` 仍是 GUI 自己的。计划模式只跟已启用的 `@plannotator/pi-extension`。没装或没启用时，输入框不显示计划开关，`/plan` 直接拒绝。新建任务里的开关和空 `/plan` 只记在草稿上，不创建会话。真正发出第一条消息时才先发送 `/plannotator-plan-mode`。这条命令和其他单独的斜杠命令不当会话标题，标题仍取之后第一条真正的用户消息。会话库 `first_input` 和任务索引同样不保留这条命令；列表摘要里已经有真实标题时直接换上，不必先点开会话。已有会话的开关直接发送该命令。带正文的 `/plan` 先进入计划模式，再把正文发给模型。PiCode 自己的 `planEnabled` 不再发给 Host。命令设置读写 Pi 提示词目录：用户 `~/.pi/agent/prompts`，工作区 `<cwd>/.pi/prompts`。钩子不进入 Pi 会话，设置页不再单独列出。
 
-内置浏览器是宿主能力，不是可安装插件。会话创建时直接连上打包好的 `node_repl`，并把 `control-browser` 技能交给 Pi。工具名仍是 `mcp__node_repl__js`。direct 调用带上当前会话 id，browser broker 才能回到 `BrowserControlPort`，再调 Electron `interaction/browserExecute`。不写进用户 MCP 配置。开关在 `~/.PiCode/v2/setting.json` 的 `browserHostEnabled`，缺省开启，只影响之后新建的会话。子会话不带这个工具。
+内置浏览器是宿主能力，不是可安装插件。会话创建时直接连上打包好的 `node_repl`，并把 `control-browser` 技能交给 Pi。工具名仍是 `mcp__node_repl__js`。direct 调用带上当前会话 id，browser broker 才能回到 `BrowserControlPort`，再调 Electron `interaction/browserExecute`。不写进用户 MCP 配置。开关在 `~/.PiCode/v2/setting.json` 的 `browserHostEnabled`，缺省开启，只影响之后新建的会话。子会话不带这个工具。对话分叉出来的新会话仍带。
 
 SSH 工作区不部署远端 zcode-server，也不从 PiCode CDN 下载或上传运行时。状态所有者仍是本机 Pi：模型读本机 `~/.pi/agent`，会话 jsonl 写在本机。窗口 Host 只记住该 workspace identity 对应的 SSH 目标（别名优先，否则 `user@host` 加端口），并在拉起本机 agent 时放进 `ZCODE_SSH_REMOTE`。这个进程里的 read / write / edit / bash / ls / grep / find 经系统 `ssh` 作用在远端路径上。Pi 在 Windows 上会把远端路径 resolve 成盘符路径；会话提示改回远端 posix 路径，命令里的盘符前缀在执行前换回去。bash 的 timeout 按秒计。会话 jsonl 按 workspace identity 分目录，侧栏才能列出来；目录选择的默认路径是远端 `/home`。密码和私钥不进环境变量；认证失败就失败，不回退到远端安装。WSL 和 Docker 仍走原来的远端 server。
 

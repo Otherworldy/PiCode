@@ -5,7 +5,25 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { createSdkSessionFactory, withBuiltinSearchTools } from "./session-factory.js";
+import {
+  createSdkSessionFactory,
+  mountPiHostExtensions,
+  withBuiltinSearchTools,
+} from "./session-factory.js";
+
+test("a conversation branch still mounts host extensions", () => {
+  assert.equal(mountPiHostExtensions({ isolated: false, loadExtensions: true }), true);
+  assert.equal(
+    mountPiHostExtensions({ isolated: false, loadExtensions: true, omitHostExtensions: false }),
+    true,
+  );
+  assert.equal(
+    mountPiHostExtensions({ isolated: false, loadExtensions: true, omitHostExtensions: true }),
+    false,
+  );
+  assert.equal(mountPiHostExtensions({ isolated: true, loadExtensions: true }), false);
+  assert.equal(mountPiHostExtensions({ isolated: false, loadExtensions: false }), false);
+});
 
 test("unloading an override extension still leaves builtin search tools", () => {
   assert.deepEqual(withBuiltinSearchTools(["read", "bash", "edit", "write"], ["grep", "find", "ls"]), [

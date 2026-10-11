@@ -82,6 +82,7 @@ export function ExecuteGroupToolCallBlock(context: ToolCallBlockRenderContext) {
         {childToolCalls.map((child) => (
           <ToolCallBlock
             key={child.toolCall.toolId}
+            summaryTrailing={context.resumeMenuForToolId?.(child.toolCall.toolId)}
             toolCallNode={child}
             workspacePath={context.workspacePath}
             showIcon={false}
@@ -97,6 +98,7 @@ export function ExecuteGroupToolCallBlock(context: ToolCallBlockRenderContext) {
     [
       childToolCalls,
       context.onLoadFullToolCallFields,
+      context.resumeMenuForToolId,
       context.onOpenAutomationsMain,
       context.onOpenBrowserUrl,
       context.onOpenCodeViewer,
