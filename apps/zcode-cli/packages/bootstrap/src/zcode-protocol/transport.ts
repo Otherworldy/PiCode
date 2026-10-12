@@ -57,7 +57,7 @@ function isSettingsCatalogRead(message: ZCodeProtocolMessage): boolean {
   return (
     (message.method === zcodeProtocolMethods.piModelsMutate && action === "get") ||
     (message.method === zcodeProtocolMethods.piPlugins &&
-      (action === "list" || action === "search"))
+      (action === "list" || action === "search" || action === "prerequisites"))
   );
 }
 

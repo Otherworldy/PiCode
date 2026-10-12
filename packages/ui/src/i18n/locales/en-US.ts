@@ -1589,7 +1589,7 @@ const enUS: Record<string, string> = {
   "workspaceSidebar.showFileTree": "Show files",
   "workspaceSidebar.systemPrompt": "Project prompts",
   "workspaceSidebar.systemPrompt.description":
-    "Applies only to this project's .pi/prompts directory, and there can be many. Each Markdown file's name is a slash command. Changes apply the next time a session is created or reopened.",
+    "Applies only to this project's .pi/prompts directory, and there can be many. Each Markdown file's name is a slash command. After saving, open / again to use it. You do not need to restart.",
   "workspaceSidebar.sshConnectionTitle": "SSH connection",
   "workspaceSidebar.sshConnectionAlias": "Alias",
   "workspaceSidebar.sshConnectionHost": "Host",
@@ -2133,7 +2133,7 @@ const enUS: Record<string, string> = {
   "settings.terminalFontFamilyPlaceholder": "Leave blank to inherit, e.g. MesloLGS NF, monospace",
   "settings.systemPrompt": "Prompts",
   "settings.systemPrompt.description":
-    "Global prompts live in Pi's prompts directory on this machine, and there can be many. Each one is a Markdown file in that directory. The file name is the slash command, so review.md becomes /review. Changes apply the next time a session is created or reopened.",
+    "Global prompts live in Pi's prompts directory on this machine, and there can be many. Each one is a Markdown file in that directory. The file name is the slash command, so review.md becomes /review. After saving, open / again to use it. You do not need to restart.",
   "settings.systemPrompt.placeholder":
     "Prompt text. A leading description in Markdown front matter is the command description",
   "settings.systemPrompt.save": "Save",
@@ -2147,7 +2147,7 @@ const enUS: Record<string, string> = {
   "settings.systemPrompt.delete": "Delete",
   "settings.systemPrompt.deleteTitle": "Delete this prompt?",
   "settings.systemPrompt.deleteDescription":
-    "This deletes {name}. The slash command disappears the next time a session is opened.",
+    "This deletes {name}. Sessions that already loaded the command keep it until they end.",
   "settings.systemPrompt.deleted": "Prompt deleted",
   "settings.systemPrompt.unsavedTitle": "Discard unsaved changes?",
   "settings.systemPrompt.discard": "Discard",
@@ -2730,6 +2730,12 @@ const enUS: Record<string, string> = {
   "settings.plugins.pi.updated": "Updated. Applies to the next new session.",
   "settings.plugins.pi.checkFailed": "Couldn't check for updates. Try again.",
   "settings.plugins.pi.market.title": "Plugin market",
+  "settings.plugins.pi.tools.both":
+    "npm and Git are not installed, so plugins cannot be installed yet. Install both first.",
+  "settings.plugins.pi.tools.npm":
+    "npm is not installed, so packages from npm cannot be installed. Install Node.js, which includes npm.",
+  "settings.plugins.pi.tools.git":
+    "Git is not installed, so git and https sources cannot be installed. Install Git first.",
   "settings.plugins.pi.market.hint":
     "The catalog is npm packages tagged pi-package. You can also paste an npm, git, or https source.",
   "settings.plugins.pi.market.sourcePlaceholder": "npm:name or git:github.com/owner/repo",

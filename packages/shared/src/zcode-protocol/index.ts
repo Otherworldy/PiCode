@@ -2406,6 +2406,7 @@ export const zcodePiPluginsParamsSchema = z
       "install",
       "remove",
       "search",
+      "prerequisites",
     ]),
     id: z.string().min(1).optional(),
     enabled: z.boolean().optional(),
@@ -2469,6 +2470,13 @@ export const zcodePiPluginsResultSchema = z
         ),
         total: z.number(),
         from: z.number(),
+      })
+      .strict()
+      .optional(),
+    tools: z
+      .object({
+        npm: z.boolean(),
+        git: z.boolean(),
       })
       .strict()
       .optional(),

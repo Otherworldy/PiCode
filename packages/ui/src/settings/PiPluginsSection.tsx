@@ -10,6 +10,7 @@ import { logger } from "@/logger.js";
 import { PiPluginConfigDialog } from "@/settings/PiPluginConfigDialog.js";
 import { PiPluginInstalledCards } from "@/settings/PiPluginInstalledCards.js";
 import { PiPluginMarket } from "@/settings/PiPluginMarket.js";
+import { PiPluginToolNotice } from "@/settings/PiPluginToolNotice.js";
 import { usePiPluginUpdateStore } from "@/store/piPluginUpdateStore.js";
 
 type PiPlugin = ZCodePiPluginsResult["plugins"][number];
@@ -106,6 +107,7 @@ export function PiPluginsSection({
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
   const [installedOnly, setInstalledOnly] = useState(false);
+  const [tools, setTools] = useState<{ npm: boolean; git: boolean } | null>(null);
   const workspaceKey = piPluginUpdateWorkspaceKey(workspacePath, workspaceIdentity);
   const updates = usePiPluginUpdateStore((state) =>
     state.workspaceKey === workspaceKey ? state.updates : [],
@@ -136,6 +138,21 @@ export function PiPluginsSection({
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    session
+      .mutatePiPlugins({ ...workspace, action: "prerequisites" })
+      .then((result) => {
+        if (!cancelled) setTools(result.tools ?? null);
+      })
+      .catch((error) => {
+        logger.warn("[pi-plugins] tool check failed", { error });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session, workspace]);
 
   const needle = searchQuery.trim().toLowerCase();
   const visible = (plugins ?? []).filter((plugin) => {
@@ -178,6 +195,7 @@ export function PiPluginsSection({
 
   return (
     <div className="mb-6 space-y-4">
+      <PiPluginToolNotice tools={tools ?? null} />
       {plugins !== null ? (
         <PiPluginMarket
           plugins={plugins}

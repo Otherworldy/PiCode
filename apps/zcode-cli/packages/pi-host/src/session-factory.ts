@@ -4,7 +4,7 @@ import type { CreateAgentSessionOptions, ModelRuntime } from "@earendil-works/pi
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
 import { createPiProcessBridge } from "./pi-process-bridge.js";
 import { applyZcodePluginPlan, zcodePluginLoaderExtras } from "./pi-plugins.js";
-import { listSessionSlashCommands } from "./pi-slash-commands.js";
+import { expandUnloadedPromptTemplate, listSessionSlashCommands } from "./pi-slash-commands.js";
 import { toPiSkillView } from "./pi-skills.js";
 import { branchPiSessionFile, openOrCreateSession } from "./session-files.js";
 import { shutdownPiSession } from "./session-shutdown.js";
@@ -531,6 +531,12 @@ export function createSdkSessionFactory(
       : isolated && delegate
         ? { providerId: delegate.model.provider, modelId: delegate.model.id }
         : undefined;
+    const preparePromptText = (text: string) =>
+      expandUnloadedPromptTemplate(text, {
+        cwd: input.cwd,
+        agentDir,
+        loadedNames: new Set(session.promptTemplates.map((template) => template.name)),
+      });
     return {
       sessionId: input.sessionId,
       sessionFile: session.sessionFile ?? input.sessionFile,
@@ -558,9 +564,10 @@ export function createSdkSessionFactory(
             reject(new Error("pi prompt rejected: already streaming"));
             return;
           }
+          const prepared = preparePromptText(text);
           let settled = false;
           const pending = session
-            .prompt(text, {
+            .prompt(prepared, {
               ...(options?.images?.length ? { images: options.images } : {}),
               preflightResult: () => {
                 settled = true;
@@ -577,10 +584,10 @@ export function createSdkSessionFactory(
         }),
       waitTurn: () => lastTurn,
       steer: async (text, images) => {
-        await session.steer(text, images);
+        await session.steer(preparePromptText(text), images);
       },
       followUp: async (text, images) => {
-        await session.followUp(text, images);
+        await session.followUp(preparePromptText(text), images);
       },
       abort: () => session.abort(),
       continueAfterError: () => {

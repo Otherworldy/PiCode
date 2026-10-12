@@ -3,7 +3,11 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { assemblePiSlashCommands, listPiSlashCommands } from "./pi-slash-commands.js";
+import {
+  assemblePiSlashCommands,
+  expandUnloadedPromptTemplate,
+  listPiSlashCommands,
+} from "./pi-slash-commands.js";
 
 test("pi slash commands keep gui builtins, then prompts, then extensions", () => {
   const commands = assemblePiSlashCommands({
@@ -47,4 +51,32 @@ test("pi slash commands read prompt files without a session", async () => {
   assert.equal(ship?.inputHint, "/ship <note>");
   assert.equal(found[0]?.name, "compact");
   assert.equal(found.some((command) => command.name === "copy"), false);
+});
+
+test("a prompt file saved after session start still expands", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-slash-expand-"));
+  const cwd = join(root, "work");
+  const agentDir = join(root, "agent");
+  await mkdir(join(cwd, ".pi", "prompts"), { recursive: true });
+  await writeFile(
+    join(cwd, ".pi", "prompts", "review.md"),
+    "---\ndescription: Review\n---\nLook at ${1:-all}.\n",
+  );
+
+  assert.equal(
+    expandUnloadedPromptTemplate("/review api", {
+      cwd,
+      agentDir,
+      loadedNames: new Set(),
+    }),
+    "Look at api.",
+  );
+  assert.equal(
+    expandUnloadedPromptTemplate("/review api", {
+      cwd,
+      agentDir,
+      loadedNames: new Set(["review"]),
+    }),
+    "/review api",
+  );
 });

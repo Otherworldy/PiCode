@@ -11,6 +11,7 @@ import {
   listPiPlugins,
   mutatePiCatalog,
   piPluginUpdateCacheKey,
+  probePiPluginInstallTools,
   readPiPluginUpdateCache,
   savePiPluginUpdateCache,
   searchPiPackageCatalog,
@@ -86,6 +87,9 @@ export async function mutatePiModels(rawParams: unknown) {
 export async function mutatePiPlugins(rawParams: unknown) {
   const params = parseParams(zcodePiPluginsParamsSchema, rawParams);
   const cwd = params.workspace?.workspacePath || process.cwd();
+  if (params.action === "prerequisites") {
+    return { plugins: [], tools: await probePiPluginInstallTools(cwd) };
+  }
   const cacheKey = piPluginUpdateCacheKey(cwd, params.workspace?.workspaceIdentity);
   if (params.action === "setEnabled") {
     if (!params.id || params.enabled === undefined) {

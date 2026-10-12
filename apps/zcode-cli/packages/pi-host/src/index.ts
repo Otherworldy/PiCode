@@ -53,6 +53,7 @@ export {
   writePiPluginConfig,
   type PiPluginConfigView,
 } from "./pi-plugin-config.js";
+export { probePiPluginInstallTools, type PiPluginInstallTools } from "./pi-plugin-tools.js";
 export {
   forgetPiPluginUpdate,
   piPluginUpdateCacheKey,

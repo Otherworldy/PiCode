@@ -1473,7 +1473,7 @@ const zhCN: Record<string, string> = {
   "workspaceSidebar.showFileTree": "查看文件",
   "workspaceSidebar.systemPrompt": "项目提示词",
   "workspaceSidebar.systemPrompt.description":
-    "只作用于这个项目的 .pi/prompts，可以有很多份。每一份是一个 Markdown 文件，文件名就是斜杠命令。下次新建或重新打开会话后生效。",
+    "只作用于这个项目的 .pi/prompts，可以有很多份。每一份是一个 Markdown 文件，文件名就是斜杠命令。保存后再打开 / 就能用，不必重启。",
   "workspaceSidebar.sshConnectionTitle": "SSH 连接",
   "workspaceSidebar.sshConnectionAlias": "Alias",
   "workspaceSidebar.sshConnectionHost": "Host",
@@ -1998,7 +1998,7 @@ const zhCN: Record<string, string> = {
   "settings.terminalFontFamilyPlaceholder": "留空自动继承，例如 MesloLGS NF, monospace",
   "settings.systemPrompt": "提示词",
   "settings.systemPrompt.description":
-    "全局提示词放在本机 Pi 的 prompts 目录，可以有很多份。每一份是这一层目录里的一个 Markdown 文件，文件名就是斜杠命令，例如 review.md 对应 /review。下次新建或重新打开会话后生效。",
+    "全局提示词放在本机 Pi 的 prompts 目录，可以有很多份。每一份是这一层目录里的一个 Markdown 文件，文件名就是斜杠命令，例如 review.md 对应 /review。保存后再打开 / 就能用，不必重启。",
   "settings.systemPrompt.placeholder":
     "提示词正文。可以用 Markdown 开头的 description 作为命令说明",
   "settings.systemPrompt.save": "保存",
@@ -2012,7 +2012,7 @@ const zhCN: Record<string, string> = {
   "settings.systemPrompt.delete": "删除",
   "settings.systemPrompt.deleteTitle": "删除这份提示词？",
   "settings.systemPrompt.deleteDescription":
-    "将删除 {name}。对应的斜杠命令会在下次打开会话后消失。",
+    "将删除 {name}。已经载入这条命令的会话要结束后它才会从菜单里消失。",
   "settings.systemPrompt.deleted": "提示词已删除",
   "settings.systemPrompt.unsavedTitle": "放弃未保存的修改？",
   "settings.systemPrompt.discard": "放弃",
@@ -2553,6 +2553,10 @@ const zhCN: Record<string, string> = {
   "settings.plugins.pi.market.title": "插件市场",
   "settings.plugins.pi.market.hint":
     "目录来自 npm 上的 pi-package。也可以粘贴 npm、git 或 https 源。",
+  "settings.plugins.pi.tools.both": "本机没有 npm 和 Git，现在装不了插件。请先安装下面两项。",
+  "settings.plugins.pi.tools.npm":
+    "本机没有 npm，装不了 npm 上的插件。请先安装 Node.js（自带 npm）。",
+  "settings.plugins.pi.tools.git": "本机没有 Git，装不了 git 或 https 源。请先安装 Git。",
   "settings.plugins.pi.market.sourcePlaceholder": "npm:包名 或 git:github.com/所有者/仓库",
   "settings.plugins.pi.market.installSource": "安装此源",
   "settings.plugins.pi.market.invalidSource": "只接受 npm、git: 或 https:// 源。",

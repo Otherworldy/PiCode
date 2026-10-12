@@ -14,16 +14,21 @@ export interface ListProtocolSlashCommandsOptions extends ListZCodeCustomCommand
    * 保留字段，避免旧调用方传参变成类型错误。
    */
   dynamicWorkflowEnabled?: boolean;
-  /** 活会话已经加载的 Pi 命令。没有会话时按提示词目录现扫。 */
+  /**
+   * 活会话已经加载的 Pi 命令。扩展命令只能从这里来。
+   * 提示词文件不冻结在会话创建时：即使传了这份快照，仍会再扫一次目录，把保存后新出现的文件补进菜单。
+   */
   piCommands?: readonly PiSlashCommandView[];
 }
 
 export async function listProtocolSlashCommands(
   options: ListProtocolSlashCommandsOptions = {},
 ): Promise<ZCodeSlashCommand[]> {
-  const discovered =
-    options.piCommands ??
-    (await listPiSlashCommands(options.workingDirectory ?? process.cwd()));
+  const cwd = options.workingDirectory ?? process.cwd();
+  const scanned = await listPiSlashCommands(cwd);
+  const discovered = options.piCommands
+    ? mergeScannedPromptTemplates(options.piCommands, scanned)
+    : scanned;
   const commands = discovered.map(toProtocolSlashCommand);
   for (const command of APP_PROTOCOL_APP_ONLY_BUILTIN_SLASH_COMMANDS) {
     if (!commands.some((existing) => existing.name === command.name)) commands.push(command);
@@ -62,6 +67,16 @@ export function piSlashCommandsFromApp(app: object): PiSlashCommandView[] | unde
   const list = (app as { piHosted?: { listSlashCommands?: () => PiSlashCommandView[] } }).piHosted
     ?.listSlashCommands;
   return list ? list() : undefined;
+}
+
+/** 活会话的快照留着扩展命令和包模板。磁盘上新建的提示词文件按名字补进去。 */
+function mergeScannedPromptTemplates(
+  live: readonly PiSlashCommandView[],
+  scanned: readonly PiSlashCommandView[],
+): PiSlashCommandView[] {
+  const names = new Set(live.map((command) => command.name));
+  const added = scanned.filter((command) => command.source === "custom" && !names.has(command.name));
+  return [...live, ...added];
 }
 
 function toProtocolSlashCommand(command: PiSlashCommandView): ZCodeSlashCommand {

@@ -130,6 +130,81 @@ function readPromptDir(dir: string): NamedCommand[] {
   return commands;
 }
 
+/**
+ * 会话创建时载入的模板不会跟着文件变。
+ * 命令名还没被这个会话载入时，按磁盘上的项目文件、其次全局文件展开。
+ * Pi 的 expandPromptTemplate 没有从包入口导出，参数替换与它的 substituteArgs 一致。
+ * 已经载入的交给 Pi 自己展开，包里的模板不被这里覆盖。
+ */
+export function expandUnloadedPromptTemplate(
+  text: string,
+  input: { cwd: string; agentDir: string; loadedNames: ReadonlySet<string> },
+): string {
+  const match = text.match(/^\/([^\s]+)(?:\s+([\s\S]*))?$/);
+  const name = match?.[1];
+  if (!name || input.loadedNames.has(name) || !isPromptFileName(name)) return text;
+  const file = [join(input.cwd, ".pi", "prompts", `${name}.md`), join(input.agentDir, "prompts", `${name}.md`)].find(
+    (candidate) => existsSync(candidate),
+  );
+  if (!file) return text;
+  const parsed = parseFrontmatter(readFileSync(file, "utf8"));
+  return substitutePromptArgs(parsed.body, parsePromptArgs(match?.[2] ?? ""));
+}
+
+function isPromptFileName(name: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name);
+}
+
+function parsePromptArgs(argsString: string): string[] {
+  const args: string[] = [];
+  let current = "";
+  let quote: "\"" | "'" | undefined;
+  for (const char of argsString) {
+    if (quote) {
+      if (char === quote) quote = undefined;
+      else current += char;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      if (current) {
+        args.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += char;
+  }
+  if (current) args.push(current);
+  return args;
+}
+
+function substitutePromptArgs(content: string, args: string[]): string {
+  const allArgs = args.join(" ");
+  return content.replace(
+    /\$\{(\d+|ARGUMENTS|@):-([^}]*)\}|\$\{@:(\d+)(?::(\d+))?\}|\$(ARGUMENTS|@|\d+)/g,
+    (_match, defaultTarget: string, defaultValue: string, sliceStart: string, sliceLength: string, simple: string) => {
+      if (defaultTarget) {
+        const value =
+          defaultTarget === "@" || defaultTarget === "ARGUMENTS"
+            ? allArgs
+            : args[Number(defaultTarget) - 1];
+        return value ? value : defaultValue;
+      }
+      if (sliceStart) {
+        const start = Math.max(0, Number(sliceStart) - 1);
+        if (sliceLength) return args.slice(start, start + Number(sliceLength)).join(" ");
+        return args.slice(start).join(" ");
+      }
+      if (simple === "ARGUMENTS" || simple === "@") return allArgs;
+      return args[Number(simple) - 1] ?? "";
+    },
+  );
+}
+
 function toView(command: NamedCommand, source: PiSlashCommandView["source"]): PiSlashCommandView {
   const hint = command.argumentHint?.trim();
   return {

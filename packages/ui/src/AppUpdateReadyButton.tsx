@@ -5,11 +5,15 @@ import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 
-export function AppUpdateReadyButton() {
+export function AppUpdateReadyButton({
+  initialSnapshot,
+}: {
+  initialSnapshot?: AppUpdateSnapshot | null;
+} = {}) {
   const platform = usePlatform();
   const { intl } = useZCodeIntl();
   const requestConfirmation = useConfirmDialog();
-  const [snapshot, setSnapshot] = useState<AppUpdateSnapshot | null>(null);
+  const [snapshot, setSnapshot] = useState<AppUpdateSnapshot | null>(initialSnapshot ?? null);
   const getAppUpdateState = platform.getAppUpdateState;
   const onAppUpdateStateChanged = platform.onAppUpdateStateChanged;
   const downloadAppUpdate = platform.downloadAppUpdate;
@@ -28,11 +32,13 @@ export function AppUpdateReadyButton() {
     };
   }, [getAppUpdateState, onAppUpdateStateChanged]);
 
-  if (snapshot?.phase !== "downloaded" || snapshot.installKind || !downloadAppUpdate) return null;
+  if (snapshot?.phase !== "downloaded" || snapshot.installKind || !downloadAppUpdate) {
+    return null;
+  }
 
   const handleClick = () => {
     void (async () => {
-      const version = snapshot.latestVersion?.replace(/^v/i, "") ?? "";
+      const version = snapshot?.latestVersion?.replace(/^v/i, "") || "";
       const opensDiskImage = /Mac/i.test(navigator.platform);
       const confirmed = await requestConfirmation({
         title: intl.formatMessage({
@@ -51,11 +57,11 @@ export function AppUpdateReadyButton() {
   };
 
   return (
+    // 桌面更新下载完成后，右上角更新按钮使用 #e6a23c 暖黄背景、白色文字与 13px(text-ui-caption) 字号。
     <Button
       type="button"
-      variant="outline"
       size="sm"
-      className="[app-region:no-drag]"
+      className="border-[#e6a23c] bg-[#e6a23c] text-ui-caption font-medium text-white shadow-xs hover:bg-[#ebb563] hover:text-white active:bg-[#cf9236] focus-visible:ring-[#e6a23c]/40 [app-region:no-drag]"
       onClick={handleClick}
     >
       {intl.formatMessage({ id: "appUpdate.action" })}
