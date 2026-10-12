@@ -7,6 +7,7 @@ export interface PiCatalogModel {
   modelId: string;
   name?: string;
   thoughtLevels?: readonly string[];
+  contextWindow?: number;
 }
 
 export interface PiModelCatalogSnapshot {
@@ -46,6 +47,11 @@ export function toPiModelSelectionView(catalog: PiModelCatalogSnapshot): ModelSe
         optionSpecs: {
           reasoningLevel: { values: thoughtsOf(model) },
         },
+        ...(typeof model.contextWindow === "number" &&
+        Number.isFinite(model.contextWindow) &&
+        model.contextWindow > 0
+          ? { properties: { contextWindow: Math.floor(model.contextWindow) } }
+          : {}),
       },
     })),
   }));

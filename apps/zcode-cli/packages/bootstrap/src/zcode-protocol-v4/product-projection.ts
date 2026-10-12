@@ -3130,7 +3130,11 @@ export class ProductProjection {
           }),
         )
       : [];
-    return [{ op: "row.upserted", row: next }, ...planDeltas];
+    return [
+      { op: "row.upserted", row: next },
+      ...planDeltas,
+      ...this.dropPendingForFinishedTool(toolCallId, row.toolName),
+    ];
   }
 
   /**
@@ -3200,6 +3204,7 @@ export class ProductProjection {
           endedAt: this.ms(event),
         },
       },
+      ...this.dropPendingForFinishedTool(String(payload.toolCallId), row.toolName),
     ];
   }
 
@@ -3482,6 +3487,27 @@ export class ProductProjection {
       };
     });
     return changed ? [{ op: "state.updated", patch: { pendingInteractions } }] : [];
+  }
+
+  /** 工具已经终态，不能再占着侧栏「等待确认」。permission_resolved 丢失时也要收口。 */
+  private dropPendingForFinishedTool(toolCallId: string, toolName: string): ConversationDelta[] {
+    const ask = isAskUserQuestionToolName(toolName);
+    const remaining = this.snapshot.pendingInteractions.filter((item) => {
+      const payload = item.payload;
+      if (payload.kind !== "permission" && payload.kind !== "userInput") return true;
+      if (payload.toolCallId === toolCallId) return false;
+      if (!ask || payload.kind !== "userInput") return true;
+      const name = payload.toolName?.trim().toLowerCase();
+      if (name === "askuserquestion" || name === "ask_user_question") return false;
+      return Boolean(
+        payload.toolCallId ||
+          payload.toolName ||
+          payload.options?.length ||
+          !payload.questions?.length,
+      );
+    });
+    if (remaining.length === this.snapshot.pendingInteractions.length) return [];
+    return [{ op: "state.updated", patch: { pendingInteractions: remaining } }];
   }
 
   private settlePermission(toolCallId: string, status: ToolCallRow["status"]): ConversationDelta[] {

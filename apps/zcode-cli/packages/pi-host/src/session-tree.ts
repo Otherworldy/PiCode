@@ -1,4 +1,4 @@
-import { readPiJsonl } from "./jsonl-history.js";
+import { readPiJsonl, visibleUserText } from "./jsonl-history.js";
 import type {
   PiHostEvent,
   PiSessionPort,
@@ -212,11 +212,18 @@ export function resolveSessionEntry(
   if (hint?.role === "tool") return undefined;
   const wanted = hint?.text?.trim();
   if (!wanted) return undefined;
+  const normalize =
+    hint?.role === "assistant"
+      ? (value: string) => value.trim()
+      : (value: string) => visibleUserText(value).trim();
+  const right = normalize(wanted);
+  // 气泡里已经拿掉缩放说明。只剩这行时不能拿空文本碰上别的用户消息。
+  if (!right) return undefined;
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index];
     if (!entry || entry.type !== "message") continue;
     if (hint?.role && entry.message?.role !== hint.role) continue;
-    if (textOf(entry.message?.content).trim() === wanted) return entry.id;
+    if (normalize(textOf(entry.message?.content)) === right) return entry.id;
   }
   return undefined;
 }
@@ -372,9 +379,10 @@ export async function runSessionResume(input: {
       input.reload(input.pi.contextEvents());
       input.publishContext();
     }
+    const editorText = result?.editorText ? visibleUserText(result.editorText) : "";
     return {
       cancelled,
-      ...(result && result.editorText ? { editorText: result.editorText } : {}),
+      ...(editorText ? { editorText } : {}),
       tree: input.pi.readTree?.() ?? [],
     };
   } finally {

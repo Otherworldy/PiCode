@@ -29,6 +29,13 @@ import {
   transformWorkspaceFileSearchIgnore,
   writeWorkspaceFileSearchIgnore,
 } from "./workspaceFileIgnore.js";
+import { readAgentSystemPromptFile, writeAgentSystemPromptFile } from "./agentSystemPrompt.js";
+import {
+  deleteAgentPromptFile,
+  listAgentPromptFiles,
+  readAgentPromptFile,
+  writeAgentPromptFile,
+} from "./agentPromptFiles.js";
 import { createServiceLogger } from "../logger/serviceLogger.js";
 import { getConversationWorkspaceDir } from "../paths.js";
 const DEFAULT_TEXT_READ_BYTES = 128 * 1024;
@@ -642,6 +649,24 @@ export function createFileService(options: CreateFileServiceOptions = {}): IFile
       content: string;
     }): Promise<void> {
       await writeWorkspaceFileSearchIgnore(params.rootPath, params.content);
+    },
+    readAgentSystemPrompt(params) {
+      return readAgentSystemPromptFile(params);
+    },
+    writeAgentSystemPrompt(params) {
+      return writeAgentSystemPromptFile(params);
+    },
+    listAgentPrompts(params) {
+      return listAgentPromptFiles(params);
+    },
+    readAgentPrompt(params) {
+      return readAgentPromptFile(params);
+    },
+    writeAgentPrompt(params) {
+      return writeAgentPromptFile(params);
+    },
+    deleteAgentPrompt(params) {
+      return deleteAgentPromptFile(params);
     },
   };
 }

@@ -4,6 +4,8 @@ import type { ModelSelection } from "@zcode/contracts";
 import {
   checkPiPluginUpdates,
   forgetPiPluginUpdate,
+  installPiPlugin,
+  removePiPlugin,
   listPiCatalog,
   listPiPluginConfigs,
   listPiPlugins,
@@ -11,6 +13,7 @@ import {
   piPluginUpdateCacheKey,
   readPiPluginUpdateCache,
   savePiPluginUpdateCache,
+  searchPiPackageCatalog,
   setPiPluginEnabled,
   updatePiPlugin,
   writePiPluginConfig,
@@ -96,7 +99,21 @@ export async function mutatePiPlugins(rawParams: unknown) {
     if (!params.id) throw new Error("Pi plugin update requires id");
     await updatePiPlugin(cwd, params.id);
     await forgetPiPluginUpdate(cacheKey, params.id);
+  } else if (params.action === "install") {
+    if (!params.source) throw new Error("Pi plugin install requires source");
+    await installPiPlugin(cwd, params.source, params.scope ?? "user");
+  } else if (params.action === "remove") {
+    if (!params.id) throw new Error("Pi plugin remove requires id");
+    await removePiPlugin(cwd, params.id);
+    await forgetPiPluginUpdate(cacheKey, params.id);
   }
+  const catalog =
+    params.action === "search"
+      ? await searchPiPackageCatalog(params.query ?? "", params.from ?? 0, fetch, {
+          ...(params.kind ? { kind: params.kind } : {}),
+          ...(params.sort ? { sort: params.sort } : {}),
+        })
+      : undefined;
   const cached =
     params.action === "checkUpdates"
       ? await savePiPluginUpdateCache(cacheKey, await checkPiPluginUpdates(cwd))
@@ -105,6 +122,7 @@ export async function mutatePiPlugins(rawParams: unknown) {
     plugins: await listPiPlugins(cwd),
     configs: await listPiPluginConfigs(),
     ...(cached ? { updates: cached.updates, updatesCheckedAt: cached.checkedAt } : {}),
+    ...(catalog ? { catalog } : {}),
   };
 }
 

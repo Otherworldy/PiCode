@@ -6,7 +6,9 @@
  * ChatModeSwitchControl / ThoughtLevelCycleControl / ChatContextUsage），外观与旧
  * ChatInputToolbar 对齐；但状态编排是全新 v4 wiring，不复活旧 ChatInputToolbar 的
  * effect 链 / 旧协议写路径：
- * - 当前模型/档位来自 Composer；已运行会话的用量来自 snapshot.usage.contextWindow
+ * - 当前模型/档位来自 Composer；已用量来自 snapshot.usage.contextWindow
+ * - 总量优先用所选模型目录里的 contextWindow。会话模型要等提交才写入，
+ *   不能把圆环停在默认模型容量上
  * - 模型、思考深度和模式只更新下一次 Submission 的 Composer 意图
  * - 模型静态事实来自目标 Host ModelSelectionView；workspace configOptions 只提供
  *   mode 等非模型 presentation
@@ -40,6 +42,7 @@ import type {
 import { ModelConfigSelect, type ModelSelectGroup } from "@/ModelConfigSelect.js";
 import { Button } from "@/components/ui/button.js";
 import { ChatContextUsage } from "@/chat-input-toolbar/display.js";
+import { resolveComposerContextCapacity } from "@/v4/composer/contextCapacity.js";
 import {
   hasChatCodingPlanUsageRemaining,
   type ChatCodingPlanUsageRemainingConfig,
@@ -953,16 +956,33 @@ function V4ComposerModelControlsImpl({
     });
   }, [effectiveConfig, onSelectThought, thoughtOption]);
 
+  const contextCapacity = useMemo(
+    () =>
+      resolveComposerContextCapacity({
+        providers: modelSelectionView?.providers,
+        providerId: effectiveConfig?.provider,
+        modelId: effectiveConfig?.model,
+        snapshotMaxTokens: usage?.contextWindow?.maxTokens,
+      }),
+    [
+      effectiveConfig?.model,
+      effectiveConfig?.provider,
+      modelSelectionView?.providers,
+      usage?.contextWindow?.maxTokens,
+    ],
+  );
   const taskUsage = useMemo(() => {
     const contextWindow = usage?.contextWindow;
-    if (!contextWindow) return null;
+    const size = contextCapacity;
+    if (!size) return null;
+    if (!contextWindow) return { used: 0, size };
     return {
       used: contextWindow.usedTokens,
-      size: contextWindow.maxTokens,
+      size,
       ...(contextWindow.cache ? { cache: contextWindow.cache } : {}),
       ...(contextWindow.breakdown ? { breakdown: contextWindow.breakdown } : {}),
     };
-  }, [usage?.contextWindow]);
+  }, [contextCapacity, usage?.contextWindow]);
   // 工具条热键已转正为命令表命令：tooltip 快捷键文案读生效表，
   // 改绑后按钮提示即时跟随（不能用硬编码文案）。
   const modelShortcutLabel = useShortcutCommandLabel("openModelMenu");
@@ -1012,7 +1032,7 @@ function V4ComposerModelControlsImpl({
         data-mode={draftConfig?.mode ?? ""}
         data-plan-enabled={planActive}
         data-usage-used={usage?.contextWindow?.usedTokens ?? ""}
-        data-usage-max={usage?.contextWindow?.maxTokens ?? ""}
+        data-usage-max={contextCapacity ?? ""}
         className="hidden"
       />
       <ChatContextUsage

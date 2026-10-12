@@ -92,6 +92,9 @@ export function mergeTaskListMembershipFields(
       updatedAt: activity.lastActivityAt,
       status: activityTask.status,
       unreadAt: membershipOwnsUnreadAt ? membershipTask.unreadAt : activityTask.unreadAt,
+      // 等待确认只属于 sessions-index。乐观元数据或旧快照里的 pendingInteraction
+      // 不能在问卷已经答完、活动行已经清掉之后再盖回来。
+      pendingInteraction: activityTask.pendingInteraction,
     },
     activity,
   );

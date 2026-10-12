@@ -21,7 +21,6 @@ import {
   GoalIcon,
   PencilIcon,
   Undo2Icon,
-  SquareIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
   TrendingUpDownIcon,
@@ -1363,7 +1362,7 @@ const UserInputRowView = memo(function UserInputRowView({
   }
 
   return (
-    <RowShell rowId={row.rowId} className="group/user-row flex flex-col items-end">
+    <RowShell rowId={row.rowId} className="group/user-row relative mb-4 flex flex-col items-end">
       {hasAttachmentArea ? (
         <div
           data-v4-user-input-attachments="true"
@@ -1473,10 +1472,11 @@ const UserInputRowView = memo(function UserInputRowView({
       ) : null}
       {/* 手机远控没有 hover，v4 迁移时漏掉了旧 UserMessage 的常显分支，
           导致复制和编辑入口不可发现；远控直接显示，桌面端继续通过 hover/focus 降噪。 */}
+      {/* 隐藏时不占高，避免每条用户消息下面留一条看不见的空白。 */}
       <MessageActions
         className={cn(
-          "mt-1",
-          "opacity-0 transition-opacity group-hover/user-row:opacity-100 focus-within:opacity-100",
+          "pointer-events-none absolute top-full right-0 z-10",
+          "opacity-0 transition-opacity group-hover/user-row:pointer-events-auto group-hover/user-row:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100",
         )}
       >
         <CopyRowAction
@@ -2031,8 +2031,6 @@ function MarkerDividerRow({
   label,
   running = false,
   onClick,
-  stopLabel,
-  onStop,
 }: {
   rowId: number;
   markerType: TimelineMarkerRow["marker"]["type"];
@@ -2042,10 +2040,8 @@ function MarkerDividerRow({
   icon: React.ReactNode;
   label: React.ReactNode;
   running?: boolean;
-  /** 传入即整行可点（fork→跳父会话）；不传为静态分隔线。 */
+  /** 传入即整行可点（摘要开合、fork→跳父会话）；不传为静态分隔线。 */
   onClick?: () => void;
-  stopLabel?: string;
-  onStop?: () => void;
 }) {
   const clickable = Boolean(onClick);
   const rowClassName =
@@ -2060,20 +2056,6 @@ function MarkerDividerRow({
         >
           {label}
         </span>
-        {onStop && stopLabel ? (
-          <button
-            type="button"
-            aria-label={stopLabel}
-            title={stopLabel}
-            className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-[var(--color-foreground)] hover:bg-surface-hover"
-            onClick={(event) => {
-              event.stopPropagation();
-              onStop();
-            }}
-          >
-            <SquareIcon className="size-3 fill-current" />
-          </button>
-        ) : null}
       </span>
       <div aria-hidden="true" className="h-px min-w-8 flex-1 bg-border/50" />
     </>
@@ -2174,11 +2156,15 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
       }
       case "branchSummary": {
         const running = marker.status === "running";
+        const label = intl.formatMessage({
+          id: running ? "chat.tree.summarizing" : "chat.tree.summaryMarker",
+        });
         return {
           icon: MARKER_FORK_ICON,
-          label: intl.formatMessage({
-            id: running ? "chat.tree.summarizing" : "chat.tree.summaryMarker",
-          }),
+          label:
+            branchSummaryText && !running
+              ? `${label} · ${intl.formatMessage({ id: "chat.contextCompaction.viewSummary" })}`
+              : label,
           running,
         };
       }
@@ -2252,11 +2238,12 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
     }
   }, [branchSummaryText, intl, isOfficeMode, marker, modelSelectionView, summary]);
 
+  // 压缩摘要和分支摘要都可点开/收起。开合只在这一行，刷新后回到收起。
   // fork 跳父会话（Tier 1）：仅 forkNotice 且宿主提供 onNavigateToRow 时可点，
   // 切到 marker.parentSessionId（rowId 预留 Tier 2 精确滚动，当前恒 0 占位）。
   const onNavigate = context.onNavigateToRow;
   const handleClick = useMemo(() => {
-    if (foldableSummary && marker.type !== "branchSummary") {
+    if (foldableSummary) {
       return () => setSummaryRowId((current) => (current === row.rowId ? null : row.rowId));
     }
     if (marker.type !== "forkNotice" || !onNavigate) {
@@ -2288,18 +2275,8 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
         label={view.label}
         running={view.running}
         onClick={handleClick}
-        stopLabel={
-          marker.type === "branchSummary" && view.running
-            ? intl.formatMessage({ id: "chat.stop" })
-            : undefined
-        }
-        onStop={marker.type === "branchSummary" && view.running ? context.onStop : undefined}
       />
-      {marker.type === "branchSummary" && branchSummaryText ? (
-        <div className="px-4 pb-2 text-ui-base whitespace-pre-wrap text-[var(--color-foreground)]">
-          {branchSummaryText}
-        </div>
-      ) : summaryOpen && foldableSummary ? (
+      {summaryOpen && foldableSummary ? (
         <div className="px-4 pb-2 text-ui-base whitespace-pre-wrap text-[var(--color-foreground)]">
           {foldableSummary}
         </div>

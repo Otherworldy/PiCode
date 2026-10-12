@@ -56,7 +56,8 @@ function isSettingsCatalogRead(message: ZCodeProtocolMessage): boolean {
   const action = readAction(message);
   return (
     (message.method === zcodeProtocolMethods.piModelsMutate && action === "get") ||
-    (message.method === zcodeProtocolMethods.piPlugins && action === "list")
+    (message.method === zcodeProtocolMethods.piPlugins &&
+      (action === "list" || action === "search"))
   );
 }
 
@@ -263,7 +264,7 @@ export class ZCodeProtocolNdjsonConnection {
   private shouldBypassProcessingQueue(message: ZCodeProtocolMessage): boolean {
     // 模型任务占住串行队列时，停止/取消请求必须仍能进入 server，
     // 才能把底层 AbortSignal 传给真实模型请求。控制面只旁路当前执行，普通请求仍保持串行。
-    // 设置页的模型目录和插件列表是只读。跟会话命令排队会让首次打开一直停在「正在读取」。
+    // 设置页的模型目录、插件列表和市场搜索是只读。跟会话命令排队会让首次打开一直停在「正在读取」。
     return (
       "id" in message &&
       "method" in message &&

@@ -261,9 +261,9 @@ export function createPiHostedApp(
       }
       return { applied: true, preview: plan.preview, response: "" };
     },
-    hasResidencyBlockingWork: () =>
-      hosted.projector.getSnapshot().control.phase === "running" ||
-      hosted.queue.snapshot().items.length > 0,
+    // 只看 phase 会把投影已收口、Pi 仍在 streaming/压缩/后台任务里的会话当空闲。
+    // 会话一多就被常驻池拆掉，再点开只剩「正在加载会话」。
+    hasResidencyBlockingWork: () => hosted.hasResidencyBlockingWork,
     getActiveForegroundExecutionId: () =>
       hosted.projector.getSnapshot().control.phase === "running" || hosted.isIdle === false
         ? hosted.sessionId
@@ -460,7 +460,8 @@ export function createPiHostedApp(
       await hosted.continueAfterError();
     },
     async close() {
-      hosted.dispose();
+      // dispose 要等 session_shutdown 把 MCP stdio 子进程收掉。不 await 的话常驻回收会在子进程还活着时就返回。
+      await hosted.dispose();
     },
     // Pi 会话没有 goal。缺这个方法时 stop 会在 abort 之后抛 readTarget is not a function。
     async readTarget() {

@@ -7,7 +7,7 @@ import {
 
 export type PiPluginUpdate = NonNullable<ZCodePiPluginsResult["updates"]>[number];
 
-type PiPluginUpdateState = PiPluginUpdateSnapshot & {
+type PiPluginUpdateState = PiPluginUpdateSnapshot<PiPluginUpdate> & {
   updates: PiPluginUpdate[];
   apply: (workspaceKey: string, updates: PiPluginUpdate[], checkedAt?: number) => void;
 };

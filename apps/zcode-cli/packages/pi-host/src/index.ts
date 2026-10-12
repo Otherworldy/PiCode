@@ -38,10 +38,14 @@ export { listPiSkills } from "./pi-skills.js";
 export { listPiSlashCommands, listSessionSlashCommands } from "./pi-slash-commands.js";
 export {
   checkPiPluginUpdates,
+  installPiPlugin,
   isPlannotatorPiExtension,
   listPiPlugins,
+  removePiPlugin,
+  searchPiPackageCatalog,
   setPiPluginEnabled,
   updatePiPlugin,
+  type PiPackageCatalogPage,
   type PiPluginView,
 } from "./pi-plugins.js";
 export {

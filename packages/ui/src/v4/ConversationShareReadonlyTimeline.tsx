@@ -1012,7 +1012,7 @@ function ReadonlyTurn({
   return (
     <section
       data-conversation-share-turn={unit.turnId}
-      className="mx-auto flex w-full flex-col gap-5 px-4 pb-5 pt-14 @md/conversation:px-6 [content-visibility:auto] [contain-intrinsic-size:0_420px]"
+      className="mx-auto flex w-full flex-col gap-5 px-4 pt-8 pb-5 @md/conversation:px-6 [content-visibility:auto] [contain-intrinsic-size:0_420px]"
     >
       {unit.leadingBoundaryRows.map((row) =>
         renderReadonlyRow(
@@ -1151,7 +1151,10 @@ export function ConversationShareReadonlyTimeline({
       <ZCodeIntlProvider initialLocale={locale}>
         <PluginReferenceIconProvider value={null}>
           <ArtifactOpenContext.Provider value={artifactOpenContext}>
-            <div className="@container/conversation flex flex-col" data-conversation-share-timeline>
+            <div
+              className="@container/conversation flex flex-col pt-4"
+              data-conversation-share-timeline
+            >
               {unsupportedRowCount > 0 ? (
                 // 中性信息语义，不用黄色 warning：分享本身没出错，只是这个 build 认不出其中几行。
                 <div

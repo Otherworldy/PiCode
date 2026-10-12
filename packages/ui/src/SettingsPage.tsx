@@ -68,12 +68,12 @@ import { PluginsSection } from "@/settings/PluginsSection.js";
 import { HooksSection } from "@/settings/HooksSection.js";
 import { WorkspaceFileSearchSection } from "@/settings/WorkspaceFileSearchSection.js";
 import { MemorySettingsSection } from "@/settings/MemorySettingsSection.js";
+import { SystemPromptSettingsSection } from "@/settings/SystemPromptSettingsSection.js";
 import { BrowserSettingsSection } from "@/settings/BrowserSettingsSection.js";
 import { ComputerUseSection } from "@/settings/ComputerUseSection.js";
 import { AboutSettingsSection } from "@/settings/AboutSettingsSection.js";
 import { ShortcutSettingsSection } from "@/settings/ShortcutSettingsSection.js";
 import { MigrationSection } from "@/settings/MigrationSection.js";
-import { SETTINGS_FRAME_CONTENT_CLASSNAME } from "@/settings/SettingsPageParts.js";
 import {
   SettingsBreadcrumbProvider,
   SettingsHeaderBreadcrumb,
@@ -1348,7 +1348,6 @@ export function SettingsPage({
                     );
                   })}
                 </div>
-
               </nav>
 
               <div className="max-lg:hidden">
@@ -1438,10 +1437,11 @@ export function SettingsPage({
                   <main className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
                     <div
                       className={cn(
-                        SETTINGS_FRAME_CONTENT_CLASSNAME,
+                        // 插件市场要按原型一行放更多卡片，不能跟其它设置页共用 max-w-4xl。
+                        "mx-auto w-full px-4 pb-8 pt-0 lg:px-8 lg:pb-10",
+                        activeSection === "plugin" ? "max-w-[1600px]" : "max-w-4xl",
                         "flex flex-col gap-8",
                         isMacDesktop && "pt-0",
-                        // isWindowsDesktop && "pt-12",
                       )}
                     >
                       <div>
@@ -1598,6 +1598,13 @@ export function SettingsPage({
                               onMemoryEnabledChange={handleMemoryEnabledChange}
                               projectMemoryViewerAvailable={Boolean(isDesktop)}
                               workspaceDisplayNames={memoryWorkspaceDisplayNames}
+                            />
+                          </ServiceProvider>
+                        ) : activeSection === "systemPrompt" ? (
+                          <ServiceProvider services={localHostServices}>
+                            {/* 全局 SYSTEM.md 跟模型目录一样，是本机 ~/.pi/agent，不跟远端工作区走。 */}
+                            <SystemPromptSettingsSection
+                              fileService={localHostServices.fileService}
                             />
                           </ServiceProvider>
                         ) : activeSection === "plugin" ? (

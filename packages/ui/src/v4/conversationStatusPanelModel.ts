@@ -122,8 +122,6 @@ interface BuildConversationStatusPanelModelInput {
   gitSummary?: GitRepositorySummary | null;
   gitDirtyFileCount?: number;
   gitWorktreeChangeSummary?: { added: number; removed: number } | null;
-  /** 会话执行目录是父仓库 `.worktrees/` 下的副本。干净也保留 Git 工具。 */
-  keepCleanRepository?: boolean;
   goal?: GoalState | null;
   sessionPlans?: readonly ToolCallRow[];
   workspacePath?: string;
@@ -138,21 +136,16 @@ function buildGitModel({
   gitSummary,
   gitDirtyFileCount = 0,
   gitWorktreeChangeSummary,
-  keepCleanRepository = false,
 }: Pick<
   BuildConversationStatusPanelModelInput,
-  "gitSummary" | "gitDirtyFileCount" | "gitWorktreeChangeSummary" | "keepCleanRepository"
+  "gitSummary" | "gitDirtyFileCount" | "gitWorktreeChangeSummary"
 >): ConversationStatusPanelGitModel | null {
   if (!gitSummary?.isGitAvailable || !gitSummary.isRepository) {
     return null;
   }
   const added = gitWorktreeChangeSummary?.added ?? 0;
   const removed = gitWorktreeChangeSummary?.removed ?? 0;
-  // 主工作区没有行级变化时不挂 Git 工具。To-Do 的改动在自己的 worktree 里，
-  // 提交后行级 diff 变成 0；再按这条藏起来，右上角分支和提交入口会一起消失。
-  if (!keepCleanRepository && added + removed <= 0) {
-    return null;
-  }
+  // Git 仓库右上角常显。干净工作区也保留分支和提交入口，避免改动行数为 0 时整张卡片消失。
   const isClean =
     !gitSummary.isDirty &&
     gitDirtyFileCount === 0 &&

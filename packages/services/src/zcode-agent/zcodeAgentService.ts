@@ -487,7 +487,10 @@ function savedWorkflowScopeParam(params: ZCodeAgentSavedWorkflowTarget): {
 }
 
 function ensurePluginManagementWorkspacePath(): string {
-  const workspacePath = join(ensureAppDataDir(getDataBaseDir()), PLUGIN_MANAGEMENT_WORKSPACE_DIR_NAME);
+  const workspacePath = join(
+    ensureAppDataDir(getDataBaseDir()),
+    PLUGIN_MANAGEMENT_WORKSPACE_DIR_NAME,
+  );
   // 插件管理是控制面能力，不能复用可能因真实 workspace 被删而 EPIPE 的会话进程。
   // 这里给它固定一个内部 cwd；真实 workspace 仍通过协议参数传给 CLI 做 workspace-scope 判定。
   mkdirSync(workspacePath, { recursive: true });
@@ -3823,11 +3826,26 @@ export function createZCodeAgentService(
           ...(params.id ? { id: params.id } : {}),
           ...(params.enabled === undefined ? {} : { enabled: params.enabled }),
           ...(params.values ? { values: params.values } : {}),
+          ...(params.source ? { source: params.source } : {}),
+          ...(params.scope ? { scope: params.scope } : {}),
+          ...(params.action === "search"
+            ? {
+                query: params.query ?? "",
+                from: params.from ?? 0,
+                ...(params.kind ? { kind: params.kind } : {}),
+                ...(params.sort ? { sort: params.sort } : {}),
+              }
+            : {}),
         },
         zcodePiPluginsResultSchema,
-        params.action === "checkUpdates" || params.action === "update"
+        params.action === "checkUpdates" ||
+          params.action === "update" ||
+          params.action === "install" ||
+          params.action === "remove"
           ? { timeoutMs: 5 * 60_000 }
-          : undefined,
+          : params.action === "search"
+            ? { timeoutMs: 30_000 }
+            : undefined,
       );
     },
 
@@ -3951,11 +3969,11 @@ export function createZCodeAgentService(
       return { plugins: [], diagnostics: [] };
     },
 
-        async getPluginReferenceCatalog(_params: ZCodeAgentPluginReferenceCatalogParams) {
+    async getPluginReferenceCatalog(_params: ZCodeAgentPluginReferenceCatalogParams) {
       return { authority: "workspace" as const, plugins: [] };
     },
 
-        async getSkillReferenceCatalog(params: ZCodeAgentSkillReferenceCatalogParams) {
+    async getSkillReferenceCatalog(params: ZCodeAgentSkillReferenceCatalogParams) {
       // 与 Plugin 引用一样，Session 快照只存在于 workspace agent 进程；独立管理进程
       // 没有 resident Session，不能作为对话 authority。
       const client = await getReadOnlyClient(params);
@@ -4354,7 +4372,7 @@ export function createZCodeAgentService(
       return { stableId: params.stableId, status: "unavailable" as const, diagnostics: [] };
     },
 
-        onDynamicPluginOperationProgress(operationId: string) {
+    onDynamicPluginOperationProgress(operationId: string) {
       return getPluginOperationProgressEmitter(operationId).event;
     },
 
@@ -4456,7 +4474,7 @@ export function createZCodeAgentService(
       throw new Error("PiCode plugin protocol removed");
     },
 
-        async listAutomations(params: ZCodeAgentWorkspaceTarget) {
+    async listAutomations(params: ZCodeAgentWorkspaceTarget) {
       return automationService.list(params);
     },
 
@@ -4926,7 +4944,9 @@ export function createZCodeAgentService(
           module: "services.zcode_agent",
           requestId: params.requestId,
         });
-        throw new Error(`PiCode session runtime preferences request not found: ${params.requestId}`);
+        throw new Error(
+          `PiCode session runtime preferences request not found: ${params.requestId}`,
+        );
       }
       const responseContext = {
         event: "zcode_agent.runtime_preferences.host_response_received",

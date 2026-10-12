@@ -33,7 +33,11 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 同一所有者，两套 flush。jsonl 为对话树真相；V4 snapshot 为 UI/远控派生缓存，可从 jsonl 重建。打开时若 publisher 还没有行，订阅前用 jsonl 再画一次；否则会交出空快照，加载结束后只剩输入框。runtime `dispose` 后从注册表摘掉，不删 jsonl；留着已关掉的实例会让下次打开直接复用它，冷恢复不再读文件，画面仍是空的。
 
-上下文环的总量来自 Pi `getContextUsage()`，不另算。`message_end`、`tool_execution_end`、`compaction_end`，以及非重试的 `agent_end` 立刻推。流式 `message_update` 最多 250ms 推一次，生成过程中按 Pi 的估算上涨，不等整轮结束。值和上次一样则不下发。
+常驻池只卸真正空闲的会话。投影 `phase` 已经离开 `running`，但 Pi 仍在 streaming、压缩或重试（`isStreaming` / `isCompacting` / `isIdle === false`），或队列、后台任务、子会话、分支总结、未决交互还在，都不算空闲。只看 `phase === "running"` 会在超过高水位或空闲超时后把还在跑的 runtime 拆掉，内存里的对话投影一起没了。再点开要冷恢复，界面停在「正在加载会话」。事实归 `HostedSession.hasResidencyBlockingWork`，常驻池只读这一个布尔。
+
+卸掉 runtime 时先发 `session_shutdown`，再调 `AgentSession.dispose()`。Pi 的 MCP 扩展只在 `session_shutdown` 里关掉 stdio 子进程；`dispose()` 本身不发这个事件。不先发的话，常驻回收之后 `node_repl` 和 `chrome-devtools-mcp` 仍挂在 app-server 下面。同一次关闭只跑一遍，后来的 `dispose()` 等同一个 Promise。注册表在这次关闭开始时同步摘掉，不等子进程退出。
+
+上下文环的已用量来自 Pi `getContextUsage()`，不另算。`message_end`、`tool_execution_end`、`compaction_end`，以及非重试的 `agent_end` 立刻推。流式 `message_update` 最多 250ms 推一次，生成过程中按 Pi 的估算上涨，不等整轮结束。值和上次一样则不下发。总量是当前会话模型的 `contextWindow`。模型只在下一次提交时写入会话，所以切换后、发送前不能等这份快照：目录里已有所选模型的 `contextWindow` 时，圆环总量改读这个字段（与 Pi `Model.contextWindow` 同一值）。目录还没有时仍用快照。
 
 分类和 pi-cc `/context` 同一口径，不新做扩展：System prompt、Memory（系统提示里的 `project_instructions`）、Skills、Tools definition、Tool results、Context。字符数除以 4 估算；System / Memory / Skills / Tools 保持原值，后两项缩放到总量。对不上的差额是 Other。`breakdown[].chars` 与 `tokens` 都写缩放后的 token，弹层用这个数。供应商用量比内容估算小一个数量级时，总量改用估算。
 
@@ -43,11 +47,12 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 - `getModel()` 返回 `provider/model`。旧 snapshot 把裸模型 id 当成非法选择，会在截断之后把编辑打失败。
 - 新建会话的 Pi 投影增量写入 sessions-index。只跳过纯文本流式 delta。第一条用户消息先成为侧栏标题。这条真实用户消息一落地就安排标题总结，不等首轮 `agent_end`：首轮被中断、会话被关掉，或进程在收口前退出时，否则标题会一直停在原文。重放出来的 `agent_settled` 不触发。若总结开着、标题不是用户手改的、且 jsonl 还没有 `session_info` 名字，就用总结模型换成短标题并写入 `session_info`。没配总结模型就用这一轮的对话模型。当时已经有的助手回复会一并送进去，但不等回复写完。失败或关闭时保留截断标题。同一会话只自动总结一次。子会话不总结。用户重命名同样写入 `session_info`，之后自动标题不再覆盖。侧栏「总结标题」是另一次显式请求：不受自动开关和手改保护限制，读当前会话或 jsonl 后返回标题，由壳按重命名写入。
 - 打开中的会话，侧栏转圈以该 pane 的 conversation snapshot `control.phase` 为准。sessions-index 还停在上一轮 completed 时，正在跑的这一行仍要转。未读点只在没有这份实时 phase 时盖过转圈。
+- 询问答完或对应工具进入 success/error/cancelled 后，侧栏「等待确认」必须消失。活的 `tool_execution_end` 在同一批 delta 里拿掉这份 `pendingInteractions`；冷恢复重放不清当前未决交互。侧栏只认仍在阻塞的交互：工具行已经终态的不再显示。乐观列表合并不能把旧的 `pendingInteraction` 盖回 sessions-index 行。
 - 流中途失败：turn `failed`，已写出的 row 保留。
 - 模型失败只把一句摘要写进回复和 `lastError.message`；原始 JSON 放 `lastError.detail`。
 - Pi `auto_retry_start` 写入 `control.apiRetry.failures`。最终失败只进输入框上方的原错误横幅，摘要一行，历次失败和原文在「展开详情」。不写成助手正文。成功后清掉重试状态。同一次失败的后续 `agent_settled` 不清掉这条错误。
 - `/compact` 直接调用 Pi `session.compact()`，不进入输入队列。Pi 会先中断当前操作再压缩。空闲时压缩也要打开停止：`canStop` 为真，Stop 中断这次摘要请求。跑着的轮次里发生的自动压缩不抢走该轮的停止权。完成后的摘要写在 compact marker 的 `summary` 上，界面可展开查看。这条分隔线不进「已工作」折叠：轮次收起后仍要看见「正在压缩上下文」和终态。失败原因写在 marker 的 `error` 上，并进入输入框上方的错误横幅。命令被拒绝时也要弹出原因，不能只写日志。重开会话时从 jsonl 的 compaction 条目还原同一条 marker。
-- 输入框模型左侧的圆环读 Pi `getContextUsage()`。一轮结束、压缩结束或切换模型后写入 `usage.contextWindow`。点击圆环发送 `/compact`。
+- 输入框模型左侧的圆环，已用量读 Pi `getContextUsage()`。一轮结束、压缩结束或会话模型写入后写入 `usage.contextWindow`。切换模型不改会话，只改下一次提交；圆环总量必须马上跟着 Composer 已选模型的目录 `contextWindow`，不能停在默认模型直到发出下一条消息。点击圆环发送 `/compact`。
 - 打开会话只下发尾部一窗。页面向上滚动再拉更早的一窗，不再在打开时把整段历史灌进时间线。下发的工具参数和输出只留 head+tail；宿主里的原文仍留给文件回滚。投影未到时时间线显示加载，不留白。
 - 冷恢复重放 jsonl 时，行先落完，actions 只算一次。不能每条事件都扫整窗，否则几万行的会话订阅一直不返回。
 - 折叠的工具历史不挂载，时间线只保留视口附近的轮次。截断轮自动补齐最多 3 窗，其余靠上滚再拉。
@@ -73,7 +78,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 `readSessionTree` 把 `getTree()` 压成平铺节点，放在命令回执里，不进每条快照。压平用循环：一条几万层的父链用递归，打开会话时会栈溢出。`labelSessionEntry` 写 Pi 的 label，再回一份树。
 
-`sendText` 的图片仍读成字节交给 Pi。其它附件不再在进模型前丢掉：文本文件把路径和最多 64KiB 正文附在 prompt 后面，PDF、视频和二进制只附路径。这段用 `<zcode-file>` 包住，用户气泡只留原文和附件芯片。
+`sendText` 的图片仍读成字节交给 Pi。其它附件不再在进模型前丢掉：文本文件把路径和最多 64KiB 正文附在 prompt 后面，PDF、视频和二进制只附路径。这段用 `<zcode-file>` 包住，用户气泡只留原文和附件芯片。Pi 在图片超过尺寸或换格式时，会把 `[Image: original … displayed at … Multiply coordinates by …]` 和 `[Image converted from …]` 拼进同一条用户正文，只给模型看。气泡、会话列表标题、回退进输入框的原文，以及按原文找回树节点，都去掉这些行。图片没发出去时的 `[Image omitted: …]` 仍留在气泡里。jsonl 里交给模型的原文不改。
 
 模型请求失败后，输入框上方的错误横幅有重试。`continueAfterError` 不重发用户原文，也不截断会话。失败助手仍留在 jsonl 里，但下一次模型请求读的是 Pi session projection，不是内存里临时切掉的数组。只改 `agent.state.messages` 时，`prepareRequest` 会把末尾 `stopReason: error` 的助手消息装回请求；供应商把这条空助手当成已经说完，请求成功后立刻 stop，界面没有新输出。重试先对这些失败消息写 `appendContextEdit(id, null)`（与 Pi 自动重试的省略一样），再用 projection 刷回 `agent.state.messages`，然后 `agent.continue()`。尾部不是失败助手、或省略后仍停在已完成的助手上时拒绝。还在生成时拒绝。
 
@@ -97,9 +102,11 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 壳上拆掉：PluginStore、SavedWorkflows、Automations/OffPeak、CUA、Goal、PiCode 子代理 profile、官方 plugin 商店。设置改为已加载 Pi extensions 列表。插件页用 Pi `PackageManager.checkForAvailableUpdates` / `update` 检查并更新 npm、git 包。更新子进程不继承 app-server 的 stdout。本地 extension 文件和钉死版本不更新。装完后下次新建会话生效。
 
-壳上新增：输入框 Extension Widget 槽。非计划插件的 status 收成输入框上方一个 popup，不再平铺 chips。
+壳上新增：输入框 Extension Widget 槽。非计划插件的 status 收成上下文用量圆环左侧的一个 popup，不再平铺 chips，也不再占输入框上方。点开后列表向上展开。
 
 宿主 UI 带上纯文本 `theme`（`fg` / `bg` / `bold` / `italic` / `underline` / `inverse` / `strikethrough` 原样返回文字，不发 ANSI）。缺 `theme` 时 Plannotator 在 `ctx.ui.theme.fg` 上抛错：批准计划后的 `plannotator_submit_plan` 和 `plannotator_mark_done` 都失败，`plannotator-progress` 清单也写不出去。清单仍由插件 `setWidget` 持有，输入框下不平铺这份原文。没有 TodoWrite 的 `plan` 时，状态面板的原 Todo 段用这份 widget 列出进度，不另写一份 plan。
+
+计划审查不占着工具调用。`plannotator_submit_plan` 的结果带 `details.pending: true` 时，这一轮的 `turnHeader` 保持 `running`，时间线继续显示「工作中」，时长接着走。`control.phase` 仍收成完成：输入框可以接着发消息，不因为审查而排队或停住。所有者是投影器里的这一轮 id。插件用 `sendUserMessage` 把批准、拒绝或只回答问题送进来时，这条用户消息的 input source 是 `extension`；对上原文后先把审查轮收成 `completedSuccess`，再开新回合。审查期间自己打的字 source 不是 `extension`，不收口。离开计划模式、状态 `plannotator` 被清掉时也收口。用户停止这一轮时按中断收口，不继续挂着。冷重放的工具结果没有 `details`，历史会话不会停在工作中。
 
 ## 呈现
 
@@ -164,7 +171,7 @@ SDK 来源是 `AppSettings.piSdkSource`。缺省 `builtin`，用打进 `zcode.cj
 
 ## Pi 插件开关
 
-设置「插件」页只列 Pi 已配置的包和自动发现的扩展文件。`list` 是只读，协议入口不跟会话命令排队；`checkUpdates`、`update`、开关和写配置仍串行。列表来自 Pi `settings.json`（用户级 `~/.pi/agent/settings.json`，工作区级 `<cwd>/.pi/settings.json`），但开关不写回这两处。检查更新和更新都走 Pi 的 PackageManager，但更新用的那个实例不能让 npm/git 继承进程 stdout。app-server 的 stdout 只能是协议帧；npm 成功时打印的 `changed 1 package` 会被 Host 当成 JSON，解析失败后关掉 Agent，设置页就显示更新失败。子进程 stdio 用 ignore；Windows 上的 npm/pnpm/bun 仍经 shell 启动。检查更新仍用 Pi 自己的管道捕获。可更新结果按工作区落在 `~/.PiCode/pi-plugin-update-cache/`，键是 `workspaceIdentity?.trim() || workspacePath`。`list` 只读这份缓存，不访问网络，设置页因此能直接显示上次的更新按钮。`checkUpdates` 成功后覆盖该工作区的结果和检查时间。`update` 成功后立刻从缓存去掉这个插件，不改检查时间。缓存读不出来就当没查过。应用启动后，若当前工作区还没查过或距上次成功检查已满 24 小时，就自动检查；之后每 24 小时再查。自动检查只有发现可更新才提示，不提示已是最新。手动检查仍提示两种结果。PiCode 的开关注 `~/.PiCode/pi-plugin-switches.json`，只在 PiCode 创建会话时叠加：关掉的包或扩展文件从这次会话的 extensions、skills、prompts 里拿掉；Pi 里关着、PiCode 里开着的，只在 PiCode 会话额外加载。Pi TUI 仍只看自己的 `autoload` 和 `extensions`。没在 PiCode 里动过的插件，跟随 Pi 当前状态。已打开的会话不热更新，下一次创建会话才生效。不再把 PiCode 插件市场当能力源。`plugins/*` 协议方法已删除，设置页不再列、安装或开关 PiCode 插件。
+设置「插件」页上面是官方推荐，下面是目录。「已安装」是目录筛选，不是另一个视图。选中时用和目录相同的卡片列出当前范围已经安装的包，保留开关、设置、更新和删除，不再请求这一页目录。官方推荐和目录都放在表面色带里，卡片仍用卡片色。删除走 `remove`：包调用 Pi 的 `removeAndPersist`，自动发现的扩展文件只删 `extensions/` 下的那个文件。市场最前面固定三张宿主已经接上界面的包：`@plannotator/pi-extension`、`pi-processes`、`pi-ask-me`。这三张只显示名字、短标签和宿主上多出来的行为，没有图标。当前范围已经有同源的包时，卡片上是「已安装」，不再给第二个开关。没装的可以单独安装，也可以一次装上还没装的那几个。页面搜索框同时过滤已安装列表和这三张；对不上的固定卡片隐藏。它们下面是 npm 上关键字 `pi-package` 的目录卡片，来自 `https://registry.npmjs.org/-/v1/search`，一页 12 条，用页码翻，不追加。页码居中，当前条数范围写在页码旁边。输入框不自动搜索，按下搜索才发。类型筛选把 `extension`、`skill`、`theme` 或 `prompt` 作为额外关键字和 `pi-package` 一起查；没有该关键字的包不进该类型。排序「热门」把 npm 的 popularity 权重设为 1、quality 和 maintenance 设为 0。注册表没有全局按时间或按名称排序，「最新」和「名称」只重排当前这一页。卡片按目录站的结构排：名字、说明、发布者、版本、发布时间、类型和安装命令。不显示月下载，注册表搜索没有这项。插件页比其它设置页更宽，宽屏时目录一行放更多张。图标只来自该版本 `package.json` 的 `pi.image`：https 地址直接用，包内相对路径换成 jsDelivr。没有、超时或不是 https 就不显示图。官方推荐只保留这三张，并写明各自接到界面上的用途。手填源在弹窗里，写入当前页面范围。空查询就是这个关键字本身。npm 的文本搜索会混进没有这个关键字的包，结果只留关键字里真有 `pi-package` 的。目录不落盘。搜索还在飞时后一次结果到了就丢掉，不覆盖后一次。另外可以手填源：`npm:<包名>`（可带版本或 tag；没有前缀的包名也当 npm）、`git:<主机>/<路径>`、`https://<主机>/<路径>`。本地路径、`file:`、`http:`、带查询串、用户信息或 shell 字符的源拒绝。安装走 `install`，写入当前范围的 Pi `settings.json` 包列表（用户级或工作区级），不写 `pi-plugin-switches.json`；新装上的包跟随 Pi 的默认启用。同一范围里，npm 包名对上（忽略版本）或 git/https 源原文对上时算已安装，不再下载。三个固定行仍用原来的名字针：本地目录名 `pi-processes` 就是 `https://github.com/Otherworldy/pi-processes-bash`。npm 和 git 的输出仍不能进协议 stdout。已打开的会话不热更新，下一次新建会话才加载。`list` 和 `search` 是只读，协议入口不跟会话命令排队；`install`、`remove`、`checkUpdates`、`update`、开关和写配置仍串行。列表来自 Pi `settings.json`（用户级 `~/.pi/agent/settings.json`，工作区级 `<cwd>/.pi/settings.json`），但开关不写回这两处。检查更新和更新都走 Pi 的 PackageManager，但更新用的那个实例不能让 npm/git 继承进程 stdout。app-server 的 stdout 只能是协议帧；npm 成功时打印的 `changed 1 package` 会被 Host 当成 JSON，解析失败后关掉 Agent，设置页就显示更新失败。子进程 stdio 用 ignore；Windows 上的 npm/pnpm/bun 仍经 shell 启动。检查更新仍用 Pi 自己的管道捕获。可更新结果按工作区落在 `~/.PiCode/pi-plugin-update-cache/`，键是 `workspaceIdentity?.trim() || workspacePath`。`list` 只读这份缓存，不访问网络，设置页因此能直接显示上次的更新按钮。`checkUpdates` 成功后覆盖该工作区的结果和检查时间。`update` 成功后立刻从缓存去掉这个插件，不改检查时间。缓存读不出来就当没查过。应用启动后，若当前工作区还没查过或距上次成功检查已满 24 小时，就自动检查；之后每 24 小时再查。自动检查只有发现可更新才提示，不提示已是最新。手动检查仍提示两种结果。PiCode 的开关注 `~/.PiCode/pi-plugin-switches.json`，只在 PiCode 创建会话时叠加：关掉的包或扩展文件从这次会话的 extensions、skills、prompts 里拿掉；Pi 里关着、PiCode 里开着的，只在 PiCode 会话额外加载。Pi TUI 仍只看自己的 `autoload` 和 `extensions`。没在 PiCode 里动过的插件，跟随 Pi 当前状态。已打开的会话不热更新，下一次创建会话才生效。不再把 PiCode 插件市场当能力源。`plugins/*` 协议方法已删除，设置页不再列、安装或开关 PiCode 插件。
 
 插件自己的设置不进 `settings.json`。能改的只有已经存在的 `~/.pi/agent/extensions/<名字>/config.json`。`list` 顺带这些文件里的顶层开关、数字和文本；`writeConfig` 只覆盖同名且同类型的顶层项，嵌套对象、数组和没出现过的键保持原样。不新建配置文件，也不执行插件代码去猜它的设置项。设置页不把这些表单铺在列表下面：能对上配置文件的插件，行内一个「设置」按钮，弹窗里改。改完同样从下一次新建会话生效。
 

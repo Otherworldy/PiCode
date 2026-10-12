@@ -37,6 +37,24 @@ export {
   isAppDataDirName,
 } from "./node/appDataDir.js";
 export {
+  AGENT_SYSTEM_PROMPT_FILE_NAME,
+  AGENT_SYSTEM_PROMPT_MAX_BYTES,
+  localAgentSystemPromptPath,
+  prepareAgentSystemPromptWrite,
+  remoteAgentSystemPromptPath,
+  resolvePiAgentDir,
+  type AgentSystemPromptScope,
+} from "./node/agentSystemPromptFile.js";
+export {
+  AGENT_PROMPT_MAX_BYTES,
+  agentPromptFileNameFromLabel,
+  assertAgentPromptFileName,
+  localAgentPromptsDir,
+  prepareAgentPromptWrite,
+  remoteAgentPromptPath,
+  remoteAgentPromptsDir,
+} from "./node/agentPromptFiles.js";
+export {
   migrateUserSubagentMarkdown,
   migrateSubagentStateFile,
 } from "./node/subagentMarkdownMigration.js";

@@ -22,7 +22,8 @@ import {
   toolResultText,
 } from "./presentation.js";
 import { createEmptySnapshot, emptyAvailability } from "./snapshot.js";
-import { isControlCommandTitle } from "./jsonl-history.js";
+import { isControlCommandTitle, visibleUserText } from "./jsonl-history.js";
+import { isOpenPlanReviewResult } from "./plan-review-signal.js";
 import type { PiAssistantDelta, PiHostEvent } from "./types.js";
 
 function messageText(content: unknown): string {
@@ -37,11 +38,6 @@ function messageText(content: unknown): string {
       return "";
     })
     .join("");
-}
-
-/** 附件正文只给模型。气泡留用户原文，文件名走附件芯片。 */
-function visibleUserText(text: string): string {
-  return text.replace(/\n*<zcode-file>[\s\S]*?<\/zcode-file>/gu, "").trimEnd();
 }
 
 function clipError(text: string | undefined): string | undefined {
@@ -108,7 +104,11 @@ export class PiToV4Projector {
   private readonly rowIndexById = new Map<number, number>();
   private aborted = false;
   private stopRequested = false;
+  /** jsonl 重放中。历史 tool end 不能清掉当前还在等的问卷。 */
+  private replaying = false;
   private branchSummaryRowId: number | null = null;
+  /** plannotator_submit_plan 已打开审查。这一轮的 header 保持 running，直到决定或退出。 */
+  private openPlanReviewTurnId: string | null = null;
   private seq = 0;
   private assistantMessageId?: string;
   private pendingError?: string;
@@ -153,12 +153,18 @@ export class PiToV4Projector {
    */
   replay(events: readonly PiHostEvent[]): ConversationDelta[] {
     const deltas: ConversationDelta[] = [];
-    for (const event of events) {
-      const reduced = this.reduce(event);
-      if (reduced.length === 0) continue;
-      for (const delta of this.commit(reduced)) deltas.push(delta);
+    // 重放历史 tool_execution_end 不能清掉此刻还开着的问卷。
+    this.replaying = true;
+    try {
+      for (const event of events) {
+        const reduced = this.reduce(event);
+        if (reduced.length === 0) continue;
+        for (const delta of this.commit(reduced)) deltas.push(delta);
+      }
+      for (const delta of this.commit(this.syncActions())) deltas.push(delta);
+    } finally {
+      this.replaying = false;
     }
-    for (const delta of this.commit(this.syncActions())) deltas.push(delta);
     return deltas;
   }
 
@@ -170,6 +176,7 @@ export class PiToV4Projector {
     );
     const fromRowId = Math.min(header?.rowId ?? row.rowId, row.rowId);
     const removed = this.commit([{ op: "row.removed", fromRowId }]);
+    this.dropPlanReviewIfGone();
     const actions = this.syncActions();
     return actions.length === 0 ? removed : [...removed, ...this.commit(actions)];
   }
@@ -188,6 +195,7 @@ export class PiToV4Projector {
     this.toolArgs.clear();
     this.aborted = false;
     this.branchSummaryRowId = null;
+    this.openPlanReviewTurnId = null;
     const cleared = this.commit([{ op: "row.removed", fromRowId: 1 }]);
     return cleared.concat(this.replay(events));
   }
@@ -266,7 +274,20 @@ export class PiToV4Projector {
   replaceStatuses(
     statuses: NonNullable<ConversationSnapshot["extensionStatuses"]>,
   ): ConversationDelta[] {
-    return this.applyState({ extensionStatuses: statuses });
+    const deltas = this.applyState({ extensionStatuses: statuses });
+    // 离开计划模式会清掉 plannotator 状态，开着的审查也被插件关掉。
+    if (
+      this.openPlanReviewTurnId &&
+      !statuses.some((status) => status.key === "plannotator")
+    ) {
+      return deltas.concat(this.finishOpenPlanReview());
+    }
+    return deltas;
+  }
+
+  /** 批准、拒绝，或计划模式被关掉。审查轮从「工作中」收成完成。 */
+  finishOpenPlanReview(at?: number): ConversationDelta[] {
+    return this.commit(this.finishOpenPlanReviewDeltas(at));
   }
 
   setConfig(patch: Partial<ConversationSnapshot["config"]>): ConversationDelta[] {
@@ -872,11 +893,17 @@ export class PiToV4Projector {
     const inputText =
       this.toolArgs.get(id) || (existing && existing.kind === "toolCall" ? existing.inputText : "");
     this.aliasToolId(event.toolCallId, id);
+    const reviewDeltas = this.noteOpenPlanReview(event.toolName, event.result, event.isError);
+    const settled = this.settledInteractionDeltas(id, event.toolCallId, event.toolName);
     if (rowId == null) {
-      return this.ensureToolRow(id, event.toolName, event.isError ? "error" : "success", inputText);
+      return [
+        ...reviewDeltas,
+        ...this.ensureToolRow(id, event.toolName, event.isError ? "error" : "success", inputText),
+        ...settled,
+      ];
     }
     const row = this.snapshot.rows.window.find((item) => item.rowId === rowId);
-    if (!row || row.kind !== "toolCall") return [];
+    if (!row || row.kind !== "toolCall") return [...reviewDeltas, ...settled];
     const text = toolResultText(event.result);
     const details = event.result?.details;
     const mapped = mapPiToolName(event.toolName, this.viaRegistry);
@@ -901,7 +928,85 @@ export class PiToV4Projector {
       progress: undefined,
       endedAt: this.stamp ?? Date.now(),
     };
-    return [{ op: "row.upserted", row: next }];
+    return [...reviewDeltas, { op: "row.upserted", row: next }, ...settled];
+  }
+
+  /**
+   * 工具已经终态，侧栏不能继续显示「等待确认」。
+   * 问卷经常没有 toolCallId，只靠 AskUserQuestion 身份对上。
+   */
+  private settledInteractionDeltas(
+    toolCallId: string,
+    rawToolCallId: string,
+    toolName: string,
+  ): ConversationDelta[] {
+    if (this.replaying) return [];
+    const mapped = mapPiToolName(toolName, this.viaRegistry);
+    const ask = mapped === "AskUserQuestion";
+    const remaining = this.snapshot.pendingInteractions.filter((item) => {
+      const payload = item.payload;
+      if (payload.kind !== "permission" && payload.kind !== "userInput") return true;
+      if (
+        payload.toolCallId &&
+        (payload.toolCallId === toolCallId || payload.toolCallId === rawToolCallId)
+      ) {
+        return false;
+      }
+      if (!ask || payload.kind !== "userInput") return true;
+      const name = payload.toolName?.trim().toLowerCase();
+      if (name === "askuserquestion" || name === "ask_user_question") return false;
+      // 旧问卷没有 toolName，也没有 select 的 options。只清这次询问留下的题目。
+      return Boolean(
+        payload.toolCallId ||
+          payload.toolName ||
+          (payload.options?.length ?? 0) > 0 ||
+          !payload.questions?.length,
+      );
+    });
+    if (remaining.length === this.snapshot.pendingInteractions.length) return [];
+    return [{ op: "state.updated", patch: { pendingInteractions: remaining } }];
+  }
+
+  private noteOpenPlanReview(
+    toolName: string,
+    result: { details?: unknown } | undefined,
+    isError: boolean | undefined,
+  ): ConversationDelta[] {
+    if (!isOpenPlanReviewResult(toolName, result, isError)) return [];
+    if (!this.turnId || this.openPlanReviewTurnId === this.turnId) return [];
+    const finished = this.finishOpenPlanReviewDeltas();
+    this.openPlanReviewTurnId = this.turnId;
+    return finished;
+  }
+
+  private finishOpenPlanReviewDeltas(at?: number): ConversationDelta[] {
+    const turnId = this.openPlanReviewTurnId;
+    if (!turnId) return [];
+    this.openPlanReviewTurnId = null;
+    const endedAt = at ?? this.stamp ?? Date.now();
+    const deltas: ConversationDelta[] = [];
+    for (const row of this.snapshot.rows.window) {
+      if (row.kind !== "turnHeader" || row.turnId !== turnId || row.state !== "running") continue;
+      deltas.push({
+        op: "row.upserted",
+        row: {
+          ...row,
+          state: "completedSuccess",
+          endedAt,
+          activeMs: Math.max(0, endedAt - row.startedAt),
+        },
+      });
+    }
+    return deltas;
+  }
+
+  private dropPlanReviewIfGone(): void {
+    const turnId = this.openPlanReviewTurnId;
+    if (!turnId) return;
+    const kept = this.snapshot.rows.window.some(
+      (row) => row.kind === "turnHeader" && row.turnId === turnId,
+    );
+    if (!kept) this.openPlanReviewTurnId = null;
   }
 
   private compactStart(): ConversationDelta[] {
@@ -1081,6 +1186,9 @@ export class PiToV4Projector {
         -20,
       );
     }
+    // 审查还开着。header 继续 running，时间线才一直是「工作中」。phase 照常收口，输入框不卡住。
+    const holdPlanReview = this.openPlanReviewTurnId === this.turnId && !this.aborted;
+    if (this.aborted && this.openPlanReviewTurnId === this.turnId) this.openPlanReviewTurnId = null;
     const state = this.aborted ? "completedInterrupted" : "completedSuccess";
     const failureLines = this.retryFailures.map(
       (failure) => `${failure.attempt}. ${failure.message}`,
@@ -1090,7 +1198,12 @@ export class PiToV4Projector {
       failureLines.length > 1 || presented?.detail ? failureLines.join("\n") : undefined;
     const deltas: ConversationDelta[] = [];
     for (const row of this.snapshot.rows.window) {
-      if (row.kind === "turnHeader" && row.turnId === this.turnId && row.state === "running") {
+      if (
+        !holdPlanReview &&
+        row.kind === "turnHeader" &&
+        row.turnId === this.turnId &&
+        row.state === "running"
+      ) {
         deltas.push({
           op: "row.upserted",
           row: {

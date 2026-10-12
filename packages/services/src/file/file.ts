@@ -77,6 +77,43 @@ export interface IFileService {
     transform: "sync-gitignore" | "reset-defaults";
   }): Promise<{ content: string }>;
   writeWorkspaceFileSearchIgnore(params: { rootPath: string; content: string }): Promise<void>;
+  /**
+   * Pi 系统提示词。global 是本 Host 的 `<agent-dir>/SYSTEM.md`；
+   * project 是 `rootPath/.pi/SYSTEM.md`。空白会删文件，不写空文件。
+   */
+  readAgentSystemPrompt(params: {
+    scope: "global" | "project";
+    rootPath?: string;
+  }): Promise<{ content: string; exists: boolean; path: string }>;
+  writeAgentSystemPrompt(params: {
+    scope: "global" | "project";
+    content: string;
+    rootPath?: string;
+  }): Promise<{ content: string; exists: boolean; path: string }>;
+  /**
+   * Pi 提示词模板。global 是 `<agent-dir>/prompts/*.md`，
+   * project 是 `<workspace>/.pi/prompts/*.md`。只认这一层目录里的 .md。
+   */
+  listAgentPrompts(params: {
+    scope: "global" | "project";
+    rootPath?: string;
+  }): Promise<{ directory: string; files: string[] }>;
+  readAgentPrompt(params: {
+    scope: "global" | "project";
+    rootPath?: string;
+    name: string;
+  }): Promise<{ directory: string; name: string; content: string }>;
+  writeAgentPrompt(params: {
+    scope: "global" | "project";
+    rootPath?: string;
+    name: string;
+    content: string;
+  }): Promise<{ directory: string; name: string }>;
+  deleteAgentPrompt(params: {
+    scope: "global" | "project";
+    rootPath?: string;
+    name: string;
+  }): Promise<void>;
 }
 
 export const IFileService = createServiceDescriptor<IFileService>(ServiceChannels.File);

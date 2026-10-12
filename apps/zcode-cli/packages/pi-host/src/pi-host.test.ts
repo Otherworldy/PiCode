@@ -12,9 +12,87 @@ import { HostQueue } from "./host-queue.js";
 import { PluginViewRegistry } from "./plugin-adapters/registry.js";
 import { mapPiToolName } from "./presentation.js";
 import { PiToV4Projector } from "./projector.js";
+import { takePlanDecision } from "./plan-review-signal.js";
 import { gateTool } from "./permission-gate.js";
 import { HostSessionRegistry } from "./session-registry.js";
 import { contextUsagePublish } from "./types.js";
+
+test("finished ask_user_question clears the waiting interaction", () => {
+  const projector = new PiToV4Projector("s1", "e1");
+  projector.apply({ type: "agent_start" });
+  projector.apply({
+    type: "tool_execution_start",
+    toolCallId: "c1",
+    toolName: "ask_user_question",
+    args: {},
+  });
+  projector.replaceInteractions([
+    {
+      interactionId: "q1",
+      kind: "userInput",
+      anchorRowId: null,
+      createdAt: 1,
+      payload: {
+        kind: "userInput",
+        prompt: "哪一种？",
+        freeText: false,
+        questions: [
+          {
+            question: "哪一种？",
+            header: "Ask",
+            options: [{ value: "A", label: "A" }],
+          },
+        ],
+      },
+    },
+  ]);
+  assert.equal(projector.getSnapshot().pendingInteractions.length, 1);
+  projector.apply({
+    type: "tool_execution_end",
+    toolCallId: "c1",
+    toolName: "ask_user_question",
+    result: { content: [{ text: "User has answered your questions: \"哪一种？\"=\"A\"" }] },
+  });
+  assert.equal(projector.getSnapshot().pendingInteractions.length, 0);
+  const row = projector.getSnapshot().rows.window.find((item) => item.kind === "toolCall");
+  assert.equal(row?.kind === "toolCall" ? row.status : "", "success");
+});
+
+test("replaying an old ask does not clear a live question", () => {
+  const projector = new PiToV4Projector("s1", "e1");
+  projector.replaceInteractions([
+    {
+      interactionId: "live",
+      kind: "userInput",
+      anchorRowId: null,
+      createdAt: 1,
+      payload: {
+        kind: "userInput",
+        prompt: "还在问",
+        freeText: false,
+        toolName: "AskUserQuestion",
+        questions: [
+          { question: "还在问", header: "Ask", options: [{ value: "A", label: "A" }] },
+        ],
+      },
+    },
+  ]);
+  projector.replay([
+    {
+      type: "tool_execution_start",
+      toolCallId: "old",
+      toolName: "ask_user_question",
+      args: {},
+    },
+    {
+      type: "tool_execution_end",
+      toolCallId: "old",
+      toolName: "ask_user_question",
+      result: { content: [{ text: "done" }] },
+    },
+  ]);
+  assert.equal(projector.getSnapshot().pendingInteractions[0]?.interactionId, "live");
+});
 
 test("maps builtin pi tool names", () => {
   assert.equal(mapPiToolName("read"), "Read");
@@ -321,6 +399,100 @@ test("stop during retry stays aborted when the next attempt starts", () => {
   assert.equal(projector.wantsStop(), false);
 });
 
+test("open plan review stays working until the decision or plan mode ends", () => {
+  const projector = new PiToV4Projector("s1", "e1");
+  projector.apply({ type: "agent_start", at: 1_000 });
+  projector.apply({
+    type: "tool_execution_start",
+    at: 1_100,
+    toolCallId: "c1",
+    toolName: "plannotator_submit_plan",
+    args: { filePath: "PLAN.md" },
+  });
+  projector.apply({
+    type: "tool_execution_end",
+    at: 1_500,
+    toolCallId: "c1",
+    toolName: "plannotator_submit_plan",
+    result: { details: { pending: true, approved: false } },
+  });
+  projector.apply({ type: "agent_end", at: 1_600 });
+  const waiting = projector.getSnapshot();
+  const waitingHeader = waiting.rows.window.find((row) => row.kind === "turnHeader");
+  assert.equal(waitingHeader && waitingHeader.kind === "turnHeader" ? waitingHeader.state : "", "running");
+  assert.equal(
+    waitingHeader && waitingHeader.kind === "turnHeader" ? waitingHeader.endedAt : 0,
+    undefined,
+  );
+  assert.equal(waiting.control.phase, "completedSuccess");
+  assert.equal(waiting.control.canStop, false);
+
+  projector.replaceStatuses([{ key: "plannotator", text: "plan" }]);
+  const stillPlanning = projector.getSnapshot().rows.window.find((row) => row.kind === "turnHeader");
+  assert.equal(stillPlanning && stillPlanning.kind === "turnHeader" ? stillPlanning.state : "", "running");
+
+  projector.apply({ type: "agent_start", at: 3_000 });
+  projector.apply({
+    type: "tool_execution_end",
+    at: 3_200,
+    toolCallId: "c2",
+    toolName: "plannotator_submit_plan",
+    result: { details: { pending: true, revised: true } },
+  });
+  const revised = projector.getSnapshot().rows.window.filter((row) => row.kind === "turnHeader");
+  assert.equal(revised[0] && revised[0].kind === "turnHeader" ? revised[0].state : "", "completedSuccess");
+  projector.apply({ type: "agent_end", at: 3_300 });
+  const stillOpen = projector.getSnapshot().rows.window.filter((row) => row.kind === "turnHeader");
+  assert.equal(stillOpen[1] && stillOpen[1].kind === "turnHeader" ? stillOpen[1].state : "", "running");
+  assert.equal(projector.getSnapshot().control.phase, "completedSuccess");
+
+  projector.finishOpenPlanReview(4_000);
+  const decided = projector.getSnapshot().rows.window.filter((row) => row.kind === "turnHeader");
+  assert.equal(decided[1] && decided[1].kind === "turnHeader" ? decided[1].state : "", "completedSuccess");
+  assert.equal(decided[1] && decided[1].kind === "turnHeader" ? decided[1].activeMs : 0, 1_000);
+});
+
+test("leaving plan mode ends the working plan review", () => {
+  const projector = new PiToV4Projector("s1", "e1");
+  projector.apply({ type: "agent_start", at: 1_000 });
+  projector.apply({
+    type: "tool_execution_end",
+    toolCallId: "c1",
+    toolName: "plannotator_submit_plan",
+    result: { details: { pending: true } },
+  });
+  projector.apply({ type: "agent_end" });
+  projector.replaceStatuses([]);
+  const header = projector.getSnapshot().rows.window.find((row) => row.kind === "turnHeader");
+  assert.equal(header && header.kind === "turnHeader" ? header.state : "", "completedSuccess");
+});
+
+test("a stopped plan submit does not stay working", () => {
+  const projector = new PiToV4Projector("s1", "e1");
+  projector.apply({ type: "agent_start", at: 1_000 });
+  projector.apply({
+    type: "tool_execution_end",
+    toolCallId: "c1",
+    toolName: "plannotator_submit_plan",
+    result: { details: { pending: true } },
+  });
+  projector.markAborted();
+  projector.apply({ type: "agent_end" });
+  const header = projector.getSnapshot().rows.window.find((row) => row.kind === "turnHeader");
+  assert.equal(
+    header && header.kind === "turnHeader" ? header.state : "",
+    "completedInterrupted",
+  );
+});
+
+test("plan decisions match extension text and ignore the user's own messages", () => {
+  const pending = ["Plan approved. Execute it."];
+  assert.equal(takePlanDecision(pending, "继续改一下范围"), false);
+  assert.deepEqual(pending, ["Plan approved. Execute it."]);
+  assert.equal(takePlanDecision(pending, "Plan approved. Execute it."), true);
+  assert.deepEqual(pending, []);
+});
+
 test("message_end + agent_end flushes assistant text", () => {
   const projector = new PiToV4Projector("s1", "e1", { profile: "continuous" });
   projector.apply({ type: "agent_start" });
@@ -480,6 +652,33 @@ test("image attachments are sent as bytes and shown on the user row", async () =
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("resized image notes stay out of the user bubble", () => {
+  const note =
+    "[Image: original 2560x1392, displayed at 2000x1088. Multiply coordinates by 1.28 to map to original image.]";
+  const projector = new PiToV4Projector("s", "e1");
+  projector.apply({
+    type: "message_start",
+    message: {
+      role: "user",
+      content: [{ type: "text", text: `\u6700\u65b0\u7684\u6d88\u606f\u548c\u8f93\u5165\u6846\u592a\u9760\u8fd1\u4e86\n\n${note}` }],
+      id: "u1",
+    },
+  });
+  const row = projector.getSnapshot().rows.window.find((item) => item.kind === "userInput");
+  assert.equal(row?.kind === "userInput" ? row.text : "", "\u6700\u65b0\u7684\u6d88\u606f\u548c\u8f93\u5165\u6846\u592a\u9760\u8fd1\u4e86");
+  assert.equal(projector.getSnapshot().meta.title, "\u6700\u65b0\u7684\u6d88\u606f\u548c\u8f93\u5165\u6846\u592a\u9760\u8fd1\u4e86");
+
+  const omitted = "[Image omitted: could not be resized below the inline image size limit.]";
+  projector.apply({
+    type: "message_start",
+    message: { role: "user", content: `\u770b\u4e0d\u89c1\n\n${omitted}\n[Image converted from image/bmp to image/png.]`, id: "u2" },
+  });
+  const rows = projector
+    .getSnapshot()
+    .rows.window.filter((item) => item.kind === "userInput");
+  assert.equal(rows.at(-1)?.kind === "userInput" ? rows.at(-1)?.text : "", `\u770b\u4e0d\u89c1\n\n${omitted}`);
 });
 
 test("dragged text files are included in the model prompt", async () => {

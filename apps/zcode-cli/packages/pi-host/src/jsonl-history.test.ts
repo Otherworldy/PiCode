@@ -46,6 +46,16 @@ test("summarize skips a bare slash command and a command session name", () => {
   assert.equal(readPiJsonl(content).summary?.title, "修登录");
 });
 
+test("summarize drops Pi image resize notes from the title", () => {
+  const note =
+    "[Image: original 2560x1392, displayed at 2000x1088. Multiply coordinates by 1.28 to map to original image.]";
+  const content = [
+    '{"type":"session","id":"s1","timestamp":"2026-01-02T03:04:05.000Z"}',
+    `{"type":"message","id":"u1","timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"user","content":[{"type":"text","text":"\u770b\u8fd9\u5f20\\n\\n${note}"}]}}`,
+  ].join("\n");
+  assert.equal(readPiJsonl(content).summary?.title, "\u770b\u8fd9\u5f20");
+});
+
 test("summarize uses first user text and last assistant preview", () => {
   const { summary } = readPiJsonl(sample);
   assert.ok(summary);

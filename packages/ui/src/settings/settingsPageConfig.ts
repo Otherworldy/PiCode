@@ -19,6 +19,7 @@ import {
   Keyboard,
   FileSearch,
   Info,
+  ScrollText,
 } from "lucide-react";
 import { isSettingsSectionEnabled, type SettingsSectionId } from "@/lib/settingsNavigation.js";
 import type { Theme } from "@/useTheme.js";
@@ -78,6 +79,12 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     id: "memory",
     icon: Brain,
     titleId: "settings.memory",
+    groupId: "agentCapabilities",
+  },
+  {
+    id: "systemPrompt",
+    icon: ScrollText,
+    titleId: "settings.systemPrompt",
     groupId: "agentCapabilities",
   },
   {

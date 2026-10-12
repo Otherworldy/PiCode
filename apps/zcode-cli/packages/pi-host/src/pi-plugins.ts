@@ -1,9 +1,16 @@
+import {
+  PI_PLUGIN_CATALOG_PAGE_SIZE,
+  isRecommendedPiPluginSource,
+  normalizePiPluginInstallSource,
+  piPluginSourcesMatch,
+  recommendedPiPluginSourceMatches,
+} from "@zcode/shared";
 import { ensureAppDataDir } from "@zcode/shared/node";
 import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import type {
   DefaultPackageManager,
   PackageSource,
@@ -336,6 +343,230 @@ export async function updatePiPlugin(cwd: string, id: string, agentDir?: string)
   const { source } = piPluginPackageSource(id);
   const packages = await openPackageManager(cwd, agentDir);
   await packages.update(source);
+}
+
+async function forgetSwitch(id: string, switchRoot?: string): Promise<void> {
+  const switches = await readSwitches(switchRoot);
+  if (!(id in switches)) return;
+  delete switches[id];
+  const file = switchPath(switchRoot);
+  await mkdir(dirname(file), { recursive: true });
+  await writeFile(file, `${JSON.stringify(switches, null, 2)}\n`);
+}
+
+function extensionRemovePath(cwd: string, id: string, agentDir: string): string {
+  const match = /^ext:(user|project):(.+)$/u.exec(id);
+  const scope = match?.[1];
+  const rel = match?.[2]?.replaceAll("\\", "/");
+  const parts = rel?.split("/") ?? [];
+  if (
+    (scope !== "user" && scope !== "project") ||
+    parts.length === 0 ||
+    parts.includes("..") ||
+    parts[0] !== "extensions"
+  ) {
+    throw new Error(`Pi plugin "${id}" cannot be removed`);
+  }
+  const base = scope === "project" ? join(cwd, ".pi") : agentDir;
+  const root = resolve(base, "extensions");
+  const file = resolve(base, ...parts);
+  if (file !== root && !file.startsWith(`${root}${sep}`)) {
+    throw new Error(`Pi plugin "${id}" cannot be removed`);
+  }
+  return file;
+}
+
+/** 卸掉当前范围的包，或删掉自动发现的扩展文件。已打开的会话不热更新。 */
+export async function removePiPlugin(
+  cwd: string,
+  id: string,
+  agentDir?: string,
+  switchRoot?: string,
+): Promise<void> {
+  if (id.startsWith("pkg:")) {
+    const { scope, source } = piPluginPackageSource(id);
+    const packages = await openPackageManager(cwd, agentDir);
+    const removed = await packages.removeAndPersist(
+      source,
+      scope === "project" ? { local: true } : undefined,
+    );
+    if (!removed) throw new Error(`Pi plugin "${id}" cannot be removed`);
+  } else {
+    await ensurePiSdk();
+    const { getAgentDir } = piCoding();
+    await rm(extensionRemovePath(cwd, id, agentDir ?? getAgentDir()), { force: true });
+  }
+  await forgetSwitch(id, switchRoot);
+}
+
+const NPM_PACKAGE_SEARCH = "https://registry.npmjs.org/-/v1/search";
+
+const CATALOG_KINDS = ["extension", "skill", "theme", "prompt"] as const;
+export type PiPackageCatalogKind = (typeof CATALOG_KINDS)[number];
+export type PiPackageCatalogSort = "downloads" | "recent" | "name";
+
+export type PiPackageCatalogPage = {
+  packages: Array<{
+    name: string;
+    description: string;
+    version: string;
+    source: string;
+    publishedAt?: string;
+    publisher?: string;
+    repository?: string;
+    image?: string;
+    kinds?: PiPackageCatalogKind[];
+  }>;
+  total: number;
+  from: number;
+};
+
+function httpRepository(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const stripped = value.replace(/^git\+/u, "").replace(/\.git$/u, "");
+  return /^https:\/\//u.test(stripped) ? stripped.slice(0, 300) : "";
+}
+
+function packageImageUrl(name: string, version: string, image: unknown): string {
+  if (typeof image !== "string" || !version) return "";
+  if (/^https:\/\//u.test(image)) return image.slice(0, 300);
+  if (!image.startsWith("./")) return "";
+  const path = image.slice(2);
+  if (!path || path.includes("..") || path.includes("?") || path.includes("#")) return "";
+  return `https://cdn.jsdelivr.net/npm/${name}@${version}/${path}`.slice(0, 300);
+}
+
+async function readPackageImage(
+  name: string,
+  version: string,
+  fetchImpl: typeof fetch,
+): Promise<string> {
+  if (!version) return "";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2500);
+  try {
+    const response = await fetchImpl(`https://registry.npmjs.org/${name}/${version}`, {
+      signal: controller.signal,
+    });
+    if (!response.ok) return "";
+    const body = (await response.json()) as { pi?: { image?: unknown } };
+    return packageImageUrl(name, version, body.pi?.image);
+  } catch {
+    return "";
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function catalogKinds(keywords: unknown[]): PiPackageCatalogKind[] {
+  const names = new Set(keywords.filter((keyword) => typeof keyword === "string"));
+  return CATALOG_KINDS.filter((kind) => names.has(kind) || names.has(`pi-${kind}`));
+}
+
+/**
+ * 目录只认 npm 关键字 `pi-package`。
+ * registry 的文本搜索会带上名字碰巧像的包，那些不能从设置页装。
+ */
+export async function searchPiPackageCatalog(
+  query: string,
+  from: number,
+  fetchImpl: typeof fetch = fetch,
+  options?: { kind?: PiPackageCatalogKind; sort?: PiPackageCatalogSort },
+): Promise<PiPackageCatalogPage> {
+  const text = [...query]
+    .map((char) => ((char.codePointAt(0) ?? 0) <= 31 ? " " : char))
+    .join("")
+    .trim()
+    .slice(0, 80);
+  const start = Number.isInteger(from) && from >= 0 ? Math.min(from, 2000) : 0;
+  const kind = options?.kind ? ` keywords:${options.kind}` : "";
+  const url = new URL(NPM_PACKAGE_SEARCH);
+  url.searchParams.set("text", `keywords:pi-package${kind}${text ? ` ${text}` : ""}`);
+  url.searchParams.set("size", String(PI_PLUGIN_CATALOG_PAGE_SIZE));
+  url.searchParams.set("from", String(start));
+  if (options?.sort === "downloads") {
+    url.searchParams.set("popularity", "1");
+    url.searchParams.set("quality", "0");
+    url.searchParams.set("maintenance", "0");
+  }
+  const response = await fetchImpl(url);
+  if (!response.ok) throw new Error(`Pi package catalog search failed: ${response.status}`);
+  const body = (await response.json()) as { objects?: unknown; total?: unknown };
+  const objects = Array.isArray(body.objects) ? body.objects : [];
+  const packages: PiPackageCatalogPage["packages"] = [];
+  for (const item of objects) {
+    if (!item || typeof item !== "object") continue;
+    const record = (item as { package?: unknown }).package;
+    if (!record || typeof record !== "object") continue;
+    const pkg = record as {
+      name?: unknown;
+      description?: unknown;
+      version?: unknown;
+      keywords?: unknown;
+      date?: unknown;
+      publisher?: { username?: unknown };
+      links?: { repository?: unknown };
+    };
+    if (typeof pkg.name !== "string") continue;
+    const keywords = Array.isArray(pkg.keywords) ? pkg.keywords : [];
+    if (!keywords.some((keyword) => keyword === "pi-package")) continue;
+    const source = normalizePiPluginInstallSource(`npm:${pkg.name}`);
+    if (!source) continue;
+    const kinds = catalogKinds(keywords);
+    const publisher =
+      typeof pkg.publisher?.username === "string" ? pkg.publisher.username.slice(0, 80) : "";
+    const repository = httpRepository(pkg.links?.repository);
+    packages.push({
+      name: pkg.name,
+      description: typeof pkg.description === "string" ? pkg.description.slice(0, 240) : "",
+      version: typeof pkg.version === "string" ? pkg.version.slice(0, 64) : "",
+      source,
+      ...(typeof pkg.date === "string" ? { publishedAt: pkg.date.slice(0, 40) } : {}),
+      ...(publisher ? { publisher } : {}),
+      ...(repository ? { repository } : {}),
+      ...(kinds.length > 0 ? { kinds } : {}),
+    });
+  }
+  if (options?.sort === "recent") {
+    packages.sort((left, right) => (right.publishedAt ?? "").localeCompare(left.publishedAt ?? ""));
+  } else if (options?.sort === "name") {
+    packages.sort((left, right) => left.name.localeCompare(right.name));
+  }
+  await Promise.all(
+    packages.map(async (item) => {
+      const image = await readPackageImage(item.name, item.version, fetchImpl);
+      if (image) item.image = image;
+    }),
+  );
+  const total =
+    typeof body.total === "number" && Number.isFinite(body.total) ? body.total : packages.length;
+  return { packages, total, from: start };
+}
+
+/** 安装 npm / git / https 源，并写入当前范围的 Pi settings。同一范围已经对上源时不再下载。 */
+export async function installPiPlugin(
+  cwd: string,
+  source: string,
+  scope: PiPluginScope,
+  agentDir?: string,
+): Promise<void> {
+  const normalized = normalizePiPluginInstallSource(source);
+  if (!normalized) {
+    throw new Error(`Pi plugin source is not installable from settings: ${source}`);
+  }
+  const packages = await openPackageManager(cwd, agentDir);
+  const already = packages.listConfiguredPackages().some((pkg) => {
+    if (pkg.scope !== scope) return false;
+    if (
+      isRecommendedPiPluginSource(normalized) &&
+      recommendedPiPluginSourceMatches(pkg.source, normalized)
+    ) {
+      return true;
+    }
+    return piPluginSourcesMatch(pkg.source, normalized);
+  });
+  if (already) return;
+  await packages.installAndPersist(normalized, scope === "project" ? { local: true } : undefined);
 }
 
 export async function setPiPluginEnabled(

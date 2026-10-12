@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZCode 设置 - 插件与推荐插件列表 UI 预览 (极简无图标版)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            zai: {
+              bgDark: '#161616',
+              bgLight: '#f8f8f8',
+              cardDark: '#202020',
+              cardLight: '#ffffff',
+              borderDark: 'rgba(255, 255, 255, 0.08)',
+              borderLight: 'rgba(13, 13, 13, 0.08)',
+              surfaceDark: 'rgba(255, 255, 255, 0.04)',
+              surfaceLight: 'rgba(13, 13, 13, 0.03)',
+              hoverDark: 'rgba(255, 255, 255, 0.06)',
+              hoverLight: 'rgba(13, 13, 13, 0.05)',
+              fgDark: '#ededed',
+              fgLight: '#171717',
+              fgSubtleDark: '#909090',
+              fgSubtleLight: '#666666',
+            }
+          },
+          fontFamily: {
+            sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', '"PingFang SC"', '"Hiragino Sans GB"', '"Microsoft YaHei"', 'sans-serif'],
+            mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    :root {
+      --bg: #f8f8f8;
+      --card-bg: #ffffff;
+      --border: rgba(13, 13, 13, 0.08);
+      --fg: #171717;
+      --fg-subtle: #666666;
+    }
+    html.dark {
+      --bg: #161616;
+      --card-bg: #202020;
+      --border: rgba(255, 255, 255, 0.08);
+      --fg: #ededed;
+      --fg-subtle: #909090;
+    }
+    body { background-color: var(--bg); color: var(--fg); }
+    .theme-transition { transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease; }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-thumb { background: rgba(150, 150, 150, 0.25); border-radius: 9999px; }
+    .switch-checkbox:checked + .switch-track { background-color: #3b82f6; }
+    .switch-checkbox:checked + .switch-track .switch-thumb { transform: translateX(16px); }
+    @keyframes slideInUp {
+      from { transform: translateY(100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .toast-anim { animation: slideInUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+  </style>
+</head>
+<body class="bg-zai-bgLight dark:bg-zai-bgDark text-zai-fgLight dark:text-zai-fgDark antialiased font-sans h-screen flex flex-col overflow-hidden theme-transition select-none">
+
+  <!-- 顶部虚拟应用标题栏 -->
+  <header class="h-10 border-b border-zai-borderLight dark:border-zai-borderDark flex items-center justify-between px-4 bg-white/70 dark:bg-zinc-900/70 backdrop-blur shrink-0 z-30">
+    <div class="flex items-center gap-3">
+      <!-- 窗口操作点 -->
+      <div class="flex items-center gap-1.5 mr-2">
+        <div class="w-3 h-3 rounded-full bg-rose-500/80"></div>
+        <div class="w-3 h-3 rounded-full bg-amber-500/80"></div>
+        <div class="w-3 h-3 rounded-full bg-emerald-500/80"></div>
+      </div>
+      <!-- 面包屑导航 -->
+      <div class="flex items-center text-xs text-zai-fgSubtleLight dark:text-zai-fgSubtleDark gap-1.5 font-medium">
+        <span class="hover:text-zai-fgLight dark:hover:text-zai-fgDark cursor-pointer">设置</span>
+        <span>/</span>
+        <span class="text-zai-fgLight dark:text-zai-fgDark font-semibold">插件 (Plugins)</span>
+        <span class="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 font-mono">无图标纯文本版</span>
+      </div>
+    </div>
+
+    <!-- 右侧控制项：深浅色切换 -->
+    <div class="flex items-center gap-3">
+      <button id="themeToggleBtn" onclick="toggleTheme()" class="px-2.5 py-1 rounded-md text-xs font-medium border border-zai-borderLight dark:border-zai-borderDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark flex items-center gap-1.5 transition">
+        <span id="themeIcon">🌙</span>
+        <span id="themeLabel">暗色模式</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- 主体工作区 -->
+  <div class="flex-1 flex overflow-hidden">
+    
+    <!-- 左侧 Settings 导航栏 -->
+    <aside class="w-52 border-r border-zai-borderLight dark:border-zai-borderDark bg-zinc-50/50 dark:bg-zinc-900/30 flex flex-col p-3 gap-1 shrink-0">
+      <div class="px-2 py-1 text-[11px] font-semibold text-zai-fgSubtleLight dark:text-zai-fgSubtleDark uppercase tracking-wider">
+        配置中心
+      </div>
+      <nav class="space-y-0.5 text-xs font-medium">
+        <a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition" href="javascript:void(0)">
+          常规偏好
+        </a>
+        <a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition" href="javascript:void(0)">
+          模型提供商 (Pi Models)
+        </a>
+        <!-- 插件项：高亮 -->
+        <a class="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 font-semibold transition" href="javascript:void(0)">
+          <span>插件与扩展</span>
+          <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+        </a>
+        <a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition" href="javascript:void(0)">
+          MCP 服务
+        </a>
+        <a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition" href="javascript:void(0)">
+          智能体技能 (Skills)
+        </a>
+      </nav>
+
+      <div class="mt-auto pt-3 border-t border-zai-borderLight dark:border-zai-borderDark text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark flex items-center justify-between px-1">
+        <span>ZCode</span>
+        <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-mono">Pi Host</span>
+      </div>
+    </aside>
+
+    <!-- 右侧主设置内容区 -->
+    <main class="flex-1 overflow-y-auto px-6 py-5 lg:px-8 lg:py-6 max-w-4xl mx-auto w-full">
+      
+      <!-- 顶部控制条：Scope 切换 + 分类 Tab + 搜索框 -->
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <div class="flex items-center gap-2.5">
+          <!-- Scope 选择器 -->
+          <button class="h-7 px-2.5 rounded-md border border-zai-borderLight dark:border-zai-borderDark bg-zai-cardLight dark:bg-zai-cardDark text-xs font-medium flex items-center gap-1.5 hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>全局用户 (User)</span>
+            <svg class="w-3.5 h-3.5 opacity-60 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+          </button>
+
+          <div class="h-3.5 w-px bg-zai-borderLight dark:border-zai-borderDark"></div>
+
+          <!-- 分类 Tabs (插件 / MCP / 技能) -->
+          <div class="flex items-center p-0.5 rounded-md bg-zinc-200/50 dark:bg-zinc-800/60 text-xs font-medium">
+            <button class="px-2.5 py-0.8 rounded bg-white dark:bg-zinc-700 shadow-xs text-zai-fgLight dark:text-zai-fgDark font-semibold flex items-center gap-1.5">
+              <span>Pi 插件</span>
+              <span id="tabPluginCount" class="text-[10px] px-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 font-mono">2</span>
+            </button>
+            <button class="px-2.5 py-0.8 rounded text-zai-fgSubtleLight dark:text-zai-fgSubtleDark">
+              MCP 服务
+            </button>
+            <button class="px-2.5 py-0.8 rounded text-zai-fgSubtleLight dark:text-zai-fgSubtleDark">
+              技能 (Skills)
+            </button>
+          </div>
+        </div>
+
+        <!-- 搜索输入框 -->
+        <div class="relative w-full sm:w-56">
+          <input
+            id="searchInput"
+            oninput="handleSearch(this.value)"
+            type="text"
+            placeholder="搜索插件..."
+            class="w-full h-7 pl-3 pr-3 text-xs rounded-md border border-zai-borderLight dark:border-zai-borderDark bg-zai-cardLight dark:bg-zai-cardDark text-zai-fgLight dark:text-zai-fgDark placeholder-zai-fgSubtleLight dark:placeholder-zai-fgSubtleDark focus:outline-none focus:ring-1 focus:ring-blue-500 transition"
+          >
+        </div>
+      </div>
+
+      <!-- ============================================================== -->
+      <!-- SECTION 1: 推荐插件列表 (纯文本、无图标、极简紧凑) -->
+      <!-- ============================================================== -->
+      <section class="mb-6">
+        
+        <!-- 列表标题栏 -->
+        <div class="flex items-center justify-between gap-3 mb-2 px-0.5">
+          <div class="flex items-center gap-2">
+            <h2 class="text-xs font-semibold text-zai-fgLight dark:text-zai-fgDark uppercase tracking-wider">
+              推荐插件
+            </h2>
+            <span class="text-[10px] px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 font-medium">
+              深度适配宿主
+            </span>
+          </div>
+          <button
+            id="installAllBtn"
+            onclick="installAllRecommended()"
+            class="text-[11px] font-medium text-blue-600 dark:text-blue-400 hover:underline transition"
+          >
+            一键全部安装
+          </button>
+        </div>
+
+        <!-- 推荐列表卡片 (纯文本行结构) -->
+        <div class="rounded-xl border border-zai-borderLight dark:border-zai-borderDark bg-zai-cardLight dark:bg-zai-cardDark divide-y divide-zai-borderLight dark:divide-zai-borderDark shadow-xs overflow-hidden">
+          
+          <!-- ITEM 1: Plannotator -->
+          <div id="item-plannotator" class="px-4 py-3 flex items-center justify-between gap-4 hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-xs font-semibold font-mono text-zai-fgLight dark:text-zai-fgDark">@plannotator/pi-extension</span>
+                <span class="text-[10px] px-1.5 py-0.2 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 font-medium">计划模式</span>
+                <span class="text-[10px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark font-mono opacity-70">npm</span>
+              </div>
+              <div class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-0.5 leading-relaxed">
+                激活输入框 <code class="px-1 py-0.2 rounded bg-zinc-200/50 dark:bg-zinc-800 text-[10px] font-mono">/plan</code> 切换开关，状态面板呈现待办进度挂件，接入可视化审查流
+              </div>
+            </div>
+
+            <!-- 右侧操作 -->
+            <div id="action-plannotator" class="shrink-0">
+              <button
+                onclick="installPlugin('plannotator', '@plannotator/pi-extension', 'npm:@plannotator/pi-extension', '计划模式专属适配：激活输入框计划开关与状态面板进度挂件')"
+                class="h-7 px-3 rounded-md border border-zai-borderLight dark:border-zai-borderDark hover:bg-blue-600 hover:text-white hover:border-transparent text-xs font-medium text-zai-fgLight dark:text-zai-fgDark transition flex items-center gap-1"
+              >
+                一键安装
+              </button>
+            </div>
+          </div>
+
+          <!-- ITEM 2: pi-processes -->
+          <div id="item-processes" class="px-4 py-3 flex items-center justify-between gap-4 hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-xs font-semibold font-mono text-zai-fgLight dark:text-zai-fgDark">pi-processes</span>
+                <span class="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium">长驻进程</span>
+                <span class="text-[10px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark font-mono opacity-70">GitHub</span>
+              </div>
+              <div class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-0.5 leading-relaxed">
+                长驻命令自动归入状态面板终端列表，免敲 <code class="px-1 py-0.2 rounded bg-zinc-200/50 dark:bg-zinc-800 text-[10px] font-mono">/ps</code> 实时看日志与 stdin，支持独立安全停止
+              </div>
+            </div>
+
+            <!-- 右侧操作 -->
+            <div id="action-processes" class="shrink-0">
+              <button
+                onclick="installPlugin('processes', 'pi-processes', 'github:Otherworldy/pi-processes-bash', '长驻进程与终端监控：自动归入状态面板终端列表，支持日志与交互')"
+                class="h-7 px-3 rounded-md border border-zai-borderLight dark:border-zai-borderDark hover:bg-blue-600 hover:text-white hover:border-transparent text-xs font-medium text-zai-fgLight dark:text-zai-fgDark transition flex items-center gap-1"
+              >
+                一键安装
+              </button>
+            </div>
+          </div>
+
+          <!-- ITEM 3: pi-ask-me -->
+          <div id="item-askme" class="px-4 py-3 flex items-center justify-between gap-4 hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-xs font-semibold font-mono text-zai-fgLight dark:text-zai-fgDark">pi-ask-me</span>
+                <span class="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-medium">结构化问卷</span>
+                <span class="text-[10px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark font-mono opacity-70">GitHub</span>
+              </div>
+              <div class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-0.5 leading-relaxed">
+                拦截工具名 <code class="px-1 py-0.2 rounded bg-zinc-200/50 dark:bg-zinc-800 text-[10px] font-mono">ask_user_question</code>，渲染带短标题、单选/多选与独立预览的原生问卷交互卡
+              </div>
+            </div>
+
+            <!-- 右侧操作 -->
+            <div id="action-askme" class="shrink-0">
+              <button
+                onclick="installPlugin('askme', 'pi-ask-me', 'github:Otherworldy/pi-ask-me', '结构化交互问卷卡：拦截 ask_user_question 呈现原生结构化问卷卡片')"
+                class="h-7 px-3 rounded-md border border-zai-borderLight dark:border-zai-borderDark hover:bg-blue-600 hover:text-white hover:border-transparent text-xs font-medium text-zai-fgLight dark:text-zai-fgDark transition flex items-center gap-1"
+              >
+                一键安装
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ============================================================== -->
+      <!-- SECTION 2: 已安装插件列表 (纯文本无图标标准列表) -->
+      <!-- ============================================================== -->
+      <section>
+        
+        <!-- 列表标题栏 -->
+        <div class="flex items-center justify-between gap-3 mb-2 px-0.5">
+          <h2 class="text-xs font-semibold text-zai-fgLight dark:text-zai-fgDark uppercase tracking-wider">
+            已安装插件
+          </h2>
+          <button
+            onclick="checkUpdates()"
+            class="h-6 px-2 rounded border border-zai-borderLight dark:border-zai-borderDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark text-[11px] font-medium text-zai-fgSubtleLight dark:text-zai-fgSubtleDark transition"
+          >
+            检查更新
+          </button>
+        </div>
+
+        <!-- 已安装插件列表卡片 -->
+        <div class="rounded-xl border border-zai-borderLight dark:border-zai-borderDark bg-zai-cardLight dark:bg-zai-cardDark divide-y divide-zai-borderLight dark:divide-zai-borderDark shadow-xs overflow-hidden">
+          
+          <!-- 已安装插件 1 -->
+          <div class="px-4 py-3 flex items-center justify-between gap-4 installed-plugin-item" data-name="ponytail" data-detail="npm:@dietrichgebert/ponytail">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-semibold font-mono text-zai-fgLight dark:text-zai-fgDark">@dietrichgebert/ponytail</span>
+                <span class="text-[10px] px-1.5 py-0.2 rounded bg-zinc-200/50 dark:bg-zinc-800 text-zai-fgSubtleLight dark:text-zai-fgSubtleDark font-medium">技能扩展</span>
+              </div>
+              <div class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-0.5 font-mono truncate">
+                npm:@dietrichgebert/ponytail • 高效精简模式技能注入
+              </div>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+              <button class="h-6 px-2 rounded border border-zai-borderLight dark:border-zai-borderDark text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark font-medium hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition">
+                配置
+              </button>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" checked onchange="togglePluginStatus('ponytail', this.checked)" class="sr-only switch-checkbox">
+                <div class="w-8 h-4 bg-zinc-300 dark:bg-zinc-700 rounded-full switch-track transition-colors">
+                  <div class="w-3.5 h-3.5 bg-white rounded-full switch-thumb transform transition-transform translate-x-0.5 translate-y-0.25 shadow-xs"></div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- 已安装插件 2 -->
+          <div class="px-4 py-3 flex items-center justify-between gap-4 installed-plugin-item" data-name="context7" data-detail="npm:@upstash/context7">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-semibold font-mono text-zai-fgLight dark:text-zai-fgDark">@upstash/context7</span>
+                <span class="text-[10px] px-1.5 py-0.2 rounded bg-zinc-200/50 dark:bg-zinc-800 text-zai-fgSubtleLight dark:text-zai-fgSubtleDark font-medium">文档检索</span>
+              </div>
+              <div class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-0.5 font-mono truncate">
+                npm:@upstash/context7 • 第三方库实时权威文档检索工具
+              </div>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+              <button class="h-6 px-2 rounded border border-zai-borderLight dark:border-zai-borderDark text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark font-medium hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition">
+                配置
+              </button>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" checked onchange="togglePluginStatus('context7', this.checked)" class="sr-only switch-checkbox">
+                <div class="w-8 h-4 bg-zinc-300 dark:bg-zinc-700 rounded-full switch-track transition-colors">
+                  <div class="w-3.5 h-3.5 bg-white rounded-full switch-thumb transform transition-transform translate-x-0.5 translate-y-0.25 shadow-xs"></div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- 动态安装条目插入位置 -->
+          <div id="installedDynamicContainer"></div>
+
+        </div>
+
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Toast 浮层 -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- 动态交互控制脚本 -->
+  <script>
+    function toggleTheme() {
+      const isDark = document.documentElement.classList.toggle('dark');
+      document.getElementById('themeIcon').textContent = isDark ? '🌙' : '☀️';
+      document.getElementById('themeLabel').textContent = isDark ? '暗色模式' : '明色模式';
+    }
+
+    function showToast(message) {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = 'toast-anim pointer-events-auto px-3.5 py-2 rounded-lg border border-emerald-500/30 bg-zinc-900/95 text-white shadow-xl backdrop-blur text-xs font-medium';
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 2600);
+    }
+
+    const pluginState = {
+      plannotator: { installed: false },
+      processes: { installed: false },
+      askme: { installed: false }
+    };
+
+    function installPlugin(key, name, source, desc) {
+      const actionEl = document.getElementById(`action-${key}`);
+      if (!actionEl) return;
+
+      actionEl.innerHTML = `
+        <div class="h-7 px-2.5 rounded-md bg-blue-500/10 text-blue-500 text-xs font-medium flex items-center border border-blue-500/20">
+          安装中...
+        </div>
+      `;
+
+      setTimeout(() => {
+        pluginState[key].installed = true;
+
+        actionEl.innerHTML = `
+          <div class="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+            已安装
+          </div>
+        `;
+
+        addInstalledRow(key, name, source, desc);
+        showToast(`已安装并启用：${name}`);
+      }, 800);
+    }
+
+    function addInstalledRow(key, name, source, desc) {
+      const container = document.getElementById('installedDynamicContainer');
+      const row = document.createElement('div');
+      row.className = 'px-4 py-3 flex items-center justify-between gap-4 installed-plugin-item border-t border-zai-borderLight dark:border-zai-borderDark bg-emerald-500/5 transition-colors';
+      row.setAttribute('data-name', name);
+      row.setAttribute('data-detail', source);
+      row.innerHTML = `
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-semibold font-mono text-zai-fgLight dark:text-zai-fgDark">${name}</span>
+            <span class="text-[10px] px-1.5 py-0.2 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 font-medium">深度适配</span>
+          </div>
+          <div class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-0.5 font-mono truncate">
+            ${source} • ${desc}
+          </div>
+        </div>
+        <div class="flex items-center gap-3 shrink-0">
+          <button class="h-6 px-2 rounded border border-zai-borderLight dark:border-zai-borderDark text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark font-medium hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition">
+            配置
+          </button>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" checked onchange="togglePluginStatus('${key}', this.checked)" class="sr-only switch-checkbox">
+            <div class="w-8 h-4 bg-zinc-300 dark:bg-zinc-700 rounded-full switch-track transition-colors">
+              <div class="w-3.5 h-3.5 bg-white rounded-full switch-thumb transform transition-transform translate-x-0.5 translate-y-0.25 shadow-xs"></div>
+            </div>
+          </label>
+        </div>
+      `;
+      container.appendChild(row);
+
+      const countEl = document.getElementById('tabPluginCount');
+      countEl.textContent = parseInt(countEl.textContent, 10) + 1;
+    }
+
+    function installAllRecommended() {
+      const btn = document.getElementById('installAllBtn');
+      btn.textContent = '安装中...';
+      btn.style.pointerEvents = 'none';
+
+      ['plannotator', 'processes', 'askme'].forEach((key, index) => {
+        setTimeout(() => {
+          if (!pluginState[key].installed) {
+            const names = {
+              plannotator: '@plannotator/pi-extension',
+              processes: 'pi-processes',
+              askme: 'pi-ask-me'
+            };
+            const sources = {
+              plannotator: 'npm:@plannotator/pi-extension',
+              processes: 'github:Otherworldy/pi-processes-bash',
+              askme: 'github:Otherworldy/pi-ask-me'
+            };
+            const descs = {
+              plannotator: '计划模式专属适配：激活输入框计划开关与状态面板进度挂件',
+              processes: '长驻进程与终端监控：自动归入状态面板终端列表，支持日志与交互',
+              askme: '结构化交互问卷卡：拦截 ask_user_question 呈现原生结构化问卷卡片'
+            };
+            installPlugin(key, names[key], sources[key], descs[key]);
+          }
+        }, index * 200);
+      });
+
+      setTimeout(() => {
+        btn.textContent = '全部已就绪';
+        btn.className = 'text-[11px] font-medium text-emerald-500';
+      }, 1200);
+    }
+
+    function togglePluginStatus(key, isChecked) {
+      showToast(`已${isChecked ? '启用' : '停用'}插件：${key}（新建会话生效）`);
+    }
+
+    function handleSearch(query) {
+      const q = query.trim().toLowerCase();
+      ['plannotator', 'processes', 'askme'].forEach(key => {
+        const item = document.getElementById(`item-${key}`);
+        if (item) item.style.display = (!q || item.textContent.toLowerCase().includes(q)) ? 'flex' : 'none';
+      });
+
+      document.querySelectorAll('.installed-plugin-item').forEach(item => {
+        const name = item.getAttribute('data-name')?.toLowerCase() || '';
+        const detail = item.getAttribute('data-detail')?.toLowerCase() || '';
+        item.style.display = (!q || name.includes(q) || detail.includes(q)) ? 'flex' : 'none';
+      });
+    }
+
+    function checkUpdates() {
+      showToast('所有已安装插件均为最新版本');
+    }
+  </script>
+</body>
+</html>

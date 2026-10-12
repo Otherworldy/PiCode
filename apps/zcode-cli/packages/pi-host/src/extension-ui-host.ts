@@ -233,6 +233,7 @@ export class ExtensionUiHost {
         kind: "userInput",
         prompt: questions[0]?.question ?? "",
         freeText: false,
+        toolName: "AskUserQuestion",
         ...(questions.length > 0 ? { questions } : {}),
       },
     };

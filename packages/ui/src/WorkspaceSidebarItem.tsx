@@ -22,6 +22,7 @@ import {
   LoaderCircle,
   RefreshCwIcon,
   MessageCirclePlus,
+  ScrollText,
   XIcon,
 } from "lucide-react";
 import type { useSortable } from "@dnd-kit/sortable";
@@ -61,6 +62,7 @@ import {
   TID_WORKSPACE_CLOSE,
   TID_WORKSPACE_FILE_TREE_BUTTON,
   TID_WORKSPACE_ITEM,
+  TID_WORKSPACE_SYSTEM_PROMPT_BUTTON,
   testId,
 } from "@zcode/shared";
 import type { ZCodeTaskMeta } from "@zcode/shared";
@@ -82,6 +84,7 @@ import { refreshSharedSkillStoreForWorkspace } from "@/lib/skillStoreRefresh.js"
 import { refreshWorkspacePluginCapabilitiesAfterRemoteSync } from "@/lib/remotePluginSyncRefresh.js";
 import { useMcpStore } from "@/store/mcpStore.js";
 import { TaskRowActionButton } from "@/workspace-grouped-tasks/task-row-action-button.js";
+import { WorkspaceSystemPromptDialog } from "@/WorkspaceSidebar/WorkspaceSystemPromptDialog.js";
 import { releaseWorkspaceRuntimeAfterProjectRemoval } from "@/lib/workspaceRuntimeRelease.js";
 import {
   hasRunningWorkspaceChat,
@@ -244,6 +247,7 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
   );
   const showReconnectAction = Boolean(isDisconnectedRemoteWorkspace);
   const showFileTreeAction = Boolean(onOpenFileTree && !isDisconnectedRemoteWorkspace);
+  const showSystemPromptAction = !isDisconnectedRemoteWorkspace;
   const showRemoteSkillSyncAction = shouldShowRemoteSyncActions({
     remoteSessionId: tab.remoteSessionId,
     remoteTarget: tab.remoteTarget,
@@ -259,6 +263,7 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
   const [remoteSkillSyncOpen, setRemoteSkillSyncOpen] = useState(false);
   const [remoteMcpSyncOpen, setRemoteMcpSyncOpen] = useState(false);
   const [remotePluginSyncOpen, setRemotePluginSyncOpen] = useState(false);
+  const [systemPromptOpen, setSystemPromptOpen] = useState(false);
   const [workspaceRowHovered, setWorkspaceRowHovered] = useState(false);
   const [workspaceRowFocusWithin, setWorkspaceRowFocusWithin] = useState(false);
   const [workspaceActionMenuOpen, setWorkspaceActionMenuOpen] = useState(false);
@@ -443,6 +448,16 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
       onReconnectRemoteWorkspace,
       remoteWorkspaceKey,
     ],
+  );
+
+  const handleOpenSystemPrompt = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (isDisconnectedRemoteWorkspace || readOnlyReason) return;
+      setSystemPromptOpen(true);
+    },
+    [isDisconnectedRemoteWorkspace, readOnlyReason],
   );
 
   const handleOpenWorkspaceFileTree = useCallback(
@@ -949,6 +964,22 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
                         </DropdownMenuContent>
                       </DropdownMenu>
                     ) : null}
+                    {shouldMountWorkspaceRowActions && showSystemPromptAction ? (
+                      <span className="shrink-0">
+                        <TaskRowActionButton
+                          className="text-foreground-subtle hover:text-foreground"
+                          label={intl.formatMessage({
+                            id: "workspaceSidebar.systemPrompt",
+                          })}
+                          onClick={handleOpenSystemPrompt}
+                          showTooltip
+                          disabledReason={readOnlyReason}
+                          testId={testId(TID_WORKSPACE_SYSTEM_PROMPT_BUTTON, tab.workspacePath)}
+                        >
+                          <ScrollText className="h-3.5 w-3.5" />
+                        </TaskRowActionButton>
+                      </span>
+                    ) : null}
                     {shouldMountWorkspaceRowActions && showFileTreeAction ? (
                       <span className="shrink-0">
                         {/* Project 文件树入口以前单独覆盖 hover:bg-surface-hover，
@@ -1136,6 +1167,15 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
           />
         </CollapsibleContent>
       </Collapsible>
+      {systemPromptOpen ? (
+        <WorkspaceSystemPromptDialog
+          fileService={services.fileService}
+          onOpenChange={setSystemPromptOpen}
+          open
+          workspaceLabel={workspaceSidebarLabel}
+          workspacePath={tab.workspacePath}
+        />
+      ) : null}
       <RemoteSyncDialogs
         canSyncSkills={showRemoteSkillSyncAction}
         canSyncMcp={showRemoteSkillSyncAction}

@@ -16,6 +16,8 @@ export function shouldEnableGitAutoRefreshForWorkspace(params: {
 // 安静后马上刷。连续写入最多再忍一会儿，避免每个文件一次 git status。
 export const GIT_AUTO_REFRESH_QUIET_MS = 1_000;
 export const GIT_AUTO_REFRESH_MAX_WAIT_MS = 5_000;
+// Linux 和不递归的监听只盯 `.git`。工作区文件改动不会碰元数据，右上角会一直停在干净状态。
+export const GIT_AUTO_REFRESH_POLL_MS = 5_000;
 
 export function gitAutoRefreshDueAt(params: {
   now: number;
@@ -83,6 +85,20 @@ export function buildGitAutoRefreshWatchPaths(
   }
 
   return watchPaths;
+}
+
+export function shouldPollGitWorkspaceContent(
+  watchPaths: readonly GitAutoRefreshWatchPath[],
+  workspacePath: string,
+): boolean {
+  const normalizedWorkspacePath = normalizeWatchPath(workspacePath);
+  if (!normalizedWorkspacePath) {
+    return false;
+  }
+
+  return !watchPaths.some(
+    (entry) => entry.recursive && normalizeWatchPath(entry.path) === normalizedWorkspacePath,
+  );
 }
 
 export function stringifyGitAutoRefreshWatchPaths(

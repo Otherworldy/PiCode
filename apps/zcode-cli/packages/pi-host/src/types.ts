@@ -213,6 +213,8 @@ export interface PiSessionPort {
     images?: Array<{ type: "image"; data: string; mimeType: string }>,
   ): Promise<void>;
   abort(): Promise<void>;
+  /** 插件 sendUserMessage 的原文。对上才结束计划审查的「工作中」。 */
+  takeMatchingPlanDecision?(text: string): boolean;
   /** 模型失败后从当前上下文接着跑。命令在 agent_start 后返回。 */
   continueAfterError?(): Promise<void>;
   /** pi-processes 列表变化。没装插件时列表一直是空的。 */
@@ -276,7 +278,8 @@ export interface PiSessionPort {
    * 助手消息写进会话树之后通知。此时 message_end 已经画完，entryId 才是分叉点。
    */
   notePersistedMessage?(listener: (notice: { role: string; entryId: string }) => void): () => void;
-  dispose(): void;
+  /** 先等 session_shutdown 关掉 MCP 子进程，再拆 Pi session。重复调用等同一次关闭。 */
+  dispose(): void | Promise<void>;
 }
 
 export interface CreatePiSessionInput {

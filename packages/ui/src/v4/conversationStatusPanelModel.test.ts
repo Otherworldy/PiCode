@@ -52,28 +52,37 @@ test("plannotator progress widget fills the todo list when plan is empty", () =>
   assert.equal(kept.plan?.items[0]?.content, "旧 TodoWrite");
 });
 
-test("clean worktree sessions keep the git tool; clean main workspaces do not", () => {
+test("git repositories keep the git tool even when the worktree is clean", () => {
   const gitSummary = repository("todo-1");
-  const hidden = buildConversationStatusPanelModel({
+  const shown = buildConversationStatusPanelModel({
     gitSummary,
     gitWorktreeChangeSummary: { added: 0, removed: 0 },
   });
-  assert.equal(hidden.git, null);
-  assert.equal(hidden.hasContent, false);
-
-  const kept = buildConversationStatusPanelModel({
-    gitSummary,
-    gitWorktreeChangeSummary: { added: 0, removed: 0 },
-    keepCleanRepository: true,
-  });
-  assert.equal(kept.git?.branchName, "todo-1");
-  assert.equal(kept.git?.added, 0);
-  assert.equal(kept.hasContent, true);
+  assert.equal(shown.git?.branchName, "todo-1");
+  assert.equal(shown.git?.added, 0);
+  assert.equal(shown.hasContent, true);
 
   const office = buildConversationStatusPanelModel({
     isOfficeMode: true,
     gitSummary,
-    keepCleanRepository: true,
   });
   assert.equal(office.git, null);
+});
+
+test("dirty files with no line stats still show the git tool", () => {
+  const gitSummary = {
+    ...repository("main"),
+    workspacePath: "D:/repo",
+    repoRoot: "D:/repo",
+    isDirty: true,
+  };
+  const shown = buildConversationStatusPanelModel({
+    gitSummary,
+    gitDirtyFileCount: 2,
+    gitWorktreeChangeSummary: { added: 0, removed: 0 },
+  });
+  assert.equal(shown.git?.dirtyFileCount, 2);
+  assert.equal(shown.git?.added, 0);
+  assert.equal(shown.git?.isClean, false);
+  assert.equal(shown.hasContent, true);
 });

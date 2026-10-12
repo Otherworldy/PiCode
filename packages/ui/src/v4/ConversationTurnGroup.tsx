@@ -1223,9 +1223,7 @@ function resolveBackgroundResultTitle(unit: ConversationTurnRenderUnit): string 
 /**
  * 该轮是否以 workflow 通知卡（ToolLayout 行）开头。
  *
- * 用于两处：`ConversationBackgroundResultWork` 决定渲染通知行还是裸标题行；轮容器决定是否
- * 去掉轮顶 `pt-14`。后台结果轮没有可见的 user 行，通知卡就是轮内第一个节点——若照常保留
- * 轮顶 padding，卡片上方会叠出 56px + 上一轮 pb-5 共约 76px 的空白，用户判为多余。
+ * `ConversationBackgroundResultWork` 据此决定渲染通知行还是裸标题行。
  */
 function resolveWorkflowNotification(
   unit: ConversationTurnRenderUnit,
@@ -1534,10 +1532,6 @@ function ConversationTurnGroupImpl({
     return { enabled: true, reason: "available" };
   }, [unit.header?.actions?.canRewindFiles, unit.header?.fileChanges, unit.isRunning]);
 
-  // workflow 通知卡开头的轮去掉轮顶 padding：卡片只贴上一轮 pb-5 的常规流内间距。
-  const startsWithWorkflowNotificationCard =
-    backgroundResultTitle !== undefined && resolveWorkflowNotification(unit) !== undefined;
-
   const shareSelectionRows = shareSelection
     ? unit.visibleUserInputs.filter(
         (row) => row.origin === "realUser" && shareSelection.eligibleRowIds.has(row.rowId),
@@ -1603,10 +1597,8 @@ function ConversationTurnGroupImpl({
     <section
       data-turn-id={unit.turnId}
       data-turn-key={unit.key}
-      className={cn(
-        "relative mx-auto flex w-full flex-col gap-5 px-4 @md/conversation:px-6 pb-5",
-        startsWithWorkflowNotificationCard ? "pt-0" : "pt-14",
-      )}
+      // 轮间只留一档间距：pt-14 会和上轮 pb-5 叠成大块空白，完全去掉又会贴在一起。
+      className="relative mx-auto flex w-full flex-col gap-5 px-4 pt-8 pb-5 @md/conversation:px-6"
     >
       {unit.leadingBoundaryRows.map((row) => (
         <ConversationTurnRow
@@ -1619,7 +1611,7 @@ function ConversationTurnGroupImpl({
         // deferAssistantActions 后工具栏被移到文件 summary 之后，
         // 之前 hover group 只包住工具栏自己，导致必须悬停到不可见按钮位置才出现。
         // 这里把 assistant work、summary 和工具栏放进同一轮 hover 容器，对齐旧版。
-        <div className="group/assistant-turn flex w-full flex-col gap-5">
+        <div className="group/assistant-turn relative flex w-full flex-col gap-5">
           {backgroundResultTitle ? (
             <>
               {visibleUserRows.map((row) =>
@@ -1714,6 +1706,7 @@ function ConversationTurnGroupImpl({
           {canRenderAssistantActions && latestAssistantTextRow ? (
             // 文件 summary 是整轮完成后的聚合结果；轮尾工具栏如果跟着
             // assistant text 内联渲染，会插到 summary 前面，读起来像 summary 不是本轮收尾。
+            // 工具栏移出文档流：opacity-0 仍占高时，每轮下面都会空出一条看不见的空隙。
             <ConversationAssistantTextActions
               rowId={latestAssistantTextRow.rowId}
               entityId={latestAssistantTextRow.entityId}
@@ -1726,10 +1719,10 @@ function ConversationTurnGroupImpl({
               onFeedbackChange={onFeedbackChange}
               hookInvocations={unit.hookInvocations}
               turnId={unit.turnId}
-              className="opacity-0 transition-opacity group-hover/assistant-turn:opacity-100 focus-within:opacity-100"
+              className="pointer-events-none absolute top-full left-0 z-10 opacity-0 transition-opacity group-hover/assistant-turn:pointer-events-auto group-hover/assistant-turn:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100"
             />
           ) : hasHookActions ? (
-            <MessageActions className="opacity-0 transition-opacity group-hover/assistant-turn:opacity-100 focus-within:opacity-100">
+            <MessageActions className="pointer-events-none absolute top-full left-0 z-10 opacity-0 transition-opacity group-hover/assistant-turn:pointer-events-auto group-hover/assistant-turn:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
               <ConversationHookDetailsAction rows={unit.hookInvocations} turnId={unit.turnId} />
             </MessageActions>
           ) : null}

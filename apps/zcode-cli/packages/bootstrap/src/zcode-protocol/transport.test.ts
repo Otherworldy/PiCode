@@ -104,7 +104,7 @@ describe("MCP App NDJSON admission", () => {
           started.resolve();
           await finish.promise;
         }
-        if (label === "pi/plugins:list") reads.resolve();
+        if (label === "pi/plugins:search") reads.resolve();
         return { id: message.id, result: {} };
       },
     });
@@ -115,12 +115,18 @@ describe("MCP App NDJSON admission", () => {
           JSON.stringify({ id: 1, method: "session/send" }),
           JSON.stringify({ id: 2, method: "pi/models", params: { action: "get" } }),
           JSON.stringify({ id: 3, method: "pi/plugins", params: { action: "list" } }),
+          JSON.stringify({ id: 5, method: "pi/plugins", params: { action: "search" } }),
           JSON.stringify({ id: 4, method: "pi/plugins", params: { action: "checkUpdates" } }),
         ].join("\n") + "\n",
       );
       await started.promise;
       await reads.promise;
-      expect(order).toEqual(["session/send", "pi/models:get", "pi/plugins:list"]);
+      expect(order).toEqual([
+        "session/send",
+        "pi/models:get",
+        "pi/plugins:list",
+        "pi/plugins:search",
+      ]);
     } finally {
       finish.resolve();
       input.end();
@@ -130,6 +136,7 @@ describe("MCP App NDJSON admission", () => {
       "session/send",
       "pi/models:get",
       "pi/plugins:list",
+      "pi/plugins:search",
       "pi/plugins:checkUpdates",
     ]);
   });

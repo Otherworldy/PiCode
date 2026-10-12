@@ -3,14 +3,15 @@ import type { IDisposable } from "@zcode/rpc";
 import type { GitRepositorySummary } from "@zcode/shared";
 import {
   buildGitAutoRefreshWatchPaths,
+  GIT_AUTO_REFRESH_POLL_MS,
   gitAutoRefreshDueAt,
   parseGitAutoRefreshWatchPaths,
   shouldEnableGitAutoRefreshForWorkspace,
+  shouldPollGitWorkspaceContent,
   stringifyGitAutoRefreshWatchPaths,
 } from "@/lib/gitAutoRefresh.js";
 import { logger } from "@/logger.js";
 import { useWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
-
 
 interface GitWatcherRegistration {
   subscription: IDisposable;
@@ -101,6 +102,24 @@ export function useGitAutoRefresh({
   );
 
   refreshRef.current = onRefreshGit;
+  const shouldPollWorkspaceContent =
+    canWatchCurrentWorkspace &&
+    gitSummary.isGitAvailable &&
+    gitSummary.isRepository &&
+    shouldPollGitWorkspaceContent(watchPaths, gitSummary.workspacePath || workspacePath);
+
+  useEffect(() => {
+    if (!shouldPollWorkspaceContent) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      refreshRef.current();
+    }, GIT_AUTO_REFRESH_POLL_MS);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [shouldPollWorkspaceContent]);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,15 +135,18 @@ export function useGitAutoRefresh({
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
-      debounceTimerRef.current = setTimeout(() => {
-        debounceTimerRef.current = null;
-        burstStartedAtRef.current = null;
-        logger.debug("[GitAutoRefresh] Git 状态变更，刷新仓库状态", {
-          workspacePath,
-          path,
-        });
-        refreshRef.current();
-      }, Math.max(0, next.dueAt - now));
+      debounceTimerRef.current = setTimeout(
+        () => {
+          debounceTimerRef.current = null;
+          burstStartedAtRef.current = null;
+          logger.debug("[GitAutoRefresh] Git 状态变更，刷新仓库状态", {
+            workspacePath,
+            path,
+          });
+          refreshRef.current();
+        },
+        Math.max(0, next.dueAt - now),
+      );
     };
 
     // Git summary 每次刷新都会带回新的 autoRefreshWatchPaths 数组引用。

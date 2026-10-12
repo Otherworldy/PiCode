@@ -2099,6 +2099,8 @@ function ConversationComposerImpl({
     () => (
       <div className="flex min-w-0 items-center gap-1">
         <span className="flex min-w-0 shrink items-center gap-1 overflow-hidden empty:hidden">
+          {/* 非计划插件 status 跟在上下文圆环左侧，不占输入框上方。 */}
+          <ExtensionChrome snapshot={snapshot} placement="status" />
           <V4ComposerModelControls
             workspacePath={workspacePath}
             workspaceIdentity={workspaceIdentity}
@@ -2189,6 +2191,7 @@ function ConversationComposerImpl({
       sendShortcut,
       sendTooltipTitle,
       sessionId,
+      snapshot?.extensionStatuses,
       showStopControl,
       stopTooltipTitle,
       workspaceIdentity,
@@ -2271,7 +2274,6 @@ function ConversationComposerImpl({
         className="hidden"
         onChange={attachmentsApi.handleAttachmentInputChange}
       />
-      <ExtensionChrome snapshot={snapshot} placement="status" />
       <ExtensionChrome snapshot={snapshot} placement="aboveEditor" />
       {visibleError ? (
         // 仅展示附件错误会漏掉会话级 lastError，任务失败后也应在输入框上方显示原因。

@@ -426,9 +426,15 @@ export function parseNumstat(stdout: string): Map<string, GitLineStat> {
   return stats;
 }
 
-async function countUntrackedFileLines(absolutePath: string, buffer: Buffer): Promise<number> {
+async function countUntrackedFileLines(
+  absolutePath: string,
+  buffer: Buffer,
+): Promise<{ added: number; hasContent: boolean }> {
   const info = await stat(absolutePath);
-  if (!info.isFile() || info.size > GIT_UNTRACKED_STAT_MAX_BYTES) return 0;
+  // 空文件和失效链接没有可审查内容。有体积但读不出行数的文件仍算有内容，
+  // 否则二进制和大文件在 git status 里看得见，变更列表却是空的。
+  if (!info.isFile() || info.size === 0) return { added: 0, hasContent: false };
+  if (info.size > GIT_UNTRACKED_STAT_MAX_BYTES) return { added: 0, hasContent: true };
 
   const file = await open(absolutePath, "r");
   try {
@@ -439,19 +445,32 @@ async function countUntrackedFileLines(absolutePath: string, buffer: Buffer): Pr
       // 文件可能在 stat 后增长；实际读取也必须受预算约束，额外一字节只用于识别越界。
       const length = Math.min(buffer.length, GIT_UNTRACKED_STAT_MAX_BYTES + 1 - totalBytes);
       const { bytesRead } = await file.read(buffer, 0, length, null);
-      if (bytesRead === 0) return newlines + (lastByte === 10 ? 0 : 1);
+      if (bytesRead === 0) {
+        return { added: newlines + (lastByte === 10 ? 0 : 1), hasContent: true };
+      }
       totalBytes += bytesRead;
-      if (totalBytes > GIT_UNTRACKED_STAT_MAX_BYTES) return 0;
+      if (totalBytes > GIT_UNTRACKED_STAT_MAX_BYTES) return { added: 0, hasContent: true };
       for (let index = 0; index < bytesRead; index++) {
-        if (buffer[index] === 0) return 0;
+        if (buffer[index] === 0) return { added: 0, hasContent: true };
         if (buffer[index] === 10) newlines++;
       }
       lastByte = buffer[bytesRead - 1]!;
     }
-    return 0;
+    return { added: 0, hasContent: true };
   } finally {
     await file.close();
   }
+}
+
+export function shouldIncludeUntrackedChange(
+  entry: { path: string },
+  stat: { added: number; removed: number; hasContent?: boolean },
+): boolean {
+  // 构建目录里常见大量未跟踪的空文件、失效链接或不可读产物。
+  // 这类条目没有可审查的文本增删，之前会以 +0/-0 挤进 Review 面板。
+  // 详细 status 超限后，Git 会用末尾 `/` 的目录记录表达整棵未跟踪目录；它行数必然为 0，
+  // 仍必须留下。二进制和大文件同样行数为 0，但有内容，不能当成空文件丢掉。
+  return entry.path.endsWith("/") || stat.added > 0 || stat.removed > 0 || stat.hasContent === true;
 }
 
 export async function buildUntrackedStats(
@@ -469,9 +488,11 @@ export async function buildUntrackedStats(
       const entry = untrackedEntries[nextIndex++]!;
       const absolutePath = resolve(repoRoot, ...entry.path.split("/"));
       try {
+        const inspected = await countUntrackedFileLines(absolutePath, buffer);
         stats.set(entry.path, {
-          added: await countUntrackedFileLines(absolutePath, buffer),
+          added: inspected.added,
           removed: 0,
+          ...(inspected.hasContent ? { hasContent: true } : {}),
         });
       } catch {
         stats.set(entry.path, { added: 0, removed: 0 });

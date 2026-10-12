@@ -100,7 +100,6 @@ import {
 } from "@/v4/conversationStatusPanelModel.js";
 import type { ConversationStatusPanelWorkflowRunTarget } from "@/v4/conversationStatusPanelModel.js";
 import { workflowRunOpenTarget } from "@/v4/conversationStatusPanelModel.js";
-import { isWorkspaceWorktree } from "@/v4/sessionWorktree.js";
 import {
   buildConversationGoalIterationSummaries,
   getConversationGoalElapsedSeconds,
@@ -399,6 +398,7 @@ function GitStatusSection({
     return null;
   }
   const hasChanges = git.added + git.removed > 0;
+  const hasDirtyFiles = git.dirtyFileCount > 0;
   const canOpenReview = Boolean(onOpenGitReview && gitSummary.isRepository);
   const gitPath = gitWorkspacePath ?? workspacePath;
 
@@ -410,12 +410,19 @@ function GitStatusSection({
       trailing={(isOpen) =>
         isOpen ? null : (
           <span className="shrink-0 font-mono text-ui-sm tabular-nums">
-            <span className={cn("text-[var(--color-diff-added)]", !hasChanges && "opacity-50")}>
-              +{git.added}
-            </span>{" "}
-            <span className={cn("text-[var(--color-diff-removed)]", !hasChanges && "opacity-50")}>
-              -{git.removed}
-            </span>
+            {hasChanges ? (
+              <>
+                <span className="text-[var(--color-diff-added)]">+{git.added}</span>{" "}
+                <span className="text-[var(--color-diff-removed)]">-{git.removed}</span>
+              </>
+            ) : hasDirtyFiles ? (
+              <span>{git.dirtyFileCount}</span>
+            ) : (
+              <>
+                <span className="text-[var(--color-diff-added)] opacity-50">+{git.added}</span>{" "}
+                <span className="text-[var(--color-diff-removed)] opacity-50">-{git.removed}</span>
+              </>
+            )}
           </span>
         )
       }
@@ -441,8 +448,19 @@ function GitStatusSection({
             {intl.formatMessage({ id: "chat.statusPanel.changes" })}
           </span>
           <span className="shrink-0 font-mono tabular-nums">
-            <span className="text-[var(--color-diff-added)]">+{git.added}</span>{" "}
-            <span className="text-[var(--color-diff-removed)]">-{git.removed}</span>
+            {hasChanges ? (
+              <>
+                <span className="text-[var(--color-diff-added)]">+{git.added}</span>{" "}
+                <span className="text-[var(--color-diff-removed)]">-{git.removed}</span>
+              </>
+            ) : hasDirtyFiles ? (
+              <span>{git.dirtyFileCount}</span>
+            ) : (
+              <>
+                <span className="text-[var(--color-diff-added)] opacity-50">+{git.added}</span>{" "}
+                <span className="text-[var(--color-diff-removed)] opacity-50">-{git.removed}</span>
+              </>
+            )}
           </span>
         </button>
         <GitBranchSwitcher
@@ -1633,7 +1651,9 @@ function StatusSummaryRow({
   const isDoneGoal = goalStatus === "verified";
   const added = gitWorktreeChangeSummary?.added ?? 0;
   const removed = gitWorktreeChangeSummary?.removed ?? 0;
-  const hasGitMiniSummary = Boolean(model.git && added + removed > 0);
+  const dirtyFileCount = model.git?.dirtyFileCount ?? 0;
+  // 行数为 0 的脏文件也要占胶囊，否则右上角只剩别的状态，看起来像没有 Git 修改。
+  const hasGitMiniSummary = Boolean(model.git && (added + removed > 0 || dirtyFileCount > 0));
   const cleanGitBranchLabel = model.git?.branchName?.trim() || null;
 
   // 胶囊摘要过去把所有后台任务都写死成 Activity，纯 Subagent 因而没有复用
@@ -1672,8 +1692,14 @@ function StatusSummaryRow({
       <span className="min-w-0 truncate">
         {intl.formatMessage({ id: "chat.statusPanel.changes" })}
       </span>
-      <span className="shrink-0 text-[var(--color-diff-added)]">+{added}</span>
-      <span className="shrink-0 text-[var(--color-diff-removed)]">-{removed}</span>
+      {added + removed > 0 ? (
+        <>
+          <span className="shrink-0 text-[var(--color-diff-added)]">+{added}</span>
+          <span className="shrink-0 text-[var(--color-diff-removed)]">-{removed}</span>
+        </>
+      ) : (
+        <span className="shrink-0 text-[var(--color-foreground-subtle)]">{dirtyFileCount}</span>
+      )}
     </StatusSummaryMetric>
   ) : goalTitle && isDoneGoal ? (
     <StatusSummaryMetric icon={<GoalIcon className="size-4 text-[var(--color-foreground)]" />}>
@@ -1731,7 +1757,9 @@ function StatusSummaryRow({
       </span>
     </StatusSummaryMetric>
   ) : endedSubagentCount > 0 ? (
-    <StatusSummaryMetric icon={<BotIcon className="size-4 text-[var(--color-foreground-subtle)]" />}>
+    <StatusSummaryMetric
+      icon={<BotIcon className="size-4 text-[var(--color-foreground-subtle)]" />}
+    >
       <span className="min-w-0 truncate">
         {intl.formatMessage({ id: "chat.statusPanel.agents" })}
       </span>
@@ -1813,9 +1841,6 @@ function ConversationStatusPanelImpl({
   const isOfficeMode = useIsOfficeMode();
   const miniMeasureRef = useRef<HTMLDivElement | null>(null);
   const [miniWidth, setMiniWidth] = useState(320);
-  const keepCleanRepository = Boolean(
-    gitWorkspacePath && isWorkspaceWorktree(workspacePath, gitWorkspacePath),
-  );
   const model = useMemo(
     () =>
       buildConversationStatusPanelModel({
@@ -1823,7 +1848,6 @@ function ConversationStatusPanelImpl({
         gitSummary,
         gitDirtyFileCount,
         gitWorktreeChangeSummary,
-        keepCleanRepository,
         goal,
         sessionPlans,
         workspacePath,
@@ -1840,7 +1864,6 @@ function ConversationStatusPanelImpl({
       gitDirtyFileCount,
       gitSummary,
       gitWorktreeChangeSummary,
-      keepCleanRepository,
       goal,
       sessionPlans,
       plan,

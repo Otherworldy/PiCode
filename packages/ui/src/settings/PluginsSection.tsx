@@ -405,6 +405,9 @@ export function PluginsSection({
                 workspaceIdentity={target.workspaceIdentity}
                 scope={selectedScope.kind === "user" ? "user" : "project"}
                 searchQuery={searchQueries.plugins}
+                onSearchQueryChange={(value) => {
+                  setSearchQueries((current) => ({ ...current, plugins: value }));
+                }}
                 onVisibleCountChange={updatePluginCount}
               />
             ) : null}

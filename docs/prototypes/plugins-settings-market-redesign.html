@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZCode 设置 - 插件市场与管理 (参考 pi.dev/packages 设计提案)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            zai: {
+              bgDark: '#161616',
+              bgLight: '#f8f8f8',
+              cardDark: '#202020',
+              cardLight: '#ffffff',
+              cardBorderDark: 'rgba(255, 255, 255, 0.08)',
+              cardBorderLight: 'rgba(13, 13, 13, 0.08)',
+              surfaceDark: 'rgba(255, 255, 255, 0.04)',
+              surfaceLight: 'rgba(13, 13, 13, 0.03)',
+              hoverDark: 'rgba(255, 255, 255, 0.07)',
+              hoverLight: 'rgba(13, 13, 13, 0.05)',
+              selectedDark: 'rgba(255, 255, 255, 0.12)',
+              selectedLight: 'rgba(13, 13, 13, 0.08)',
+              fgDark: '#ededed',
+              fgLight: '#171717',
+              fgSubtleDark: '#999999',
+              fgSubtleLight: '#666666',
+              fgSubtlestDark: '#666666',
+              fgSubtlestLight: '#999999',
+              brand: '#3b82f6',
+              brandHover: '#2563eb',
+              piBadgeBgDark: '#2a2618',
+              piBadgeFgDark: '#d4b76a',
+              piBadgeBorderDark: '#4a3f23',
+              piBadgeBgLight: '#fef9e7',
+              piBadgeFgLight: '#8a6d1c',
+              piBadgeBorderLight: '#f0deb0',
+            }
+          },
+          fontFamily: {
+            sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', '"PingFang SC"', '"Hiragino Sans GB"', '"Microsoft YaHei"', 'sans-serif'],
+            mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    :root {
+      --ui-font-size: 14px;
+      --bg: #f8f8f8;
+      --card-bg: #ffffff;
+      --border: rgba(13, 13, 13, 0.08);
+      --fg: #171717;
+      --fg-subtle: #666666;
+      --grid-line: rgba(0, 0, 0, 0.03);
+    }
+    html.dark {
+      --bg: #161616;
+      --card-bg: #202020;
+      --border: rgba(255, 255, 255, 0.08);
+      --fg: #ededed;
+      --fg-subtle: #999999;
+      --grid-line: rgba(255, 255, 255, 0.025);
+    }
+    body {
+      background-color: var(--bg);
+      color: var(--fg);
+      font-size: var(--ui-font-size);
+      background-image: 
+        linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+      background-size: 32px 32px;
+    }
+    .theme-transition { transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: rgba(150, 150, 150, 0.25); border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(150, 150, 150, 0.4); }
+    .switch-checkbox:checked + .switch-track { background-color: #3b82f6; }
+    .switch-checkbox:checked + .switch-track .switch-thumb { transform: translateX(14px); }
+    @keyframes slideInUp {
+      from { transform: translateY(10px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    @keyframes slideInRight {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .anim-slide-up { animation: slideInUp 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .anim-slide-right { animation: slideInRight 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .anim-fade-in { animation: fadeIn 0.15s ease-out forwards; }
+
+    /* pi.dev 风格的极客几何网格图 */
+    .pi-wire-thumb {
+      background: 
+        repeating-linear-gradient(0deg, transparent, transparent 7px, var(--border) 7px, var(--border) 8px),
+        repeating-linear-gradient(90deg, transparent, transparent 7px, var(--border) 7px, var(--border) 8px);
+      border: 1px solid var(--border);
+      position: relative;
+    }
+    .pi-wire-thumb::after {
+      content: '';
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      right: 12px;
+      height: 2px;
+      background: currentColor;
+      opacity: 0.35;
+      box-shadow: 0 -5px 0 0 currentColor;
+    }
+  </style>
+</head>
+<body class="bg-zai-bgLight dark:bg-zai-bgDark text-zai-fgLight dark:text-zai-fgDark antialiased font-sans h-screen flex flex-col overflow-hidden theme-transition select-none">
+
+  <!-- 顶部虚拟应用标题栏 -->
+  <header class="h-11 border-b border-zai-cardBorderLight dark:border-zai-cardBorderDark flex items-center justify-between px-4 bg-white/75 dark:bg-zinc-900/75 backdrop-blur shrink-0 z-30">
+    <div class="flex items-center gap-3">
+      <!-- 窗口操作红黄绿点 -->
+      <div class="flex items-center gap-1.5 mr-2">
+        <div class="w-3 h-3 rounded-full bg-rose-500/80"></div>
+        <div class="w-3 h-3 rounded-full bg-amber-500/80"></div>
+        <div class="w-3 h-3 rounded-full bg-emerald-500/80"></div>
+      </div>
+      <!-- 面包屑导航 -->
+      <div class="flex items-center text-xs text-zai-fgSubtleLight dark:text-zai-fgSubtleDark gap-2 font-medium">
+        <span class="hover:text-zai-fgLight dark:hover:text-zai-fgDark cursor-pointer">设置</span>
+        <span>/</span>
+        <span class="text-zai-fgLight dark:text-zai-fgDark font-semibold">插件 (Plugins)</span>
+        <span class="ml-2 px-2 py-0.5 rounded text-[11px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-mono">
+          pi.dev/packages 设计对齐版
+        </span>
+      </div>
+    </div>
+
+    <!-- 右侧工具区：深浅色切换 -->
+    <div class="flex items-center gap-2">
+      <a href="https://pi.dev/packages" target="_blank" class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:underline mr-2 flex items-center gap-1">
+        <span>对齐官方规范: pi.dev/packages</span>
+        <svg class="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+      </a>
+
+      <button id="themeToggleBtn" onclick="toggleTheme()" class="h-7 px-2.5 rounded-md text-xs font-medium border border-zai-cardBorderLight dark:border-zai-cardBorderDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark flex items-center gap-1.5 transition">
+        <span id="themeIcon">🌙</span>
+        <span id="themeLabel">暗色模式</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- 主体工作区 -->
+  <div class="flex-1 flex overflow-hidden">
+    
+    <!-- 左侧 Settings 导航栏 -->
+    <aside class="w-56 border-r border-zai-cardBorderLight dark:border-zai-cardBorderDark bg-zinc-50/50 dark:bg-zinc-900/30 flex flex-col p-3 gap-1 shrink-0">
+      <div class="px-2 py-1 text-[11px] font-semibold text-zai-fgSubtleLight dark:text-zai-fgSubtleDark uppercase tracking-wider">
+        配置中心
+      </div>
+      <nav class="space-y-0.5 text-xs font-medium">
+        <a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition" href="javascript:void(0)">
+          <svg class="w-3.5 h-3.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+          常规偏好
+        </a>
+        <a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition" href="javascript:void(0)">
+          <svg class="w-3.5 h-3.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+          模型提供商 (Models)
+        </a>
+        <!-- 高亮项：插件与扩展 -->
+        <a class="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 font-semibold transition" href="javascript:void(0)">
+          <div class="flex items-center gap-2.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+            <span>插件与扩展</span>
+          </div>
+          <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+        </a>
+        <a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition" href="javascript:void(0)">
+          <svg class="w-3.5 h-3.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+          MCP 服务
+        </a>
+        <a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition" href="javascript:void(0)">
+          <svg class="w-3.5 h-3.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+          智能体技能 (Skills)
+        </a>
+      </nav>
+
+      <div class="mt-auto pt-3 border-t border-zai-cardBorderLight dark:border-zai-cardBorderDark text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark flex items-center justify-between px-1">
+        <span class="font-mono">Pi Protocol v4</span>
+        <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-mono font-medium">Ready</span>
+      </div>
+    </aside>
+
+    <!-- 右侧主设置内容区 (自适应高密度宽度) -->
+    <main class="flex-1 overflow-y-auto px-6 py-5 lg:px-8 lg:py-6 max-w-5xl mx-auto w-full relative">
+      
+      <!-- ============================================================== -->
+      <!-- LEVEL 1: 顶层操作条 (Scope + 一级分类 + 视图切换 + 从源安装) -->
+      <!-- ============================================================== -->
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <div class="flex items-center gap-3">
+          <!-- Scope 选择器 -->
+          <div class="relative">
+            <button id="scopeMenuBtn" onclick="toggleScopeDropdown()" class="h-7 px-2.5 rounded-md border border-zai-cardBorderLight dark:border-zai-cardBorderDark bg-zai-cardLight dark:bg-zai-cardDark text-xs font-medium flex items-center gap-1.5 hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition">
+              <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <span id="currentScopeLabel">全局用户 (User)</span>
+              <svg class="w-3 h-3 opacity-60 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </button>
+            <div id="scopeDropdown" class="hidden absolute top-full left-0 mt-1 w-52 rounded-lg border border-zai-cardBorderLight dark:border-zai-cardBorderDark bg-zai-cardLight dark:bg-zai-cardDark shadow-lg p-1 z-20 text-xs anim-slide-up">
+              <div onclick="selectScope('user', '全局用户 (User)')" class="px-2.5 py-1.5 rounded-md hover:bg-zai-hoverLight dark:hover:bg-zai-hoverDark cursor-pointer flex items-center justify-between font-medium">
+                <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>全局用户 (User)</span>
+                <span class="text-[10px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark">默认</span>
+              </div>
+              <div onclick="selectScope('workspace', '当前工作区 (ZCode)')" class="px-2.5 py-1.5 rounded-md hover:bg-zai-hoverLight dark:hover:bg-zai-hoverDark cursor-pointer flex items-center justify-between text-zai-fgSubtleLight dark:text-zai-fgSubtleDark">
+                <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>项目工作区 (ZCode)</span>
+                <span class="text-[10px] font-mono">.pi/</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="h-3.5 w-px bg-zai-cardBorderLight dark:border-zai-cardBorderDark"></div>
+
+          <!-- 二级子视图：插件市场 vs 已安装 (Segmented Tabs) -->
+          <div class="inline-flex items-center p-0.5 rounded-lg bg-zinc-200/60 dark:bg-zinc-800/80 border border-zai-cardBorderLight dark:border-zai-cardBorderDark">
+            <button
+              id="subTabMarket"
+              onclick="switchSubTab('market')"
+              class="h-6.5 px-3 rounded-md text-xs font-semibold flex items-center gap-1.5 transition bg-white dark:bg-zinc-700 text-zai-fgLight dark:text-zai-fgDark shadow-2xs"
+            >
+              <svg class="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
+              <span>插件市场</span>
+              <span class="text-[10px] px-1 py-0.1 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 font-mono">pi.dev</span>
+            </button>
+            <button
+              id="subTabInstalled"
+              onclick="switchSubTab('installed')"
+              class="h-6.5 px-3 rounded-md text-xs font-medium flex items-center gap-1.5 transition text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:text-zai-fgLight dark:hover:text-zai-fgDark"
+            >
+              <span>已安装</span>
+              <span id="installedCountBadge" class="text-[10px] px-1.5 py-0.2 rounded-full bg-zinc-300 dark:bg-zinc-600 font-mono">3</span>
+              <span id="updateDot" class="w-1.5 h-1.5 rounded-full bg-amber-500" title="1 个插件可更新"></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 右侧操作项 -->
+        <div class="flex items-center gap-2">
+          <button
+            onclick="openInstallSourceModal()"
+            class="h-7 px-2.5 rounded-lg border border-zai-cardBorderLight dark:border-zai-cardBorderDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark text-xs font-medium text-zai-fgLight dark:text-zai-fgDark transition flex items-center gap-1.5 shadow-2xs font-mono"
+          >
+            <span>+ 从源安装...</span>
+          </button>
+          
+          <button
+            id="installAllPinnedBtn"
+            onclick="installAllPinned()"
+            class="h-7 px-2.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-xs font-medium transition flex items-center gap-1.5"
+          >
+            <span>全部安装官方推荐 (3)</span>
+          </button>
+
+          <button
+            id="checkUpdatesBtn"
+            onclick="checkUpdates()"
+            class="hidden h-7 px-2.5 rounded-lg border border-zai-cardBorderLight dark:border-zai-cardBorderDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark text-xs font-medium transition flex items-center gap-1.5"
+          >
+            <svg id="refreshIcon" class="w-3.5 h-3.5 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            <span>检查更新</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ============================================================== -->
+      <!-- VIEW 1: 插件市场视图 (严格参考 pi.dev/packages 设计规范) -->
+      <!-- ============================================================== -->
+      <div id="viewMarket" class="space-y-6">
+        
+        <!-- ------------------------------------------------------------ -->
+        <!-- 板块 1: RECENTLY PUBLISHED (对应 pi.dev 顶部的最新/精选推荐包) -->
+        <!-- ------------------------------------------------------------ -->
+        <section class="space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-mono text-xs font-semibold tracking-wider text-zai-fgLight dark:text-zai-fgDark uppercase">
+              RECENTLY PUBLISHED / FEATURED
+            </span>
+            <span class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark font-mono">
+              3 official recommended packages
+            </span>
+          </div>
+
+          <!-- 4 列紧凑卡片网格 (完全复刻 pi.dev/packages 顶部小卡片设计) -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            
+            <!-- 推荐 1: @plannotator/pi-extension -->
+            <div onclick="openDetailDrawer('plannotator')" class="p-3 rounded-lg border border-zai-cardBorderLight dark:border-zai-cardBorderDark bg-zai-cardLight dark:bg-zai-cardDark hover:border-zinc-400 dark:hover:border-zinc-600 transition cursor-pointer flex flex-col justify-between group">
+              <div>
+                <div class="font-mono text-xs font-bold text-zai-fgLight dark:text-zai-fgDark group-hover:underline truncate">
+                  @plannotator/pi-extension
+                </div>
+                <p class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-1 leading-snug line-clamp-2">
+                  Interactive plan review with annotations, annotate agent messages, and review PRs.
+                </p>
+              </div>
+              <div class="mt-2.5 pt-1.5 flex items-center justify-between text-[10px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark font-mono">
+                <span class="text-emerald-500 font-semibold">FEATURED</span>
+                <span>4H AGO</span>
+              </div>
+            </div>
+
+            <!-- 推荐 2: pi-processes -->
+            <div onclick="openDetailDrawer('processes')" class="p-3 rounded-lg border border-zai-cardBorderLight dark:border-zai-cardBorderDark bg-zai-cardLight dark:bg-zai-cardDark hover:border-zinc-400 dark:hover:border-zinc-600 transition cursor-pointer flex flex-col justify-between group">
+              <div>
+                <div class="font-mono text-xs font-bold text-zai-fgLight dark:text-zai-fgDark group-hover:underline truncate">
+                  pi-processes
+                </div>
+                <p class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-1 leading-snug line-clamp-2">
+                  Durable background shell processes, log tail streaming, and stdin/stdout interaction.
+                </p>
+              </div>
+              <div class="mt-2.5 pt-1.5 flex items-center justify-between text-[10px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark font-mono">
+                <span class="text-blue-500 font-semibold">FEATURED</span>
+                <span>1D AGO</span>
+              </div>
+            </div>
+
+            <!-- 推荐 3: pi-ask-me -->
+            <div onclick="openDetailDrawer('askme')" class="p-3 rounded-lg border border-zai-cardBorderLight dark:border-zai-cardBorderDark bg-zai-cardLight dark:bg-zai-cardDark hover:border-zinc-400 dark:hover:border-zinc-600 transition cursor-pointer flex flex-col justify-between group">
+              <div>
+                <div class="font-mono text-xs font-bold text-zai-fgLight dark:text-zai-fgDark group-hover:underline truncate">
+                  pi-ask-me
+                </div>
+                <p class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-1 leading-snug line-clamp-2">
+                  Structured questionnaire for missing decisions before autonomous execution.
+                </p>
+              </div>
+              <div class="mt-2.5 pt-1.5 flex items-center justify-between text-[10px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark font-mono">
+                <span class="text-amber-500 font-semibold">INSTALLED</span>
+                <span>7H AGO</span>
+              </div>
+            </div>
+
+            <!-- 推荐 4: pi-subagents -->
+            <div onclick="openDetailDrawer('subagents')" class="p-3 rounded-lg border border-zai-cardBorderLight dark:border-zai-cardBorderDark bg-zai-cardLight dark:bg-zai-cardDark hover:border-zinc-400 dark:hover:border-zinc-600 transition cursor-pointer flex flex-col justify-between group">
+              <div>
+                <div class="font-mono text-xs font-bold text-zai-fgLight dark:text-zai-fgDark group-hover:underline truncate">
+                  pi-subagents
+                </div>
+                <p class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-1 leading-snug line-clamp-2">
+                  Single-agent delegation and scripted multi-agent parallel workflows.
+                </p>
+              </div>
+              <div class="mt-2.5 pt-1.5 flex items-center justify-between text-[10px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark font-mono">
+                <span class="text-purple-500 font-semibold">POPULAR</span>
+                <span>2D AGO</span>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- ------------------------------------------------------------ -->
+        <!-- 板块 2: ALL PACKAGES 头部与筛选栏 (严格采用 pi.dev/packages 的分类) -->
+        <!-- ------------------------------------------------------------ -->
+        <section class="space-y-3.5">
+          
+          <!-- 标题与总数指示 -->
+          <div class="flex items-center justify-between">
+            <h2 class="font-mono text-xs font-bold tracking-wider text-zai-fgLight dark:text-zai-fgDark uppercase">
+              ALL PACKAGES
+            </h2>
+            <div id="pageRangeLabel" class="font-mono text-xs text-zai-fgSubtleLight dark:text-zai-fgSubtleDark">
+              1-6 / 5,376
+            </div>
+          </div>
+
+          <!-- pi.dev 官方规范筛选与搜索控制栏 -->
+          <div class="flex flex-wrap items-center gap-2">
+            <!-- 搜索框: Filter packages by name, description, or author -->
+            <div class="relative flex-1 min-w-[240px]">
+              <input
+                id="filterInput"
+                type="text"
+                oninput="handleSearch(this.value)"
+                placeholder="Filter packages by name, description, or author..."
+                class="w-full h-8 px-3 text-xs font-mono rounded-md border border-zai-cardBorderLight dark:border-zai-cardBorderDark bg-zai-cardLight dark:bg-zai-cardDark text-zai-fgLight dark:text-zai-fgDark placeholder-zai-fgSubtleLight dark:placeholder-zai-fgSubtleDark focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600 transition"
+              >
+            </div>
+
+            <!-- 分类下拉: 严格按照 pi.dev 的 package type 分类 (All types / extension / skill / theme / prompt) -->
+            <div class="relative">
+              <select
+                id="typeFilterSelect"
+                onchange="handleTypeFilter(this.value)"
+                class="h-8 pl-3 pr-7 text-xs font-mono rounded-md border border-zai-cardBorderLight dark:border-zai-cardBorderDark bg-zai-cardLight dark:bg-zai-cardDark text-zai-fgLight dark:text-zai-fgDark focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600 cursor-pointer transition appearance-none"
+              >
+                <option value="all">All types</option>
+                <option value="extension">extension</option>
+                <option value="skill">skill</option>
+                <option value="theme">theme</option>
+                <option value="prompt">prompt</option>
+              </select>
+              <svg class="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </div>
+
+            <!-- 排序下拉: Most downloads / Recently published / A-Z -->
+            <div class="relative">
+              <select
+                id="sortFilterSelect"
+                onchange="handleSortFilter(this.value)"
+                class="h-8 pl-3 pr-7 text-xs font-mono rounded-md border border-zai-cardBorderLight dark:border-zai-cardBorderDark bg-zai-cardLight dark:bg-zai-cardDark text-zai-fgLight dark:text-zai-fgDark focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600 cursor-pointer transition appearance-none"
+              >
+                <option value="downloads">Most downloads</option>
+                <option value="recent">Recently published</option>
+                <option value="alpha">A-Z</option>
+              </select>
+              <svg class="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </div>
+
+            <!-- 操作按钮: [ SEARCH ] [ RESET ] -->
+            <button
+              onclick="triggerSearch()"
+              class="h-8 px-3 rounded-md border border-zai-cardBorderLight dark:border-zai-cardBorderDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark text-xs font-mono text-zai-fgLight dark:text-zai-fgDark transition font-medium"
+            >
+              [ SEARCH ]
+            </button>
+            <button
+              onclick="resetFilter()"
+              class="h-8 px-3 rounded-md border border-zai-cardBorderLight dark:border-zai-cardBorderDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark text-xs font-mono text-zai-fgSubtleLight dark:text-zai-fgSubtleDark transition"
+            >
+              [ RESET ]
+            </button>
+          </div>
+
+          <!-- ------------------------------------------------------------ -->
+          <!-- 板块 3: PACKAGE CARDS (2列双栏网格，完美复刻 pi.dev/packages 卡片) -->
+          <!-- ------------------------------------------------------------ -->
+          <div id="packageGrid" class="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
+            
+            <!-- 卡片 1: pi-mcp-adapter -->
+            <div class="package-card p-4 rounded-xl border border-zai-cardBorderLight dark:border-zai-cardBorderDark bg-zai-cardLight dark:bg-zai-cardDark hover:border-zinc-400 dark:hover:border-zinc-600 transition flex gap-3.5" data-type="extension">
+              <!-- 左侧 Wireframe 图形占位 -->
+              <div class="w-20 h-20 rounded-md pi-wire-thumb shrink-0 hidden sm:block opacity-60"></div>
+              
+              <!-- 右侧详情 -->
+              <div class="flex-1 min-w-0 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-start justify-between gap-2">
+                    <a href="javascript:void(0)" onclick="openDetailDrawer('mcp-adapter')" class="font-mono text-xs font-bold text-zai-fgLight dark:text-zai-fgDark underline hover:text-blue-500 truncate">
+                      pi-mcp-adapter
+                    </a>
+                  </div>
+                  <p class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-1 leading-snug line-clamp-2">
+                    MCP (Model Context Protocol) adapter extension for Pi coding agent
+                  </p>
+                  <div class="mt-2 flex items-center gap-2 text-[10px] font-mono text-zai-fgSubtleLight dark:text-zai-fgSubtleDark flex-wrap">
+                    <span>nicopreme</span>
+                    <span>1.6M/mo</span>
+                    <span>2d ago</span>
+                  </div>
+                  <!-- Type Badge & Links -->
+                  <div class="mt-2 flex items-center gap-2.5 text-[10px] font-mono">
+                    <span class="px-1.5 py-0.2 rounded uppercase font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                      EXTENSION
+                    </span>
+                    <a href="javascript:void(0)" class="text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:underline">npm</a>
+                    <a href="javascript:void(0)" class="text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:underline">repo</a>
+                  </div>
+                </div>
+
+                <!-- 安装命令与操作栏 (完美整合命令行呈现与安装动作) -->
+                <div class="mt-3 pt-2.5 border-t border-zai-cardBorderLight dark:border-zai-cardBorderDark flex items-center justify-between gap-2">
+                  <div class="font-mono text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark truncate select-all">
+                    $ pi install npm:pi-mcp-adapter
+                  </div>
+                  <button onclick="installPackage('pi-mcp-adapter', this)" class="h-6 px-2.5 rounded border border-zai-cardBorderLight dark:border-zai-cardBorderDark hover:bg-blue-600 hover:text-white hover:border-transparent text-xs font-mono font-medium shrink-0 transition">
+                    [ 安装 ]
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 卡片 2: @plannotator/pi-extension -->
+            <div class="package-card p-4 rounded-xl border border-zai-cardBorderLight dark:border-zai-cardBorderDark bg-zai-cardLight dark:bg-zai-cardDark hover:border-zinc-400 dark:hover:border-zinc-600 transition flex gap-3.5" data-type="extension">
+              <div class="w-20 h-20 rounded-md pi-wire-thumb shrink-0 hidden sm:block opacity-60"></div>
+              
+              <div class="flex-1 min-w-0 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-start justify-between gap-2">
+                    <a href="javascript:void(0)" onclick="openDetailDrawer('plannotator')" class="font-mono text-xs font-bold text-zai-fgLight dark:text-zai-fgDark underline hover:text-blue-500 truncate">
+                      @plannotator/pi-extension
+                    </a>
+                  </div>
+                  <p class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-1 leading-snug line-clamp-2">
+                    Plannotator Pi extension - interactive plan review with annotations, annotate agent messages, and review code/PRs.
+                  </p>
+                  <div class="mt-2 flex items-center gap-2 text-[10px] font-mono text-zai-fgSubtleLight dark:text-zai-fgSubtleDark flex-wrap">
+                    <span>backnotprop</span>
+                    <span>132.7K/mo</span>
+                    <span>4h ago</span>
+                  </div>
+                  <div class="mt-2 flex items-center gap-2.5 text-[10px] font-mono">
+                    <span class="px-1.5 py-0.2 rounded uppercase font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                      EXTENSION
+                    </span>
+                    <a href="javascript:void(0)" class="text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:underline">npm</a>
+                    <a href="javascript:void(0)" class="text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:underline">repo</a>
+                  </div>
+                </div>
+
+                <div class="mt-3 pt-2.5 border-t border-zai-cardBorderLight dark:border-zai-cardBorderDark flex items-center justify-between gap-2">
+                  <div class="font-mono text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark truncate select-all">
+                    $ pi install npm:@plannotator/pi-extension
+                  </div>
+                  <button onclick="installPackage('@plannotator/pi-extension', this)" class="h-6 px-2.5 rounded border border-zai-cardBorderLight dark:border-zai-cardBorderDark hover:bg-blue-600 hover:text-white hover:border-transparent text-xs font-mono font-medium shrink-0 transition">
+                    [ 安装 ]
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 卡片 3: pi-subagents -->
+            <div class="package-card p-4 rounded-xl border border-zai-cardBorderLight dark:border-zai-cardBorderDark bg-zai-cardLight dark:bg-zai-cardDark hover:border-zinc-400 dark:hover:border-zinc-600 transition flex gap-3.5" data-type="extension">
+              <div class="w-20 h-20 rounded-md pi-wire-thumb shrink-0 hidden sm:block opacity-60"></div>
+              
+              <div class="flex-1 min-w-0 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-start justify-between gap-2">
+                    <a href="javascript:void(0)" onclick="openDetailDrawer('subagents')" class="font-mono text-xs font-bold text-zai-fgLight dark:text-zai-fgDark underline hover:text-blue-500 truncate">
+                      pi-subagents
+                    </a>
+                  </div>
+                  <p class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-1 leading-snug line-clamp-2">
+                    Pi extension for single-agent delegation and scripted multi-agent workflows
+                  </p>
+                  <div class="mt-2 flex items-center gap-2 text-[10px] font-mono text-zai-fgSubtleLight dark:text-zai-fgSubtleDark flex-wrap">
+                    <span>nicopreme</span>
+                    <span>623K/mo</span>
+                    <span>2d ago</span>
+                  </div>
+                  <div class="mt-2 flex items-center gap-2.5 text-[10px] font-mono">
+                    <span class="px-1.5 py-0.2 rounded uppercase font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                      EXTENSION
+                    </span>
+                    <a href="javascript:void(0)" class="text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:underline">npm</a>
+                    <a href="javascript:void(0)" class="text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:underline">repo</a>
+                  </div>
+                </div>
+
+                <div class="mt-3 pt-2.5 border-t border-zai-cardBorderLight dark:border-zai-cardBorderDark flex items-center justify-between gap-2">
+                  <div class="font-mono text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark truncate select-all">
+                    $ pi install npm:pi-subagents
+                  </div>
+                  <button onclick="installPackage('pi-subagents', this)" class="h-6 px-2.5 rounded border border-zai-cardBorderLight dark:border-zai-cardBorderDark hover:bg-blue-600 hover:text-white hover:border-transparent text-xs font-mono font-medium shrink-0 transition">
+                    [ 安装 ]
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 卡片 4: @dietrichgebert/ponytail -->
+            <div class="package-card p-4 rounded-xl border border-zai-cardBorderLight dark:border-zai-cardBorderDark bg-zai-cardLight dark:bg-zai-cardDark hover:border-zinc-400 dark:hover:border-zinc-600 transition flex gap-3.5" data-type="skill">
+              <div class="w-20 h-20 rounded-md pi-wire-thumb shrink-0 hidden sm:block opacity-60"></div>
+              
+              <div class="flex-1 min-w-0 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-start justify-between gap-2">
+                    <a href="javascript:void(0)" class="font-mono text-xs font-bold text-zai-fgLight dark:text-zai-fgDark underline hover:text-blue-500 truncate">
+                      @dietrichgebert/ponytail
+                    </a>
+                  </div>
+                  <p class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-1 leading-snug line-clamp-2">
+                    Lazy senior dev mode for AI agents. The best code is the code you never wrote.
+                  </p>
+                  <div class="mt-2 flex items-center gap-2 text-[10px] font-mono text-zai-fgSubtleLight dark:text-zai-fgSubtleDark flex-wrap">
+                    <span>dietrichgebert</span>
+                    <span>97.5K/mo</span>
+                    <span>3d ago</span>
+                  </div>
+                  <div class="mt-2 flex items-center gap-2.5 text-[10px] font-mono">
+                    <span class="px-1.5 py-0.2 rounded uppercase font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                      SKILL
+                    </span>
+                    <a href="javascript:void(0)" class="text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:underline">npm</a>
+                    <a href="javascript:void(0)" class="text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:underline">repo</a>
+                  </div>
+                </div>
+
+                <div class="mt-3 pt-2.5 border-t border-zai-cardBorderLight dark:border-zai-cardBorderDark flex items-center justify-between gap-2">
+                  <div class="font-mono text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark truncate select-all">
+                    $ pi install npm:@dietrichgebert/ponytail
+                  </div>
+                  <button onclick="installPackage('@dietrichgebert/ponytail', this)" class="h-6 px-2.5 rounded border border-zai-cardBorderLight dark:border-zai-cardBorderDark hover:bg-blue-600 hover:text-white hover:border-transparent text-xs font-mono font-medium shrink-0 transition">
+                    [ 安装 ]
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 卡片 5: pi-processes -->
+            <div class="package-card p-4 rounded-xl border border-zai-cardBorderLight dark:border-zai-cardBorderDark bg-zai-cardLight dark:bg-zai-cardDark hover:border-zinc-400 dark:hover:border-zinc-600 transition flex gap-3.5" data-type="extension">
+              <div class="w-20 h-20 rounded-md pi-wire-thumb shrink-0 hidden sm:block opacity-60"></div>
+              
+              <div class="flex-1 min-w-0 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-start justify-between gap-2">
+                    <a href="javascript:void(0)" onclick="openDetailDrawer('processes')" class="font-mono text-xs font-bold text-zai-fgLight dark:text-zai-fgDark underline hover:text-blue-500 truncate">
+                      pi-processes
+                    </a>
+                  </div>
+                  <p class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-1 leading-snug line-clamp-2">
+                    Pi extension for durable background shell tasks, read-only delegated agents, and process inspection.
+                  </p>
+                  <div class="mt-2 flex items-center gap-2 text-[10px] font-mono text-zai-fgSubtleLight dark:text-zai-fgSubtleDark flex-wrap">
+                    <span>ismailsaleekh</span>
+                    <span>109K/mo</span>
+                    <span>11d ago</span>
+                  </div>
+                  <div class="mt-2 flex items-center gap-2.5 text-[10px] font-mono">
+                    <span class="px-1.5 py-0.2 rounded uppercase font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                      EXTENSION
+                    </span>
+                    <a href="javascript:void(0)" class="text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:underline">npm</a>
+                    <a href="javascript:void(0)" class="text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:underline">repo</a>
+                  </div>
+                </div>
+
+                <div class="mt-3 pt-2.5 border-t border-zai-cardBorderLight dark:border-zai-cardBorderDark flex items-center justify-between gap-2">
+                  <div class="font-mono text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark truncate select-all">
+                    $ pi install npm:pi-processes
+                  </div>
+                  <button onclick="installPackage('pi-processes', this)" class="h-6 px-2.5 rounded border border-zai-cardBorderLight dark:border-zai-cardBorderDark hover:bg-blue-600 hover:text-white hover:border-transparent text-xs font-mono font-medium shrink-0 transition">
+                    [ 安装 ]
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 卡片 6: pi-ask-me -->
+            <div class="package-card p-4 rounded-xl border border-zai-cardBorderLight dark:border-zai-cardBorderDark bg-zai-cardLight dark:bg-zai-cardDark hover:border-zinc-400 dark:hover:border-zinc-600 transition flex gap-3.5" data-type="extension">
+              <div class="w-20 h-20 rounded-md pi-wire-thumb shrink-0 hidden sm:block opacity-60"></div>
+              
+              <div class="flex-1 min-w-0 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-start justify-between gap-2">
+                    <a href="javascript:void(0)" onclick="openDetailDrawer('askme')" class="font-mono text-xs font-bold text-zai-fgLight dark:text-zai-fgDark underline hover:text-blue-500 truncate">
+                      pi-ask-me
+                    </a>
+                  </div>
+                  <p class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-1 leading-snug line-clamp-2">
+                    A structured questionnaire the model can put to you when it would otherwise guess, with typed options.
+                  </p>
+                  <div class="mt-2 flex items-center gap-2 text-[10px] font-mono text-zai-fgSubtleLight dark:text-zai-fgSubtleDark flex-wrap">
+                    <span>juicesharp</span>
+                    <span>301K/mo</span>
+                    <span>7h ago</span>
+                  </div>
+                  <div class="mt-2 flex items-center gap-2.5 text-[10px] font-mono">
+                    <span class="px-1.5 py-0.2 rounded uppercase font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                      EXTENSION
+                    </span>
+                    <a href="javascript:void(0)" class="text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:underline">npm</a>
+                    <a href="javascript:void(0)" class="text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:underline">repo</a>
+                  </div>
+                </div>
+
+                <div class="mt-3 pt-2.5 border-t border-zai-cardBorderLight dark:border-zai-cardBorderDark flex items-center justify-between gap-2">
+                  <div class="font-mono text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark truncate select-all">
+                    $ pi install npm:pi-ask-me
+                  </div>
+                  <span class="text-xs font-mono text-emerald-500 font-semibold px-2 py-0.5">
+                    [ 已安装 ✓ ]
+                  </span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ------------------------------------------------------------ -->
+          <!-- 板块 4: 分页器 (PAGINATION) —— 严格响应反馈 1，代替滚动加载 -->
+          <!-- ------------------------------------------------------------ -->
+          <div class="pt-6 pb-2 border-t border-zai-cardBorderLight dark:border-zai-cardBorderDark flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-mono">
+            <div class="text-zai-fgSubtleLight dark:text-zai-fgSubtleDark text-[11px]">
+              Showing <span id="pagRangeText" class="font-bold text-zai-fgLight dark:text-zai-fgDark">1-6</span> of 5,376 packages (20 per page)
+            </div>
+
+            <!-- 分页控件: ← Previous  1  2  3  ...  269  Next → -->
+            <div class="flex items-center gap-1.5 select-none">
+              <!-- 上一页 -->
+              <button
+                id="btnPrevPage"
+                onclick="goToPage(currentPage - 1)"
+                disabled
+                class="h-7 px-2.5 rounded border border-zai-cardBorderLight dark:border-zai-cardBorderDark text-zai-fgSubtleLight dark:text-zai-fgSubtleDark disabled:opacity-40 disabled:cursor-not-allowed hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition"
+              >
+                ← Previous
+              </button>
+
+              <!-- 页码按钮集合 -->
+              <button onclick="goToPage(1)" class="page-btn h-7 w-7 rounded border border-zinc-500 bg-zinc-200 dark:bg-zinc-700 text-zai-fgLight dark:text-zai-fgDark font-bold">1</button>
+              <button onclick="goToPage(2)" class="page-btn h-7 w-7 rounded border border-zai-cardBorderLight dark:border-zai-cardBorderDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark">2</button>
+              <button onclick="goToPage(3)" class="page-btn h-7 w-7 rounded border border-zai-cardBorderLight dark:border-zai-cardBorderDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark">3</button>
+              <span class="px-1 text-zai-fgSubtleLight dark:text-zai-fgSubtleDark">…</span>
+              <button onclick="goToPage(269)" class="page-btn h-7 px-2 rounded border border-zai-cardBorderLight dark:border-zai-cardBorderDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark">269</button>
+
+              <!-- 下一页 -->
+              <button
+                id="btnNextPage"
+                onclick="goToPage(currentPage + 1)"
+                class="h-7 px-2.5 rounded border border-zai-cardBorderLight dark:border-zai-cardBorderDark text-zai-fgLight dark:text-zai-fgDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition"
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+
+        </section>
+
+      </div>
+
+      <!-- ============================================================== -->
+      <!-- VIEW 2: 已安装插件管理视图 (INSTALLED VIEW) -->
+      <!-- ============================================================== -->
+      <div id="viewInstalled" class="hidden space-y-5">
+        
+        <!-- 更新提示横幅 -->
+        <div id="updateBanner" class="p-3.5 rounded-xl border border-amber-500/25 bg-amber-500/8 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5">
+            <div class="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path></svg>
+            </div>
+            <div>
+              <div class="text-xs font-semibold text-zai-fgLight dark:text-zai-fgDark font-mono">
+                1 package has an update available
+              </div>
+              <div class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-0.5">
+                <span class="font-mono text-amber-500 font-semibold">@plannotator/pi-extension</span> (0.4.2 → 0.5.0)
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button onclick="updateAllPlugins()" class="h-7 px-3 rounded-md bg-amber-500 hover:bg-amber-600 text-white text-xs font-mono font-medium transition shadow-xs">
+              [ 全部升级 ]
+            </button>
+          </div>
+        </div>
+
+        <!-- 已安装列表管理容器 -->
+        <div class="space-y-3">
+          <div class="flex items-center justify-between px-0.5">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-mono font-bold text-zai-fgLight dark:text-zai-fgDark uppercase tracking-wider">
+                CURRENT SCOPE PACKAGES
+              </span>
+              <span class="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-500 font-mono font-medium">
+                3 READY
+              </span>
+            </div>
+            <span class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark">修改开关或安装后在下个新建会话生效</span>
+          </div>
+
+          <div class="rounded-xl border border-zai-cardBorderLight dark:border-zai-cardBorderDark bg-zai-cardLight dark:bg-zai-cardDark divide-y divide-zai-cardBorderLight dark:divide-zai-cardBorderDark overflow-hidden font-mono text-xs">
+            
+            <!-- 已安装 1: pi-ask-me -->
+            <div class="p-3.5 flex items-center justify-between gap-4 hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition">
+              <div class="flex items-center gap-3 min-w-0">
+                <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input type="checkbox" checked class="sr-only switch-checkbox" onchange="togglePluginEnabled('pi-ask-me', this.checked)">
+                  <div class="w-8 h-4.5 bg-zinc-300 dark:bg-zinc-700 rounded-full switch-track transition p-0.5">
+                    <div class="w-3.5 h-3.5 bg-white rounded-full switch-thumb transition shadow-xs"></div>
+                  </div>
+                </label>
+
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-bold text-zai-fgLight dark:text-zai-fgDark">pi-ask-me</span>
+                    <span class="px-1.5 py-0.2 rounded text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">ENABLED</span>
+                    <span class="text-[10px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark">scope:user</span>
+                    <span class="text-[10px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark">v0.9.5</span>
+                  </div>
+                  <div class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-0.5 font-sans">
+                    向用户发起结构化多选或澄清提问，在缺少关键决策时由用户明确边界后再继续执行。
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 shrink-0">
+                <button onclick="openConfigDrawer('pi-ask-me')" class="h-7 px-2.5 rounded border border-zai-cardBorderLight dark:border-zai-cardBorderDark hover:bg-zai-hoverLight dark:hover:bg-zai-hoverDark text-xs font-mono flex items-center gap-1 transition">
+                  <span>[ 配置 ]</span>
+                </button>
+                <button onclick="uninstallPlugin('pi-ask-me')" class="h-7 w-7 rounded border border-zai-cardBorderLight dark:border-zai-cardBorderDark hover:bg-rose-500/10 hover:text-rose-500 text-zai-fgSubtleLight dark:text-zai-fgSubtleDark flex items-center justify-center transition" title="卸载">
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <!-- 已安装 2: @plannotator/pi-extension -->
+            <div class="p-3.5 flex items-center justify-between gap-4 hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition">
+              <div class="flex items-center gap-3 min-w-0">
+                <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input type="checkbox" checked class="sr-only switch-checkbox" onchange="togglePluginEnabled('@plannotator/pi-extension', this.checked)">
+                  <div class="w-8 h-4.5 bg-zinc-300 dark:bg-zinc-700 rounded-full switch-track transition p-0.5">
+                    <div class="w-3.5 h-3.5 bg-white rounded-full switch-thumb transition shadow-xs"></div>
+                  </div>
+                </label>
+
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-bold text-zai-fgLight dark:text-zai-fgDark">@plannotator/pi-extension</span>
+                    <span class="px-1.5 py-0.2 rounded text-[10px] bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">EXTENSION</span>
+                    <span class="px-1.5 py-0.2 rounded text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-bold">UPGRADE: 0.5.0</span>
+                    <span class="text-[10px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark">v0.4.2</span>
+                  </div>
+                  <div class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-0.5 font-sans">
+                    激活输入框 /plan 切换，状态面板显示待办进度挂件，接入可视化审查流。
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 shrink-0">
+                <button onclick="updateSinglePlugin('@plannotator/pi-extension')" class="h-7 px-2.5 rounded bg-amber-500 hover:bg-amber-600 text-white text-xs font-mono font-medium flex items-center gap-1 transition shadow-xs">
+                  <span>[ 升级 ]</span>
+                </button>
+                <button onclick="uninstallPlugin('@plannotator/pi-extension')" class="h-7 w-7 rounded border border-zai-cardBorderLight dark:border-zai-cardBorderDark hover:bg-rose-500/10 hover:text-rose-500 text-zai-fgSubtleLight dark:text-zai-fgSubtleDark flex items-center justify-center transition" title="卸载">
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <!-- 已安装 3: context7 -->
+            <div class="p-3.5 flex items-center justify-between gap-4 hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark transition">
+              <div class="flex items-center gap-3 min-w-0">
+                <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input type="checkbox" checked class="sr-only switch-checkbox" onchange="togglePluginEnabled('context7', this.checked)">
+                  <div class="w-8 h-4.5 bg-zinc-300 dark:bg-zinc-700 rounded-full switch-track transition p-0.5">
+                    <div class="w-3.5 h-3.5 bg-white rounded-full switch-thumb transition shadow-xs"></div>
+                  </div>
+                </label>
+
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-bold text-zai-fgLight dark:text-zai-fgDark">context7</span>
+                    <span class="px-1.5 py-0.2 rounded text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">ENABLED</span>
+                    <span class="text-[10px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark">scope:user</span>
+                    <span class="text-[10px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark">v0.4.0</span>
+                  </div>
+                  <div class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-0.5 font-sans">
+                    精准检索第三方框架与官方开源文档，杜绝过时或臆造的 API 实现。
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 shrink-0">
+                <button onclick="uninstallPlugin('context7')" class="h-7 w-7 rounded border border-zai-cardBorderLight dark:border-zai-cardBorderDark hover:bg-rose-500/10 hover:text-rose-500 text-zai-fgSubtleLight dark:text-zai-fgSubtleDark flex items-center justify-center transition" title="卸载">
+                  ✕
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- MODAL: 从自定义源安装插件弹窗 -->
+  <!-- ============================================================== -->
+  <div id="installSourceModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 anim-fade-in font-mono">
+    <div class="w-full max-w-md rounded-xl border border-zai-cardBorderLight dark:border-zai-cardBorderDark bg-zai-cardLight dark:bg-zai-cardDark shadow-2xl p-5 anim-slide-up">
+      <div class="flex items-center justify-between pb-3 border-b border-zai-cardBorderLight dark:border-zai-cardBorderDark">
+        <div>
+          <h3 class="text-xs font-bold text-zai-fgLight dark:text-zai-fgDark uppercase tracking-wider">INSTALL FROM CUSTOM SOURCE</h3>
+          <p class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark font-sans mt-0.5">支持指定 npm 包、git 仓库或 https 地址</p>
+        </div>
+        <button onclick="closeInstallSourceModal()" class="text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:text-zai-fgLight dark:hover:text-zai-fgDark p-1 font-mono">
+          ✕
+        </button>
+      </div>
+
+      <div class="py-4 space-y-4 text-xs">
+        <div>
+          <label class="block font-semibold text-zai-fgLight dark:text-zai-fgDark mb-1.5 font-sans">安装生效范围</label>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex items-center gap-2 p-2 rounded-lg border border-zai-cardBorderLight dark:border-zai-cardBorderDark bg-zai-surfaceLight dark:bg-zai-surfaceDark cursor-pointer font-sans">
+              <input type="radio" name="modalScope" value="user" checked class="text-blue-600">
+              <div>
+                <div class="font-medium">全局用户 (User)</div>
+                <div class="text-[10px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark">所有工作区共享</div>
+              </div>
+            </label>
+            <label class="flex items-center gap-2 p-2 rounded-lg border border-zai-cardBorderLight dark:border-zai-cardBorderDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark cursor-pointer font-sans">
+              <input type="radio" name="modalScope" value="project" class="text-blue-600">
+              <div>
+                <div class="font-medium">当前工作区 (Project)</div>
+                <div class="text-[10px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark">仅在当前项目生效</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-zai-fgLight dark:text-zai-fgDark mb-1.5 font-sans">插件安装源地址</label>
+          <input
+            id="modalSourceInput"
+            type="text"
+            oninput="validateSourceInput(this.value)"
+            placeholder="如 npm:my-pkg 或 git:https://github.com/..."
+            class="w-full h-8 px-3 text-xs font-mono rounded border border-zai-cardBorderLight dark:border-zai-cardBorderDark bg-zinc-50 dark:bg-zinc-900 text-zai-fgLight dark:text-zai-fgDark focus:outline-none focus:ring-1 focus:ring-zinc-500"
+          >
+          <div id="sourceValidationHint" class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark mt-1 font-sans">
+            支持格式: npm:包名、git:https:// 或 直接包名
+          </div>
+        </div>
+
+        <div class="p-2.5 rounded bg-zinc-100 dark:bg-zinc-800/60 border border-zai-cardBorderLight dark:border-zai-cardBorderDark text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark font-sans leading-relaxed">
+          安全说明：安装后将写入对应范围的 Pi <code class="font-mono text-[10px]">settings.json</code>。禁止本地路径或含 shell 字符的源。下次新建会话时加载。
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-zai-cardBorderLight dark:border-zai-cardBorderDark">
+        <button onclick="closeInstallSourceModal()" class="h-7 px-3 rounded border border-zai-cardBorderLight dark:border-zai-cardBorderDark hover:bg-zai-hoverLight dark:hover:bg-zai-hoverDark text-xs text-zai-fgSubtleLight dark:text-zai-fgSubtleDark">
+          [ CANCEL ]
+        </button>
+        <button id="modalSubmitBtn" onclick="submitModalInstall()" class="h-7 px-3.5 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition">
+          [ INSTALL ]
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- DRAWER: 插件详情侧栏抽屉 -->
+  <!-- ============================================================== -->
+  <div id="detailDrawer" class="hidden fixed inset-y-0 right-0 w-full sm:w-96 z-40 bg-zai-cardLight dark:bg-zai-cardDark border-l border-zai-cardBorderLight dark:border-zai-cardBorderDark shadow-2xl flex flex-col anim-slide-right font-mono">
+    <div class="p-4 border-b border-zai-cardBorderLight dark:border-zai-cardBorderDark flex items-center justify-between shrink-0">
+      <div>
+        <div id="drawerTitle" class="text-xs font-bold text-zai-fgLight dark:text-zai-fgDark truncate">
+          @plannotator/pi-extension
+        </div>
+        <div id="drawerSubtitle" class="text-[10px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark">
+          npm package • v0.4.2
+        </div>
+      </div>
+      <button onclick="closeDetailDrawer()" class="text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:text-zai-fgLight dark:hover:text-zai-fgDark p-1">
+        ✕
+      </button>
+    </div>
+
+    <div class="flex-1 overflow-y-auto p-4 space-y-4 text-xs font-sans">
+      <div>
+        <h4 class="font-bold text-zai-fgLight dark:text-zai-fgDark mb-1 font-mono text-xs">PACKAGE DESCRIPTION</h4>
+        <p id="drawerDesc" class="text-zai-fgSubtleLight dark:text-zai-fgSubtleDark leading-relaxed text-[11px]">
+          激活输入框 /plan 切换，状态面板显示待办进度挂件，接入可视化审查流。深度适配 ZCode 任务生命周期。
+        </p>
+      </div>
+
+      <div>
+        <h4 class="font-bold text-zai-fgLight dark:text-zai-fgDark mb-1.5 font-mono text-xs">COMMAND OVERVIEW</h4>
+        <div class="p-2 rounded bg-zinc-100 dark:bg-zinc-800/60 border border-zai-cardBorderLight dark:border-zai-cardBorderDark font-mono text-[11px] select-all">
+          $ pi install npm:<span id="drawerPkgName">@plannotator/pi-extension</span>
+        </div>
+      </div>
+
+      <div>
+        <h4 class="font-bold text-zai-fgLight dark:text-zai-fgDark mb-1.5 font-mono text-xs">METADATA</h4>
+        <div class="space-y-1 text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark font-mono">
+          <div class="flex justify-between py-1 border-b border-zai-cardBorderLight dark:border-zai-cardBorderDark">
+            <span>LICENSE</span>
+            <span>MIT</span>
+          </div>
+          <div class="flex justify-between py-1 border-b border-zai-cardBorderLight dark:border-zai-cardBorderDark">
+            <span>COMPAT</span>
+            <span>Pi Protocol v4</span>
+          </div>
+          <div class="flex justify-between py-1">
+            <span>KEYWORD</span>
+            <span>pi-package</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="p-4 border-t border-zai-cardBorderLight dark:border-zai-cardBorderDark flex items-center justify-between shrink-0 bg-zinc-50 dark:bg-zinc-900/40">
+      <span class="text-[11px] text-zai-fgSubtleLight dark:text-zai-fgSubtleDark">SCOPE: USER</span>
+      <button onclick="handleDrawerAction()" class="h-7 px-4 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs font-mono font-medium transition">
+        [ INSTALL ]
+      </button>
+    </div>
+  </div>
+
+  <!-- TOAST 提示容器 -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- ============================================================== -->
+  <!-- JAVASCRIPT: 交互、搜索、分类与分页逻辑 -->
+  <!-- ============================================================== -->
+  <script>
+    let currentPage = 1;
+    const totalPages = 269;
+    const itemsPerPage = 6;
+
+    // 模拟包数据库，支持真实分类和翻页
+    const packagesData = [
+      { name: 'pi-mcp-adapter', author: 'nicopreme', downloads: '1.6M/mo', time: '2d ago', type: 'extension', desc: 'MCP (Model Context Protocol) adapter extension for Pi coding agent', installed: false },
+      { name: '@plannotator/pi-extension', author: 'backnotprop', downloads: '132.7K/mo', time: '4h ago', type: 'extension', desc: 'Plannotator Pi extension - interactive plan review with annotations, annotate agent messages, and review code/PRs', installed: false },
+      { name: 'pi-subagents', author: 'nicopreme', downloads: '623K/mo', time: '2d ago', type: 'extension', desc: 'Pi extension for single-agent delegation and scripted multi-agent workflows', installed: false },
+      { name: '@dietrichgebert/ponytail', author: 'dietrichgebert', downloads: '97.5K/mo', time: '3d ago', type: 'skill', desc: 'Lazy senior dev mode for AI agents. The best code is the code you never wrote.', installed: false },
+      { name: 'pi-processes', author: 'ismailsaleekh', downloads: '109K/mo', time: '11d ago', type: 'extension', desc: 'Pi extension for durable background shell tasks, read-only delegated agents, and process inspection.', installed: false },
+      { name: 'pi-ask-me', author: 'juicesharp', downloads: '301K/mo', time: '7h ago', type: 'extension', desc: 'A structured questionnaire the model can put to you when it would otherwise guess, with typed options.', installed: true },
+      { name: 'billion-context', author: 'ranxianglei', downloads: '1.1M/mo', time: '1h ago', type: 'extension', desc: 'A context-compression plugin — small context windows (a 100K context is enough), 5x fewer tokens.', installed: false },
+      { name: 'pi-web-access', author: 'nicopreme', downloads: '720.5K/mo', time: '4h ago', type: 'extension', desc: 'Web search, URL fetching, GitHub repo cloning, PDF extraction, and YouTube video understanding.', installed: false },
+      { name: 'bigpowers', author: 'danielvm', downloads: '130.5K/mo', time: '20d ago', type: 'skill', desc: '73 agent skills synthesizing 17 years of software engineering discipline into a prescriptive methodology.', installed: false },
+      { name: 'pi-powerline-footer', author: 'nicopreme', downloads: '106.8K/mo', time: '1d ago', type: 'theme', desc: 'Powerline-style status bar theme extension for pi coding agent.', installed: false },
+      { name: 'pi-lens', author: 'apmantza', downloads: '102K/mo', time: '1d ago', type: 'extension', desc: 'Real-time code feedback for pi — LSP, linters, formatters, type-checking, structural analysis.', installed: false },
+      { name: 'system-prompt-pro', author: 'agent-dev', downloads: '45K/mo', time: '5d ago', type: 'prompt', desc: 'High precision prompt engineering template pack for coding workflows.', installed: false }
+    ];
+
+    // 主题切换
+    function toggleTheme() {
+      const html = document.documentElement;
+      if (html.classList.contains('dark')) {
+        html.classList.remove('dark');
+        document.getElementById('themeIcon').textContent = '☀️';
+        document.getElementById('themeLabel').textContent = '浅色模式';
+      } else {
+        html.classList.add('dark');
+        document.getElementById('themeIcon').textContent = '🌙';
+        document.getElementById('themeLabel').textContent = '暗色模式';
+      }
+    }
+
+    // 子视图切换 (Marketplace vs Installed)
+    function switchSubTab(target) {
+      const btnMarket = document.getElementById('subTabMarket');
+      const btnInstalled = document.getElementById('subTabInstalled');
+      const viewMarket = document.getElementById('viewMarket');
+      const viewInstalled = document.getElementById('viewInstalled');
+      const installAllPinnedBtn = document.getElementById('installAllPinnedBtn');
+      const checkUpdatesBtn = document.getElementById('checkUpdatesBtn');
+
+      if (target === 'market') {
+        btnMarket.className = "h-6.5 px-3 rounded-md text-xs font-semibold flex items-center gap-1.5 transition bg-white dark:bg-zinc-700 text-zai-fgLight dark:text-zai-fgDark shadow-2xs";
+        btnInstalled.className = "h-6.5 px-3 rounded-md text-xs font-medium flex items-center gap-1.5 transition text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:text-zai-fgLight dark:hover:text-zai-fgDark";
+        viewMarket.classList.remove('hidden');
+        viewInstalled.classList.add('hidden');
+        installAllPinnedBtn.classList.remove('hidden');
+        checkUpdatesBtn.classList.add('hidden');
+      } else {
+        btnInstalled.className = "h-6.5 px-3 rounded-md text-xs font-semibold flex items-center gap-1.5 transition bg-white dark:bg-zinc-700 text-zai-fgLight dark:text-zai-fgDark shadow-2xs";
+        btnMarket.className = "h-6.5 px-3 rounded-md text-xs font-medium flex items-center gap-1.5 transition text-zai-fgSubtleLight dark:text-zai-fgSubtleDark hover:text-zai-fgLight dark:hover:text-zai-fgDark";
+        viewInstalled.classList.remove('hidden');
+        viewMarket.classList.add('hidden');
+        installAllPinnedBtn.classList.add('hidden');
+        checkUpdatesBtn.classList.remove('hidden');
+      }
+    }
+
+    // 分页器逻辑 (Feedback 1 响应)
+    function goToPage(page) {
+      if (page < 1 || page > totalPages) return;
+      currentPage = page;
+
+      // 更新按钮状态
+      document.getElementById('btnPrevPage').disabled = (currentPage === 1);
+      document.getElementById('btnNextPage').disabled = (currentPage === totalPages);
+
+      // 更新页码高亮
+      document.querySelectorAll('.page-btn').forEach(btn => {
+        if (btn.textContent.trim() == currentPage) {
+          btn.className = "page-btn h-7 w-7 rounded border border-zinc-500 bg-zinc-200 dark:bg-zinc-700 text-zai-fgLight dark:text-zai-fgDark font-bold";
+        } else {
+          btn.className = "page-btn h-7 w-7 rounded border border-zai-cardBorderLight dark:border-zai-cardBorderDark hover:bg-zai-surfaceLight dark:hover:bg-zai-surfaceDark";
+        }
+      });
+
+      const start = (currentPage - 1) * itemsPerPage + 1;
+      const end = Math.min(currentPage * itemsPerPage, 5376);
+      document.getElementById('pageRangeLabel').textContent = `${start}-${end} / 5,376`;
+      document.getElementById('pagRangeText').textContent = `${start}-${end}`;
+
+      renderPageItems();
+      showToast(`已翻至第 ${currentPage} 页 (Showing ${start}-${end})`);
+    }
+
+    function renderPageItems() {
+      // 模拟根据页码切换数据展示
+      const cards = document.querySelectorAll('.package-card');
+      cards.forEach((card, index) => {
+        card.style.opacity = '0.3';
+        setTimeout(() => { card.style.opacity = '1'; }, 100);
+      });
+    }
+
+    // 搜索过滤与分类 (Feedback 2 响应：严格遵循 pi.dev 的 Type 分类)
+    function handleSearch(val) {
+      filterPackages();
+    }
+
+    function handleTypeFilter(type) {
+      filterPackages();
+    }
+
+    function handleSortFilter(sort) {
+      showToast(`排序方式已切换至: ${sort}`);
+    }
+
+    function filterPackages() {
+      const q = document.getElementById('filterInput').value.trim().toLowerCase();
+      const type = document.getElementById('typeFilterSelect').value;
+
+      document.querySelectorAll('.package-card').forEach(card => {
+        const text = card.textContent.toLowerCase();
+        const cardType = card.getAttribute('data-type') || 'extension';
+
+        const matchQuery = !q || text.includes(q);
+        const matchType = (type === 'all') || (cardType === type);
+
+        card.style.display = (matchQuery && matchType) ? 'flex' : 'none';
+      });
+    }
+
+    function resetFilter() {
+      document.getElementById('filterInput').value = '';
+      document.getElementById('typeFilterSelect').value = 'all';
+      document.getElementById('sortFilterSelect').value = 'downloads';
+      filterPackages();
+      showToast('筛选条件已重置为全部');
+    }
+
+    function triggerSearch() {
+      filterPackages();
+      showToast('搜索完成');
+    }
+
+    // 安装操作
+    function installPackage(name, btn) {
+      btn.textContent = '[ 安装中... ]';
+      btn.disabled = true;
+      setTimeout(() => {
+        btn.textContent = '[ 已安装 ✓ ]';
+        btn.className = "h-6 px-2.5 rounded text-xs font-mono font-semibold text-emerald-500 shrink-0";
+        showToast(`已成功安装 ${name}！已写入 settings.json`, 'success');
+      }, 900);
+    }
+
+    function installAllPinned() {
+      showToast('正在批量安装 3 个官方推荐插件...');
+      setTimeout(() => {
+        showToast('3 个官方推荐插件已全部安装完毕！', 'success');
+      }, 1400);
+    }
+
+    // 弹窗相关
+    function openInstallSourceModal() {
+      document.getElementById('installSourceModal').classList.remove('hidden');
+      document.getElementById('modalSourceInput').focus();
+    }
+
+    function closeInstallSourceModal() {
+      document.getElementById('installSourceModal').classList.add('hidden');
+    }
+
+    function validateSourceInput(v) {
+      const hint = document.getElementById('sourceValidationHint');
+      const val = v.trim();
+      if (!val) {
+        hint.innerHTML = '支持格式: npm:包名、git:https:// 或 直接包名';
+        return;
+      }
+      if (/[\s"'`;&|$<>\\]/.test(val)) {
+        hint.innerHTML = '<span class="text-rose-500">⚠️ 包含非法字符，禁止 shell 注入符号</span>';
+      } else if (val.startsWith('/') || val.startsWith('./') || val.startsWith('file:') || /^[a-zA-Z]:\\/.test(val)) {
+        hint.innerHTML = '<span class="text-rose-500">⚠️ 不支持安装本地路径或 file: 源</span>';
+      } else {
+        hint.innerHTML = '<span class="text-emerald-500">✓ 格式合法 (将被规范化安装)</span>';
+      }
+    }
+
+    function submitModalInstall() {
+      const val = document.getElementById('modalSourceInput').value.trim();
+      if (!val) return;
+      closeInstallSourceModal();
+      showToast(`正在从源 ${val} 下载安装...`);
+      setTimeout(() => {
+        showToast(`插件 ${val} 安装成功！下次新建会话时生效。`, 'success');
+      }, 1000);
+    }
+
+    // 抽屉详情
+    function openDetailDrawer(id) {
+      document.getElementById('detailDrawer').classList.remove('hidden');
+      if (id === 'plannotator') {
+        document.getElementById('drawerTitle').textContent = '@plannotator/pi-extension';
+        document.getElementById('drawerPkgName').textContent = '@plannotator/pi-extension';
+        document.getElementById('drawerDesc').textContent = 'Plannotator Pi extension - interactive plan review with annotations, annotate agent messages, and review code/PRs.';
+      } else if (id === 'processes') {
+        document.getElementById('drawerTitle').textContent = 'pi-processes';
+        document.getElementById('drawerPkgName').textContent = 'pi-processes';
+        document.getElementById('drawerDesc').textContent = 'Pi extension for durable background shell tasks, read-only delegated agents, and process inspection.';
+      }
+    }
+
+    function closeDetailDrawer() {
+      document.getElementById('detailDrawer').classList.add('hidden');
+    }
+
+    function handleDrawerAction() {
+      closeDetailDrawer();
+      showToast('插件正在安装中...');
+      setTimeout(() => {
+        showToast('插件已安装成功！', 'success');
+      }, 800);
+    }
+
+    // Scope 下拉
+    function toggleScopeDropdown() {
+      document.getElementById('scopeDropdown').classList.toggle('hidden');
+    }
+
+    function selectScope(scope, label) {
+      document.getElementById('currentScopeLabel').textContent = label;
+      document.getElementById('scopeDropdown').classList.add('hidden');
+      showToast(`切换生效范围: ${label}`);
+    }
+
+    // 插件管理
+    function togglePluginEnabled(name, checked) {
+      showToast(`${name} 已${checked ? '启用' : '禁用'}（下个会话生效）`);
+    }
+
+    function uninstallPlugin(name) {
+      if (confirm(`确定要移除 ${name} 吗？`)) {
+        showToast(`已成功移除 ${name}`, 'success');
+      }
+    }
+
+    function checkUpdates() {
+      const icon = document.getElementById('refreshIcon');
+      icon.classList.add('animate-spin');
+      showToast('正在检查插件更新...');
+      setTimeout(() => {
+        icon.classList.remove('animate-spin');
+        showToast('检查完毕：已是最新状态。', 'success');
+      }, 1000);
+    }
+
+    function updateSinglePlugin(id) {
+      showToast(`正在将 ${id} 升级至 0.5.0...`);
+      setTimeout(() => {
+        showToast(`${id} 升级完成！`, 'success');
+      }, 1000);
+    }
+
+    function updateAllPlugins() {
+      showToast('正在批量升级所有可更新插件...');
+      setTimeout(() => {
+        document.getElementById('updateBanner').style.display = 'none';
+        showToast('全部插件已成功升级至最新版本！', 'success');
+      }, 1200);
+    }
+
+    // Toast
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = 'px-3.5 py-2 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-mono shadow-lg anim-slide-up flex items-center gap-2 pointer-events-auto border border-white/10 dark:border-black/10';
+      
+      let icon = 'ℹ️';
+      if (type === 'success') icon = '✓';
+      if (type === 'warning') icon = '⚠️';
+
+      toast.innerHTML = `<span class="opacity-80">${icon}</span><span>${message}</span>`;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.2s ease';
+        setTimeout(() => toast.remove(), 200);
+      }, 2600);
+    }
+  </script>
+</body>
+</html>

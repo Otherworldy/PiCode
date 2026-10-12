@@ -51,21 +51,21 @@ function ExtensionStatusPopup({
     { count: String(statuses.length) },
   );
   return (
-    <div className="mb-2 flex" data-testid="pi-extension-status">
+    <div className="flex shrink-0 items-center" data-testid="pi-extension-status">
       <Popover>
         <PopoverTrigger asChild>
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="gap-1.5 text-muted-foreground"
+            className="h-7 gap-1 px-1.5 text-foreground-subtle"
             aria-label={label}
           >
-            <BlocksIcon />
-            <span>{statuses.length}</span>
+            <BlocksIcon className="size-4" />
+            <span className="tabular-nums">{statuses.length}</span>
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-72 gap-0 p-1.5">
+        <PopoverContent align="end" side="top" className="w-72 gap-0 p-1.5">
           <ul>
             {statuses.map((status) => (
               <li key={status.key} className="break-words px-2 py-1.5 text-ui-base text-foreground">

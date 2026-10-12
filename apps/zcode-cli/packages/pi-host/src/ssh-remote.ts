@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { posix } from "node:path";
 import {
   quotePosixArg,
+  remoteAgentSystemPromptPath,
   remotePosixPath,
   runSsh,
   sshDestinationArgs,
@@ -76,6 +77,23 @@ async function writeRemoteFile(spec: SshRemoteSpec, path: string, content: strin
 
 export async function sshReadText(spec: SshRemoteSpec, remotePath: string): Promise<string> {
   return (await sshStdout(spec, `cat -- ${quotePosixArg(remotePath)}`)).toString("utf8");
+}
+
+/**
+ * SSH 会话的项目系统提示词在远端 `.pi/SYSTEM.md`。
+ * 文件不存在返回 undefined；存在则返回正文（可以是空字符串）。
+ */
+export async function readSshProjectSystemPrompt(
+  spec: SshRemoteSpec,
+): Promise<string | undefined> {
+  const filePath = remoteAgentSystemPromptPath(spec.remotePath);
+  const probe = await sshStdout(
+    spec,
+    `if test -f ${quotePosixArg(filePath)}; then printf yes; else printf no; fi`,
+  );
+  if (probe.toString("utf8").trim() !== "yes") return undefined;
+  const text = await sshReadText(spec, filePath);
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
 
 export async function sshWriteText(

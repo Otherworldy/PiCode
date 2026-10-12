@@ -5,8 +5,9 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import type { ConversationDelta, DeliveryProfileName } from "@zcode/shared/zcode-protocol-v4";
-import { CommandBridge, type SubmissionModel } from "./command-bridge.js";
+import { CommandBridge, piHostBlocksResidency, type SubmissionModel } from "./command-bridge.js";
 import { createHostExtensionUi } from "./extension-ui-bridge.js";
+import { textOfMessageContent } from "./plan-review-signal.js";
 import { ExtensionUiHost } from "./extension-ui-host.js";
 import { HostQueue } from "./host-queue.js";
 import { workspaceKey } from "./identity.js";
@@ -61,6 +62,8 @@ export interface HostedSession {
   listSkills(): PiSkillView[];
   listSlashCommands(): PiSlashCommandView[];
   readonly isIdle: boolean;
+  /** 常驻池唯一读的忙闲事实。投影 phase 不是 running 时也要算上 Pi 自己还在跑。 */
+  readonly hasResidencyBlockingWork: boolean;
   prompt(text: string): Promise<boolean>;
   waitTurn(): Promise<void>;
   abort(): Promise<void>;
@@ -110,7 +113,7 @@ export interface HostedSession {
   /** 立刻改这个会话的权限。完全访问会放掉正在等的工具授权。 */
   setCollaborationMode(mode: string): void;
   publishUi(): void;
-  dispose(): void;
+  dispose(): void | Promise<void>;
   hydrateHistory(content: string): void;
   onDeltas(listener: (deltas: ConversationDelta[]) => void): () => void;
   onNotify(
@@ -400,7 +403,7 @@ export class HostSessionRegistry {
     if (hosted) {
       files.add(hosted.sessionFile);
       await hosted.abort().catch(() => undefined);
-      hosted.dispose();
+      await hosted.dispose();
       this.sessions.delete(sessionId);
       this.toolChecks.delete(sessionId);
       this.children.delete(sessionId);
@@ -879,6 +882,13 @@ export class HostSessionRegistry {
           handleUi(event);
           return;
         }
+        if (event.type === "message_start" && event.message.role === "user") {
+          const text = textOfMessageContent(event.message.content);
+          // 审查决定是插件 sendUserMessage。对上原文才结束「工作中」，用户自己的消息不收口。
+          if (text && pi.takeMatchingPlanDecision?.(text)) {
+            emit(projector.finishOpenPlanReview(event.at));
+          }
+        }
         emit(projector.apply(event));
         // 停止之后 Pi 仍可能把重试的下一跳发出来。再 abort 一次，别让它接着跑。
         if (
@@ -955,6 +965,7 @@ export class HostSessionRegistry {
       });
     }
     publishContext();
+    let disposing: Promise<void> | undefined;
     return {
       sessionId: meta.sessionId,
       identity: meta.identity,
@@ -973,6 +984,21 @@ export class HostSessionRegistry {
       listSlashCommands: () => pi.listSlashCommands?.() ?? [],
       get isIdle() {
         return pi.isIdle ?? !pi.isStreaming;
+      },
+      get hasResidencyBlockingWork() {
+        const snapshot = projector.getSnapshot();
+        return piHostBlocksResidency({
+          pi,
+          phase: snapshot.control.phase,
+          activeWorkCount: snapshot.control.activeWorks.length,
+          queuedCount: queue.snapshot().items.length,
+          branchSummary: summarizingBranch || projector.isBranchSummaryRunning(),
+          backgroundActive: snapshot.backgroundWorks.some(
+            (work) => work.status === "running" || work.status === "resultPending",
+          ),
+          pendingInteraction: snapshot.pendingInteractions.length > 0,
+          runningSubagents: snapshot.subagents?.running.length ?? 0,
+        });
       },
       prompt: (text) => pi.prompt(text),
       waitTurn: () => pi.waitTurn?.() ?? Promise.resolve(),
@@ -1207,6 +1233,7 @@ export class HostSessionRegistry {
         return allowed;
       },
       dispose: () => {
+        if (disposing) return disposing;
         if (contextTimer) clearTimeout(contextTimer);
         if (subagentTimer) clearTimeout(subagentTimer);
         stopHistoryWatch();
@@ -1215,12 +1242,14 @@ export class HostSessionRegistry {
         unsubscribeProcesses();
         unsubscribePersisted();
         unsubscribe();
-        pi.dispose();
-        // 常驻回收只关 runtime，不删 jsonl。注册表若留着这个实例，下次 create 直接返回它，不再读文件，订阅拿到空投影。
+        // 常驻回收只关 runtime，不删 jsonl。注册表必须同步摘掉：留着已关掉的实例，下次 create 会直接复用它，不再读文件。
+        // MCP 子进程在 pi.dispose() 里异步关，不能挡住这次摘除。
         this.sessions.delete(meta.sessionId);
         this.toolChecks.delete(meta.sessionId);
         this.children.delete(meta.sessionId);
         for (const ids of this.children.values()) ids.delete(meta.sessionId);
+        disposing = Promise.resolve(pi.dispose());
+        return disposing;
       },
       hydrateHistory: (content) => {
         const live = hasLiveSubagent(meta.sessionId);

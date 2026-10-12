@@ -1,19 +1,234 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import type { SpawnOptions } from "node:child_process";
+import { isRecommendedPiPluginInstalled, normalizePiPluginInstallSource } from "@zcode/shared";
 import {
   applyZcodePluginPlan,
+  installPiPlugin,
   isPlannotatorPiExtension,
   listPiPlugins,
   piPluginPackageSource,
+  removePiPlugin,
+  searchPiPackageCatalog,
   setPiPluginEnabled,
   silencePackageManagerStdout,
   updatePiPlugin,
   zcodePluginSourceId,
 } from "./pi-plugins.js";
+
+test("recommended plugins match only the same scope package", () => {
+  const plugins = [
+    {
+      id: "pkg:user:npm:@plannotator/pi-extension",
+      detail: "npm:@plannotator/pi-extension",
+      name: "pi-extension",
+      scope: "user",
+      kind: "package",
+    },
+    {
+      id: "pkg:project:git:github.com/Otherworldy/pi-ask-me",
+      detail: "git:github.com/Otherworldy/pi-ask-me",
+      name: "pi-ask-me",
+      scope: "project",
+      kind: "package",
+    },
+  ];
+  assert.equal(
+    isRecommendedPiPluginInstalled(plugins, "npm:@plannotator/pi-extension", "user"),
+    true,
+  );
+  assert.equal(
+    isRecommendedPiPluginInstalled(plugins, "npm:@plannotator/pi-extension", "project"),
+    false,
+  );
+  assert.equal(
+    isRecommendedPiPluginInstalled(plugins, "git:github.com/Otherworldy/pi-ask-me", "user"),
+    false,
+  );
+  assert.equal(
+    isRecommendedPiPluginInstalled(
+      plugins,
+      "https://github.com/Otherworldy/pi-processes-bash",
+      "user",
+    ),
+    false,
+  );
+  assert.equal(
+    isRecommendedPiPluginInstalled(
+      [
+        {
+          id: "pkg:user:D:\\Study\\Code\\Node\\pi-processes",
+          detail: "D:\\Study\\Code\\Node\\pi-processes",
+          name: "pi-processes",
+          scope: "user",
+          kind: "package",
+        },
+      ],
+      "https://github.com/Otherworldy/pi-processes-bash",
+      "user",
+    ),
+    true,
+  );
+});
+
+test("settings install accepts npm and git sources and rejects local or shell sources", async () => {
+  assert.equal(normalizePiPluginInstallSource("pi-subagents"), "npm:pi-subagents");
+  assert.equal(
+    normalizePiPluginInstallSource("npm:@Plannotator/pi-extension"),
+    "npm:@plannotator/pi-extension",
+  );
+  assert.equal(
+    normalizePiPluginInstallSource("npm:@scope/name@1.2.3"),
+    "npm:@scope/name@1.2.3",
+  );
+  assert.equal(
+    normalizePiPluginInstallSource("git:github.com/Otherworldy/pi-ask-me"),
+    "git:github.com/Otherworldy/pi-ask-me",
+  );
+  assert.equal(
+    normalizePiPluginInstallSource("https://github.com/Otherworldy/pi-processes-bash"),
+    "https://github.com/Otherworldy/pi-processes-bash",
+  );
+  assert.equal(
+    normalizePiPluginInstallSource("git:gitlab.com/group/sub/repo@main"),
+    "git:gitlab.com/group/sub/repo@main",
+  );
+  assert.equal(normalizePiPluginInstallSource("../secret"), null);
+  assert.equal(normalizePiPluginInstallSource("file:/tmp/plugin"), null);
+  assert.equal(normalizePiPluginInstallSource("npm:foo;rm"), null);
+  assert.equal(normalizePiPluginInstallSource("https://user@github.com/a/b"), null);
+  assert.equal(normalizePiPluginInstallSource("http://github.com/a/b"), null);
+  await assert.rejects(
+    () => installPiPlugin(process.cwd(), "npm:foo;rm", "user"),
+    /not installable/,
+  );
+});
+
+test("package catalog keeps only the pi-package keyword", async () => {
+  const page = await searchPiPackageCatalog("web", 0, async () => {
+    return new Response(
+      JSON.stringify({
+        total: 2,
+        objects: [
+          {
+            package: {
+              name: "pi-web-access",
+              description: "Web search",
+              version: "1.2.3",
+              keywords: ["pi-package"],
+            },
+          },
+          {
+            package: {
+              name: "unrelated",
+              description: "Not a Pi package",
+              version: "0.0.1",
+              keywords: ["other"],
+            },
+          },
+        ],
+      }),
+      { status: 200 },
+    );
+  });
+  assert.deepEqual(page, {
+    from: 0,
+    total: 2,
+    packages: [
+      {
+        name: "pi-web-access",
+        description: "Web search",
+        version: "1.2.3",
+        source: "npm:pi-web-access",
+      },
+    ],
+  });
+  await assert.rejects(
+    () => searchPiPackageCatalog("", 0, async () => new Response("", { status: 503 })),
+    /503/,
+  );
+});
+
+test("catalog kind and download sort go to the registry query", async () => {
+  let seen = "";
+  const page = await searchPiPackageCatalog(
+    "web",
+    0,
+    async (input) => {
+      const url = String(input);
+      if (url.includes("/-/v1/search")) seen = url;
+      return new Response(
+        JSON.stringify({
+          total: 1,
+          objects: [
+            {
+              package: {
+                name: "pi-web-access",
+                description: "Web",
+                version: "1.0.0",
+                keywords: ["pi-package", "extension"],
+                date: "2026-01-02T03:04:05.000Z",
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    },
+    { kind: "extension", sort: "downloads" },
+  );
+  assert.match(seen, /keywords%3Api-package\+keywords%3Aextension\+web/);
+  assert.match(seen, /popularity=1/);
+  assert.equal(page.packages[0]?.publishedAt, "2026-01-02T03:04:05.000Z");
+  assert.deepEqual(page.packages[0]?.kinds, ["extension"]);
+});
+
+test("catalog image keeps https pi.image and drops anything else", async () => {
+  const page = await searchPiPackageCatalog("", 0, async (input) => {
+    const url = String(input);
+    if (url.includes("/-/v1/search")) {
+      return new Response(
+        JSON.stringify({
+          total: 2,
+          objects: [
+            {
+              package: {
+                name: "pi-pictured",
+                description: "",
+                version: "1.0.0",
+                keywords: ["pi-package"],
+              },
+            },
+            {
+              package: {
+                name: "pi-plain",
+                description: "",
+                version: "1.0.0",
+                keywords: ["pi-package"],
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    }
+    if (url.endsWith("/pi-pictured/1.0.0")) {
+      return new Response(
+        JSON.stringify({
+          pi: { image: "https://example.com/logo.png", video: "https://example.com/a.mp4" },
+        }),
+        { status: 200 },
+      );
+    }
+    return new Response(JSON.stringify({ pi: { image: "javascript:alert(1)" } }), { status: 200 });
+  });
+  assert.equal(page.packages[0]?.image, "https://example.com/logo.png");
+  assert.equal(page.packages[1]?.image, undefined);
+});
 
 test("plan mode matches only an enabled plannotator pi extension", () => {
   assert.equal(
@@ -122,6 +337,22 @@ test("lists and toggles Pi packages and extension files", async () => {
     scope: "user",
   };
   assert.equal(zcodePluginSourceId(info, pkgDir), pkg!.id);
+  await removePiPlugin(cwd, pkg!.id, agentDir, root);
+  await removePiPlugin(cwd, ext!.id, agentDir, root);
+  const gone = await listPiPlugins(cwd, agentDir, root);
+  assert.equal(
+    gone.find((row) => row.id === pkg!.id),
+    undefined,
+  );
+  assert.equal(
+    gone.find((row) => row.id === ext!.id),
+    undefined,
+  );
+  assert.equal(existsSync(join(agentDir, "extensions", "demo.ts")), false);
+  await assert.rejects(
+    () => removePiPlugin(cwd, "ext:user:extensions/../../settings.json", agentDir, root),
+    /cannot be removed/,
+  );
   const extensions = [
     { path: pkgDir, sourceInfo: info },
     {

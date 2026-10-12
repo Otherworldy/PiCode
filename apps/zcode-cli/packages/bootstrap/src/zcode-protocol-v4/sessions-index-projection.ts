@@ -23,6 +23,49 @@ export interface SessionSummaryDeriveExtra {
 
 const MAX_PREVIEW_CHARS = 120;
 
+function isTerminalToolStatus(status: string): boolean {
+  return status === "success" || status === "error" || status === "cancelled";
+}
+
+function isAskToolName(value: string | undefined): boolean {
+  const name = value?.trim().toLowerCase();
+  return name === "askuserquestion" || name === "ask_user_question";
+}
+
+/** 工具已经终态时，留下的 pending 不能再点亮侧栏「等待确认」。 */
+function isBlockingSidebarInteraction(
+  snapshot: ConversationSnapshot,
+  interaction: ConversationSnapshot["pendingInteractions"][number],
+): boolean {
+  if (interaction.kind !== "permission" && interaction.kind !== "userInput") return false;
+  const payload = interaction.payload;
+  if (payload.kind !== "permission" && payload.kind !== "userInput") return false;
+  const rows = snapshot.rows.window;
+  if (payload.toolCallId) {
+    const row = rows.find(
+      (item) => item.kind === "toolCall" && item.toolCallId === payload.toolCallId,
+    );
+    if (row?.kind === "toolCall" && isTerminalToolStatus(row.status)) return false;
+  }
+  const namedAsk = isAskToolName(payload.toolName);
+  // 旧 Ask 没有 toolName，也没有 select 那种 options。问卷答完后行已是 success，
+  // 不能因为 pending 没清掉就继续显示等待确认。select 带 options，不受这条影响。
+  const untaggedAsk =
+    payload.kind === "userInput" &&
+    !payload.toolCallId &&
+    !payload.toolName &&
+    (payload.questions?.length ?? 0) > 0 &&
+    (payload.options?.length ?? 0) === 0;
+  if (!namedAsk && !untaggedAsk) return true;
+  const askRows = rows.filter(
+    (item) => item.kind === "toolCall" && isAskToolName(item.toolName),
+  );
+  return !(
+    askRows.length > 0 &&
+    askRows.every((item) => item.kind === "toolCall" && isTerminalToolStatus(item.status))
+  );
+}
+
 /** 从 ConversationSnapshot + 会话元信息派生 SessionSummary（纯函数，golden 可测）。 */
 function deriveSessionSummary(
   snapshot: ConversationSnapshot,
@@ -51,15 +94,14 @@ function deriveSessionSummary(
     backgroundWorks: snapshot.backgroundWorks,
   });
   // workspaceHookReview 由 Hooks Settings 呈现，不降级成 permission/userInput 侧栏徽标。
-  const pending = snapshot.pendingInteractions.find(
-    (interaction) => interaction.kind === "permission" || interaction.kind === "userInput",
+  // 工具行已经 success/error/cancelled 的交互不再是「等待确认」：问卷答完后
+  // 投影若还留着旧 pending，侧栏不能继续挂徽标。
+  const blocking = snapshot.pendingInteractions.filter((interaction) =>
+    isBlockingSidebarInteraction(snapshot, interaction),
   );
-  const permissionCount = snapshot.pendingInteractions.filter(
-    (interaction) => interaction.kind === "permission",
-  ).length;
-  const userInputCount = snapshot.pendingInteractions.filter(
-    (interaction) => interaction.kind === "userInput",
-  ).length;
+  const pending = blocking[0];
+  const permissionCount = blocking.filter((interaction) => interaction.kind === "permission").length;
+  const userInputCount = blocking.filter((interaction) => interaction.kind === "userInput").length;
   // 兼容恢复迁移或归约测试构造的裁剪快照：不能因新增轻量 toolName 投影，
   // 在旧 pending interaction 暂缺 payload 时阻断整个任务列表。
   const pendingPayload = pending?.payload;

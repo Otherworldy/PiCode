@@ -38,8 +38,12 @@ interface GitLiveDataRefreshInput {
   workspaceKey: string;
   includeExtendedData: boolean;
   refreshToken: string | number | boolean | null;
+  retryNonce: number;
   workspaceRpcEnabled: boolean;
 }
+
+const GIT_REFRESH_RETRY_LIMIT = 3;
+const GIT_REFRESH_RETRY_BASE_MS = 1_000;
 
 export interface GitPaneFileChange extends GitFileChange {
   diff: GitDiffResult | null;
@@ -366,6 +370,10 @@ function shouldRefreshLiveGitData(
     return true;
   }
 
+  if (previous.retryNonce !== next.retryNonce) {
+    return true;
+  }
+
   // 关键业务逻辑：Git pane 关闭时不应该因为“少拿 branch/identity”反向触发一轮真实 Git。
   // 只有从关闭 -> 打开时，才补拉扩展数据；task/last-turn 的切换则只走本地数据重组。
   return !previous.includeExtendedData && next.includeExtendedData;
@@ -409,15 +417,25 @@ export function useGitRepository(options: {
   );
   const requestVersionRef = useRef(0);
   const lastLiveRefreshInputRef = useRef<GitLiveDataRefreshInput | null>(null);
+  const refreshFailureCountRef = useRef(0);
+  const retryNonceRef = useRef(0);
+  const [retryNonce, setRetryNonce] = useState(0);
   const lastFileChangeEntry = null;
   const lastSummaryEntry = null;
 
   useEffect(() => {
+    const triggeredByRetry = retryNonceRef.current !== retryNonce;
+    retryNonceRef.current = retryNonce;
+    if (!triggeredByRetry) {
+      refreshFailureCountRef.current = 0;
+    }
+
     const nextRefreshInput: GitLiveDataRefreshInput = {
       workspacePath,
       workspaceKey,
       includeExtendedData,
       refreshToken,
+      retryNonce,
       workspaceRpcEnabled,
     };
 
@@ -447,6 +465,7 @@ export function useGitRepository(options: {
     }
 
     let disposed = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
     const requestVersion = requestVersionRef.current + 1;
     requestVersionRef.current = requestVersion;
 
@@ -477,6 +496,7 @@ export function useGitRepository(options: {
           return;
         }
 
+        refreshFailureCountRef.current = 0;
         const repositoryDatasets = buildRepositoryDatasets({
           unstagedChanges,
           stagedChanges,
@@ -511,23 +531,48 @@ export function useGitRepository(options: {
           workspacePath,
           error: message,
         });
-        setRepositoryState((current) => ({
-          ...createInitialState(workspacePath, {
+        setRepositoryState((current) => {
+          // 一次失败不能把已有仓库清成「不是仓库」。清掉之后自动刷新会停，
+          // 右上角就一直空着，直到打开审查页才会再拉。
+          if (current.workspaceKey === workspaceKey && current.summary.isRepository) {
+            return {
+              ...current,
+              loading: false,
+              error: message,
+            };
+          }
+
+          return createInitialState(workspacePath, {
             workspaceKey,
             loading: false,
             error: message,
             revision: current.revision,
-          }),
-        }));
+          });
+        });
+        if (refreshFailureCountRef.current >= GIT_REFRESH_RETRY_LIMIT) {
+          return;
+        }
+        refreshFailureCountRef.current += 1;
+        const delay = GIT_REFRESH_RETRY_BASE_MS * refreshFailureCountRef.current;
+        retryTimer = setTimeout(() => {
+          retryTimer = null;
+          if (!disposed) {
+            setRetryNonce((value) => value + 1);
+          }
+        }, delay);
       });
 
     return () => {
       disposed = true;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
     };
   }, [
     gitService,
     includeExtendedData,
     refreshToken,
+    retryNonce,
     workspaceIdentity,
     workspaceKey,
     workspacePath,

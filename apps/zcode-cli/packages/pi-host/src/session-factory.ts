@@ -7,6 +7,7 @@ import { applyZcodePluginPlan, zcodePluginLoaderExtras } from "./pi-plugins.js";
 import { listSessionSlashCommands } from "./pi-slash-commands.js";
 import { toPiSkillView } from "./pi-skills.js";
 import { branchPiSessionFile, openOrCreateSession } from "./session-files.js";
+import { shutdownPiSession } from "./session-shutdown.js";
 import { InMemoryCredentialStore, type AssistantMessage } from "@earendil-works/pi-ai";
 import { lowestPiThought, piAssistantText } from "./pi-assistant-text.js";
 import {
@@ -16,6 +17,7 @@ import {
 } from "./host-capabilities.js";
 import { readPiContextUsage } from "./context-breakdown.js";
 import { createPermissionExtension } from "./permission-gate.js";
+import { createPlanReviewSignalExtension, takePlanDecision } from "./plan-review-signal.js";
 import { captureAbandonedBranch, summarizeAbandonedBranch } from "./branch-summary.js";
 import {
   contextEventsOf,
@@ -33,6 +35,7 @@ import {
 } from "./model-delegate.js";
 import {
   readProcessSshRemoteSpec,
+  readSshProjectSystemPrompt,
   sshCodingToolOptions,
   sshWorkspacePrompt,
 } from "./ssh-remote.js";
@@ -141,8 +144,20 @@ function thoughtLevelsOf(model: { thinkingLevelMap?: Record<string, unknown> }):
   return ["off", "low", "medium", "high"];
 }
 
+function catalogContextWindow(model: { contextWindow?: number }): number | undefined {
+  const value = model.contextWindow;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return undefined;
+  return Math.floor(value);
+}
+
 export async function listPiCatalog(): Promise<{
-  models: Array<{ providerId: string; modelId: string; name?: string; thoughtLevels: string[] }>;
+  models: Array<{
+    providerId: string;
+    modelId: string;
+    name?: string;
+    thoughtLevels: string[];
+    contextWindow?: number;
+  }>;
   defaultProvider?: string;
   defaultModel?: string;
   defaultThought?: string;
@@ -150,12 +165,16 @@ export async function listPiCatalog(): Promise<{
   const runtime = await getProductionModelRuntime();
   const settings = piCoding().SettingsManager.create(process.cwd(), piCoding().getAgentDir());
   return {
-    models: runtime.getAvailableSnapshot().map((model) => ({
-      providerId: model.provider,
-      modelId: model.id,
-      name: model.name,
-      thoughtLevels: thoughtLevelsOf(model),
-    })),
+    models: runtime.getAvailableSnapshot().map((model) => {
+      const contextWindow = catalogContextWindow(model);
+      return {
+        providerId: model.provider,
+        modelId: model.id,
+        name: model.name,
+        thoughtLevels: thoughtLevelsOf(model),
+        ...(contextWindow ? { contextWindow } : {}),
+      };
+    }),
     defaultProvider: settings.getDefaultProvider(),
     defaultModel: settings.getDefaultModel(),
     defaultThought: settings.getDefaultThinkingLevel() ?? "medium",
@@ -371,6 +390,10 @@ export function createSdkSessionFactory(
         )
       : [];
     const codingForMcp = usePiMcp ? piCoding() : undefined;
+    // Pi 用本机 fs 按 cwd 找 .pi/SYSTEM.md。SSH 在 Windows 上会把远端路径 resolve 成本机盘符，
+    // 项目提示词实际在远端。远端文件存在时用它替换发现结果，保持「项目优先于全局」。
+    const sshProjectSystemPrompt = ssh ? await readSshProjectSystemPrompt(ssh) : undefined;
+    const planDecisions: string[] = [];
     const resourceLoader = new (piCoding().DefaultResourceLoader)({
       cwd: input.cwd,
       agentDir,
@@ -378,6 +401,9 @@ export function createSdkSessionFactory(
       ...(pluginExtras?.loader ?? { additionalSkillPaths: options.skillPaths?.(input.cwd) ?? [] }),
       extensionFactories: [
         createPermissionExtension(input.checkPermission),
+        createPlanReviewSignalExtension((text) => {
+          planDecisions.push(text);
+        }),
         ...(usePiMcp && codingForMcp
           ? [
               (pi: {
@@ -401,6 +427,9 @@ export function createSdkSessionFactory(
           : []),
         ...(processes?.factories ?? []),
       ],
+      ...(sshProjectSystemPrompt !== undefined
+        ? { systemPromptOverride: () => sshProjectSystemPrompt }
+        : {}),
       ...(ssh ? { appendSystemPrompt: [sshWorkspacePrompt(ssh)] } : {}),
     });
     await resourceLoader.reload();
@@ -496,6 +525,7 @@ export function createSdkSessionFactory(
       session.setActiveToolsByName(session.getActiveToolNames());
     }
     let lastTurn: Promise<void> = Promise.resolve();
+    let shuttingDown: Promise<void> | undefined;
     const currentModel = session.model
       ? { providerId: session.model.provider, modelId: session.model.id }
       : isolated && delegate
@@ -519,6 +549,7 @@ export function createSdkSessionFactory(
       get isIdle() {
         return session.isIdle;
       },
+      takeMatchingPlanDecision: (text: string) => takePlanDecision(planDecisions, text),
       prompt: (text, options) =>
         new Promise<boolean>((resolve, reject) => {
           // 还在跑就不要进 Pi。裸 prompt 会抛 "already processing"，
@@ -690,7 +721,7 @@ export function createSdkSessionFactory(
           persistedListeners.delete(listener);
         };
       },
-      dispose: () => session.dispose(),
+      dispose: () => (shuttingDown ??= shutdownPiSession(session)),
     } satisfies PiSessionPort;
   };
 }

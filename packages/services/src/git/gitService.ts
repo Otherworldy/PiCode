@@ -4,6 +4,7 @@ import { isPathInWorkspaceScope, normalizeGitPath, toWorkspaceRelativeGitPath } 
 import { filterCommitMessageFilesByCurrentSession } from "./commitMessageFileScope.js";
 import type { IGitService } from "./git.js";
 import type { GitCommitMessageGenerator } from "./gitCommitMessageGenerator.js";
+import { shouldIncludeUntrackedChange } from "./repo/gitCliHelpers.js";
 import {
   createGitCliRepo,
   type GitBranchComparisonChange,
@@ -51,17 +52,6 @@ function buildFileChange(
     isUntracked: section === "untracked",
     isConflicted: section === "conflicted",
   };
-}
-
-function shouldIncludeUntrackedChange(
-  entry: GitStatusEntry,
-  stat: { added: number; removed: number },
-): boolean {
-  // 构建目录里常见大量未跟踪的空文件、失效链接或不可读产物。
-  // 这类条目没有可审查的文本增删，之前会以 +0/-0 挤进 Review 面板，既污染列表又拖慢打开。
-  // 但详细 status 超限后，Git 会用末尾 `/` 的目录记录表达整棵未跟踪目录；它本身不可读，
-  // 行数必然为 0，却仍必须作为可 stage/discard 的降级入口保留。
-  return entry.path.endsWith("/") || stat.added > 0 || stat.removed > 0;
 }
 
 function toChangeForSource(

@@ -25,6 +25,7 @@ import { mcpAppInstanceSchema } from "../mcp-apps/instance.js";
 // UI 旧投影（zcodeSessionProjection 等读路径）。
 // 上述旧协议 client/server 组删除时，本文件整体删除。
 // 注：外部零消费 schema 多为存活 schema 联合的内部依赖，随宿主文件一起处理，勿单删。
+
 import { z } from "zod";
 import { accountProviderUnavailableReasonSchema } from "../account-provider-state.js";
 import { bashOutputDisplaySchema } from "../bash-output-display.js";
@@ -2278,6 +2279,8 @@ export const zcodePiCatalogModelSchema = z
     modelId: z.string().min(1),
     name: z.string().min(1).optional(),
     thoughtLevels: z.array(z.string().min(1)).optional(),
+    // 圆环总量在会话模型写入前读这个字段，与 Pi Model.contextWindow 同一值。
+    contextWindow: z.number().int().positive().optional(),
   })
   .strict();
 export const zcodeWorkspacePresentationSchema = z
@@ -2394,10 +2397,25 @@ export const zcodePiPluginConfigSchema = z
 export const zcodePiPluginsParamsSchema = z
   .object({
     workspace: zcodeWorkspaceRefSchema.optional(),
-    action: z.enum(["list", "setEnabled", "writeConfig", "checkUpdates", "update"]),
+    action: z.enum([
+      "list",
+      "setEnabled",
+      "writeConfig",
+      "checkUpdates",
+      "update",
+      "install",
+      "remove",
+      "search",
+    ]),
     id: z.string().min(1).optional(),
     enabled: z.boolean().optional(),
     values: z.record(z.string(), zcodePiPluginConfigValueSchema).optional(),
+    source: z.string().min(1).max(300).optional(),
+    scope: z.enum(["user", "project"]).optional(),
+    query: z.string().max(200).optional(),
+    from: z.number().int().nonnegative().max(2000).optional(),
+    kind: z.enum(["extension", "skill", "theme", "prompt"]).optional(),
+    sort: z.enum(["downloads", "recent", "name"]).optional(),
   })
   .strict();
 export type ZCodePiPluginsParams = z.infer<typeof zcodePiPluginsParamsSchema>;
@@ -2429,6 +2447,31 @@ export const zcodePiPluginsResultSchema = z
       )
       .optional(),
     updatesCheckedAt: z.number().optional(),
+    catalog: z
+      .object({
+        packages: z.array(
+          z
+            .object({
+              name: z.string(),
+              description: z.string(),
+              version: z.string(),
+              source: z.string(),
+              publishedAt: z.string().max(40).optional(),
+              publisher: z.string().max(80).optional(),
+              repository: z.string().max(300).optional(),
+              image: z.string().max(300).optional(),
+              kinds: z
+                .array(z.enum(["extension", "skill", "theme", "prompt"]))
+                .max(4)
+                .optional(),
+            })
+            .strict(),
+        ),
+        total: z.number(),
+        from: z.number(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type ZCodePiPluginsResult = z.infer<typeof zcodePiPluginsResultSchema>;

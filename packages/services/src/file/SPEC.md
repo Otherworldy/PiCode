@@ -24,3 +24,29 @@
 1. 只有 `.zcodeignore` 时，读取后磁盘上变为 `.picodeignore`，内容不变，旧文件消失。
 2. 两者都在时，读到的是 `.picodeignore`，`.zcodeignore` 仍在且内容不变。
 3. 都没有时，扫描创建 `.picodeignore`，不创建 `.zcodeignore`。
+
+# 系统提示词
+
+Pi 的 `SYSTEM.md` 是系统提示词正文的唯一事实。设置页和项目按钮只读写这个文件，不另存一份。
+
+| 范围 | 路径 | 谁写 |
+| --- | --- | --- |
+| 全局 | `<agent-dir>/SYSTEM.md`。`agent-dir` 优先 `PI_CODING_AGENT_DIR`，否则 `~/.pi/agent` | 执行读写的那台 Host 的本机磁盘 |
+| 项目 | `<workspace>/.pi/SYSTEM.md` | 该工作区的 file service（本机、远端服务或 SSH） |
+
+路径、空白删除和 256 KiB 上限在 `@zcode/shared/node` 的 `agentSystemPromptFile`。本地落盘在 `agentSystemPrompt.ts`。
+
+有内容时整段替换 Pi 内置系统提示词，不是追加。只含空白的保存删掉文件，因为空文件仍会替换内置提示词。超过 256 KiB 拒绝写入，也不把已有超限文件截断后交给编辑器。
+
+已打开的会话不热更新。下一次新建或重新打开会话时，Pi 的 resource loader 重新读文件。项目文件存在时优先于全局文件。SSH 工作区的项目文件在远端；会话创建时若远端文件存在，用它覆盖本机按 cwd 发现的结果。
+
+# 提示词模板
+
+Pi 的可复用提示词是多份文件，不是一份 `SYSTEM.md`。
+
+| 范围 | 目录 |
+| --- | --- |
+| 全局 | `<agent-dir>/prompts/*.md` |
+| 项目 | `<workspace>/.pi/prompts/*.md` |
+
+只认这一层目录里的 `.md`。文件名去掉后缀就是斜杠命令，例如 `review.md` 对应 `/review`。子目录、隐藏文件和带 `..` 的名字不列出、不写。空文件可以保留。超过 256 KiB 拒绝写入。设置页和项目按钮只通过 file service 读写这些文件。同一处也编辑 `SYSTEM.md`：全局一份，项目一份，有内容时替换内置系统提示词，空白保存删除文件。

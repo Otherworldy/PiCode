@@ -107,7 +107,6 @@ import {
   bindSessionWorktree,
   draftWorktree,
   draftWorktreeEpoch,
-  isWorkspaceWorktree,
   sessionGitDirectory,
   subscribeSessionWorktrees,
 } from "@/v4/sessionWorktree.js";
@@ -1120,10 +1119,6 @@ export function SessionPane({
   const [composerRestoreRequest, setComposerRestoreRequest] =
     useState<ComposerRestoreRequest | null>(null);
   const summarizingTreeRef = useRef(false);
-  const stopActionRef = useRef<(() => void) | undefined>(undefined);
-  const stopBranchSummary = useCallback(() => {
-    stopActionRef.current?.();
-  }, []);
   const resumeHereRef = useRef<
     (target: {
       entryId: string;
@@ -2340,7 +2335,6 @@ export function SessionPane({
       toolGroupingTerminalEnabled,
       toolGroupingChangesEnabled,
       onNavigateToRow: handleNavigateToRow,
-      onStop: readOnly || selectionSideChat ? undefined : stopBranchSummary,
       onResumeHere:
         readOnly || selectionSideChat || !sessionId || branchSummaryRunning
           ? undefined
@@ -2411,7 +2405,6 @@ export function SessionPane({
       toolGroupingTerminalEnabled,
       toolGroupingChangesEnabled,
       handleNavigateToRow,
-      stopBranchSummary,
       readOnly,
       selectionSideChat,
       branchSummaryRunning,
@@ -4073,7 +4066,6 @@ export function SessionPane({
   // 直接写 onStop={() => handleStop("button")} 每次 render 都换引用，memo 白做，而 composer
   // 恰好是每次输入都可能重渲染的组件。这里固定 button 版的引用，不动 handleStop 的双入口设计。
   const handleStopFromButton = useCallback(() => handleStop("button"), [handleStop]);
-  stopActionRef.current = handleStopFromButton;
 
   const handleRetrySubscribe = useCallback(() => {
     void lease?.store.retry();
@@ -4308,10 +4300,6 @@ export function SessionPane({
         gitSummary,
         gitDirtyFileCount,
         gitWorktreeChangeSummary,
-        // 与面板同一道门：漏掉的话宽屏布局仍按「没有状态卡」排，Git 工具会盖住正文。
-        keepCleanRepository: Boolean(
-          gitWorkspacePath && isWorkspaceWorktree(workspacePath, gitWorkspacePath),
-        ),
         goal: selectionSideChat ? null : (snapshot?.goal ?? null),
         sessionPlans: state.sessionPlans,
         plan: snapshot?.plan ?? null,
@@ -4325,7 +4313,6 @@ export function SessionPane({
       gitDirtyFileCount,
       gitSummary,
       gitWorktreeChangeSummary,
-      gitWorkspacePath,
       snapshot?.backgroundWorks,
       snapshot?.goal,
       snapshot?.extensionWidgets,

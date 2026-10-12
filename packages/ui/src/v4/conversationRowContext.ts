@@ -77,8 +77,6 @@ export interface ConversationRowRenderContext {
    * 需保持引用稳定（rowContext 的 memo 依赖）。
    */
   onNavigateToRow?: (sessionId: string, rowId: number) => void;
-  /** 正在总结被丢下的分支时，点这一行的停止。与输入框停止键同一条路。 */
-  onStop?: () => void;
   /** 行右侧分叉按钮：按总结方式建成左侧新会话。工具行的 entryId 是 toolCallId。 */
   onResumeHere?: (target: {
     entryId: string;

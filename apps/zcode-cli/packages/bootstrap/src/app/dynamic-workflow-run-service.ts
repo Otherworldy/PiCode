@@ -27,7 +27,7 @@
 //      journal 快照——条目晚一步，重臂的通知 watcher 会立刻对着旧的终态行结算。
 //   6. **每次启动都在启动的同一同步片登记为常驻阻塞工作**。引擎是父会话 App 的闭包，不进
 //      runtime task registry；常驻池因此只看见「registry 已退休」而把带着在飞引擎的
-//      App 按 idle 关掉（10 分钟），resume 又起了第二个引擎。登记点只有一个——
+//      App 按空闲超时关掉，resume 又起了第二个引擎。登记点只有一个——
 //      {@link trackSettlement}，submit / amend / resume 共用它——计数在 launch 的同一同步片
 //      增加、在结算的 finally 释放。
 //   7. **close 停下自己拥有的每一个 run，而那一笔由引擎自己写**。App 关闭时本服务以

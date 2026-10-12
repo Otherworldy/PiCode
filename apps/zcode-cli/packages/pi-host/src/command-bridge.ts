@@ -30,6 +30,34 @@ export function piSessionBusy(session: {
   return session.isStreaming || session.isCompacting === true || session.isIdle === false;
 }
 
+/**
+ * 常驻池能不能卸掉这个会话。
+ * 只看投影 phase 会把还在 streaming / 压缩 / 后台任务里的会话当空闲，
+ * 拆掉后再点开只能冷恢复，界面停在「正在加载会话」。
+ */
+export function piHostBlocksResidency(input: {
+  pi: { isStreaming: boolean; isCompacting?: boolean; isIdle?: boolean };
+  phase?: string;
+  activeWorkCount?: number;
+  queuedCount?: number;
+  branchSummary?: boolean;
+  backgroundActive?: boolean;
+  pendingInteraction?: boolean;
+  runningSubagents?: number;
+}): boolean {
+  return (
+    piSessionBusy(input.pi) ||
+    input.branchSummary === true ||
+    input.phase === "running" ||
+    input.phase === "prewarming" ||
+    (input.activeWorkCount ?? 0) > 0 ||
+    (input.queuedCount ?? 0) > 0 ||
+    input.backgroundActive === true ||
+    input.pendingInteraction === true ||
+    (input.runningSubagents ?? 0) > 0
+  );
+}
+
 function queuedSelection(selection: SubmissionModel | undefined) {
   if (!selection?.providerId || !selection.modelId) return undefined;
   return {

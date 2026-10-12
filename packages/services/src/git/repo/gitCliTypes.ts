@@ -16,6 +16,8 @@ import type {
 export interface GitLineStat {
   added: number;
   removed: number;
+  /** 行数为 0 但仍有内容（二进制或超过行数预算）。空文件不设。 */
+  hasContent?: boolean;
   kind?: GitChangeKind;
   originalPath?: string | null;
 }
@@ -94,11 +96,7 @@ export interface GitCliRepo {
     branchName: string,
     options?: { worktreePath?: string; startPoint?: string },
   ): Promise<GitWorktreeMutationResult>;
-  removeWorktree(
-    workspacePath: string,
-    worktreePath: string,
-    force?: boolean,
-  ): Promise<void>;
+  removeWorktree(workspacePath: string, worktreePath: string, force?: boolean): Promise<void>;
   countCommitsAhead(workspacePath: string, baseCommit: string, branchName: string): Promise<number>;
   mergeBranch(
     workspacePath: string,

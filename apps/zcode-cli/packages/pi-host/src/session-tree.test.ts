@@ -182,6 +182,33 @@ test("resolveSessionEntry matches entry id, message id, then text", () => {
   assert.equal(resolveSessionEntry(tree, "msg-u"), "u1");
   assert.equal(resolveSessionEntry(tree, "row:1", { text: "side", role: "assistant" }), "a2");
   assert.equal(resolveSessionEntry(tree, "missing", { text: "nope" }), undefined);
+  assert.equal(
+    resolveSessionEntry(tree, "row:9", {
+      text: "hi",
+      role: "user",
+    }),
+    "u1",
+  );
+});
+
+test("resolveSessionEntry ignores Pi image notes when matching user text", () => {
+  const note =
+    "[Image: original 2560x1392, displayed at 2000x1088. Multiply coordinates by 1.28 to map to original image.]";
+  const tree = source("u1");
+  const entriesWithNote = tree.getEntries().map((entry) =>
+    entry.id === "u1"
+      ? { ...entry, message: { ...entry.message, content: `hi\n\n${note}` } }
+      : entry,
+  );
+  const noted = {
+    ...tree,
+    getEntries: () => entriesWithNote,
+  };
+  assert.equal(resolveSessionEntry(noted, "row:9", { text: "hi", role: "user" }), "u1");
+  assert.equal(
+    resolveSessionEntry(noted, "row:9", { text: note, role: "user" }),
+    undefined,
+  );
 });
 
 test("resolveSessionEntry maps a tool call id to the result, else the call", () => {

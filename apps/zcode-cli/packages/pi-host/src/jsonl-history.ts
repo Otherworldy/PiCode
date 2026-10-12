@@ -57,6 +57,20 @@ export function isControlCommandTitle(text: string): boolean {
   return /^\/\S+$/u.test(text.trim());
 }
 
+const PI_IMAGE_MODEL_HINT =
+  /^\[Image: original \d+x\d+, displayed at \d+x\d+\. Multiply coordinates by \d+\.\d{2} to map to original image\.\]$|^\[Image converted from \S+ to \S+\.\]$/u;
+
+/** 附件正文和 Pi 的图片缩放说明只给模型。气泡、标题、回退原文留用户自己写的字。 */
+export function visibleUserText(text: string): string {
+  const withoutFiles = text.replace(/\n*<zcode-file>[\s\S]*?<\/zcode-file>/gu, "");
+  const kept = withoutFiles
+    .split("\n")
+    .filter((line) => !PI_IMAGE_MODEL_HINT.test(line.trim()))
+    .join("\n")
+    .trimEnd();
+  return kept.trim().length === 0 ? "" : kept;
+}
+
 function clip(text: string, max: number): string {
   const compact = text.trim().replace(/\s+/gu, " ");
   if (compact.length <= max) return compact;
@@ -234,7 +248,9 @@ export function readPiJsonl(
     }
     if (isUserRole(role)) {
       const text = messageText(message.content);
-      if (!firstUser && text.trim() && !isControlCommandTitle(text)) firstUser = text;
+      const visible = visibleUserText(text);
+      const titleText = visible.trim() ? visible : text;
+      if (!firstUser && titleText.trim() && !isControlCommandTitle(titleText)) firstUser = titleText;
       endTurn();
       beginTurn(timestamp);
       events.push({

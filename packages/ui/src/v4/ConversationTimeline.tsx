@@ -1676,7 +1676,7 @@ function ConversationTimelineImpl({
                 "flex min-h-full flex-col items-center px-4 before:block before:min-h-[52px] before:w-full before:shrink before:basis-[29dvh] before:content-[''] after:block after:min-h-4 after:w-full after:flex-1 after:content-['']"
               : centeredEmptyLayout
                 ? "flex min-h-full flex-col items-center justify-center gap-4 px-4"
-                : "flex min-h-full flex-col",
+                : "flex min-h-full flex-col pt-4",
           )}
           // session 切到 draft 时内容高度骤降，Chrome 会把子树里的
           // sticky composer 选作原生 scroll anchor，并在切回后覆盖 layout/RAF 恢复值。
@@ -1699,7 +1699,8 @@ function ConversationTimelineImpl({
               ref={messageLayerRef}
               data-v4-timeline-message-layer="true"
               data-sandbox-page-container="true"
-              className="relative w-full flex-1 [mask-repeat:no-repeat] [-webkit-mask-repeat:no-repeat]"
+              // 只拉开最后一条和输入框。轮与轮的间距不加回来。
+              className="relative w-full flex-1 pb-8 [mask-repeat:no-repeat] [-webkit-mask-repeat:no-repeat]"
             >
               {/*
                * headerSlot 必须落在被 mask 的消息层内、并套用与实时消息列相同的宽度类：
