@@ -60,6 +60,13 @@ export function createDesktopProductionBuildPlan({ cwd, baseEnv = process.env })
           cwd,
           env,
         },
+        {
+          // 手机远程控制在发行包里直接提供这份页面。漏掉这一步时，安装后的扫码只能看到“页面还没有构建”。
+          command: "pnpm",
+          args: ["--filter", "@zcode/web", "build"],
+          cwd: resolve(cwd, "../.."),
+          env,
+        },
       ],
     },
   ];

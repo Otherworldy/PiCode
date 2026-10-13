@@ -23,6 +23,21 @@ import {
 
 export { selectLanIPv4 } from "./mobileRemoteTransport.js";
 
+export const MOBILE_REMOTE_PACKAGED_WEB_DIR = "mobile-web";
+
+export function mobileRemoteWebRootCandidates(input: {
+  override?: string | null;
+  packagedRoot?: string | null;
+  appPath: string;
+}): string[] {
+  return [
+    input.override?.trim(),
+    input.packagedRoot?.trim(),
+    join(input.appPath, "../web/dist"),
+    join(input.appPath, "web-dist"),
+  ].filter((value): value is string => Boolean(value));
+}
+
 export interface MobileRemoteHostPort {
   postMessage(message: unknown, transfer?: readonly unknown[]): void;
 }

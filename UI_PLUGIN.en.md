@@ -17,7 +17,7 @@ This guide focuses on testing plugins with the host in the main repository. Plug
 
 A UI Plugin adds an interactive page to an ordinary plugin. The Agent can call tools to create or modify content, while users work directly with canvases, forms, or file lists and send selections or results back to the conversation. The page communicates with the host through MCP Apps; the plugin's MCP server manages application data.
 
-Registration, installation, enabling, and updates follow the ordinary plugin workflow. Pages use the official `@modelcontextprotocol/ext-apps` SDK. They do not need a separate ZCode Plugin SDK or a development guide plugin. The current plugin repository pins the page SDK to `2.0.0` and the MCP server SDK to `1.29.0`. Check the SDK major version when reading upstream examples; the repository lockfile determines the installed versions.
+Registration, installation, enabling, and updates follow the ordinary plugin workflow. Pages use the official `@modelcontextprotocol/ext-apps` SDK. They do not need a separate PiCode Plugin SDK or a development guide plugin. The current plugin repository pins the page SDK to `2.0.0` and the MCP server SDK to `1.29.0`. Check the SDK major version when reading upstream examples; the repository lockfile determines the installed versions.
 
 | Capability                               | User experience                                                                                  | Development entry point                                      |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
@@ -29,7 +29,7 @@ Registration, installation, enabling, and updates follow the ordinary plugin wor
 | Model calls to page tools                | Work with editor state owned by a live page                                                      | `registerTool()` or `onlisttools` + `oncalltool`             |
 | Page state and resource updates          | Retain a page when moving it, restore its view after recreation, and subscribe to server changes | Live page retention, widgetState, and resource subscriptions |
 
-Interactive pages currently run in **local workspaces in ZCode Desktop**. Web, mobile, and remote workspaces retain ordinary MCP tool records; interactive panels are not supported on those paths yet. Plugin pages and Gen UI use different loading and communication protocols, so their APIs are not interchangeable.
+Interactive pages currently run in **local workspaces in PiCode Desktop**. Web, mobile, and remote workspaces retain ordinary MCP tool records; interactive panels are not supported on those paths yet. Plugin pages and Gen UI use different loading and communication protocols, so their APIs are not interchangeable.
 
 ## Featured Example: Excalidraw
 
@@ -125,7 +125,7 @@ These screenshots show a generated capability demo in Chinese. Its tabs and cont
 | <a href="docs/images/gen-ui/state.png"><img src="docs/images/gen-ui/state.png" alt="Preference, parameter, and restore controls with a pending modelContent and privateContent snapshot" width="420" /></a> | <a href="docs/images/gen-ui/design.png"><img src="docs/images/gen-ui/design.png" alt="A music-player design in a carousel, showing the minimal option among three variants" width="420" /></a> |
 | Organize preferences and parameters into a `modelContent` / `privateContent` snapshot. The view shows unsaved state; the page can save it and provide a button to ask a follow-up.                          | Use `viz-carousel` to compare player designs and Tweak to adjust styles. This is a UI prototype.                                                                                               |
 
-In a ZCode Desktop session that supports Gen UI, try requests like these. The Agent generates the controls and interactions for the task:
+In a PiCode Desktop session that supports Gen UI, try requests like these. The Agent generates the controls and interactions for the task:
 
 | Scenario             | Example prompt                                                                                                                                   | How to interact                                                                                 |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
@@ -338,7 +338,7 @@ The current host implementation and pinned SDK types define the supported behavi
 
 ### Official MCP Apps API
 
-| API / event                                                     | Purpose                                                              | ZCode behavior and usage notes                                                                                                                        |
+| API / event                                                     | Purpose                                                              | PiCode behavior and usage notes                                                                                                                        |
 | --------------------------------------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `new App(info, capabilities, options)`, `connect()`             | Create the page connection and complete the handshake                | Create one App per live page; do not also access `window.zcode`, which can trigger another connection                                                 |
 | `getHostVersion()`, `getHostCapabilities()`, `getHostContext()` | Read host information, capabilities, theme, locale, and display mode | Use after connecting; do not infer capabilities from the host version alone                                                                           |
@@ -358,11 +358,11 @@ The current host implementation and pinned SDK types define the supported behavi
 | `downloadFile({ contents })`                                    | Open a native save dialog                                            | Requires `downloadFile`; accepts embedded resources or resource links from the current server; cancellation or write failure returns `isError: true`  |
 | `sendLog({ level, data })`                                      | Send observable page diagnostics                                     | Keep debug logs out of a stdio server's stdout; do not log secrets or user content                                                                    |
 | `onteardown`                                                    | Release page listeners and other resources                           | Host teardown has a time limit; do not leave the only save operation until teardown                                                                   |
-| `requestTeardown()`                                             | Ask the host to release the page                                     | ZCode currently only logs the request; actual lifecycle follows the card/panel, so this is not a close button                                         |
+| `requestTeardown()`                                             | Ask the host to release the page                                     | PiCode currently only logs the request; actual lifecycle follows the card/panel, so this is not a close button                                         |
 
 Sampling uses the task model selected when the request is accepted. It does not read the main conversation history; only history explicitly supplied by the App enters the request. Unsupported parameters such as `temperature`, `tools`, and native audio are rejected, and `includeContext` only supports `none`. Responses and cancellations should not automatically be appended as main conversation turns.
 
-### ZCode Extensions and Low-Level MCP Requests
+### PiCode Extensions and Low-Level MCP Requests
 
 The `app.request()` calls below use the official App's low-level interface. Validate results with the corresponding schema from `@modelcontextprotocol/core`.
 

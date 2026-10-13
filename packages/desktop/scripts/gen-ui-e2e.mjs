@@ -75,7 +75,7 @@ await Promise.all([
 ]);
 await writeFile(
   join(output, "host.html"),
-  '<!doctype html><meta charset="utf-8"><title>ZCode Gen UI test</title><body><div id="inline" style="position:absolute;left:20px;top:40px;width:700px;height:620px"></div><div id="expanded" style="position:absolute;left:20px;top:20px;width:1000px;height:740px"></div><script src="host.js"></script>',
+  '<!doctype html><meta charset="utf-8"><title>PiCode Gen UI test</title><body><div id="inline" style="position:absolute;left:20px;top:40px;width:700px;height:620px"></div><div id="expanded" style="position:absolute;left:20px;top:20px;width:1000px;height:740px"></div><script src="host.js"></script>',
 );
 await writeFile(
   join(output, "plugin-sandbox.html"),

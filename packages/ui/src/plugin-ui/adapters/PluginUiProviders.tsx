@@ -8,6 +8,7 @@ import type {
 import { createPluginUiSessionActions } from "@/plugin-ui/adapters/pluginUiSessionBinding.js";
 import { registerPluginUiSessionActions } from "@/plugin-ui/adapters/pluginUiSessionActions.js";
 import { usePluginUiResourceDeltaFeed } from "@/plugin-ui/adapters/pluginUiResourceDeltaFeed.js";
+import { publishEmbeddedBrowserOpens } from "@/v4/embeddedBrowserOpen.js";
 import type { ConversationProjectionStore } from "@/v4/conversationProjectionStore.js";
 
 const WorkspaceActions = createContext<((request: OpenPluginUiSideTabRequest) => void) | undefined>(
@@ -54,6 +55,12 @@ export function PluginUiSessionProvider({
   const port = useRef({ sendText, uploadAttachment });
   port.current = { sendText, uploadAttachment };
   usePluginUiResourceDeltaFeed(projectionStore, scope);
+  useEffect(() => {
+    if (!projectionStore || !scope) return;
+    return projectionStore.onOnlineDeltas((deltas) => {
+      publishEmbeddedBrowserOpens(deltas, scope);
+    });
+  }, [projectionStore, scope]);
   useEffect(() => {
     if (!scope || readOnly) return;
     // 修复：发送配置变更会重建回调，但不应让同一挂载中的待确认请求失效。

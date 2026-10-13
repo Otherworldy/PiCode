@@ -1193,6 +1193,19 @@ const zhCN: Record<string, string> = {
   "workspaceSidebar.systemPrompt": "项目提示词",
   "workspaceSidebar.systemPrompt.description":
     "只作用于这个项目的 .pi/prompts，可以有很多份。每一份是一个 Markdown 文件，文件名就是斜杠命令。保存后再打开 / 就能用，不必重启。",
+  "workspaceSidebar.systemPrompt.append": "追加系统提示词",
+  "workspaceSidebar.systemPrompt.replace": "系统提示词",
+  "workspaceSidebar.systemPrompt.commands": "斜杠命令模板",
+  "workspaceSidebar.systemPrompt.pending": "下次新建或重新打开会话后生效",
+  "workspaceSidebar.systemPrompt.appendHint": "追加在通用系统提示词之后",
+  "workspaceSidebar.systemPrompt.replaceHint": "整段替换通用系统提示词",
+  "workspaceSidebar.systemPrompt.commandHint": "输入 /{command} 触发",
+  "workspaceSidebar.projectMcp": "项目 MCP",
+  "workspaceSidebar.projectMcp.description":
+    "只改这个项目的 .pi/mcp.json，不改全局 MCP。同名的项目条目会盖过全局。下次新建或重新打开会话后生效。",
+  "workspaceSidebar.projectMcp.loadFailed": "读取项目 MCP 失败",
+  "workspaceSidebar.projectMcp.saveFailed": "保存项目 MCP 失败",
+  "workspaceSidebar.projectMcp.saved": "项目 MCP 已保存",
   "workspaceSidebar.sshConnectionTitle": "SSH 连接",
   "workspaceSidebar.sshConnectionAlias": "Alias",
   "workspaceSidebar.sshConnectionHost": "Host",
@@ -1701,8 +1714,15 @@ const zhCN: Record<string, string> = {
     "留空时自动探测系统终端配置；填写后作为 PiCode 终端的字体覆盖。",
   "settings.terminalFontFamilyPlaceholder": "留空自动继承，例如 MesloLGS NF, monospace",
   "settings.systemPrompt": "提示词",
+  "settings.systemPrompt.append": "追加系统提示词",
+  "settings.systemPrompt.replace": "系统提示词",
+  "settings.systemPrompt.commands": "斜杠命令模板",
+  "settings.systemPrompt.appendDescription":
+    "追加在系统提示词之后。项目里的 APPEND_SYSTEM.md 会替换这份。留空保存会删除文件。下次新建或重新打开会话后生效。",
+  "settings.systemPrompt.appendPlaceholder": "留空则不追加",
+  "settings.systemPrompt.commandHint": "输入 /{command} 触发",
   "settings.systemPrompt.description":
-    "全局提示词放在本机 Pi 的 prompts 目录，可以有很多份。每一份是这一层目录里的一个 Markdown 文件，文件名就是斜杠命令，例如 review.md 对应 /review。保存后再打开 / 就能用，不必重启。",
+    "每一份是本机 prompts 目录里的 Markdown 文件。列表显示文件名，例如 review.md，命令是 /review。保存后再打开 / 就能用。",
   "settings.systemPrompt.placeholder":
     "提示词正文。可以用 Markdown 开头的 description 作为命令说明",
   "settings.systemPrompt.save": "保存",
@@ -1722,7 +1742,7 @@ const zhCN: Record<string, string> = {
   "settings.systemPrompt.discard": "放弃",
   "settings.systemPrompt.systemTitle": "系统提示词",
   "settings.systemPrompt.systemDescription":
-    "这是本机 Pi 的全局系统提示词（SYSTEM.md）。有内容时替换内置提示词，不是追加。留空保存会删除文件并恢复内置提示词。项目里的 .pi/SYSTEM.md 优先于这份。下次新建或重新打开会话后生效。",
+    "有内容时替换内置提示词。项目里的 SYSTEM.md 会替换这份。留空保存会删除文件。下次新建或重新打开会话后生效。",
   "settings.systemPrompt.systemProjectDescription":
     "只作用于这个项目的 .pi/SYSTEM.md。有内容时替换全局和内置系统提示词。留空保存会删除文件。下次新建或重新打开会话后生效。",
   "settings.systemPrompt.systemPlaceholder": "留空则使用 Pi 内置系统提示词",
@@ -1841,7 +1861,8 @@ const zhCN: Record<string, string> = {
   "mobileRemote.starting": "正在准备地址。如果弹出 Windows 窗口，点「是」。",
   "mobileRemote.failed": "没能打开手机连接。",
   "mobileRemote.firewallPrompted": "请在弹出的 Windows 窗口里点「是」。不用自己去设置防火墙。",
-  "mobileRemote.firewallBlocked": "手机还是打不开。请关掉这个窗口再打开一次，并在弹出的 Windows 窗口里点「是」。",
+  "mobileRemote.firewallBlocked":
+    "手机还是打不开。请关掉这个窗口再打开一次，并在弹出的 Windows 窗口里点「是」。",
   "sidebar.settings.systemDefault": "系统默认",
   "sidebar.settings.locale.en-US": "English",
   "sidebar.settings.locale.zh-CN": "中文简体",

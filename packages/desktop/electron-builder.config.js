@@ -451,6 +451,17 @@ function assertPackagedNodePtyPrebuild(context) {
     throw new Error(`node-pty 预编译产物缺失: ${targetBinaryPath}`);
 }
 
+function assertPackagedMobileRemoteWeb(context) {
+  const indexPath = join(
+    resolvePackagedResourcesDir(context),
+    "mobile-web",
+    "index.html",
+  );
+  if (!existsSync(indexPath)) {
+    throw new Error(`手机远程页面缺失: ${indexPath}`);
+  }
+}
+
 /** @type {import("electron-builder").Configuration} */
 export default {
   appId: desktopProductIdentity.appId,
@@ -562,6 +573,9 @@ export default {
     runTimedSync("afterPack:assertPackagedNodePtyPrebuild", () =>
       assertPackagedNodePtyPrebuild(context),
     );
+    runTimedSync("afterPack:assertPackagedMobileRemoteWeb", () =>
+      assertPackagedMobileRemoteWeb(context),
+    );
     if (actualWindowsTarget) {
       await runTimedAsync("afterPack:writeWindowsInstallManifest", () =>
         writeWindowsInstallManifest(context),
@@ -569,6 +583,12 @@ export default {
     }
   },
   extraResources: [
+    {
+      // 手机扫码打开的是这份页面，不是桌面 renderer。发行包必须自带，不能再指向仓库里的 packages/web/dist。
+      from: resolve(workspaceRoot, "packages/web/dist"),
+      to: "mobile-web",
+      filter: ["**/*", "!**/*.map"],
+    },
     { from: resolve(workspaceRoot, noticesFileName), to: noticesFileName },
     ...(targetPlatform.os === "darwin"
       ? [

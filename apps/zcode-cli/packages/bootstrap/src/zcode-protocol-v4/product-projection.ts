@@ -4079,6 +4079,7 @@ export class ProductProjection {
         case "pluginUi.resourceListChanged":
         case "pluginUi.instanceClosed":
         case "pluginUi.appToolCall":
+        case "embeddedBrowser.open":
         // 非行 op：只动 workflowRuns 状态键，与 subagent 行投影的输入没有交集。
         case "workflowRun.updated":
         case "workflowRun.removed":
@@ -4230,6 +4231,7 @@ export class ProductProjection {
         case "pluginUi.resourceListChanged":
         case "pluginUi.instanceClosed":
         case "pluginUi.appToolCall":
+        case "embeddedBrowser.open":
         // 非行 op：改不了这一行的 prospective 形态。
         case "workflowRun.updated":
         case "workflowRun.removed":

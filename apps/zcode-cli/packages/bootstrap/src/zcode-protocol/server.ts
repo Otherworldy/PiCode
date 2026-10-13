@@ -290,6 +290,7 @@ export class ZCodeProtocolAgentServer {
       ),
       piHost: new HostSessionRegistry({
         storageRoot: join(ensureAppDataDir(homedir())),
+        redirectPlannotatorToEmbeddedBrowser: true,
         createSession: createSdkSessionFactory({
           capabilities: createPiCapabilityPorts(() => this.context),
           mcpCompat: {

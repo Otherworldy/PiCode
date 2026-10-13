@@ -2,8 +2,10 @@ import type { NetworkInterfaceInfo } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
 import { HostMessageTypes } from "@zcode/shared";
+import { join } from "node:path";
 import {
   createMobileRemotePairingController,
+  mobileRemoteWebRootCandidates,
   selectLanIPv4,
   type MobileRemoteHostPort,
 } from "./mobileRemotePairing.js";
@@ -56,6 +58,34 @@ describe("selectLanIPv4", () => {
 
   it("returns null when the machine has no LAN address", () => {
     expect(selectLanIPv4({ lo: [ipv4("127.0.0.1", true)] })).toBeNull();
+  });
+});
+
+describe("mobile remote web root", () => {
+  it("reads the packaged page before the repository dist", () => {
+    expect(
+      mobileRemoteWebRootCandidates({
+        override: "override",
+        packagedRoot: join("resources", "mobile-web"),
+        appPath: "app.asar",
+      }),
+    ).toEqual([
+      "override",
+      join("resources", "mobile-web"),
+      join("app.asar", "../web/dist"),
+      join("app.asar", "web-dist"),
+    ]);
+  });
+
+  it("does not invent a packaged directory for a development app", () => {
+    expect(
+      mobileRemoteWebRootCandidates({
+        appPath: join("packages", "desktop"),
+      }),
+    ).toEqual([
+      join("packages", "desktop", "../web/dist"),
+      join("packages", "desktop", "web-dist"),
+    ]);
   });
 });
 

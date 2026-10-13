@@ -1,6 +1,7 @@
 /* eslint-disable max-lines */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createUuid } from "@zcode/shared";
+import { registerEmbeddedBrowserOpener } from "@/v4/embeddedBrowserOpen.js";
 import type { EmbeddedBrowserOpenUrlRequest, IPlatformService } from "@zcode/shared";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
 // 保活：side pane terminal 跨 workspace 会话上移到模块级 registry。
@@ -510,6 +511,11 @@ export function useAppPanels(options: {
   // waitForGuest 10 秒超时并把 tab closeTabDurably 删掉，用户退出设置页就看到侧边栏空空如也。
   // 可见性只表达“现在给不给用户看”，不能决定“要不要接收权威事件”；是否抢焦点仍由 shouldReveal
   // 的 scope 匹配决定，因此这里不再依赖 isWorkspaceVisible。
+  useEffect(
+    () => registerEmbeddedBrowserOpener(handleOpenBrowserUrl),
+    [handleOpenBrowserUrl],
+  );
+
   useEffect(() => {
     if (!supportsEmbeddedBrowser || !isDesktop || !platform?.onOpenBrowserUrl) {
       return;

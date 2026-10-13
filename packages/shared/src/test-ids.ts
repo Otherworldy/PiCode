@@ -501,6 +501,8 @@ export const TID_WORKSPACE_HELP_MENU_RESOURCE_MANAGER = "workspace-help-menu-res
 export const TID_WORKSPACE_FILE_TREE_BUTTON = "workspace-file-tree-button";
 /** 侧边栏项目系统提示词按钮（动态后缀为 workspacePath） */
 export const TID_WORKSPACE_SYSTEM_PROMPT_BUTTON = "workspace-system-prompt-button";
+/** 侧边栏项目 MCP 按钮（动态后缀为 workspacePath） */
+export const TID_WORKSPACE_PROJECT_MCP_BUTTON = "workspace-project-mcp-button";
 /** 工作区文件树面板 */
 export const TID_WORKSPACE_FILE_TREE_PANEL = "workspace-file-tree-panel";
 /** 工作区文件树刷新按钮 */

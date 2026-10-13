@@ -166,6 +166,11 @@ export const conversationDeltaSchema = z.discriminatedUnion("op", [
     toolName: z.string(),
     arguments: z.record(z.string(), z.unknown()),
   }),
+  // Plannotator 审查页。live-only：不进快照、不冷恢复；壳决定开内置浏览器还是系统浏览器。
+  z.object({
+    op: z.literal("embeddedBrowser.open"),
+    url: z.string().min(1).max(4096),
+  }),
   /**
    * 一条 dwf run 的键级增量。`revision` 是**这次变化之后**的 `workflowRuns.revision`（绝对值）；
    * 一条引擎事件最多产生一条本 op（节点相位、派生的 actor 状态、用量、水位一起落地，原子）。

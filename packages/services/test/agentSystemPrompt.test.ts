@@ -38,6 +38,17 @@ test("global and project prompts resolve to Pi's SYSTEM.md paths", () => {
   );
   assert.equal(remoteAgentSystemPromptPath("/srv/app/"), "/srv/app/.pi/SYSTEM.md");
   assert.equal(remoteAgentSystemPromptPath("/"), "/.pi/SYSTEM.md");
+  assert.equal(
+    localAgentSystemPromptPath({
+      scope: "project",
+      rootPath: "/work/app",
+      agentDir: "/tmp/agent",
+      kind: "append",
+    }).replaceAll("\\", "/"),
+    "/work/app/.pi/APPEND_SYSTEM.md",
+  );
+  assert.equal(remoteAgentSystemPromptPath("/srv/app/", "append"), "/srv/app/.pi/APPEND_SYSTEM.md");
+  assert.equal(remoteAgentSystemPromptPath("/", "append"), "/.pi/APPEND_SYSTEM.md");
   assert.equal(prepareAgentSystemPromptWrite("  \n"), null);
   assert.equal(prepareAgentSystemPromptWrite("\uFEFFkeep"), "keep");
 });
@@ -65,6 +76,43 @@ test("blank save deletes SYSTEM.md and a later read is empty", async () => {
     assert.equal(read.exists, false);
     assert.equal(read.content, "");
     assert.equal(read.path, join(agentDir, "SYSTEM.md"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("project append prompt writes APPEND_SYSTEM.md and leaves SYSTEM.md alone", async () => {
+  const root = await makeRoot();
+  try {
+    await writeAgentSystemPromptFile({
+      scope: "project",
+      rootPath: root,
+      agentDir: join(root, "unused-agent"),
+      kind: "append",
+      content: "project addendum",
+    });
+    assert.equal(await readFile(join(root, ".pi", "APPEND_SYSTEM.md"), "utf8"), "project addendum");
+    await assert.rejects(stat(join(root, ".pi", "SYSTEM.md")));
+    assert.equal(
+      (
+        await readAgentSystemPromptFile({
+          scope: "project",
+          rootPath: root,
+          agentDir: root,
+          kind: "append",
+        })
+      ).content,
+      "project addendum",
+    );
+    const cleared = await writeAgentSystemPromptFile({
+      scope: "project",
+      rootPath: root,
+      agentDir: root,
+      kind: "append",
+      content: "  ",
+    });
+    assert.equal(cleared.exists, false);
+    await assert.rejects(stat(join(root, ".pi", "APPEND_SYSTEM.md")));
   } finally {
     await rm(root, { recursive: true, force: true });
   }

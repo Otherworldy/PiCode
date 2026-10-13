@@ -33,6 +33,7 @@ export function McpServerForm({
   onCancel,
   onDelete,
   scopeKey,
+  showScope = true,
   workspaceTabs,
   onScopeKeyChange,
 }: {
@@ -41,6 +42,7 @@ export function McpServerForm({
   editorMode: McpEditorMode;
   source?: McpSource;
   scopeKey: string;
+  showScope?: boolean;
   workspaceTabs: WorkspaceTabState[];
   onScopeKeyChange: (scopeKey: string) => void;
   onEditorModeChange: (mode: McpEditorMode) => void;
@@ -163,7 +165,7 @@ export function McpServerForm({
   // （配置文件不落多余字段），用户显式选 auto 时同样写回空串。
   const updateProtocolVersion = (value: string) =>
     update({ protocolVersion: value === "auto" ? "" : value });
-  const scopeSelect = (
+  const scopeSelect = showScope ? (
     <McpScopeMenu
       disabled={!!initial}
       scopeKey={scopeKey}
@@ -175,13 +177,13 @@ export function McpServerForm({
         onScopeKeyChange(nextScopeKey);
       }}
     />
-  );
+  ) : null;
 
   return (
     <div className="space-y-4 rounded-xl border border-border p-4">
       {editorMode === "json" ? (
         <div className="space-y-3">
-          <div className="flex justify-end">{scopeSelect}</div>
+          {scopeSelect ? <div className="flex justify-end">{scopeSelect}</div> : null}
           <div className="space-y-1.5">
             <McpFormFieldLabel>
               {intl.formatMessage({ id: "settings.mcp.form.fullConfig" })}
@@ -225,7 +227,7 @@ export function McpServerForm({
                 onChange={(e) => update({ name: e.target.value })}
               />
             </div>
-            <div>{scopeSelect}</div>
+            {scopeSelect ? <div>{scopeSelect}</div> : null}
           </div>
 
           <div className="space-y-1.5">

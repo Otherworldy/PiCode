@@ -165,21 +165,6 @@ interface McpOAuthAuthorizationPendingRefresh {
   workspaceKey: string;
 }
 
-function transitionMcpAutoStatusListRefreshKey(
-  previousKey: string,
-  nextKey: string,
-): { lastRefreshKey: string; shouldRefresh: boolean } {
-  if (!nextKey) {
-    // workspace 切换会先清空 server/status；若空状态仍保留 A 的去重 key，
-    // 回到相同配置的 A 时会被误判为已刷新，列表和 OAuth 轮询永久停在 unknown。
-    return { lastRefreshKey: "", shouldRefresh: false };
-  }
-  return {
-    lastRefreshKey: nextKey,
-    shouldRefresh: previousKey !== nextKey,
-  };
-}
-
 interface McpOAuthAuthorizationFollowupRefresh {
   mcpServers: ZCodeAgentMcpServer[];
   refreshKey: string;
@@ -671,25 +656,6 @@ export function McpSettingsSection({
     serverStatusListKey,
     storeWorkspaceKey: currentMcpStoreWorkspaceKey,
   };
-  const autoStatusListRefreshKey = useMemo(() => {
-    if (
-      !isConfigLoaded ||
-      !activeWorkspacePath ||
-      !activeWorkspaceKey ||
-      mcpConfigReadyWorkspaceKey !== activeWorkspaceKey ||
-      !serverStatusListKey
-    ) {
-      return "";
-    }
-    return [activeWorkspaceIdentity ?? "", activeWorkspacePath, serverStatusListKey].join("\n");
-  }, [
-    activeWorkspaceIdentity,
-    activeWorkspaceKey,
-    activeWorkspacePath,
-    isConfigLoaded,
-    mcpConfigReadyWorkspaceKey,
-    serverStatusListKey,
-  ]);
   const pendingMcpOAuthAuthorizationRefreshKey = useMemo(
     () => buildPendingMcpOAuthAuthorizationRefreshKey(servers, statusSnapshots),
     [servers, statusSnapshots],
@@ -709,7 +675,6 @@ export function McpSettingsSection({
   );
   const lastPendingMcpOAuthAuthorizationRefreshRef =
     useRef<McpOAuthAuthorizationPendingRefresh | null>(null);
-  const lastAutoStatusListRefreshKeyRef = useRef("");
   const requestMcpServerStatusList = useCallback(
     async (options?: {
       mcpServers?: ZCodeAgentMcpServer[];
@@ -928,18 +893,6 @@ export function McpSettingsSection({
     scopeFilter,
     services.pluginManagementService,
   ]);
-
-  useEffect(() => {
-    const transition = transitionMcpAutoStatusListRefreshKey(
-      lastAutoStatusListRefreshKeyRef.current,
-      autoStatusListRefreshKey,
-    );
-    lastAutoStatusListRefreshKeyRef.current = transition.lastRefreshKey;
-    if (!transition.shouldRefresh) {
-      return;
-    }
-    void requestMcpServerStatusList();
-  }, [autoStatusListRefreshKey, requestMcpServerStatusList]);
 
   useEffect(() => {
     if (!activeWorkspaceKey || mcpConfigReadyWorkspaceKey !== activeWorkspaceKey) {

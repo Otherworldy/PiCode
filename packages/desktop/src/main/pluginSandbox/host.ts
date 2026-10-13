@@ -124,7 +124,7 @@ export function installPluginSandboxHost(input: {
     registry,
     async prompt({ record, permissions: pending }) {
       const text = formatPluginSandboxPermissionDialogText(
-        { serverName: record.serverName ?? "ZCode Gen UI", permissions: pending },
+        { serverName: record.serverName ?? "PiCode Gen UI", permissions: pending },
         resolveLocale(),
       );
       const owner = electronWebContents.fromId(record.ownerWebContentsId);

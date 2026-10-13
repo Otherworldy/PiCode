@@ -7,7 +7,7 @@ export const enUS: ZCodeCopy = {
       localeUnsupported: (value) =>
         `Unsupported --locale value: ${value}. Supported locales: en-US, zh-CN, auto.`,
     },
-    help: (version) => `zcode ${version}
+    help: (version) => `PiCode ${version}
 
 Usage:
   zcode [command] [options]

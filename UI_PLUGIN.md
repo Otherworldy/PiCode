@@ -17,7 +17,7 @@
 
 UI Plugin 给普通插件增加可交互页面。Agent 可以调用工具创建或修改内容，用户可以直接操作画布、表单、文件列表，再把选区或操作结果交回对话。页面通过 MCP Apps 与宿主通信，业务数据由插件的 MCP 服务管理。
 
-注册、安装、启用和更新沿用普通插件流程。页面使用官方 `@modelcontextprotocol/ext-apps`，不需要单独的 ZCode Plugin SDK，也不要求安装开发指引插件。当前插件仓库锁定页面 SDK `2.0.0`、MCP 服务 SDK `1.29.0`；阅读上游示例时注意 SDK 主版本，实际安装以仓库锁文件为准。
+注册、安装、启用和更新沿用普通插件流程。页面使用官方 `@modelcontextprotocol/ext-apps`，不需要单独的 PiCode Plugin SDK，也不要求安装开发指引插件。当前插件仓库锁定页面 SDK `2.0.0`、MCP 服务 SDK `1.29.0`；阅读上游示例时注意 SDK 主版本，实际安装以仓库锁文件为准。
 
 | 能力               | 用户看到的效果                               | 开发入口                                         |
 | ------------------ | -------------------------------------------- | ------------------------------------------------ |
@@ -29,7 +29,7 @@ UI Plugin 给普通插件增加可交互页面。Agent 可以调用工具创建�
 | 模型调用页面工具   | 操作只有活页面才拥有的编辑器状态             | `registerTool()` 或 `onlisttools` + `oncalltool` |
 | 页面状态与资源更新 | 切换位置保留页面，重建恢复视图，订阅服务变化 | 活页面保留、widgetState、资源订阅                |
 
-交互页面目前用于 **ZCode Desktop 的本地工作区**。Web、手机和远程工作区保留普通 MCP 工具记录，不把这些路径视为已经支持交互面板。插件页面与 Gen UI 的加载和通信协议不同，不能混用两者的 API。
+交互页面目前用于 **PiCode Desktop 的本地工作区**。Web、手机和远程工作区保留普通 MCP 工具记录，不把这些路径视为已经支持交互面板。插件页面与 Gen UI 的加载和通信协议不同，不能混用两者的 API。
 
 ## 重点示例：Excalidraw
 
@@ -125,7 +125,7 @@ Gen UI（生成式界面）让 Agent 针对当前问题生成 HTML / JavaScript 
 | <a href="docs/images/gen-ui/state.png"><img src="docs/images/gen-ui/state.png" alt="偏好、参数和恢复开关，以及待保存的 modelContent 和 privateContent 快照" width="420" /></a> | <a href="docs/images/gen-ui/design.png"><img src="docs/images/gen-ui/design.png" alt="轮播展示的音乐播放器设计稿，当前为三个方案中的极简方案" width="420" /></a> |
 | 将偏好和参数组织成 `modelContent` / `privateContent` 快照。画面展示待保存状态；页面可保存参数，再通过按钮发起追问。                                                            | `viz-carousel` 展示多种播放器设计，配合 Tweak 调整样式；这是界面原型。                                                                                           |
 
-在支持 Gen UI 的 ZCode Desktop 会话中，可以直接提出下面这样的请求。具体控件和交互由 Agent 根据任务生成：
+在支持 Gen UI 的 PiCode Desktop 会话中，可以直接提出下面这样的请求。具体控件和交互由 Agent 根据任务生成：
 
 | 场景         | 示例提示词                                                                                    | 可以如何交互                                  |
 | ------------ | --------------------------------------------------------------------------------------------- | --------------------------------------------- |
@@ -338,7 +338,7 @@ stdio MCP 服务的 stdout 只输出协议消息，调试日志写 stderr。定�
 
 ### 官方 MCP Apps API
 
-| API / 事件                                                      | 用途                                 | ZCode 行为与注意事项                                                                          |
+| API / 事件                                                      | 用途                                 | PiCode 行为与注意事项                                                                          |
 | --------------------------------------------------------------- | ------------------------------------ | --------------------------------------------------------------------------------------------- |
 | `new App(info, capabilities, options)`、`connect()`             | 创建页面连接并完成握手               | 每个活页面只建一个 App；不要同时访问会触发另一连接的 `window.zcode`                           |
 | `getHostVersion()`、`getHostCapabilities()`、`getHostContext()` | 读取宿主、能力、主题、语言和展示模式 | 在连接完成后使用；不要只按宿主版本号猜能力                                                    |
@@ -358,11 +358,11 @@ stdio MCP 服务的 stdout 只输出协议消息，调试日志写 stderr。定�
 | `downloadFile({ contents })`                                    | 调用原生保存对话框                   | 需要 `downloadFile` 能力；支持嵌入资源或当前服务的资源链接；取消/写入失败返回 `isError: true` |
 | `sendLog({ level, data })`                                      | 发送可观察的页面诊断                 | 不向 stdio 服务的 stdout 写调试日志；不要记录密钥或用户内容                                   |
 | `onteardown`                                                    | 释放页面监听器等资源                 | 宿主做有时限的 teardown，不应把唯一保存操作留到此时                                           |
-| `requestTeardown()`                                             | 请求宿主释放页面                     | 当前 ZCode 只记录请求；实际生命周期跟随卡片/面板，不能把它当关闭按钮                          |
+| `requestTeardown()`                                             | 请求宿主释放页面                     | 当前 PiCode 只记录请求；实际生命周期跟随卡片/面板，不能把它当关闭按钮                          |
 
 Sampling 使用接纳请求时的任务模型，不读取主聊天历史；只有 App 明确传入的历史进入请求。当前不接受 `temperature`、`tools`、原生 audio 等未实现参数，`includeContext` 只支持 `none`。回答和取消不应被自动追加为主对话回合。
 
-### ZCode 扩展与低层 MCP 请求
+### PiCode 扩展与低层 MCP 请求
 
 下面的 `app.request()` 是官方 App 的低层接口。请求结果应使用 `@modelcontextprotocol/core` 的对应 schema 校验。
 

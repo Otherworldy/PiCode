@@ -9,6 +9,8 @@ import {
 } from "./mobileRemoteFirewall.js";
 import {
   createMobileRemotePairingController,
+  MOBILE_REMOTE_PACKAGED_WEB_DIR,
+  mobileRemoteWebRootCandidates,
   type MobileRemoteHostPort,
 } from "./mobileRemotePairing.js";
 
@@ -33,12 +35,13 @@ function wrapMainPort(port: MessagePortMain): MessagePortLike {
 }
 
 function resolveMobileRemoteWebRoot(): string | null {
-  const override = process.env.ZCODE_MOBILE_REMOTE_WEB_ROOT?.trim();
-  const candidates = [
-    override,
-    join(app.getAppPath(), "../web/dist"),
-    join(app.getAppPath(), "web-dist"),
-  ].filter((value): value is string => Boolean(value));
+  const candidates = mobileRemoteWebRootCandidates({
+    override: process.env.ZCODE_MOBILE_REMOTE_WEB_ROOT,
+    packagedRoot: app.isPackaged
+      ? join(process.resourcesPath, MOBILE_REMOTE_PACKAGED_WEB_DIR)
+      : null,
+    appPath: app.getAppPath(),
+  });
   return candidates.find((path) => existsSync(join(path, "index.html"))) ?? null;
 }
 

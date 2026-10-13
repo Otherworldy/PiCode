@@ -14,12 +14,16 @@ const PROMPT_TEXTAREA_CLASS =
 export function AgentSystemPromptField({
   description,
   fileService,
+  kind = "replace",
+  placeholder,
   rootPath,
   scope,
   testIdPrefix,
 }: {
   description: string;
   fileService: Pick<IFileService, "readAgentSystemPrompt" | "writeAgentSystemPrompt">;
+  kind?: "replace" | "append";
+  placeholder?: string;
   rootPath?: string;
   scope: "global" | "project";
   testIdPrefix: string;
@@ -42,7 +46,7 @@ export function AgentSystemPromptField({
     setLoading(true);
     setLoadFailed(false);
     try {
-      const result = await fileServiceRef.current.readAgentSystemPrompt({ scope, rootPath });
+      const result = await fileServiceRef.current.readAgentSystemPrompt({ scope, rootPath, kind });
       if (requestIdRef.current !== requestId) return;
       setDraft(result.content);
       setSaved(result.content);
@@ -57,7 +61,7 @@ export function AgentSystemPromptField({
     } finally {
       if (requestIdRef.current === requestId) setLoading(false);
     }
-  }, [rootPath, scope]);
+  }, [kind, rootPath, scope]);
 
   useEffect(() => {
     void load();
@@ -71,11 +75,18 @@ export function AgentSystemPromptField({
       const result = await runUserActionAsync({
         input: {
           featureId: "settings.systemPrompt",
-          action: scope === "global" ? "save_system_global" : "save_system_project",
+          action:
+            kind === "append"
+              ? scope === "global"
+                ? "save_system_global_append"
+                : "save_system_project_append"
+              : scope === "global"
+                ? "save_system_global"
+                : "save_system_project",
           trigger: "button",
         },
         operation: () =>
-          fileServiceRef.current.writeAgentSystemPrompt({ scope, rootPath, content: draft }),
+          fileServiceRef.current.writeAgentSystemPrompt({ scope, rootPath, kind, content: draft }),
         completed: { resultSource: "platform_result" },
         failureStage: "settings_commit",
       });
@@ -92,16 +103,13 @@ export function AgentSystemPromptField({
     } finally {
       setSaving(false);
     }
-  }, [dirty, draft, intl, rootPath, saving, scope]);
+  }, [dirty, draft, intl, kind, rootPath, saving, scope]);
 
   return (
     <div className="space-y-3">
-      <div>
-        <h3 className="text-ui-base font-medium text-foreground">
-          {intl.formatMessage({ id: "settings.systemPrompt.systemTitle" })}
-        </h3>
-        <p className="mt-1 text-ui-base leading-6 text-foreground-subtle">{description}</p>
-      </div>
+      {description ? (
+        <p className="text-ui-base leading-6 text-foreground-subtle">{description}</p>
+      ) : null}
       {pathLabel ? (
         <p className="break-all font-mono text-ui-sm text-foreground-subtle">{pathLabel}</p>
       ) : null}
@@ -111,9 +119,16 @@ export function AgentSystemPromptField({
         </p>
       ) : (
         <Textarea
-          aria-label={intl.formatMessage({ id: "settings.systemPrompt.systemTitle" })}
+          aria-label={intl.formatMessage({
+            id:
+              kind === "append"
+                ? "settings.systemPrompt.append"
+                : "settings.systemPrompt.systemTitle",
+          })}
           className={PROMPT_TEXTAREA_CLASS}
-          data-testid={`${testIdPrefix}-system-editor`}
+          data-testid={
+            kind === "append" ? `${testIdPrefix}-append-editor` : `${testIdPrefix}-system-editor`
+          }
           disabled={loading || saving}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
@@ -122,13 +137,23 @@ export function AgentSystemPromptField({
               if (dirty && !saving && !loading) void save();
             }
           }}
-          placeholder={intl.formatMessage({ id: "settings.systemPrompt.systemPlaceholder" })}
+          placeholder={
+            placeholder ??
+            intl.formatMessage({
+              id:
+                kind === "append"
+                  ? "settings.systemPrompt.appendPlaceholder"
+                  : "settings.systemPrompt.systemPlaceholder",
+            })
+          }
           spellCheck={false}
           value={draft}
         />
       )}
       <Button
-        data-testid={`${testIdPrefix}-system-save`}
+        data-testid={
+          kind === "append" ? `${testIdPrefix}-append-save` : `${testIdPrefix}-system-save`
+        }
         disabled={!dirty || saving || loading}
         onClick={() => void save()}
         size="sm"

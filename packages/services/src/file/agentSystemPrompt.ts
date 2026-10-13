@@ -6,6 +6,7 @@ import {
   localAgentSystemPromptPath,
   prepareAgentSystemPromptWrite,
   resolvePiAgentDir,
+  type AgentSystemPromptKind,
   type AgentSystemPromptScope,
 } from "@zcode/shared/node";
 
@@ -36,11 +37,13 @@ export async function readAgentSystemPromptFile(input: {
   scope: AgentSystemPromptScope;
   rootPath?: string;
   agentDir?: string;
+  kind?: AgentSystemPromptKind;
 }): Promise<AgentSystemPromptFile> {
   const path = localAgentSystemPromptPath({
     scope: input.scope,
     rootPath: input.rootPath,
     agentDir: input.agentDir ?? currentPiAgentDir(),
+    kind: input.kind,
   });
   try {
     const fileStat = await stat(path);
@@ -63,11 +66,13 @@ export async function writeAgentSystemPromptFile(input: {
   rootPath?: string;
   content: string;
   agentDir?: string;
+  kind?: AgentSystemPromptKind;
 }): Promise<AgentSystemPromptFile> {
   const path = localAgentSystemPromptPath({
     scope: input.scope,
     rootPath: input.rootPath,
     agentDir: input.agentDir ?? currentPiAgentDir(),
+    kind: input.kind,
   });
   const next = prepareAgentSystemPromptWrite(input.content);
   if (next === null) {

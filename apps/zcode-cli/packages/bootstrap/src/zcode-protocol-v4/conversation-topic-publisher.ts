@@ -715,7 +715,8 @@ export class ConversationTopicPublisher {
             delta.op === "pluginUi.resourceUpdated" ||
             delta.op === "pluginUi.resourceListChanged" ||
             delta.op === "pluginUi.appToolCall" ||
-            delta.op === "pluginUi.instanceClosed"
+            delta.op === "pluginUi.instanceClosed" ||
+            delta.op === "embeddedBrowser.open"
           )
             return false;
           // 键级增量作用在状态键上，不在 60 行 wire tail 里——没有「已滑出窗口所以不计」这一说，

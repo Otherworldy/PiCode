@@ -124,7 +124,7 @@ export function createSshFileService(spec: SshRemoteSpec): IFileService {
     async readAgentSystemPrompt(params) {
       // SSH 上的 Agent 仍跑在本机，全局 SYSTEM.md 不在远端。全局只走本机 file service。
       if (params.scope !== "project") unsupported("readAgentSystemPrompt");
-      const path = remoteAgentSystemPromptPath(params.rootPath ?? "");
+      const path = remoteAgentSystemPromptPath(params.rootPath ?? "", params.kind);
       const probe = await sshText(
         spec,
         `if test -f ${quotePosixArg(path)}; then printf yes; else printf no; fi`,
@@ -143,7 +143,7 @@ export function createSshFileService(spec: SshRemoteSpec): IFileService {
     },
     async writeAgentSystemPrompt(params) {
       if (params.scope !== "project") unsupported("writeAgentSystemPrompt");
-      const path = remoteAgentSystemPromptPath(params.rootPath ?? "");
+      const path = remoteAgentSystemPromptPath(params.rootPath ?? "", params.kind);
       const next = prepareAgentSystemPromptWrite(params.content);
       if (next === null) {
         await sshText(spec, `rm -f -- ${quotePosixArg(path)}`);

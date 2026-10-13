@@ -37,12 +37,15 @@ export {
   isAppDataDirName,
 } from "./node/appDataDir.js";
 export {
+  AGENT_APPEND_SYSTEM_PROMPT_FILE_NAME,
   AGENT_SYSTEM_PROMPT_FILE_NAME,
   AGENT_SYSTEM_PROMPT_MAX_BYTES,
+  agentSystemPromptFileName,
   localAgentSystemPromptPath,
   prepareAgentSystemPromptWrite,
   remoteAgentSystemPromptPath,
   resolvePiAgentDir,
+  type AgentSystemPromptKind,
   type AgentSystemPromptScope,
 } from "./node/agentSystemPromptFile.js";
 export {

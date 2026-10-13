@@ -90,7 +90,9 @@ export const SETTINGS_USER_ACTION_FEATURES = {
     "delete_global",
     "delete_project",
     "save_system_global",
+    "save_system_global_append",
     "save_system_project",
+    "save_system_project_append",
   ],
   "settings.browser": [
     "toggle_browser_use",

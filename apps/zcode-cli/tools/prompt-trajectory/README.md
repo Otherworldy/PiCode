@@ -1,6 +1,6 @@
 # @zcode/prompt-trajectory
 
-OpenAI protocol trajectory recorder for inspecting zcode-cli prompt assembly.
+OpenAI protocol trajectory recorder for inspecting PiCode CLI prompt assembly.
 
 This tool lives under `tools/` so it is available in the pnpm workspace but stays out of
 the production CLI and SEA packaging path.
@@ -39,7 +39,7 @@ it does not alter the derived trajectories. Without this option, no reference
 copy is written. Unrecognized options are rejected before recording or derivation.
 
 When `--model`, `--upstream-base-url`, and API-key flags are omitted, the recorder
-uses the same zcode model config resolution as the CLI. The upstream request is
+uses the same PiCode model config resolution as the CLI. The upstream request is
 still proxied through the recorder; only the model provider `baseURL` is replaced
 with the local proxy URL at runtime.
 

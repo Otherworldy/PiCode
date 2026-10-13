@@ -13,6 +13,11 @@ import { HostQueue } from "./host-queue.js";
 import { workspaceKey } from "./identity.js";
 import { readPiJsonl, shouldApplyStoredSessionTitle } from "./jsonl-history.js";
 import {
+  installPlannotatorEmbeddedBrowserRedirect,
+  notePlannotatorBrowserSession,
+  registerPlannotatorBrowserSession,
+} from "./plannotator-browser-redirect.js";
+import {
   abortLiveSubagent,
   getLiveSubagentModel,
   hasLiveSubagent,
@@ -153,6 +158,11 @@ export interface RegistryOptions {
   createToolPermission?: (hosted: HostedSession) => ToolPermissionCheck;
   /** Pi 原生会话根目录，缺省 `~/.pi/agent/sessions`。测试可注入。 */
   nativeSessionsRoot?: string;
+  /**
+   * 协议宿主把 Plannotator 的审查页交给内置浏览器。
+   * 纯 CLI 不打开，插件继续用本机浏览器。
+   */
+  redirectPlannotatorToEmbeddedBrowser?: boolean;
 }
 
 const execFileAsync = promisify(execFile);
@@ -232,7 +242,11 @@ export class HostSessionRegistry {
   private readonly children = new Map<string, Set<string>>();
   private readonly toolChecks = new Map<string, ToolPermissionCheck>();
 
-  constructor(private readonly options: RegistryOptions) {}
+  constructor(private readonly options: RegistryOptions) {
+    if (options.redirectPlannotatorToEmbeddedBrowser) {
+      installPlannotatorEmbeddedBrowserRedirect();
+    }
+  }
 
   get(sessionId: string): HostedSession | undefined {
     return this.sessions.get(sessionId);
@@ -696,6 +710,11 @@ export class HostSessionRegistry {
       }
       for (const listener of deltaListeners) listener(deltas);
     };
+    const unregisterBrowser = this.options.redirectPlannotatorToEmbeddedBrowser
+      ? registerPlannotatorBrowserSession(meta.sessionId, (url) => {
+          emit([{ op: "embeddedBrowser.open", url }]);
+        })
+      : () => undefined;
     // 入队、删除、改写都走 replaceQueue。不推出去，界面看不到，也取消不了。
     projector.bindQueuePublish(emit);
     const applyModel = async (selection: SubmissionModel) => {
@@ -892,6 +911,9 @@ export class HostSessionRegistry {
         emit(projector.bindPersistedEntry(notice.entryId));
       }) ?? (() => undefined);
     const unsubscribe = pi.subscribe((event: PiHostEvent) => {
+      if (this.options.redirectPlannotatorToEmbeddedBrowser) {
+        notePlannotatorBrowserSession(meta.sessionId);
+      }
       try {
         if (event.type === "extension_ui_request") {
           handleUi(event);
@@ -1257,6 +1279,7 @@ export class HostSessionRegistry {
         unsubscribeProcesses();
         unsubscribePersisted();
         unsubscribe();
+        unregisterBrowser();
         // 常驻回收只关 runtime，不删 jsonl。注册表必须同步摘掉：留着已关掉的实例，下次 create 会直接复用它，不再读文件。
         // MCP 子进程在 pi.dispose() 里异步关，不能挡住这次摘除。
         this.sessions.delete(meta.sessionId);

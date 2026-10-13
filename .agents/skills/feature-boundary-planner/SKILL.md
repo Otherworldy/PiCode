@@ -1,6 +1,6 @@
 ---
 name: feature-boundary-planner
-description: Map a ZCode behavior change to current UI surfaces, state owners, protocol commands, persistence, and validation. Use for impact analysis, product-boundary planning, or an implementation handoff grounded in the checked-out source.
+description: Map a PiCode behavior change to current UI surfaces, state owners, protocol commands, persistence, and validation. Use for impact analysis, product-boundary planning, or an implementation handoff grounded in the checked-out source.
 ---
 
 # Feature Boundary Planner

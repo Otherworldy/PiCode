@@ -18,6 +18,8 @@ Main 只保存这个窗口已打开的工作区目录，用来决定挂哪条端
 
 Main 在 WebSocket 和 MessagePort 之间转发 RPC 帧，不解释发送、停止或提问。断线后的下一次挂接仍由 Host 的 replayable 快照补齐。
 
+手机页面来自 `@zcode/web` 的生产构建。桌面生产构建会先构建它，发行包再把它放进 `resources/mobile-web`。安装后的 Main 只读这个目录。开发态才回退到仓库里的 `packages/web/dist`。两边都没有 `index.html` 时，扫码会看到页面未就绪，而不是再去找另一套 Web 开发服务。
+
 ## 所有者
 
 每个窗口至多一个配对会话，所有者是 Main 的 `createMobileRemotePairingController`。Host 仍拥有会话和快照。

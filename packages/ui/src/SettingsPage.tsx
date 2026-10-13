@@ -1602,7 +1602,7 @@ export function SettingsPage({
                           </ServiceProvider>
                         ) : activeSection === "systemPrompt" ? (
                           <ServiceProvider services={localHostServices}>
-                            {/* 全局 SYSTEM.md 跟模型目录一样，是本机 ~/.pi/agent，不跟远端工作区走。 */}
+                            {/* 全局提示词跟模型目录一样，是本机 ~/.pi/agent，不跟远端工作区走。 */}
                             <SystemPromptSettingsSection
                               fileService={localHostServices.fileService}
                             />

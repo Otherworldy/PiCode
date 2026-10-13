@@ -110,6 +110,8 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 计划审查不占着工具调用。`plannotator_submit_plan` 的结果带 `details.pending: true` 时，这一轮的 `turnHeader` 保持 `running`，时间线继续显示「工作中」，时长接着走。`control.phase` 仍收成完成：输入框可以接着发消息，不因为审查而排队或停住。所有者是投影器里的这一轮 id。插件用 `sendUserMessage` 把批准、拒绝或只回答问题送进来时，这条用户消息的 input source 是 `extension`；对上原文后先把审查轮收成 `completedSuccess`，再开新回合。审查期间自己打的字 source 不是 `extension`，不收口。离开计划模式、状态 `plannotator` 被清掉时也收口。用户停止这一轮时按中断收口，不继续挂着。冷重放的工具结果没有 `details`，历史会话不会停在工作中。
 
+Plannotator 打开审查页时，宿主优先把地址交给右侧普通内置浏览器，不改插件源码。插件仍走自己的 `openBrowser`。协议宿主在进程里拦住这次启动：调用栈来自插件的 `network.ts`，参数里有 http(s) 地址，且没有显式 `PLANNOTATOR_BROWSER`。拦住后发 live-only 增量 `embeddedBrowser.open`。它不进快照、不抬 conversation revision、不刷侧栏。桌面壳把它开成右侧浏览器页，和「用内置浏览器打开」同一条路径。没有内置浏览器的壳（网页、手机）用系统浏览器打开这个地址。纯 CLI 不安装拦截，插件仍开本机浏览器。拦截模块加载时不能调用 `createRequire(import.meta.url)`：桌面 Agent 是 CJS 包，`import.meta.url` 为空，一加载就退出，`--prepare-storage` 会让桌面只看到 `transport_closed`。对不上会话、或用户显式指定了 `PLANNOTATOR_BROWSER` 时放行插件原来的启动。未设置 `PLANNOTATOR_GLIMPSE` 时宿主把它写成 `0`，避免 Glimpse 抢在本机浏览器之前打开。会话归属跟当前执行上下文；只有一个会话时才用它兜底。两个会话同时打开、又对不上上下文时不猜，放行本机浏览器。
+
 ## 呈现
 
 | Pi | V4 `toolName` |
@@ -141,13 +143,13 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 ## MCP
 
-用户 MCP 的主人是 Pi：用户级 `~/.pi/agent/mcp.json`，项目级 `<cwd>/.pi/mcp.json`，都是 `mcpServers`。设置页仍写这两个文件。目标文件还不存在时，把旧的 `~/.PiCode/cli/config.json` 或 `<cwd>/.PiCode/config.json` 里的 `mcp.servers` 拷过去一次；之后只认 Pi 文件。项目条目覆盖同名的用户条目。SSE 不连。`directTools: true` 写成 Pi 的 `exposure: "direct"`，没写则是 `codemode`。
+用户 MCP 的主人是 Pi：用户级 `~/.pi/agent/mcp.json`，项目级 `<cwd>/.pi/mcp.json`，都是 `mcpServers`。设置页仍写这两个文件。侧栏的项目 MCP 按钮只写当前工作区的项目文件。目标文件还不存在时，把旧的 `~/.PiCode/cli/config.json` 或 `<cwd>/.PiCode/config.json` 里的 `mcp.servers` 拷过去一次；之后只认 Pi 文件。项目条目覆盖同名的用户条目。SSE 不连。`directTools: true` 写成 Pi 的 `exposure: "direct"`，没写则是 `codemode`。
 
 桌面 `--prepare-storage` 只解析会话库路径，不迁移、也不创建 Pi MCP 文件。这个 Worker 不能改 cwd，Windows 上继承到的目录经常是 `C:\Windows\System32`。在那里创建项目 `.pi` 会 EPERM，进程在写出库路径之前退出，桌面只能看到传输中断。迁移仍只发生在真正的会话进程里，并且用该工作区当项目目录。
 
 会话加载 Pi 的 `codemode`、`tool_search` 和 MCP 扩展，不再注册 PiCode 的 `mcp` 代理工具。插件 MCP 和内置 `node_repl` 不进这两个文件，会话创建时用 `registerMcpServer` 注册。`picode_subagent` 拉起的子会话不挂这三个扩展。对话分叉不是子会话：新会话仍加载它们，`codemode` 和 `mcp__node_repl__js` 不会因为带了父会话 id 而消失。
 
-浏览器和官方鉴权仍走这条 Pi 连接。`node_repl` 的每次请求带 `com.zcode/request-context.session_id`。官方 HTTP 仍用现有的逐请求 JWT fetch；官方 stdio 仍把身份头放进 `_meta`。设置页刷新连接状态仍可能再打开一份 `McpPort`，与会话里的 Pi 连接不是同一个客户端。
+浏览器和官方鉴权仍走这条 Pi 连接。`node_repl` 的每次请求带 `com.zcode/request-context.session_id`。官方 HTTP 仍用现有的逐请求 JWT fetch；官方 stdio 仍把身份头放进 `_meta`。设置页和侧栏项目 MCP 对话框打开时只读配置，不自动 connect。用户点刷新，或在设置里启用一台服务器时，状态检查仍可能再打开一份 `McpPort`，与会话里的 Pi 连接不是同一个客户端。
 
 ## 持久化与旧会话
 

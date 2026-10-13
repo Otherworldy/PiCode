@@ -152,7 +152,7 @@ async function runProbe() {
     width: 1100,
     height: 760,
     show: true,
-    title: "ZCode browser perf probe",
+    title: "PiCode browser perf probe",
     webPreferences: { contextIsolation: true, sandbox: true },
   });
   await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(PAGE_HTML)}`);

@@ -57,40 +57,43 @@ export function SystemPromptEditor({
   const [saving, setSaving] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
 
-  const loadList = useCallback(async (prefer?: string) => {
-    if (scope === "project" && !rootPath?.trim()) return;
-    const requestId = requestIdRef.current + 1;
-    requestIdRef.current = requestId;
-    setLoading(true);
-    setLoadFailed(false);
-    try {
-      const listed = await fileServiceRef.current.listAgentPrompts({ scope, rootPath });
-      if (requestIdRef.current !== requestId) return;
-      setDirectory(listed.directory);
-      setFiles(listed.files);
-      const next = prefer && listed.files.includes(prefer) ? prefer : (listed.files[0] ?? null);
-      setSelected(next);
-      if (!next) {
-        setDraft("");
-        setSaved("");
-        setLoading(false);
-        return;
+  const loadList = useCallback(
+    async (prefer?: string) => {
+      if (scope === "project" && !rootPath?.trim()) return;
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
+      setLoading(true);
+      setLoadFailed(false);
+      try {
+        const listed = await fileServiceRef.current.listAgentPrompts({ scope, rootPath });
+        if (requestIdRef.current !== requestId) return;
+        setDirectory(listed.directory);
+        setFiles(listed.files);
+        const next = prefer && listed.files.includes(prefer) ? prefer : (listed.files[0] ?? null);
+        setSelected(next);
+        if (!next) {
+          setDraft("");
+          setSaved("");
+          setLoading(false);
+          return;
+        }
+        const file = await fileServiceRef.current.readAgentPrompt({ scope, rootPath, name: next });
+        if (requestIdRef.current !== requestId) return;
+        setDraft(file.content);
+        setSaved(file.content);
+      } catch (error) {
+        if (requestIdRef.current !== requestId) return;
+        setLoadFailed(true);
+        logger.warn("[SystemPromptEditor] 读取提示词失败", {
+          error: error instanceof Error ? error.message : String(error),
+          scope,
+        });
+      } finally {
+        if (requestIdRef.current === requestId) setLoading(false);
       }
-      const file = await fileServiceRef.current.readAgentPrompt({ scope, rootPath, name: next });
-      if (requestIdRef.current !== requestId) return;
-      setDraft(file.content);
-      setSaved(file.content);
-    } catch (error) {
-      if (requestIdRef.current !== requestId) return;
-      setLoadFailed(true);
-      logger.warn("[SystemPromptEditor] 读取提示词失败", {
-        error: error instanceof Error ? error.message : String(error),
-        scope,
-      });
-    } finally {
-      if (requestIdRef.current === requestId) setLoading(false);
-    }
-  }, [rootPath, scope]);
+    },
+    [rootPath, scope],
+  );
 
   useEffect(() => {
     void loadList();
@@ -217,7 +220,8 @@ export function SystemPromptEditor({
           action: scope === "global" ? "delete_global" : "delete_project",
           trigger: "button",
         },
-        operation: () => fileServiceRef.current.deleteAgentPrompt({ scope, rootPath, name: selected }),
+        operation: () =>
+          fileServiceRef.current.deleteAgentPrompt({ scope, rootPath, name: selected }),
         completed: { resultSource: "platform_result" },
         failureStage: "settings_commit",
       });
@@ -236,9 +240,23 @@ export function SystemPromptEditor({
 
   return (
     <div className="space-y-3">
-      <p className="text-ui-base leading-6 text-foreground-subtle">{description}</p>
-      {directory ? (
-        <p className="break-all font-mono text-ui-sm text-foreground-subtle">{directory}</p>
+      {description ? (
+        <p className="text-ui-base leading-6 text-foreground-subtle">{description}</p>
+      ) : null}
+      {directory || selected ? (
+        <div className="flex items-center justify-between gap-3">
+          <p className="min-w-0 truncate font-mono text-ui-sm text-foreground-subtle">
+            {directory}
+          </p>
+          {selected ? (
+            <p className="shrink-0 text-ui-sm text-foreground-subtle">
+              {intl.formatMessage(
+                { id: "settings.systemPrompt.commandHint" },
+                { command: selected.replace(/\.md$/u, "") },
+              )}
+            </p>
+          ) : null}
+        </div>
       ) : null}
       <div className="flex gap-2">
         <Input
@@ -280,7 +298,7 @@ export function SystemPromptEditor({
                 <button
                   key={name}
                   className={cn(
-                    "truncate rounded-md px-2 py-1 text-left text-ui-sm",
+                    "truncate rounded-md px-2 py-1 text-left font-mono text-ui-sm",
                     name === selected
                       ? "bg-surface-hover text-foreground"
                       : "text-foreground-subtle hover:bg-surface-hover hover:text-foreground",
@@ -289,7 +307,7 @@ export function SystemPromptEditor({
                   onClick={() => void openFile(name)}
                   type="button"
                 >
-                  {name.replace(/\.md$/u, "")}
+                  {name}
                 </button>
               ))
             )}

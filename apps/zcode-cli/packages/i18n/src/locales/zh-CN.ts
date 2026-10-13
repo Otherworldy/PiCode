@@ -7,7 +7,7 @@ export const zhCN: ZCodeCopy = {
       localeUnsupported: (value) =>
         `不支持的 --locale 值：${value}。支持的语言：en-US、zh-CN、auto。`,
     },
-    help: (version) => `zcode ${version}
+    help: (version) => `PiCode ${version}
 
 用法:
   zcode [command] [options]

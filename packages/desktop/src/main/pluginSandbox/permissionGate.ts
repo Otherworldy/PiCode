@@ -109,7 +109,7 @@ export function createPluginSandboxPermissionGate(deps: {
               allowed = allowed && valid();
               deps.logger?.info?.("[plugin-sandbox] permission prompt settled", {
                 sandboxId: record.sandboxId,
-                serverName: record.serverName ?? "ZCode Gen UI",
+                serverName: record.serverName ?? "PiCode Gen UI",
                 permissions: pending,
                 allowed,
               });

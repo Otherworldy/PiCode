@@ -402,7 +402,13 @@ export function createSdkSessionFactory(
     ];
     // Pi 用本机 fs 按 cwd 找 .pi/SYSTEM.md。SSH 在 Windows 上会把远端路径 resolve 成本机盘符，
     // 项目提示词实际在远端。远端文件存在时用它替换发现结果，保持「项目优先于全局」。
-    const sshProjectSystemPrompt = ssh ? await readSshProjectSystemPrompt(ssh) : undefined;
+    // 直接传 appendSystemPrompt 会关掉文件发现，所以额外说明走 override，接在追加段后面。
+    const [sshProjectSystemPrompt, sshProjectAppendPrompt] = ssh
+      ? await Promise.all([
+          readSshProjectSystemPrompt(ssh),
+          readSshProjectSystemPrompt(ssh, "append"),
+        ])
+      : [undefined, undefined];
     const planDecisions: string[] = [];
     const resourceLoader = new (piCoding().DefaultResourceLoader)({
       cwd: input.cwd,
@@ -441,7 +447,14 @@ export function createSdkSessionFactory(
       ...(sshProjectSystemPrompt !== undefined
         ? { systemPromptOverride: () => sshProjectSystemPrompt }
         : {}),
-      ...(extraSystemPrompts.length > 0 ? { appendSystemPrompt: extraSystemPrompts } : {}),
+      ...(extraSystemPrompts.length > 0 || sshProjectAppendPrompt !== undefined
+        ? {
+            appendSystemPromptOverride: (base: string[]) => [
+              ...(sshProjectAppendPrompt !== undefined ? [sshProjectAppendPrompt] : base),
+              ...extraSystemPrompts,
+            ],
+          }
+        : {}),
     });
     await resourceLoader.reload();
     if (pluginExtras) applyZcodePluginPlan(resourceLoader, pluginExtras.plan);

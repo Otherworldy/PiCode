@@ -2895,7 +2895,9 @@ export class ConversationV4Gateway {
       this.scheduleFlush(routeKey, state, publisher);
     }
     // 流式 token 不刷侧栏。行新增和状态变化才入列，否则新建会话永远不出现。
-    if (deltas.some((delta) => delta.op !== "row.delta")) {
+    if (
+      deltas.some((delta) => delta.op !== "row.delta" && delta.op !== "embeddedBrowser.open")
+    ) {
       this.publishCurrentSummaryToIndex(sessionId);
     }
   }

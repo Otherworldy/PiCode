@@ -1282,6 +1282,19 @@ const enUS: Record<string, string> = {
   "workspaceSidebar.systemPrompt": "Project prompts",
   "workspaceSidebar.systemPrompt.description":
     "Applies only to this project's .pi/prompts directory, and there can be many. Each Markdown file's name is a slash command. After saving, open / again to use it. You do not need to restart.",
+  "workspaceSidebar.systemPrompt.append": "Append system prompt",
+  "workspaceSidebar.systemPrompt.replace": "System prompt",
+  "workspaceSidebar.systemPrompt.commands": "Slash templates",
+  "workspaceSidebar.systemPrompt.pending": "Applies the next time a session is created or reopened",
+  "workspaceSidebar.systemPrompt.appendHint": "Appended after the active system prompt",
+  "workspaceSidebar.systemPrompt.replaceHint": "Replaces the active system prompt",
+  "workspaceSidebar.systemPrompt.commandHint": "Invoked as /{command}",
+  "workspaceSidebar.projectMcp": "Project MCP",
+  "workspaceSidebar.projectMcp.description":
+    "Edits only this project's .pi/mcp.json, not the global MCP file. A project entry with the same name overrides the global one. Changes apply the next time a session is created or reopened.",
+  "workspaceSidebar.projectMcp.loadFailed": "Couldn't read project MCP",
+  "workspaceSidebar.projectMcp.saveFailed": "Couldn't save project MCP",
+  "workspaceSidebar.projectMcp.saved": "Project MCP saved",
   "workspaceSidebar.sshConnectionTitle": "SSH connection",
   "workspaceSidebar.sshConnectionAlias": "Alias",
   "workspaceSidebar.sshConnectionHost": "Host",
@@ -1809,8 +1822,15 @@ const enUS: Record<string, string> = {
     "Leave blank to auto-detect system terminal settings; set a value to override the PiCode terminal font.",
   "settings.terminalFontFamilyPlaceholder": "Leave blank to inherit, e.g. MesloLGS NF, monospace",
   "settings.systemPrompt": "Prompts",
+  "settings.systemPrompt.append": "Append system prompt",
+  "settings.systemPrompt.replace": "System prompt",
+  "settings.systemPrompt.commands": "Slash templates",
+  "settings.systemPrompt.appendDescription":
+    "Appended after the system prompt. A project APPEND_SYSTEM.md replaces this file. Saving blank deletes it. Changes apply the next time a session is created or reopened.",
+  "settings.systemPrompt.appendPlaceholder": "Leave blank to append nothing",
+  "settings.systemPrompt.commandHint": "Type /{command} to run",
   "settings.systemPrompt.description":
-    "Global prompts live in Pi's prompts directory on this machine, and there can be many. Each one is a Markdown file in that directory. The file name is the slash command, so review.md becomes /review. After saving, open / again to use it. You do not need to restart.",
+    "Each file is Markdown in the prompts directory on this machine. The list shows the file name, such as review.md, and the command is /review. Open / again after saving.",
   "settings.systemPrompt.placeholder":
     "Prompt text. A leading description in Markdown front matter is the command description",
   "settings.systemPrompt.save": "Save",
@@ -1830,7 +1850,7 @@ const enUS: Record<string, string> = {
   "settings.systemPrompt.discard": "Discard",
   "settings.systemPrompt.systemTitle": "System prompt",
   "settings.systemPrompt.systemDescription":
-    "This is Pi's global system prompt on this machine (SYSTEM.md). Content replaces the built-in prompt instead of appending to it. Saving blank deletes the file and restores the built-in prompt. A project's .pi/SYSTEM.md takes priority. Changes apply the next time a session is created or reopened.",
+    "Content replaces the built-in prompt. A project SYSTEM.md replaces this file. Saving blank deletes it. Changes apply the next time a session is created or reopened.",
   "settings.systemPrompt.systemProjectDescription":
     "Applies only to this project's .pi/SYSTEM.md. Content replaces the global and built-in system prompts. Saving blank deletes the file. Changes apply the next time a session is created or reopened.",
   "settings.systemPrompt.systemPlaceholder": "Leave blank to use Pi's built-in system prompt",
@@ -1950,13 +1970,16 @@ const enUS: Record<string, string> = {
   "settings.locale.en-US": "English",
   "mobileRemote.open": "Phone remote",
   "mobileRemote.title": "Phone remote",
-  "mobileRemote.description": "Scan with a phone on the same Wi-Fi to open a workspace already open in this window.",
+  "mobileRemote.description":
+    "Scan with a phone on the same Wi-Fi to open a workspace already open in this window.",
   "mobileRemote.disconnect": "Disconnect",
   "mobileRemote.noLan": "No LAN address is available, so a phone cannot reach this computer.",
   "mobileRemote.starting": "Preparing the address. If Windows asks, choose Yes.",
   "mobileRemote.failed": "Could not open the phone connection.",
-  "mobileRemote.firewallPrompted": "Choose Yes on the Windows prompt. You do not need to open firewall settings.",
-  "mobileRemote.firewallBlocked": "The phone still cannot connect. Close this dialog, open it again, and choose Yes on the Windows prompt.",
+  "mobileRemote.firewallPrompted":
+    "Choose Yes on the Windows prompt. You do not need to open firewall settings.",
+  "mobileRemote.firewallBlocked":
+    "The phone still cannot connect. Close this dialog, open it again, and choose Yes on the Windows prompt.",
   "sidebar.settings.systemDefault": "System default",
   "sidebar.settings.locale.en-US": "English",
   "sidebar.settings.locale.zh-CN": "中文简体",

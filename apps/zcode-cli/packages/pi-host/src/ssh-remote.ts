@@ -3,6 +3,7 @@ import { posix } from "node:path";
 import {
   quotePosixArg,
   remoteAgentSystemPromptPath,
+  type AgentSystemPromptKind,
   remotePosixPath,
   runSsh,
   sshDestinationArgs,
@@ -80,13 +81,14 @@ export async function sshReadText(spec: SshRemoteSpec, remotePath: string): Prom
 }
 
 /**
- * SSH 会话的项目系统提示词在远端 `.pi/SYSTEM.md`。
+ * SSH 会话的项目系统提示词在远端 `.pi/SYSTEM.md` 或 `.pi/APPEND_SYSTEM.md`。
  * 文件不存在返回 undefined；存在则返回正文（可以是空字符串）。
  */
 export async function readSshProjectSystemPrompt(
   spec: SshRemoteSpec,
+  kind: AgentSystemPromptKind = "replace",
 ): Promise<string | undefined> {
-  const filePath = remoteAgentSystemPromptPath(spec.remotePath);
+  const filePath = remoteAgentSystemPromptPath(spec.remotePath, kind);
   const probe = await sshStdout(
     spec,
     `if test -f ${quotePosixArg(filePath)}; then printf yes; else printf no; fi`,

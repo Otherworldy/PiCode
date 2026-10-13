@@ -96,12 +96,12 @@ export function MobileRemoteDialog({
             <p className="w-full break-all text-center text-ui-xs text-foreground-subtle">
               {address}
             </p>
-            {status !== "starting" && status !== "failed" && status.firewall === "prompted" ? (
+            {status !== "starting" && status !== "failed" && status.status === "ready" && status.firewall === "prompted" ? (
               <p className="text-center text-ui-xs text-foreground-subtle">
                 {intl.formatMessage({ id: "mobileRemote.firewallPrompted" })}
               </p>
             ) : null}
-            {status !== "starting" && status !== "failed" && status.firewall === "blocked" ? (
+            {status !== "starting" && status !== "failed" && status.status === "ready" && status.firewall === "blocked" ? (
               <p className="text-center text-ui-xs text-destructive">
                 {intl.formatMessage({ id: "mobileRemote.firewallBlocked" })}
               </p>

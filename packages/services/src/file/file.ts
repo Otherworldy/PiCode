@@ -78,17 +78,20 @@ export interface IFileService {
   }): Promise<{ content: string }>;
   writeWorkspaceFileSearchIgnore(params: { rootPath: string; content: string }): Promise<void>;
   /**
-   * Pi 系统提示词。global 是本 Host 的 `<agent-dir>/SYSTEM.md`；
-   * project 是 `rootPath/.pi/SYSTEM.md`。空白会删文件，不写空文件。
+   * Pi 系统提示词。`replace` 是 `SYSTEM.md`，`append` 是 `APPEND_SYSTEM.md`。
+   * global 在本 Host 的 agent 目录；project 在 `rootPath/.pi/`。空白会删文件，不写空文件。
+   * 缺省 kind 是 replace。
    */
   readAgentSystemPrompt(params: {
     scope: "global" | "project";
     rootPath?: string;
+    kind?: "replace" | "append";
   }): Promise<{ content: string; exists: boolean; path: string }>;
   writeAgentSystemPrompt(params: {
     scope: "global" | "project";
     content: string;
     rootPath?: string;
+    kind?: "replace" | "append";
   }): Promise<{ content: string; exists: boolean; path: string }>;
   /**
    * Pi 提示词模板。global 是 `<agent-dir>/prompts/*.md`，
