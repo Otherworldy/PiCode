@@ -11,7 +11,12 @@ import { createServiceDescriptor } from "../descriptors.js";
  */
 export interface IFileWatcherService {
   /** 开始监视路径。返回 watcherId，用于 unwatch 和事件订阅 */
-  watch(params: { path: string; recursive?: boolean }): Promise<{ id: string }>;
+  watch(params: {
+    path: string;
+    recursive?: boolean;
+    /** 路径段完全匹配时不发出变更。旧 Host 会忽略这个字段。 */
+    ignoreDirectoryNames?: readonly string[];
+  }): Promise<{ id: string }>;
   /** 停止监视。释放 watcher 和相关资源 */
   unwatch(params: { id: string }): Promise<void>;
   /** 停止全部监视。host 退出清理时用于统一释放底层 fs.watch 句柄 */

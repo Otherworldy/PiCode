@@ -20,6 +20,7 @@ import { toast } from "@/components/ui/toast.js";
 import { useZCodeSessionService } from "@/hooks/useZCodeSessionService.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
+import { piPluginFailureDetail } from "@/settings/piPluginMarketFormat.js";
 import { PiPluginMarketView, recommendedCopy } from "@/settings/PiPluginMarketView.js";
 
 type PiPlugin = ZCodePiPluginsResult["plugins"][number];
@@ -160,7 +161,13 @@ export function PiPluginMarket({
         }
       } catch (error) {
         logger.warn("[pi-plugins] install failed", { error });
-        toast(intl.formatMessage({ id: "settings.plugins.pi.failed" }));
+        const detail = piPluginFailureDetail(error);
+        const title = intl.formatMessage({ id: "settings.plugins.pi.installFailed" });
+        toast(detail ? `${title}\n${detail}` : title, {
+          dismissible: true,
+          durationMs: 12_000,
+          variant: "warning",
+        });
       } finally {
         setPending(null);
       }

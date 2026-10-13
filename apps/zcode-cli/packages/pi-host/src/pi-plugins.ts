@@ -16,6 +16,7 @@ import type {
   PackageSource,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
+import { retainCommandFailure } from "./pi-plugin-tools.js";
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
 
 export type PiPluginKind = "package" | "extension";
@@ -295,7 +296,8 @@ function quoteCmdArg(arg: string): string {
 /**
  * Pi `PackageManager.update` 默认 `stdio: "inherit"`。
  * app-server 的 stdout 是协议帧，npm 打出 `changed 1 package` 会让 Host 解析失败并关掉 Agent。
- * 只换掉这次检查/更新用的实例，让子进程丢掉输出；Windows 的 npm shim 仍走 shell。
+ * 只换掉这次检查/更新/安装用的实例。输出走管道，不进协议 stdout；失败原因留在 error 里。
+ * Windows 的 npm shim 仍走 shell。
  */
 export function silencePackageManagerStdout(
   manager: object,
@@ -306,13 +308,19 @@ export function silencePackageManagerStdout(
   };
   target.spawnCommand = (command, args, options) => {
     const shell = needsWindowsShell(command);
-    return spawnImpl(shell ? quoteCmdArg(command) : command, shell ? args.map(quoteCmdArg) : args, {
-      cwd: options?.cwd,
-      env: process.env,
-      stdio: "ignore",
-      windowsHide: true,
-      shell,
-    });
+    const child = spawnImpl(
+      shell ? quoteCmdArg(command) : command,
+      shell ? args.map(quoteCmdArg) : args,
+      {
+        cwd: options?.cwd,
+        env: process.env,
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+        shell,
+      },
+    );
+    if (typeof child.emit === "function") retainCommandFailure(child, command);
+    return child;
   };
 }
 

@@ -1,3 +1,10 @@
+/** 安装失败时把宿主带回的原因原样给设置页。没有原因才留给调用方的通用文案。 */
+export function piPluginFailureDetail(error: unknown): string {
+  const message = error instanceof Error ? error.message.trim() : "";
+  if (!message) return "";
+  return message.length > 500 ? `${message.slice(0, 500)}…` : message;
+}
+
 export function pageNumbers(current: number, count: number): number[] {
   const start = Math.max(1, Math.min(current - 2, count - 4));
   const end = Math.min(count, start + 4);

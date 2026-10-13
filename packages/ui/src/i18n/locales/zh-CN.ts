@@ -2541,6 +2541,7 @@ const zhCN: Record<string, string> = {
   "settings.plugins.pi.loading": "正在读取 Pi 插件…",
   "settings.plugins.pi.empty": "这个范围没有 Pi 插件。",
   "settings.plugins.pi.failed": "无法更新 Pi 插件，请重试。",
+  "settings.plugins.pi.installFailed": "安装失败",
   "settings.plugins.pi.configure": "设置",
   "settings.plugins.pi.configHint":
     "只改这个插件 config.json 里的开关、数字和文本。嵌套内容仍留在文件里。下次新建会话生效。",

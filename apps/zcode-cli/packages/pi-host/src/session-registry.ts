@@ -11,7 +11,7 @@ import { textOfMessageContent } from "./plan-review-signal.js";
 import { ExtensionUiHost } from "./extension-ui-host.js";
 import { HostQueue } from "./host-queue.js";
 import { workspaceKey } from "./identity.js";
-import { readPiJsonl } from "./jsonl-history.js";
+import { readPiJsonl, shouldApplyStoredSessionTitle } from "./jsonl-history.js";
 import {
   abortLiveSubagent,
   getLiveSubagentModel,
@@ -835,6 +835,21 @@ export class HostSessionRegistry {
       clearInterval(historyWatch);
       historyWatch = undefined;
     };
+    const applyStoredTitle = (summary: ReturnType<typeof readPiJsonl>["summary"]) => {
+      if (!summary?.title) return;
+      const current = projector.getSnapshot().meta;
+      if (
+        !shouldApplyStoredSessionTitle({
+          currentTitle: current.title,
+          currentTitleSource: current.titleSource,
+          storedTitle: summary.title,
+          storedTitleNamed: summary.named,
+        })
+      ) {
+        return;
+      }
+      emit(projector.setTitle(summary.title, "generated"));
+    };
     const paintHistory = (content: string, settle: boolean) => {
       if (historyPainting) return;
       historyPainting = true;
@@ -842,7 +857,7 @@ export class HostSessionRegistry {
         lastHistory = content;
         const parsed = readPiJsonl(content, { settle });
         emit(projector.reload(parsed.events));
-        if (parsed.summary?.title) emit(projector.setTitle(parsed.summary.title, "generated"));
+        applyStoredTitle(parsed.summary);
       } finally {
         historyPainting = false;
       }
@@ -1256,7 +1271,7 @@ export class HostSessionRegistry {
         lastHistory = content;
         const parsed = readPiJsonl(content, { settle: !live });
         emit(projector.replay(parsed.events));
-        if (parsed.summary?.title) emit(projector.setTitle(parsed.summary.title, "generated"));
+        applyStoredTitle(parsed.summary);
         void publishSubagents();
         if (live) startHistoryWatch();
       },
@@ -1265,7 +1280,7 @@ export class HostSessionRegistry {
         lastHistory = content;
         const parsed = readPiJsonl(content, { settle: !live });
         emit(projector.reload(parsed.events));
-        if (parsed.summary?.title) emit(projector.setTitle(parsed.summary.title, "generated"));
+        applyStoredTitle(parsed.summary);
         if (live) startHistoryWatch();
       },
       onDeltas: (listener) => {

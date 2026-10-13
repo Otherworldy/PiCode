@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { gitAutoRefreshDueAt, shouldPollGitWorkspaceContent } from "./gitAutoRefresh.js";
+import {
+  gitAutoRefreshDueAt,
+  gitAutoRefreshWatchRequest,
+  shouldPollGitWorkspaceContent,
+} from "./gitAutoRefresh.js";
 
 test("git auto refresh waits for a quiet gap, then caps a long burst", () => {
   const first = gitAutoRefreshDueAt({
@@ -44,4 +48,12 @@ test("git content poll runs only when the workspace itself is not watched recurs
     ),
     false,
   );
+});
+
+test("git auto refresh watch ignores node_modules", () => {
+  assert.deepEqual(gitAutoRefreshWatchRequest({ path: "D:/repo", recursive: true }), {
+    path: "D:/repo",
+    recursive: true,
+    ignoreDirectoryNames: ["node_modules"],
+  });
 });

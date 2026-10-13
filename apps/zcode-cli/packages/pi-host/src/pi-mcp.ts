@@ -116,19 +116,47 @@ function wrapMeta(
   };
 }
 
+/**
+ * Windows 上这个包会拉起 npx、cmd 和 watchdog。没点到浏览器就不该在 session_start 起这串进程。
+ * direct 工具必须出现在第一轮请求里，所以不推迟。
+ */
+export function isLazyChromeDevtoolsConfig(config: Record<string, unknown>): boolean {
+  if (config.enabled === false || config.exposure === "direct") return false;
+  const toolExposure = config.toolExposure;
+  if (isRecord(toolExposure) && Object.values(toolExposure).includes("direct")) return false;
+  const args = Array.isArray(config.args) ? config.args : [];
+  return [config.command, ...args].some(
+    (part) => typeof part === "string" && part.includes("chrome-devtools-mcp"),
+  );
+}
+
 export function loadZcodeMcpConfig(agentDir: string, cwd: string): LoadedMcpConfig {
   const loaded = readPiMcpServers(agentDir, cwd);
   return {
     autoEnableCodemode: true,
     errors: loaded.errors,
     projectConfig: resolve(cwd, ".pi", "mcp.json"),
-    servers: loaded.servers.map((server) => ({
+    servers: loaded.servers
+      .filter((server) => !isLazyChromeDevtoolsConfig(server.config))
+      .map((server) => ({
+        name: server.name,
+        config: server.config as unknown as McpServerConfig,
+        source: server.scope === "project" ? "project" : "global",
+        scope: server.scope,
+      })),
+  };
+}
+
+export function loadLazyChromeDevtoolsServers(
+  agentDir: string,
+  cwd: string,
+): Array<{ name: string; config: McpServerConfig }> {
+  return readPiMcpServers(agentDir, cwd)
+    .servers.filter((server) => isLazyChromeDevtoolsConfig(server.config))
+    .map((server) => ({
       name: server.name,
       config: server.config as unknown as McpServerConfig,
-      source: server.scope === "project" ? "project" : "global",
-      scope: server.scope,
-    })),
-  };
+    }));
 }
 
 export function createZcodeMcpTransport(input: {

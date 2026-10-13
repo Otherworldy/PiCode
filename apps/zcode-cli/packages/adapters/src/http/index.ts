@@ -4,7 +4,6 @@
 
 import http from "node:http";
 import https from "node:https";
-import { Readable } from "node:stream";
 import { ProxyAgent } from "proxy-agent";
 import {
   createHttpClientError,
@@ -26,6 +25,7 @@ import {
   defaultPublicDnsLookup,
   type DnsLookup,
 } from "./public-egress-policy.js";
+import { responseFromNodeMessage } from "../network/incoming-message-response.js";
 import { readResponseBody } from "./response-body.js";
 
 const TRACE_HEADER = "x-zcode-trace-id";
@@ -199,24 +199,13 @@ function fetchHttpResponse(
         lookup: proxyUrl ? undefined : lookup,
       },
       (message) => {
-        const responseHeaders = new Headers();
-        for (const [name, value] of Object.entries(message.headers)) {
-          if (Array.isArray(value)) {
-            for (const item of value) {
-              responseHeaders.append(name, item);
-            }
-          } else if (value !== undefined) {
-            responseHeaders.append(name, String(value));
-          }
+        // 204 等无 body 状态码不能把流交给 Response，否则同步抛错会打崩进程。
+        try {
+          resolve(responseFromNodeMessage(message));
+        } catch (error) {
+          message.resume();
+          reject(error);
         }
-
-        resolve(
-          new Response(Readable.toWeb(message) as ReadableStream<Uint8Array>, {
-            headers: responseHeaders,
-            status: message.statusCode ?? 502,
-            statusText: message.statusMessage,
-          }),
-        );
       },
     );
 

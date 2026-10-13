@@ -18,6 +18,16 @@ interface WatcherInstance {
   /** 同一防抖窗口只含一个明确路径时才透传，避免过滤掉同批次里的目标文件事件 */
   pendingChangedPaths: Set<string>;
   hasUnknownChangedPath: boolean;
+  ignoreDirectoryNames: readonly string[];
+}
+
+export function isIgnoredWatchPath(filePath: string, directoryNames: readonly string[]): boolean {
+  if (directoryNames.length === 0) {
+    return false;
+  }
+
+  const ignored = new Set(directoryNames);
+  return filePath.split(/[\\/]+/).some((part) => ignored.has(part));
 }
 
 function resolveFileWatchChangedPath(
@@ -53,10 +63,15 @@ export function createFileWatcherService(options?: {
   }
 
   return {
-    async watch(params: { path: string; recursive?: boolean }): Promise<{ id: string }> {
+    async watch(params: {
+      path: string;
+      recursive?: boolean;
+      ignoreDirectoryNames?: readonly string[];
+    }): Promise<{ id: string }> {
       const id = String(nextId++);
       const changeEmitter = new Emitter<FileWatchEvent>();
       const recursive = params.recursive ?? false;
+      const ignoreDirectoryNames = params.ignoreDirectoryNames ?? [];
 
       let fsWatcher: FSWatcher;
       try {
@@ -66,6 +81,9 @@ export function createFileWatcherService(options?: {
           if (!instance) return;
 
           const changedPath = resolveFileWatchChangedPath(instance.path, fileName);
+          if (changedPath && isIgnoredWatchPath(changedPath, instance.ignoreDirectoryNames)) {
+            return;
+          }
           if (changedPath) {
             instance.pendingChangedPaths.add(changedPath);
           } else {
@@ -115,6 +133,7 @@ export function createFileWatcherService(options?: {
         debounceTimer: null,
         pendingChangedPaths: new Set(),
         hasUnknownChangedPath: false,
+        ignoreDirectoryNames,
       });
 
       return { id };

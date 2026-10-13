@@ -2720,6 +2720,7 @@ const enUS: Record<string, string> = {
   "settings.plugins.pi.loading": "Reading Pi plugins…",
   "settings.plugins.pi.empty": "No Pi plugins in this scope.",
   "settings.plugins.pi.failed": "Couldn't update Pi plugins. Try again.",
+  "settings.plugins.pi.installFailed": "Couldn't install the plugin.",
   "settings.plugins.pi.configure": "Settings",
   "settings.plugins.pi.configHint":
     "Edits switches, numbers, and text in this plugin's config.json. Nested values stay in the file. Changes apply to the next new session.",

@@ -2,6 +2,8 @@ import type { PiHostEvent } from "./types.js";
 
 export type PiJsonlSummary = {
   title: string;
+  /** session_info.name 写过的名字。false 时 title 只是首条用户原文的回退。 */
+  named: boolean;
   createdAt: number;
   lastActivityAt: number;
   cwd?: string;
@@ -310,6 +312,7 @@ export function readPiJsonl(
   return {
     summary: {
       title,
+      named: namedTitle !== undefined,
       createdAt,
       // 打开会话时写入的 label/custom 不能把原会话抬成「刚刚」，否则新分叉会排到它下面。
       lastActivityAt: Math.max(headerAt, lastMessageAt) || createdAt,
@@ -323,6 +326,26 @@ export function readPiJsonl(
 
 export function summarizePiJsonl(content: string): PiJsonlSummary | null {
   return readPiJsonl(content).summary;
+}
+
+/**
+ * jsonl 重放后是否用摘要标题覆盖当前标题。
+ * 没有 session_info 名字时，title 只是首条原文。不能盖掉已经总结好的标题，
+ * 否则侧栏会先闪回原文，等名字落盘后再闪回总结。
+ */
+export function shouldApplyStoredSessionTitle(input: {
+  currentTitle: string;
+  currentTitleSource: "default" | "generated" | "custom" | undefined;
+  storedTitle: string;
+  storedTitleNamed: boolean;
+}): boolean {
+  if (input.currentTitleSource === "custom") return false;
+  const stored = input.storedTitle.trim();
+  if (!stored) return false;
+  const current = input.currentTitle.trim();
+  if (current === stored) return false;
+  if (!input.storedTitleNamed && current && input.currentTitleSource !== "default") return false;
+  return true;
 }
 
 export function replayPiJsonl(content: string): PiHostEvent[] {

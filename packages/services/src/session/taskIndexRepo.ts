@@ -489,7 +489,7 @@ function isReplaceableSessionTitle(title: string): boolean {
   );
 }
 
-/** 手动标题优先。占位标题不能盖掉索引里已经有的真实标题。 */
+/** 手动标题优先。占位标题和过期的首条原文都不能盖掉索引里已经有的真实标题。 */
 function resolveSyncedTaskTitle(input: {
   titleOverridden: boolean;
   existingTitle?: string;
@@ -500,6 +500,17 @@ function resolveSyncedTaskTitle(input: {
     input.existingTitle &&
     !isReplaceableSessionTitle(input.existingTitle) &&
     isReplaceableSessionTitle(input.incomingTitle)
+  ) {
+    return input.existingTitle;
+  }
+  // 回源快照的 session.title 经常还是首条原文。索引里如果已经是总结标题，
+  // 不能让这份旧快照盖回去，否则侧栏会先闪原文再被 sessions-index 改回总结。
+  // 真正的标题变更走 applyAgentPatch。
+  if (
+    input.existingTitle &&
+    !isReplaceableSessionTitle(input.existingTitle) &&
+    !isReplaceableSessionTitle(input.incomingTitle) &&
+    input.existingTitle.trim() !== input.incomingTitle.trim()
   ) {
     return input.existingTitle;
   }

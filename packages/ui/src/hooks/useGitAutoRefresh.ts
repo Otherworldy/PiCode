@@ -5,6 +5,7 @@ import {
   buildGitAutoRefreshWatchPaths,
   GIT_AUTO_REFRESH_POLL_MS,
   gitAutoRefreshDueAt,
+  gitAutoRefreshWatchRequest,
   parseGitAutoRefreshWatchPaths,
   shouldEnableGitAutoRefreshForWorkspace,
   shouldPollGitWorkspaceContent,
@@ -153,10 +154,7 @@ export function useGitAutoRefresh({
     // 监听路径内容没变时不能重建 watcher，否则 agent 批量写文件会出现 unwatch/watch 风暴。
     for (const watchPath of watchPaths) {
       void fileWatcherService
-        .watch({
-          path: watchPath.path,
-          recursive: watchPath.recursive,
-        })
+        .watch(gitAutoRefreshWatchRequest(watchPath))
         .then(({ id }) => {
           if (cancelled) {
             void fileWatcherService.unwatch({ id });

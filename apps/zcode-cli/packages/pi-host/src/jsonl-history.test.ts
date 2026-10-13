@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PiToV4Projector } from "./projector.js";
-import { readPiJsonl } from "./jsonl-history.js";
+import { readPiJsonl, shouldApplyStoredSessionTitle } from "./jsonl-history.js";
 
 const sample = [
   '{"type":"session","version":3,"id":"s1","timestamp":"2026-01-02T03:04:05.000Z","cwd":"C:\\\\work"}',
@@ -12,6 +12,48 @@ const sample = [
   '{"type":"message","id":"t1","timestamp":"2026-01-02T03:05:02.000Z","message":{"role":"toolResult","toolCallId":"c1","toolName":"ls","content":[{"type":"text","text":"(empty)"}],"isError":false}}',
   '{"type":"message","id":"a3","timestamp":"2026-01-02T03:05:03.000Z","message":{"role":"assistant","content":[{"type":"text","text":"empty dir"}]}}',
 ].join("\n");
+
+test("replay does not publish the first-message title", () => {
+  const events = readPiJsonl(sample).events;
+  const projector = new PiToV4Projector("s1", "e1");
+  projector.setTitle("修登录", "generated");
+  projector.replay(events);
+  assert.equal(projector.getSnapshot().meta.title, "修登录");
+  assert.equal(projector.getSnapshot().meta.titleSource, "generated");
+  const live = new PiToV4Projector("s1", "e1");
+  for (const event of events) live.apply(event);
+  assert.equal(live.getSnapshot().meta.title, "just say pong");
+});
+
+test("stored history title does not roll a summary back to the first message", () => {
+  assert.equal(
+    shouldApplyStoredSessionTitle({
+      currentTitle: "修登录",
+      currentTitleSource: "generated",
+      storedTitle: "just say pong",
+      storedTitleNamed: false,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldApplyStoredSessionTitle({
+      currentTitle: "just say pong",
+      currentTitleSource: "generated",
+      storedTitle: "修登录",
+      storedTitleNamed: true,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldApplyStoredSessionTitle({
+      currentTitle: "",
+      currentTitleSource: "default",
+      storedTitle: "just say pong",
+      storedTitleNamed: false,
+    }),
+    true,
+  );
+});
 
 test("replay matches per-event apply", () => {
   const events = readPiJsonl(sample).events;

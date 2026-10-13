@@ -670,6 +670,9 @@ export class PiToV4Projector {
     };
     if (messageId) row.entityId = messageId;
     const deltas: ConversationDelta[] = [{ op: "row.appended", row }];
+    // 历史重放不能先把首条原文推进侧栏。这一帧会把已经总结好的标题闪回原文，
+    // 随后的 session_info 名字再改回来。重放结束后由 jsonl 摘要一次写入。
+    if (this.replaying) return deltas;
     const compact = text.trim().replace(/\s+/gu, " ");
     const current = this.snapshot.meta;
     const replaceCommandTitle =

@@ -18,6 +18,19 @@ export const GIT_AUTO_REFRESH_QUIET_MS = 1_000;
 export const GIT_AUTO_REFRESH_MAX_WAIT_MS = 5_000;
 // Linux 和不递归的监听只盯 `.git`。工作区文件改动不会碰元数据，右上角会一直停在干净状态。
 export const GIT_AUTO_REFRESH_POLL_MS = 5_000;
+export const GIT_AUTO_REFRESH_IGNORED_DIRECTORIES = ["node_modules"] as const;
+
+export function gitAutoRefreshWatchRequest(watchPath: { path: string; recursive: boolean }): {
+  path: string;
+  recursive: boolean;
+  ignoreDirectoryNames: string[];
+} {
+  return {
+    path: watchPath.path,
+    recursive: watchPath.recursive,
+    ignoreDirectoryNames: [...GIT_AUTO_REFRESH_IGNORED_DIRECTORIES],
+  };
+}
 
 export function gitAutoRefreshDueAt(params: {
   now: number;

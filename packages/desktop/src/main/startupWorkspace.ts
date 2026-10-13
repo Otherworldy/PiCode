@@ -37,8 +37,6 @@ export interface StartupWorkspaceWarmupTarget {
   workspaceIdentity?: string;
 }
 
-const STARTUP_AGENT_WARMUP_LIMIT = 3;
-
 export interface StartupWindowBootstrap {
   restoreSession?: boolean;
   initialWorkspacePath?: string;
@@ -69,34 +67,6 @@ function resolvePersistedActiveSession(
   }
   const activeIndex = Math.min(Math.max(lastActiveTabIndex ?? 0, 0), sessions.length - 1);
   return sessions[activeIndex];
-}
-
-function resolveStartupAgentWarmupTargets(
-  settings: Pick<ReturnType<typeof appSettingsSchema.parse>, "recentProjects">,
-  activeTarget: StartupWorkspaceWarmupTarget,
-): StartupWorkspaceWarmupTarget[] {
-  const candidates: StartupWorkspaceWarmupTarget[] = [
-    activeTarget,
-    ...(settings.recentProjects ?? []).map((workspacePath) => ({
-      workspacePath,
-    })),
-  ];
-  const seen = new Set<string>();
-  const targets: StartupWorkspaceWarmupTarget[] = [];
-
-  for (const candidate of candidates) {
-    const workspaceKey = candidate.workspaceIdentity?.trim() || candidate.workspacePath;
-    if (!workspaceKey || seen.has(workspaceKey)) {
-      continue;
-    }
-    seen.add(workspaceKey);
-    targets.push(candidate);
-    if (targets.length === STARTUP_AGENT_WARMUP_LIMIT) {
-      break;
-    }
-  }
-
-  return targets;
 }
 
 export function createOpenWorkspaceStartupBootstrap(workspacePath: string): StartupWindowBootstrap {
@@ -145,12 +115,9 @@ export async function resolveStartupWindowBootstrap({
     const activeSession =
       localActiveSessionIndex == null ? undefined : sessions[localActiveSessionIndex];
     if (activeSession?.kind === "local") {
-      // 被动 sessions-index 全量恢复不能再启动全部 workspace，但只预热当前一个又让
-      // 用户在最近项目间切换重新承担完整冷启动。Main 在唯一启动边界固定选出最近 3 个，
-      // Host 仍走原 initializeWorkspace 路径；失败不继续扫描第 4 个补位。
-      const agentWarmupTargets = resolveStartupAgentWarmupTargets(settings, {
-        workspacePath: activeSession.workspacePath,
-      });
+      // 只预热本次恢复的工作区。recentProjects 里更早的目录会话已经停了，
+      // 再拉 app-server 只会空转到关窗口。之后打开那个目录时再预热它。
+      const agentWarmupTargets = [{ workspacePath: activeSession.workspacePath }];
       return {
         ...(unavailableWorkspacePath ? { unavailableWorkspacePath } : {}),
         agentWarmupTargets,

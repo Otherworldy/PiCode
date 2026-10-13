@@ -275,7 +275,7 @@ test("plugin update spawn does not inherit protocol stdout", () => {
   });
   manager.spawnCommand("npm", ["install", "pkg@latest", "--prefix", "C:\\Users\\a b\\npm"]);
   manager.spawnCommand("git", ["pull"], { cwd: "repo" });
-  assert.equal(seen[0]?.options.stdio, "ignore");
+  assert.deepEqual(seen[0]?.options.stdio, ["ignore", "pipe", "pipe"]);
   assert.equal(seen[0]?.options.windowsHide, true);
   assert.equal(seen[0]?.options.shell, process.platform === "win32");
   assert.equal(
@@ -283,7 +283,7 @@ test("plugin update spawn does not inherit protocol stdout", () => {
     process.platform === "win32" ? '"C:\\Users\\a b\\npm"' : "C:\\Users\\a b\\npm",
   );
   assert.equal(seen[1]?.options.shell, false);
-  assert.equal(seen[1]?.options.stdio, "ignore");
+  assert.deepEqual(seen[1]?.options.stdio, ["ignore", "pipe", "pipe"]);
   assert.equal(seen[1]?.options.cwd, "repo");
   assert.deepEqual(seen[1]?.args, ["pull"]);
 });

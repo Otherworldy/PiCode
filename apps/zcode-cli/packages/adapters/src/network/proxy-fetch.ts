@@ -1,6 +1,5 @@
 import http from "node:http";
 import https from "node:https";
-import { Readable } from "node:stream";
 import { ProxyAgent } from "proxy-agent";
 import { ZCODE_HTTP_PROXY_ENV_KEY, ZCODE_NO_PROXY_ENV_KEY } from "@zcode/shared";
 import {
@@ -8,6 +7,7 @@ import {
   resolveProxyUrlForRequest,
   resolveTlsCaCertFile,
 } from "./http-config.js";
+import { responseFromNodeMessage } from "./incoming-message-response.js";
 import { publishConfiguredProxyEnv } from "./subprocess-env.js";
 
 type NetworkFetch = typeof globalThis.fetch;
@@ -216,25 +216,14 @@ function fetchWithAgent(
         responseMessage = message;
         responseMessage.once("close", cleanupAll);
         responseMessage.once("error", onResponseError);
-        const headers = new Headers();
-        for (const [name, value] of Object.entries(message.headers)) {
-          if (Array.isArray(value)) {
-            for (const item of value) {
-              headers.append(name, item);
-            }
-          } else if (value !== undefined) {
-            headers.append(name, String(value));
-          }
+        // 构造失败必须拒绝这次请求。回调里的同步抛出会变成 uncaughtException，打崩 Agent。
+        try {
+          const response = responseFromNodeMessage(message);
+          settled = true;
+          resolve(response);
+        } catch (error) {
+          rejectOnce(error);
         }
-
-        settled = true;
-        resolve(
-          new Response(Readable.toWeb(message) as ReadableStream<Uint8Array>, {
-            headers,
-            status: message.statusCode ?? 502,
-            statusText: message.statusMessage,
-          }),
-        );
       },
     );
 

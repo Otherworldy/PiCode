@@ -44,7 +44,12 @@ import {
   runContinueAfterModelError,
 } from "./continue-after-error.js";
 import {
+  createLazyChromeDevtoolsExtension,
+  lazyChromeDevtoolsPrompt,
+} from "./chrome-devtools-lazy.js";
+import {
   createZcodeMcpTransport,
+  loadLazyChromeDevtoolsServers,
   loadZcodeMcpConfig,
   registerableMcpServers,
   type PiMcpCompat,
@@ -390,6 +395,11 @@ export function createSdkSessionFactory(
         )
       : [];
     const codingForMcp = usePiMcp ? piCoding() : undefined;
+    const lazyChrome = usePiMcp ? loadLazyChromeDevtoolsServers(agentDir, input.cwd) : [];
+    const extraSystemPrompts = [
+      ...(ssh ? [sshWorkspacePrompt(ssh)] : []),
+      ...(lazyChrome.length > 0 ? [lazyChromeDevtoolsPrompt(lazyChrome)] : []),
+    ];
     // Pi 用本机 fs 按 cwd 找 .pi/SYSTEM.md。SSH 在 Windows 上会把远端路径 resolve 成本机盘符，
     // 项目提示词实际在远端。远端文件存在时用它替换发现结果，保持「项目优先于全局」。
     const sshProjectSystemPrompt = ssh ? await readSshProjectSystemPrompt(ssh) : undefined;
@@ -416,6 +426,7 @@ export function createSdkSessionFactory(
               },
               codingForMcp.createCodemodeExtension(),
               codingForMcp.createToolSearchExtension(),
+              ...(lazyChrome.length > 0 ? [createLazyChromeDevtoolsExtension(lazyChrome)] : []),
               codingForMcp.createMcpExtension({
                 loadConfig: () => loadZcodeMcpConfig(agentDir, input.cwd),
                 createTransport: createZcodeMcpTransport({
@@ -430,7 +441,7 @@ export function createSdkSessionFactory(
       ...(sshProjectSystemPrompt !== undefined
         ? { systemPromptOverride: () => sshProjectSystemPrompt }
         : {}),
-      ...(ssh ? { appendSystemPrompt: [sshWorkspacePrompt(ssh)] } : {}),
+      ...(extraSystemPrompts.length > 0 ? { appendSystemPrompt: extraSystemPrompts } : {}),
     });
     await resourceLoader.reload();
     if (pluginExtras) applyZcodePluginPlan(resourceLoader, pluginExtras.plan);

@@ -1,4 +1,4 @@
-import { spawn, type SpawnOptions } from "node:child_process";
+import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
 
 const PROBE_TIMEOUT_MS = 8_000;
@@ -25,6 +25,54 @@ function needsWindowsShell(command: string): boolean {
 
 function quoteCmdArg(arg: string): string {
   return /[\s"&|<>^]/u.test(arg) ? `"${arg.replaceAll('"', '""')}"` : arg;
+}
+
+/** 从命令输出里留下能看懂的失败原因。没有可用输出时退回退出码。 */
+export function commandFailureText(command: string, code: number, output: string): string {
+  const lines = output
+    .split(/\r?\n/u)
+    .map((line) => line.trim().replace(/^npm ERR!\s*/u, ""))
+    .filter(Boolean);
+  const interesting = lines.filter((line) =>
+    /error|err!|fatal|not found|enoent|eacces|e404|timed out|permission|refused|failed/iu.test(
+      line,
+    ),
+  );
+  const text = (interesting.length > 0 ? interesting : lines).slice(-8).join("\n").slice(0, 500);
+  return text || `${command} failed with code ${code}`;
+}
+
+/**
+ * 把非 0 退出变成带输出的 error 事件。
+ * `runCommand` 自己只记录退出码；先吞掉 exit，等 stdio 结束后再报错，原因才完整。
+ */
+export function retainCommandFailure(child: ChildProcess, command: string): void {
+  let output = "";
+  const append = (chunk: Buffer | string) => {
+    output = `${output}${chunk.toString()}`.slice(-4000);
+  };
+  child.stdout?.on("data", append);
+  child.stderr?.on("data", append);
+  const emit = child.emit.bind(child) as (event: string, ...args: unknown[]) => boolean;
+  let pending: number | null = null;
+  let reported = false;
+  child.emit = ((event: string, ...args: unknown[]) => {
+    if (event === "exit" || event === "close") {
+      const code = args[0];
+      const signal = args[1];
+      const failed =
+        (typeof code === "number" && code !== 0) || (code == null && Boolean(signal));
+      if (event === "exit" && failed) {
+        pending = typeof code === "number" ? code : -1;
+        return true;
+      }
+      if (event === "close" && pending !== null && !reported) {
+        reported = true;
+        return emit("error", new Error(commandFailureText(command, pending, output)));
+      }
+    }
+    return emit(event, ...args);
+  }) as typeof child.emit;
 }
 
 /** 命令能在 8 秒内以 0 退出才算已安装。找不到或超时都是 false，不抛给设置页。 */
