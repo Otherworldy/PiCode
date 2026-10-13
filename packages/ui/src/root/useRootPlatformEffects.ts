@@ -457,6 +457,22 @@ export function useRootPlatformEffects({
       .filter((tab) => !tab.remoteSessionId && !tab.workspaceIdentity && !tab.remoteTarget)
       .map((tab) => tab.workspacePath);
     platform.syncWindowTabs(paths);
+    // 本地路径集合继续排除远端占位。手机列表单独带身份和 remoteSessionId，
+    // 没有 session 的远端占位不能挂接，也不把它当成本地工作区。
+    platform.syncWindowWorkspaceCatalog?.(
+      tabs.filter(isWorkspaceTab).flatMap((tab) => {
+        if ((tab.remoteTarget || tab.workspaceIdentity) && !tab.remoteSessionId) return [];
+        const workspaceIdentity = tab.workspaceIdentity?.trim();
+        return [
+          {
+            workspacePath: tab.workspacePath,
+            label: tab.label || tab.workspacePath,
+            ...(workspaceIdentity ? { workspaceIdentity } : {}),
+            ...(tab.remoteSessionId ? { remoteSessionId: tab.remoteSessionId } : {}),
+          },
+        ];
+      }),
+    );
   }, [hasCompletedFullTabRestore, isDesktop, platform, tabs]);
 
   useEffect(() => {

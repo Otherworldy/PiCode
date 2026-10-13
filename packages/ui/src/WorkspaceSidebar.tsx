@@ -24,6 +24,7 @@ import {
   Maximize2,
   MessageCircleCheck,
   MessageCirclePlus,
+  PanelLeftClose,
   Minimize2,
   Plus,
   Search,
@@ -247,7 +248,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
   isMacDesktop: _isMacDesktop = false,
   isWindowsDesktop = false,
   isSidebarVisible: _isSidebarVisible = true,
-  onToggleSidebar: _onToggleSidebar,
+  onToggleSidebar,
   toggleSidebarShortcutLabel: _toggleSidebarShortcutLabel,
   canGoBack: _canGoBack = false,
   canGoForward: _canGoForward = false,
@@ -1254,7 +1255,21 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
       // 这里用设计系统的结构面 token 固定侧栏层级，避免不同合成器把左侧容器混成异常灰块。
       className="flex h-full flex-col overflow-hidden"
     >
-      <div className="h-12 [app-region:drag]"></div>
+      {isDesktop ? (
+        <div className="h-12 [app-region:drag]"></div>
+      ) : (
+        <div className="flex h-12 items-center justify-end px-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-md"
+            aria-label={intl.formatMessage({ id: "workspace.backToWorkspace" })}
+            onClick={() => onToggleSidebar?.()}
+          >
+            <PanelLeftClose className="size-4" />
+          </Button>
+        </div>
+      )}
       <div className="relative flex-1 min-h-0 overflow-hidden">
         <div
           className={cn(

@@ -317,3 +317,10 @@ export * from "./clientConfig.js";
 export * from "./pluginStoreOrdering.js";
 export * from "./session-debug.js";
 export { redactFeedbackText } from "./feedbackPrivacy.js";
+export { windowWorkspaceCatalogEntrySchema, windowWorkspaceCatalogSchema } from "./mobileRemote.js";
+export type {
+  MobileRemoteFirewallState,
+  MobileRemotePairingStatus,
+  MobileRemoteWorkspaceListItem,
+  WindowWorkspaceCatalogEntry,
+} from "./mobileRemote.js";

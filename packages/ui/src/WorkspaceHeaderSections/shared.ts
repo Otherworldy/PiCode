@@ -51,6 +51,8 @@ export interface WorkspaceHeaderTitleSectionProps {
   isMacFullscreen?: boolean;
   isWindowsDesktop?: boolean;
   simplifyForNarrowRemote?: boolean;
+  /** 窄屏把会话标题放到顶栏正中，避免跟左侧浮层按钮挤在一起。 */
+  centerOnNarrow?: boolean;
   selectedEditor: EditorInfo | null;
   compact?: boolean;
 }

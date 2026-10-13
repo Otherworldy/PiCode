@@ -113,6 +113,11 @@ declare global {
       activateOrSetWorkspace?(path: string): Promise<{ activated: boolean }>;
       /** 同步当前窗口所有 tab 的 workspace 路径到 main 进程 */
       syncWindowTabs(paths: string[]): void;
+      syncWindowWorkspaceCatalog?(
+        entries: import("@zcode/shared").WindowWorkspaceCatalogEntry[],
+      ): void;
+      startMobileRemotePairing?(): Promise<import("@zcode/shared").MobileRemotePairingStatus>;
+      stopMobileRemotePairing?(): Promise<void>;
       /** 同步当前窗口的未读 task 数到 main 进程 */
       syncWindowUnreadCount(count: number): void;
       syncActiveTaskSession(sessionId: string | null): void;
@@ -293,7 +298,9 @@ declare global {
       /** 下载并安装已发现的桌面更新 */
       downloadAppUpdate?(): Promise<import("@zcode/shared").AppUpdateSnapshot>;
       /** 订阅桌面更新快照 */
-      onAppUpdateStateChanged?(handler: (snapshot: import("@zcode/shared").AppUpdateSnapshot) => void): () => void;
+      onAppUpdateStateChanged?(
+        handler: (snapshot: import("@zcode/shared").AppUpdateSnapshot) => void,
+      ): () => void;
       /** 同步应用菜单语言 */
       setApplicationLocale(locale: Locale): Promise<void>;
       /** 读取宿主系统语言 */

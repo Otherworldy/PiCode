@@ -1,11 +1,7 @@
 /* oxlint-disable eslint(max-lines) -- footer 聚合账户、主题、模式和快捷键菜单。 */
 import type { Locale, UserInfo } from "@zcode/shared";
 import { memo, useCallback, useEffect, useState } from "react";
-import {
-  DesktopCommandIds,
-  TID_LOGIN_TRIGGER,
-  TID_TASK_SETTINGS_BUTTON,
-} from "@zcode/shared";
+import { DesktopCommandIds, TID_LOGIN_TRIGGER, TID_TASK_SETTINGS_BUTTON } from "@zcode/shared";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar.js";
 import { cn } from "@/components/lib/utils.js";
@@ -28,11 +24,13 @@ import {
   Loader2,
   Maximize,
   Palette,
+  Smartphone,
   Settings,
   User,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
+import { MobileRemoteDialog } from "@/MobileRemoteDialog.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useShortcutCommandLabel } from "@/shortcuts/useShortcutBindings.js";
@@ -144,6 +142,7 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
       ? intl.formatMessage({ id: "workspace.backToWorkspace" })
       : intl.formatMessage({ id: "settings.title" });
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [mobileRemoteOpen, setMobileRemoteOpen] = useState(false);
   const [desktopZoomLevel, setDesktopZoomLevel] = useState(0);
   const runDesktopZoomCommand = useCallback(
     (command: (typeof DesktopCommandIds)["ZoomIn" | "ZoomOut" | "ResetZoom"]) => {
@@ -184,6 +183,20 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
   return (
     // footer 被 Settings 复用，页面专属边距由调用方传入，避免修改共享默认样式。
     <footer className={cn("flex shrink-0 flex-col gap-2.5 px-4 pt-2 pb-4", className)}>
+      {isDesktop ? (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            className="justify-start"
+            onClick={() => setMobileRemoteOpen(true)}
+          >
+            <Smartphone className="size-4" />
+            {intl.formatMessage({ id: "mobileRemote.open" })}
+          </Button>
+          <MobileRemoteDialog open={mobileRemoteOpen} onOpenChange={setMobileRemoteOpen} />
+        </>
+      ) : null}
       <div className="flex min-w-0 gap-2">
         <DropdownMenu open={profileMenuOpen} onOpenChange={setProfileMenuOpen}>
           <DropdownMenuTrigger asChild>

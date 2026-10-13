@@ -141,6 +141,18 @@ export function DesktopTopOverlay({
             </DesktopTopOverlayActionButton>
           )}
 
+          {/* 手机没有窗口标题栏。侧栏收起后，打开入口只能留在这块浮层上。 */}
+          {!isDesktop ? (
+            <DesktopTopOverlayActionButton
+              title={toggleSidebarTitle}
+              shortcut={toggleSidebarShortcutLabel}
+              ariaLabel={toggleSidebarTitle}
+              onClick={onToggleSidebar}
+            >
+              <SidebarToggleIcon className="size-4" />
+            </DesktopTopOverlayActionButton>
+          ) : null}
+
           {isMacDesktop && (
             <DesktopTopOverlayActionButton
               title={toggleSidebarTitle}
@@ -152,9 +164,9 @@ export function DesktopTopOverlay({
             </DesktopTopOverlayActionButton>
           )}
 
-          {/* 远程控制移动端左上角空间有限，任务前进/后退在这里会与主操作拥挤重叠。*/}
+          {/* 窄屏上前进/后退没有可用历史，留着只会挡住居中的标题。 */}
           {hideTaskNavigationButtons ? null : (
-            <>
+            <div className={cn("flex items-center gap-1", !isDesktop && "max-md:hidden")}>
               <DesktopTopOverlayActionButton
                 title={taskBackTitle}
                 shortcut={goBackShortcutLabel}
@@ -174,7 +186,7 @@ export function DesktopTopOverlay({
               >
                 <ArrowRightIcon className="size-4" />
               </DesktopTopOverlayActionButton>
-            </>
+            </div>
           )}
 
           <div

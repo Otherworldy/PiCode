@@ -948,8 +948,27 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
       } else {
         handleSelectTask(targetWorkspacePath, taskId, targetWorkspaceIdentity);
       }
+      // 窄屏侧栏盖住会话。点中一条 session 后直接收起，不用再点一次返回。
+      if (
+        !isDesktop &&
+        isSidebarVisible &&
+        typeof window !== "undefined" &&
+        window.matchMedia("(max-width: 767px)").matches
+      ) {
+        handleToggleSidebar();
+      }
     },
-    [handleSelectTask, intl, shellWorkbenchBinding, showChatMainView, tabStoreApi, workspaceTabs],
+    [
+      handleSelectTask,
+      handleToggleSidebar,
+      intl,
+      isDesktop,
+      isSidebarVisible,
+      shellWorkbenchBinding,
+      showChatMainView,
+      tabStoreApi,
+      workspaceTabs,
+    ],
   );
   // 中枢直接启动 accepted 后切到新会话（run 卡已在顶部）：复用运行历史那条导航，
   // target 恒带工作流所属项目坐标（不变式 7），remoteSessionId 决定连接 endpoint。
@@ -1562,9 +1581,15 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
           id="sidebar"
           className={cn(
             "w-[var(--workspace-sidebar-panel-width)] max-w-[50%] flex-none overflow-hidden duration-200 ease-out transition-[width,opacity] data-[workspace-sidebar-resizing=true]:transition-opacity",
+            !isDesktop &&
+              "max-md:absolute max-md:inset-0 max-md:h-full max-md:w-full max-md:max-w-none max-md:bg-background",
+            !isDesktop && (isSidebarPanelVisible ? "max-md:z-30" : "max-md:z-0"),
             // 拖动侧栏宽度时如果继续过渡 width，会让指针移动和实际宽度之间产生滞后。
             // 拖拽 active 通过 DOM 标记切 transition，避免 pointerdown/up 为了切 class 重渲染整棵 workspace。
-            isSidebarPanelVisible ? "opacity-100" : "pointer-events-none opacity-0",
+            // 收起后子按钮仍是 pointer-events:auto，会盖住手机上的重新打开入口，所以整棵一起关掉命中。
+            isSidebarPanelVisible
+              ? "opacity-100"
+              : "pointer-events-none opacity-0 [&_*]:pointer-events-none",
           )}
         >
           <aside
@@ -1657,6 +1682,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
               "group/handle relative z-10 flex h-full w-1 shrink-0 touch-none cursor-ew-resize items-center justify-center bg-transparent outline-none [app-region:no-drag] focus:outline-none focus-visible:ring-0",
               "after:pointer-events-none after:absolute after:rounded-full after:bg-foreground-subtlest/50 after:opacity-0 after:transition-opacity after:content-[''] after:inset-y-[var(--workspace-panel-radius)] after:w-0.5",
               "hover:after:opacity-100 data-[separator=hover]:after:opacity-100 data-[separator=active]:after:opacity-100 focus-visible:after:opacity-100 [[data-workspace-sidebar-resizing=true]_&]:after:opacity-100",
+              !isDesktop && "max-md:hidden",
               hasDesktopPanelInset && "after:inset-y-[var(--workspace-resize-handle-inset)]",
             )}
           />
@@ -1666,7 +1692,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
           data-panel=""
           id="content"
           className={cn(
-            "flex min-w-[320px] flex-1 flex-col",
+            "flex min-w-[320px] flex-1 flex-col max-md:min-w-0",
             hasDesktopPanelInset ? "p-1 pl-0 pt-0" : "p-0",
           )}
         >

@@ -78,6 +78,11 @@ export function createDesktopPlatform(options: {
       : undefined,
     showTaskNotification: (payload) => window.zcode.showTaskNotification(payload),
     syncWindowTabs: (paths) => window.zcode.syncWindowTabs(paths),
+    syncWindowWorkspaceCatalog: (entries) => window.zcode.syncWindowWorkspaceCatalog?.(entries),
+    startMobileRemotePairing: () =>
+      window.zcode.startMobileRemotePairing?.() ??
+      Promise.resolve({ status: "unavailable", reason: "no-lan-address" } as const),
+    stopMobileRemotePairing: () => window.zcode.stopMobileRemotePairing?.() ?? Promise.resolve(),
     syncWindowUnreadCount: (count) => window.zcode.syncWindowUnreadCount(count),
     syncActiveTaskSession: (sessionId) => window.zcode.syncActiveTaskSession(sessionId),
     syncAppSettings: (patch) => window.zcode.syncAppSettings?.(patch),
@@ -140,9 +145,7 @@ export function createDesktopPlatform(options: {
     getAppUpdateState: window.zcode.getAppUpdateState
       ? () => window.zcode.getAppUpdateState!()
       : undefined,
-    checkAppUpdate: window.zcode.checkAppUpdate
-      ? () => window.zcode.checkAppUpdate!()
-      : undefined,
+    checkAppUpdate: window.zcode.checkAppUpdate ? () => window.zcode.checkAppUpdate!() : undefined,
     downloadAppUpdate: window.zcode.downloadAppUpdate
       ? () => window.zcode.downloadAppUpdate!()
       : undefined,

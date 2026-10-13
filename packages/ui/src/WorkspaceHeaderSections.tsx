@@ -101,6 +101,7 @@ export function WorkspaceHeaderTitleSection({
   isWindowsDesktop: _isWindowsDesktop,
   selectedEditor: _selectedEditor,
   simplifyForNarrowRemote = false,
+  centerOnNarrow = false,
   compact = false,
 }: WorkspaceHeaderTitleSectionProps) {
   const { intl } = useZCodeIntl();
@@ -393,6 +394,8 @@ export function WorkspaceHeaderTitleSection({
         // 父级 header 是 drag 区域；如果 no-drag 的标题区铺满剩余空间，mac/Windows 标题栏空白处会无法拖动窗口。
         "flex min-w-0 items-center gap-2 overflow-hidden [app-region:no-drag]",
         simplifyForNarrowRemote && "max-md:gap-1",
+        centerOnNarrow &&
+          "max-md:pointer-events-auto max-md:absolute max-md:top-1/2 max-md:left-1/2 max-md:z-10 max-md:max-w-[56vw] max-md:-translate-x-1/2 max-md:-translate-y-1/2 max-md:justify-center",
       )}
     >
       <TaskRenameDialog
@@ -479,6 +482,7 @@ export function WorkspaceHeaderTitleSection({
         className={cn(
           "flex min-w-12 max-w-100 shrink items-center gap-2 truncate font-semibold text-foreground @max-[560px]/workspace-header:max-w-[30vw] @max-[420px]/workspace-header:max-w-[22vw]",
           simplifyForNarrowRemote && "max-md:max-w-[42vw]",
+          centerOnNarrow && "max-md:max-w-[56vw]! max-md:justify-center max-md:text-center",
           compact ? "text-[0.92rem]" : "text-ui-base",
         )}
         title={activeTaskTitle}

@@ -152,6 +152,7 @@ function RootInner({
   isMacDesktop,
   isWindowsDesktop,
   restoreSession = true,
+  persistSession = restoreSession,
   supportsSettings = true,
   allowOpenWorkspace = true,
   preferDirectoryBrowser,
@@ -553,7 +554,7 @@ function RootInner({
     // 首次安装未连接账号时，provider 登录入口判定会晚于 workspace 恢复。
     // 如果这里先恢复 workspace，ChatView mount 会触发草稿 session 预热并在登录页背后报错。
     restoreSession: restoreSession && canRestoreWorkspaceSession,
-    persistSession: restoreSession && canRestoreWorkspaceSession,
+    persistSession: persistSession && canRestoreWorkspaceSession,
     restorePersistedSession,
     buildPersistPatch: buildPersistedTabPatch,
   });

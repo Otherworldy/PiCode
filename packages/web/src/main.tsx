@@ -418,7 +418,45 @@ function renderWebBootstrapError(error: unknown): void {
   );
 }
 
+function isMobileRemotePath(): boolean {
+  return window.location.pathname === "/mobile" || window.location.pathname.startsWith("/mobile/");
+}
+
+async function renderMobileRemoteApp(): Promise<void> {
+  const platform = createWebPlatform();
+  try {
+    // 不带 workspaceKey，挂当前窗口的本地 Host。之后在侧栏切换工作区，不再锁死扫码时选中的那一个。
+    const services = await connectViaWebSocket(`${resolveDefaultWsOrigin()}/ws`);
+    document.title = "PiCode";
+    root.render(
+      <AppErrorBoundary>
+        <ZCodeIntlProvider
+          settingService={services.settingService}
+          broadcastService={services.broadcastService}
+        >
+          <Root
+            services={services}
+            platform={platform}
+            allowOpenWorkspace
+            preferDirectoryBrowser
+            supportsEmbeddedBrowser={false}
+            allowRemoteWorkspace={false}
+            restoreSession
+            persistSession={false}
+          />
+        </ZCodeIntlProvider>
+      </AppErrorBoundary>,
+    );
+  } catch (error) {
+    renderWebBootstrapError(error);
+  }
+}
+
 async function bootstrapWebApp() {
+  if (isMobileRemotePath()) {
+    await renderMobileRemoteApp();
+    return;
+  }
   const params = new URLSearchParams(window.location.search);
   if (isWebOAuthCallback(params)) {
     renderWebAuthCallbackPage();

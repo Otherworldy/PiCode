@@ -24,6 +24,8 @@ export interface RootProps {
   isWindowsDesktop?: boolean;
   /** 是否恢复上次关闭时的标签页，首个窗口 true，新窗口 false */
   restoreSession?: boolean;
+  /** 是否把标签变化写回设置。缺省跟 restoreSession。手机只读恢复，避免改掉桌面的标签。 */
+  persistSession?: boolean;
   /** 是否允许访问本地设置服务，远程窗口 false */
   supportsSettings?: boolean;
   /** 是否允许在当前壳层里切换/新开工作区 */

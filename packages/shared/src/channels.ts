@@ -208,6 +208,12 @@ export const PlatformChannels = {
   Log: "zcode:log",
   /** Renderer → Main：同步当前窗口所有 tab 的 workspace 路径 */
   SyncWindowTabs: "zcode:sync-window-tabs",
+  /** Renderer → Main：当前窗口已打开的工作区，供手机挂接。不含任务或快照。 */
+  SyncWindowWorkspaceCatalog: "zcode:sync-window-workspace-catalog",
+  /** Renderer → Main：开始或复用当前窗口的手机配对。 */
+  StartMobileRemotePairing: "zcode:start-mobile-remote-pairing",
+  /** Renderer → Main：断开当前窗口的手机配对并使口令失效。 */
+  StopMobileRemotePairing: "zcode:stop-mobile-remote-pairing",
   /** Renderer → Main：同步当前窗口的未读 task 数 */
   SyncWindowUnreadCount: "zcode:sync-window-unread-count",
   /** Renderer → Main：当前窗口 active task，只更新 Main 的临时焦点映射。 */

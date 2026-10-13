@@ -294,8 +294,14 @@ contextBridge.exposeInMainWorld("zcode", {
     ipcRenderer.invoke(PlatformChannels.ActivateOrSetWorkspace, path),
   /** 同步当前窗口所有 tab 的 workspace 路径到 main 进程 */
   syncWindowTabs: (paths: string[]) => ipcRenderer.send(PlatformChannels.SyncWindowTabs, paths),
-  /** 同步当前窗口里 Web 远程控制允许切换的 workspace */
-  /** 同步当前窗口里 Web 远程控制可展示的 task 快照 */
+  syncWindowWorkspaceCatalog: (entries: import("@zcode/shared").WindowWorkspaceCatalogEntry[]) =>
+    ipcRenderer.send(PlatformChannels.SyncWindowWorkspaceCatalog, entries),
+  startMobileRemotePairing: () =>
+    ipcRenderer.invoke(PlatformChannels.StartMobileRemotePairing) as Promise<
+      import("@zcode/shared").MobileRemotePairingStatus
+    >,
+  stopMobileRemotePairing: () =>
+    ipcRenderer.invoke(PlatformChannels.StopMobileRemotePairing) as Promise<void>,
   /** 同步当前窗口的未读 task 数到 main 进程 */
   syncWindowUnreadCount: (count: number) =>
     ipcRenderer.send(PlatformChannels.SyncWindowUnreadCount, count),
@@ -708,7 +714,8 @@ contextBridge.exposeInMainWorld("zcode", {
     ipcRenderer.invoke(PlatformChannels.ExecuteDesktopCommand, command),
   getAppUpdateState: (): Promise<AppUpdateSnapshot> =>
     ipcRenderer.invoke(PlatformChannels.GetAppUpdateState),
-  checkAppUpdate: (): Promise<AppUpdateSnapshot> => ipcRenderer.invoke(PlatformChannels.CheckAppUpdate),
+  checkAppUpdate: (): Promise<AppUpdateSnapshot> =>
+    ipcRenderer.invoke(PlatformChannels.CheckAppUpdate),
   downloadAppUpdate: (): Promise<AppUpdateSnapshot> =>
     ipcRenderer.invoke(PlatformChannels.DownloadAppUpdate),
   onAppUpdateStateChanged: (callback: (snapshot: AppUpdateSnapshot) => void): (() => void) => {

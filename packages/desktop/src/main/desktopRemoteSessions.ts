@@ -888,6 +888,7 @@ export function createRemoteWorkspaceSessionManager(options: {
     process: ElectronUtilityProcess;
     port: MessagePortMain;
     remoteKind: RemoteTarget["kind"];
+    attachmentId: string;
   } {
     const route = routesBySessionId.get(params.remoteSessionId);
     if (!route) {
@@ -921,11 +922,12 @@ export function createRemoteWorkspaceSessionManager(options: {
     }
     const process = getWindowHost(win);
     const { port1, port2 } = createMessageChannel();
+    const attachmentId = randomUUID();
     process.postMessage(
       {
         type: HostMessageTypes.AttachServicePort,
         requestId: randomUUID(),
-        attachmentId: randomUUID(),
+        attachmentId,
         clientMode: params.clientMode,
         scope: {
           kind: "remote",
@@ -936,7 +938,7 @@ export function createRemoteWorkspaceSessionManager(options: {
       },
       [port2],
     );
-    return { process, port: port1, remoteKind: descriptor.target.kind };
+    return { process, port: port1, remoteKind: descriptor.target.kind, attachmentId };
   }
 
   return {

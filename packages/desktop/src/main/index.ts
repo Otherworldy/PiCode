@@ -171,15 +171,14 @@ import {
   isWorkspaceOpenUrl,
 } from "./desktopDeepLinkUrl.js";
 import { createRemoteWorkspaceSessionManager } from "./desktopRemoteSessions.js";
+import { installMobileRemotePairing } from "./mobileRemoteDesktop.js";
 import {
   reportRemoteConnectionStateChangedToArms,
   reportRemoteDisconnectToArms,
   stopRemoteUsageArmsPeriodicSampling,
 } from "./desktopRemoteUsageArmsTelemetry.js";
 import { resolveCanonicalWslTarget } from "./desktopWslTargetResolver.js";
-import {
-  setBrowserUseGuestWebContentsIdsProvider,
-} from "./resourceManagerWindow.js";
+import { setBrowserUseGuestWebContentsIdsProvider } from "./resourceManagerWindow.js";
 import { createDesktopHelpConfigReader } from "./desktopHelpConfig.js";
 import { registerPlatformIpcHandlers } from "./desktopMainIpcPlatform.js";
 import { registerAppUpdateIpc } from "./appUpdate/registerAppUpdateIpc.js";
@@ -758,6 +757,12 @@ const remoteSessionManager = createRemoteWorkspaceSessionManager({
   resolveWslTarget: resolveCanonicalWslTarget,
   reportRemoteConnectionStateChanged: reportRemoteConnectionStateChangedToArms,
   reportRemoteDisconnect: reportRemoteDisconnectToArms,
+});
+
+const mobileRemotePairing = installMobileRemotePairing({
+  logger,
+  getHost: (webContentsId) => windowHostProcessMap.get(webContentsId),
+  attachRemote: (params) => remoteSessionManager.attachRemoteWorkspaceSessionHost(params),
 });
 
 const deviceMid = ensureDesktopDeviceMidSync();
@@ -1845,6 +1850,7 @@ app.on("before-quit", (event) => {
   }
 
   if (!hasPreparedAppQuit) {
+    mobileRemotePairing.stopAll();
     localMediaPreviewPathRegistry.clear();
     event.preventDefault();
     void prepareAppQuit("app-before-quit").finally(() => {
