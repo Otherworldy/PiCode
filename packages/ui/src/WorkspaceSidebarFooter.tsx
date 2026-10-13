@@ -184,18 +184,7 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
     // footer 被 Settings 复用，页面专属边距由调用方传入，避免修改共享默认样式。
     <footer className={cn("flex shrink-0 flex-col gap-2.5 px-4 pt-2 pb-4", className)}>
       {isDesktop ? (
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            className="justify-start"
-            onClick={() => setMobileRemoteOpen(true)}
-          >
-            <Smartphone className="size-4" />
-            {intl.formatMessage({ id: "mobileRemote.open" })}
-          </Button>
-          <MobileRemoteDialog open={mobileRemoteOpen} onOpenChange={setMobileRemoteOpen} />
-        </>
+        <MobileRemoteDialog open={mobileRemoteOpen} onOpenChange={setMobileRemoteOpen} />
       ) : null}
       <div className="flex min-w-0 gap-2">
         <DropdownMenu open={profileMenuOpen} onOpenChange={setProfileMenuOpen}>
@@ -327,6 +316,19 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
           </DropdownMenuContent>
         </DropdownMenu>
         <div className="flex shrink-0 items-center gap-1.5">
+          {isDesktop ? (
+            <ControlHintTooltip title={intl.formatMessage({ id: "mobileRemote.open" })}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-lg"
+                aria-label={intl.formatMessage({ id: "mobileRemote.open" })}
+                onClick={() => setMobileRemoteOpen(true)}
+              >
+                <Smartphone className="size-4" />
+              </Button>
+            </ControlHintTooltip>
+          ) : null}
           <ControlHintTooltip title={settingsButtonLabel}>
             <Button
               type="button"
