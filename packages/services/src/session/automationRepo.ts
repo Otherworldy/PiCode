@@ -12,11 +12,9 @@ import {
   AUTOMATION_CREATE_LIMIT,
   AUTOMATION_CREATE_LIMIT_ERROR_CODE,
   resolveWorkspaceKey,
-  zcodeAutomationBotDeliveryTargetSchema,
   modelSelectionSchema,
   zcodeTaskModeSchema,
   type ZCodeAutomation,
-  type ZCodeAutomationBotDeliveryTarget,
   type ZCodeAutomationCreateParams,
   type ZCodeAutomationDispatchStatus,
   type ZCodeAutomationLifecycleStatus,
@@ -368,9 +366,8 @@ export class AutomationRepo {
         workspace_path: params.workspacePath,
         workspace_identity: params.workspaceIdentity ?? null,
         target_task_id: params.targetTaskId ?? null,
-        bot_delivery_target: params.botDeliveryTarget
-          ? JSON.stringify(params.botDeliveryTarget)
-          : null,
+        // Bot 回推已删除。列保留给旧库，新行不再写入目标。
+        bot_delivery_target: null,
         recurring: params.recurring ? 1 : 0,
         max_runs: params.maxRuns ?? null,
         end_at: params.endAt ?? null,
@@ -424,25 +421,6 @@ export class AutomationRepo {
     const followsWorkspace = row.model_selection === "null";
     if (!followsWorkspace) throw new Error("Automation 模型选择不可用，请重新选择模型与思考档位");
     return undefined;
-  }
-
-  /**
-   * 仅供后台派发读取 Bot 回推目标；该内部来源信息不进入 automation 展示模型。
-   */
-  async getBotDeliveryTarget(
-    automationId: string,
-    workspaceKey?: string,
-  ): Promise<ZCodeAutomationBotDeliveryTarget | undefined> {
-    await this.ensureReady();
-    const raw = this.getRow(automationId, workspaceKey)?.bot_delivery_target;
-    if (!raw) return undefined;
-    try {
-      const parsed = zcodeAutomationBotDeliveryTargetSchema.safeParse(JSON.parse(raw));
-      return parsed.success ? parsed.data : undefined;
-    } catch {
-      // Bug 原因：历史/外部写入的脏 JSON 不能拖垮任务列表或 scheduler；无效来源按未配置处理。
-      return undefined;
-    }
   }
 
   async hasTaskBinding(scope: {

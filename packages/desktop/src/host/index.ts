@@ -38,7 +38,6 @@ import { createBrowserControlMainBridge } from "./browserControlMainBridge.js";
 import { materializeBrowserRecordingArtifact } from "./browserRecordingArtifactMaterializer.js";
 import {
   ServiceCollection,
-  IBotsService,
   IFileService,
   ISystemService,
   IClientConfigService,
@@ -127,7 +126,6 @@ import {
   createRemoteMediaPreviewProxy,
   type RemoteMediaPreviewProxy,
 } from "./remoteMediaPreviewProxy.js";
-import { watchCronRunBotDelivery } from "./cronBotDelivery.js";
 import { createHostRemoteWorkspaceProxyState } from "./hostRemoteWorkspaceProxyState.js";
 import { createRemoteWorkspaceServiceCollection } from "./remoteWorkspaceServiceCollection.js";
 import {
@@ -935,26 +933,6 @@ async function dispatchCronRun(request: CronRunDispatchRequest): Promise<{
         modelSelection: submissionModelSelection,
         mode: request.mode,
       });
-    }
-    const botsService = targetServices.getOptional(IBotsService);
-    if (botsService) {
-      try {
-        await watchCronRunBotDelivery({
-          automationId: request.automationId,
-          workspaceKey,
-          workspacePath: request.workspacePath,
-          ...(request.workspaceIdentity ? { workspaceIdentity: request.workspaceIdentity } : {}),
-          taskId: task.taskId,
-          repo: cronAutomationRepo,
-          botsService,
-        });
-      } catch (error) {
-        // Bot 回推是 best-effort 辅助通道；配置/凭据/订阅失败不能阻断 automation 派发与结算。
-        logger.warn(
-          `automation Bot delivery subscription failed automation=${request.automationId} provider=unknown`,
-          error,
-        );
-      }
     }
     trackedKey = cronRunSubscriptionKey(task.taskId, promptTraceId);
     trackCronRunOutcome({

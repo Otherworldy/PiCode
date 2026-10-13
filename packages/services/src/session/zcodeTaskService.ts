@@ -33,7 +33,6 @@ import type {
   ZCodePermissionResponse,
   ModelSelection,
   ZCodeBackgroundTurnAttribution,
-  ZCodeAutomationBotDeliveryTarget,
 } from "@zcode/shared";
 import type {
   SessionMessageDeliveryResult,
@@ -166,8 +165,6 @@ export interface IZCodeTaskService {
       clientMode?: ZCodeTaskClientMode;
       /** 当前 turn 额外隐藏的工具；与 session/automation 自带的工具隔离规则合并。 */
       toolDenylist?: string[];
-      /** Bot 来源 turn 的稳定回推地址；由 BotsService 注入，模型不可控。 */
-      botDeliveryTarget?: ZCodeAutomationBotDeliveryTarget;
       /** 标准模型选择；闲时任务同样经 Registry / ModelFactory 创建 Model。 */
       modelSelection?: CommandPayloadMap["sendText"]["modelSelection"];
       /** 单次执行约束与动态鉴权；仅 idle start-now 接受，不进入普通队列。 */

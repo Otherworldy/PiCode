@@ -25,7 +25,6 @@ import type { RendererHeapSample } from "./validation.js";
 import type {
   CancelPendingRemoteConnectionRequest,
   BindRemoteWorkspaceSessionContextRequest,
-  BotRemoteWorkspaceReconnectedEvent,
   BrowserViewScreenshotSurfacePreparePayload,
   BrowserViewScreenshotSurfaceReadyPayload,
   BrowserViewScreenshotSurfaceReleasePayload,
@@ -140,8 +139,6 @@ export const ServiceChannels = {
   Memory: "memory",
   /** 首次启动设置同步服务 */
   SettingsSync: "settings-sync",
-  /** Bots 远程聊天控制服务 */
-  Bots: "bots",
   /** 用户反馈工单服务 */
   Feedback: "feedback",
   /** Composer 附件在 host-local 与 remote runtime 之间的预传服务 */
@@ -185,8 +182,6 @@ export const PlatformChannels = {
   RemoteConnectionLog: "zcode:remote-connection-log",
   /** Main → Renderer：远程 workspace session 已关闭 */
   RemoteSessionClosed: "zcode:remote-session-closed",
-  /** Main → Renderer：Bot 已触发远端 workspace 重连成功 */
-  BotRemoteWorkspaceReconnected: "zcode:bot-remote-workspace-reconnected",
   /** 检查目录是否已在其他窗口打开，如果是则激活该窗口 */
   ActivateOrSetWorkspace: "zcode:activate-or-set-workspace",
   /** 建立 SSH 远程连接 */
@@ -713,10 +708,6 @@ export interface PlatformChannelMap {
   };
   [PlatformChannels.RemoteSessionClosed]: {
     request: RemoteSessionClosedEvent;
-    response: void;
-  };
-  [PlatformChannels.BotRemoteWorkspaceReconnected]: {
-    request: BotRemoteWorkspaceReconnectedEvent;
     response: void;
   };
   [PlatformChannels.ActivateOrSetWorkspace]: {

@@ -163,7 +163,6 @@ export function createRemoteWorkspaceSessionManager(options: {
   const pendingByRequestKey = new Map<string, PendingConnect>();
   const routesBySessionId = new Map<string, RemoteAttachmentRoute>();
   const listenedHosts = new WeakSet<ElectronUtilityProcess>();
-  const reconnectsByWorkspaceKey = new Map<string, Promise<string>>();
   const pendingProviderProvisioningExecutions = new Map<
     string,
     PendingProviderProvisioningExecution
@@ -940,72 +939,13 @@ export function createRemoteWorkspaceSessionManager(options: {
     return { process, port: port1, remoteKind: descriptor.target.kind };
   }
 
-  function reconnectBotRemoteWorkspaceSession(
-    win: BrowserWindow,
-    params: {
-      target: RemoteTarget;
-      workspacePath: string;
-      workspaceIdentity: string;
-      requestId?: string;
-    },
-  ): Promise<string> {
-    const existing = Array.from(routesBySessionId.entries()).find(([, route]) => {
-      return (
-        route.webContentsId === win.webContents.id &&
-        route.attachmentState === "attachable" &&
-        route.descriptor.workspacePath === params.workspacePath &&
-        route.descriptor.workspaceIdentity === params.workspaceIdentity &&
-        isSameRemoteTarget(route.descriptor.target, params.target)
-      );
-    });
-    if (existing) return Promise.resolve(existing[0]);
-    const key = `${win.webContents.id}\0${params.workspaceIdentity}`;
-    const pending = reconnectsByWorkspaceKey.get(key);
-    if (pending) return pending;
-    const reconnect = createRemoteWorkspaceSession(win, params.target, params.requestId, params);
-    reconnectsByWorkspaceKey.set(key, reconnect);
-    void reconnect.finally(() => {
-      if (reconnectsByWorkspaceKey.get(key) === reconnect) reconnectsByWorkspaceKey.delete(key);
-    });
-    return reconnect;
-  }
-
-  async function createBotRemoteWorkspaceRuntimePort(
-    win: BrowserWindow,
-    params: { target: RemoteTarget; workspacePath: string; workspaceIdentity: string },
-    _requestId?: string,
-  ): Promise<MessagePortMain> {
-    const routeEntry = Array.from(routesBySessionId.entries()).find(([, route]) => {
-      return (
-        route.webContentsId === win.webContents.id &&
-        route.attachmentState === "attachable" &&
-        route.descriptor.workspacePath === params.workspacePath &&
-        route.descriptor.workspaceIdentity === params.workspaceIdentity &&
-        isSameRemoteTarget(route.descriptor.target, params.target)
-      );
-    });
-    if (!routeEntry) {
-      throw new Error("未找到可供 Bot attachment 的远程 logical session");
-    }
-    return attachRemoteWorkspaceSessionHost({
-      windowId: win.id,
-      remoteSessionId: routeEntry[0],
-      workspacePath: params.workspacePath,
-      workspaceIdentity: params.workspaceIdentity,
-      workspaceKey: params.workspaceIdentity,
-      clientMode: "web-remote-replayable",
-    }).port;
-  }
-
   return {
     createRemoteWorkspaceSession,
     attachRemoteWorkspaceSessionHost,
-    reconnectBotRemoteWorkspaceSession,
     bindRemoteWorkspaceSessionContext,
     confirmRendererAttachmentReady,
     reattachRemoteWorkspaceSessionsForWindow,
     hasRemoteWorkspaceSessionForTarget,
-    createBotRemoteWorkspaceRuntimePort,
     getRemoteConnectionStats,
     disposeRemoteWorkspaceSession,
     disposeRemoteWorkspaceSessionsForWindow,
