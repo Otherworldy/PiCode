@@ -16,7 +16,7 @@ import type {
   PackageSource,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import { retainCommandFailure } from "./pi-plugin-tools.js";
+import { retainCommandFailure, withFreshGitCheckout } from "./pi-plugin-tools.js";
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
 
 export type PiPluginKind = "package" | "extension";
@@ -348,9 +348,9 @@ export async function checkPiPluginUpdates(cwd: string, agentDir?: string) {
 }
 
 export async function updatePiPlugin(cwd: string, id: string, agentDir?: string): Promise<void> {
-  const { source } = piPluginPackageSource(id);
+  const { scope, source } = piPluginPackageSource(id);
   const packages = await openPackageManager(cwd, agentDir);
-  await packages.update(source);
+  await withFreshGitCheckout(packages, source, scope, () => packages.update(source));
 }
 
 async function forgetSwitch(id: string, switchRoot?: string): Promise<void> {
@@ -574,7 +574,14 @@ export async function installPiPlugin(
     return piPluginSourcesMatch(pkg.source, normalized);
   });
   if (already) return;
-  await packages.installAndPersist(normalized, scope === "project" ? { local: true } : undefined);
+  await withFreshGitCheckout(
+    packages,
+    normalized,
+    scope,
+    () =>
+      packages.installAndPersist(normalized, scope === "project" ? { local: true } : undefined),
+    { acceptExisting: true },
+  );
 }
 
 export async function setPiPluginEnabled(
