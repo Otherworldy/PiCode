@@ -12,8 +12,8 @@ import {
   mutatePiCatalog,
   piPluginUpdateCacheKey,
   probePiPluginInstallTools,
-  readPiPluginUpdateCache,
-  savePiPluginUpdateCache,
+  readPiPluginUpdateView,
+  savePiPluginUpdateCheck,
   searchPiPackageCatalog,
   setPiPluginEnabled,
   updatePiPlugin,
@@ -120,14 +120,25 @@ export async function mutatePiPlugins(rawParams: unknown) {
       : undefined;
   const cached =
     params.action === "checkUpdates"
-      ? await savePiPluginUpdateCache(cacheKey, await checkPiPluginUpdates(cwd))
-      : await readPiPluginUpdateCache(cacheKey);
+      ? await saveCheckedUpdates(cacheKey, cwd)
+      : await readPiPluginUpdateView(cacheKey);
   return {
     plugins: await listPiPlugins(cwd),
     configs: await listPiPluginConfigs(),
-    ...(cached ? { updates: cached.updates, updatesCheckedAt: cached.checkedAt } : {}),
+    ...(cached
+      ? {
+          updates: cached.updates,
+          ...(cached.checkedAt !== undefined ? { updatesCheckedAt: cached.checkedAt } : {}),
+        }
+      : {}),
     ...(catalog ? { catalog } : {}),
   };
+}
+
+async function saveCheckedUpdates(cacheKey: string, cwd: string) {
+  // 开始时间必须取在网络检查之前，更新发生在检查期间才不会被旧结果写回。
+  const startedAt = Date.now();
+  return savePiPluginUpdateCheck(cacheKey, await checkPiPluginUpdates(cwd), startedAt);
 }
 
 export async function testProviderModelConnectivity(

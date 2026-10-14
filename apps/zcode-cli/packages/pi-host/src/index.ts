@@ -58,7 +58,9 @@ export {
   forgetPiPluginUpdate,
   piPluginUpdateCacheKey,
   readPiPluginUpdateCache,
+  readPiPluginUpdateView,
   savePiPluginUpdateCache,
+  savePiPluginUpdateCheck,
   type PiPluginUpdateCache,
   type PiPluginUpdateRecord,
 } from "./pi-plugin-update-cache.js";
