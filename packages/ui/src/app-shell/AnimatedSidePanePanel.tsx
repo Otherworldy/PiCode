@@ -1100,6 +1100,7 @@ export function AnimatedSidePanePanel({
                           onPageMetadataChange={(metadata) =>
                             onBrowserPageMetadataChange(tab.id, metadata)
                           }
+                          onGuestCloseRequest={() => onCloseTab(tab.id)}
                         />
                       );
                     }
@@ -1299,6 +1300,7 @@ export function AnimatedSidePanePanel({
                             onPageMetadataChange={(metadata) =>
                               onBrowserPageMetadataChange(tab.id, metadata)
                             }
+                            onGuestCloseRequest={() => onCloseTab(tab.id)}
                             navigationRequest={
                               browserNavigationRequest?.targetTabId === tab.id
                                 ? {

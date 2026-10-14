@@ -239,6 +239,7 @@ import {
   parseSelectionSideSlashCommand,
   plannotatorPlanActive,
   plannotatorPlanAvailable,
+  uiDesignModeActive,
   v4QueuedCommandText,
   type V4VisibleSlashCommand,
 } from "@/v4/slashCommands.js";
@@ -2848,6 +2849,17 @@ export function SessionPane({
           throw new Error(ack.reasonCode ?? "sendText 被拒绝");
         }
       };
+      const ensureUiDesignMode = async (targetSessionId: string) => {
+        if (draftConfigRef.current.uiDesignEnabled !== true) return;
+        const ack = await dispatchConfigCas(
+          "setUiDesignMode",
+          { enabled: true },
+          { targetSessionId },
+        );
+        if (ack && ack.status !== "accepted" && ack.status !== "noop") {
+          throw new Error(ack.reasonCode ?? "setUiDesignMode 被拒绝");
+        }
+      };
       const currentRoutingMode = snapshotRef.current?.inputRouting.mode;
       if (
         currentRoutingMode === "choice" &&
@@ -2971,6 +2983,7 @@ export function SessionPane({
         }
         const newSessionId = createResult.sessionId;
         handleDraftSessionCreated(newSessionId, groupedDraftTaskAtSend, createSourceAtSend);
+        await ensureUiDesignMode(newSessionId);
         await dispatchSlashCommand(
           draftSlashCommand,
           newSessionId,
@@ -2988,6 +3001,7 @@ export function SessionPane({
         const prewarm = prewarmBindingRef.current;
         if (prewarm?.beginPromotion()) {
           try {
+            await ensureUiDesignMode(prewarm.sessionId);
             await ensurePlannotatorPlan(prewarm.sessionId);
             const ack = await dispatchSubmissionCommand(
               "sendText",
@@ -3095,6 +3109,7 @@ export function SessionPane({
           throw new Error("createSession 缺少 sessionId");
         }
         const newSessionId = createResult.sessionId;
+        await ensureUiDesignMode(newSessionId);
         await ensurePlannotatorPlan(newSessionId);
         const sendAck = await dispatchSubmissionCommand(
           "sendText",
@@ -3869,8 +3884,34 @@ export function SessionPane({
   // 新建任务只改草稿。已有会话才发插件命令，避免每点一次就多出一个任务。
   const handleSwitchMode = useCallback(
     (mode: string) => {
+      if (mode === "ui-design" || mode === "ui-design-off") {
+        const enabled = mode === "ui-design";
+        handleDraftSwitchMode(mode);
+        if (sessionId == null) return;
+        if (enabled && plannotatorPlanActive(snapshotRef.current?.extensionStatuses)) {
+          void handleSendText("/plannotator-plan-mode").catch(() => undefined);
+        }
+        void configCommandBarrier.enqueue(() =>
+          dispatchConfigCas("setUiDesignMode", { enabled }, { targetSessionId: sessionId }),
+        );
+        return;
+      }
       if (mode === "plan" || mode === "plan-off") {
         if (!plannotatorPlanAvailable(slashCommands)) return;
+        if (
+          mode === "plan" &&
+          sessionId != null &&
+          uiDesignModeActive(snapshotRef.current?.extensionStatuses)
+        ) {
+          handleDraftSwitchMode("ui-design-off");
+          void configCommandBarrier.enqueue(() =>
+            dispatchConfigCas(
+              "setUiDesignMode",
+              { enabled: false },
+              { targetSessionId: sessionId },
+            ),
+          );
+        }
         handleDraftSwitchMode(mode);
         if (sessionId == null) return;
         void handleSendText("/plannotator-plan-mode").catch(() => undefined);

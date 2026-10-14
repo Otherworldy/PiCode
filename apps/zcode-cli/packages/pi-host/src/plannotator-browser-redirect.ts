@@ -7,6 +7,7 @@ const NOOP_BROWSER_VALUES = new Set(["true", "false", "none", ":", "0", "1"]);
 
 const sessionByAsyncId = new Map<number, string>();
 const openers = new Map<string, (url: string) => void>();
+const streamingSessions = new Set<string>();
 let sessionHook: AsyncHook | undefined;
 let installed = false;
 
@@ -62,6 +63,12 @@ export function notePlannotatorBrowserSession(sessionId: string): void {
   sessionByAsyncId.set(executionAsyncId(), sessionId);
 }
 
+/** 审查页是在这一轮工具里打开的。异步上下文对不上时，用正在跑的那一个会话，不猜两个都在跑的。 */
+export function setPlannotatorBrowserStreaming(sessionId: string, streaming: boolean): void {
+  if (streaming) streamingSessions.add(sessionId);
+  else streamingSessions.delete(sessionId);
+}
+
 export function plannotatorBrowserLaunchUrl(
   command: string,
   args: readonly string[] | undefined,
@@ -93,6 +100,8 @@ export function consumePlannotatorBrowserLaunch(
 function resolveSessionId(): string | undefined {
   const noted = sessionByAsyncId.get(executionAsyncId());
   if (noted && openers.has(noted)) return noted;
+  const streaming = [...streamingSessions].filter((sessionId) => openers.has(sessionId));
+  if (streaming.length === 1) return streaming[0];
   if (openers.size === 1) return openers.keys().next().value;
   return undefined;
 }

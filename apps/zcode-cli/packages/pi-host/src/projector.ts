@@ -107,8 +107,9 @@ export class PiToV4Projector {
   /** jsonl 重放中。历史 tool end 不能清掉当前还在等的问卷。 */
   private replaying = false;
   private branchSummaryRowId: number | null = null;
-  /** plannotator_submit_plan 已打开审查。这一轮的 header 保持 running，直到决定或退出。 */
+  /** plannotator_submit_plan 或 UI 设计标注已打开审查。这一轮的 header 保持 running，直到决定或退出。 */
   private openPlanReviewTurnId: string | null = null;
+  private openReviewKind: "plan" | "design" | null = null;
   private seq = 0;
   private assistantMessageId?: string;
   private pendingError?: string;
@@ -196,6 +197,7 @@ export class PiToV4Projector {
     this.aborted = false;
     this.branchSummaryRowId = null;
     this.openPlanReviewTurnId = null;
+    this.openReviewKind = null;
     const cleared = this.commit([{ op: "row.removed", fromRowId: 1 }]);
     return cleared.concat(this.replay(events));
   }
@@ -275,19 +277,30 @@ export class PiToV4Projector {
     statuses: NonNullable<ConversationSnapshot["extensionStatuses"]>,
   ): ConversationDelta[] {
     const deltas = this.applyState({ extensionStatuses: statuses });
-    // 离开计划模式会清掉 plannotator 状态，开着的审查也被插件关掉。
+    const planOn = statuses.some((status) => status.key === "plannotator");
+    const designOn = statuses.some((status) => status.key === "ui-design");
+    // 计划审查跟着 plannotator。UI 设计跟着 ui-design，不能因为没有计划状态就把标注轮收口。
     if (
-      this.openPlanReviewTurnId &&
-      !statuses.some((status) => status.key === "plannotator")
+      (this.openReviewKind === "plan" && !planOn) ||
+      (this.openReviewKind === "design" && !designOn)
     ) {
       return deltas.concat(this.finishOpenPlanReview());
     }
     return deltas;
   }
 
-  /** 批准、拒绝，或计划模式被关掉。审查轮从「工作中」收成完成。 */
+  /** 批准、拒绝，或对应模式被关掉。审查轮从「工作中」收成完成。 */
   finishOpenPlanReview(at?: number): ConversationDelta[] {
     return this.commit(this.finishOpenPlanReviewDeltas(at));
+  }
+
+  /** HTML 标注页已经打开。这一轮像计划审查一样继续显示工作中。 */
+  holdDesignReview(): ConversationDelta[] {
+    if (!this.turnId || this.openPlanReviewTurnId === this.turnId) return [];
+    const finished = this.finishOpenPlanReviewDeltas();
+    this.openPlanReviewTurnId = this.turnId;
+    this.openReviewKind = "design";
+    return this.commit(finished);
   }
 
   setConfig(patch: Partial<ConversationSnapshot["config"]>): ConversationDelta[] {
@@ -979,6 +992,7 @@ export class PiToV4Projector {
     if (!this.turnId || this.openPlanReviewTurnId === this.turnId) return [];
     const finished = this.finishOpenPlanReviewDeltas();
     this.openPlanReviewTurnId = this.turnId;
+    this.openReviewKind = "plan";
     return finished;
   }
 
@@ -986,6 +1000,7 @@ export class PiToV4Projector {
     const turnId = this.openPlanReviewTurnId;
     if (!turnId) return [];
     this.openPlanReviewTurnId = null;
+    this.openReviewKind = null;
     const endedAt = at ?? this.stamp ?? Date.now();
     const deltas: ConversationDelta[] = [];
     for (const row of this.snapshot.rows.window) {
@@ -1000,6 +1015,21 @@ export class PiToV4Projector {
         },
       });
     }
+    // 审查等待把停止键留着。收口时模型已经闲了，停止键要一起拿掉。
+    if (this.snapshot.control.phase !== "running" && this.snapshot.control.canStop) {
+      deltas.push({
+        op: "state.updated",
+        patch: {
+          control: {
+            ...this.snapshot.control,
+            canStop: false,
+            stopState: "idle",
+            stopTargetKind: "unknown",
+            activeWorks: [],
+          },
+        },
+      });
+    }
     return deltas;
   }
 
@@ -1009,7 +1039,10 @@ export class PiToV4Projector {
     const kept = this.snapshot.rows.window.some(
       (row) => row.kind === "turnHeader" && row.turnId === turnId,
     );
-    if (!kept) this.openPlanReviewTurnId = null;
+    if (!kept) {
+      this.openPlanReviewTurnId = null;
+      this.openReviewKind = null;
+    }
   }
 
   private compactStart(): ConversationDelta[] {
@@ -1189,9 +1222,12 @@ export class PiToV4Projector {
         -20,
       );
     }
-    // 审查还开着。header 继续 running，时间线才一直是「工作中」。phase 照常收口，输入框不卡住。
+    // 审查还开着。header 继续 running。停止键也留着，避免时间线在工作中、输入框却是发送。
     const holdPlanReview = this.openPlanReviewTurnId === this.turnId && !this.aborted;
-    if (this.aborted && this.openPlanReviewTurnId === this.turnId) this.openPlanReviewTurnId = null;
+    if (this.aborted && this.openPlanReviewTurnId === this.turnId) {
+      this.openPlanReviewTurnId = null;
+      this.openReviewKind = null;
+    }
     const state = this.aborted ? "completedInterrupted" : "completedSuccess";
     const failureLines = this.retryFailures.map(
       (failure) => `${failure.attempt}. ${failure.message}`,
@@ -1247,10 +1283,17 @@ export class PiToV4Projector {
         control: {
           phase: this.aborted ? "completedInterrupted" : "completedSuccess",
           sessionEnded: false,
-          canStop: false,
-          stopState: "idle",
-          stopTargetKind: "unknown",
-          activeWorks: [],
+          canStop: holdPlanReview,
+          stopState: holdPlanReview ? "stoppable" : "idle",
+          stopTargetKind: holdPlanReview ? "assistant" : "unknown",
+          activeWorks: holdPlanReview
+            ? [
+                {
+                  kind: "primaryTurn" as const,
+                  startedAt: this.snapshot.control.activeWorks[0]?.startedAt ?? endedAt,
+                },
+              ]
+            : [],
           lastError: presented
             ? {
                 code: "fault.model",

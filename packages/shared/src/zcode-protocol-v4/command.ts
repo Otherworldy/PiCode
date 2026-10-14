@@ -253,6 +253,10 @@ export const commandPayloadSchemas = {
   switchCollaborationMode: z.object({
     mode: z.enum(["build", "edit", "plan", "yolo"]),
   }),
+  // UI 设计模式。只改宿主状态，不产生用户消息。
+  setUiDesignMode: z.object({
+    enabled: z.boolean(),
+  }),
   setFollowupMode: z.object({ mode: z.enum(["queue", "guide"]) }),
   pauseGoal: z.object({}),
   resumeGoal: z.object({}),
@@ -351,6 +355,7 @@ export const COMMANDS_REQUIRING_BASE_REVISION: ReadonlySet<CommandType> = new Se
   "setAutoDrain",
   "switchModelConfig",
   "switchCollaborationMode",
+  "setUiDesignMode",
   "setFollowupMode",
   "pauseGoal",
   "resumeGoal",

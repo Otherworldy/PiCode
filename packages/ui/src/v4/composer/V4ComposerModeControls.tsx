@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo } from "react";
-import { LightbulbIcon, XIcon, ChevronDownIcon } from "lucide-react";
+import { LayoutTemplateIcon, LightbulbIcon, XIcon, ChevronDownIcon } from "lucide-react";
 import {
   TID_CHAT_MODE_SELECT_TRIGGER,
   TID_CHAT_MODE_SELECT_ITEM,
@@ -47,6 +47,7 @@ function V4ComposerModeSwitchImpl({
   onSwitchMode,
   planAvailable = false,
   planActive = false,
+  uiDesignActive = false,
 }: Pick<
   V4ComposerToolbarProps,
   | "workspacePath"
@@ -59,7 +60,7 @@ function V4ComposerModeSwitchImpl({
   | "onSwitchMode"
   | "planAvailable"
   | "planActive"
->) {
+> & { uiDesignActive?: boolean }) {
   const { intl } = useZCodeIntl();
   const displayProvider = provider ?? ZCODE_AGENT_PROVIDER;
   const modeShortcutLabel = useShortcutCommandLabel("cycleSessionMode");
@@ -147,7 +148,6 @@ function V4ComposerModeSwitchImpl({
           }}
         >
           {showPlan ? (
-          <>
           <DropdownMenuCheckboxItem
             checked={planActive}
             onCheckedChange={(checked) => onSwitchMode(checked ? "plan" : "plan-off")}
@@ -164,9 +164,22 @@ function V4ComposerModeSwitchImpl({
               )}
             </span>
           </DropdownMenuCheckboxItem>
-          <DropdownMenuSeparator />
-          </>
           ) : null}
+          <DropdownMenuCheckboxItem
+            checked={uiDesignActive}
+            onCheckedChange={(checked) => onSwitchMode(checked ? "ui-design" : "ui-design-off")}
+            data-testid={testId(TID_CHAT_MODE_SELECT_ITEM, "ui-design")}
+            className="min-h-13 items-start gap-3 py-2"
+          >
+            <LayoutTemplateIcon className="mt-0.5 size-4.5 shrink-0" />
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span>{intl.formatMessage({ id: "mode.uiDesign" })}</span>
+              <span className="text-ui-sm text-foreground-subtle">
+                {intl.formatMessage({ id: "mode.description.uiDesign" })}
+              </span>
+            </span>
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuSeparator />
           <DropdownMenuRadioGroup value={selected.id} onValueChange={onSwitchMode}>
             {permissions.map((mode) => {
               const ModeIcon = resolveModeOptionIcon(mode.id);
@@ -195,6 +208,33 @@ function V4ComposerModeSwitchImpl({
           </DropdownMenuRadioGroup>
         </DropdownMenuContent>
       </DropdownMenu>
+      {uiDesignActive && (
+        <span data-testid="v4-composer-ui-design-marker" className="flex items-center gap-1">
+          <span
+            role="separator"
+            aria-orientation="vertical"
+            className="h-3 w-px shrink-0 bg-border"
+          />
+          <ControlHintTooltip title={intl.formatMessage({ id: "chat.uiDesign.removeMarker" })}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={disabled}
+              data-composer-collapse-priority="2"
+              onClick={() => onSwitchMode("ui-design-off")}
+              aria-label={intl.formatMessage({ id: "chat.uiDesign.removeMarker" })}
+              className="group/ui-design h-7 gap-1 rounded-lg px-2 text-ui-base text-foreground-subtle hover:text-foreground-subtle data-[composer-compact=true]:w-7 data-[composer-compact=true]:px-0"
+            >
+              <LayoutTemplateIcon className="size-4 group-hover/ui-design:hidden group-focus-visible/ui-design:hidden" />
+              <XIcon className="hidden size-4 group-hover/ui-design:block group-focus-visible/ui-design:block" />
+              <span className="inline group-data-[composer-compact=true]/ui-design:hidden">
+                {intl.formatMessage({ id: "mode.uiDesign" })}
+              </span>
+            </Button>
+          </ControlHintTooltip>
+        </span>
+      )}
       {showPlan && planActive && (
         <span data-testid="v4-composer-plan-marker" className="flex items-center gap-1">
           <span

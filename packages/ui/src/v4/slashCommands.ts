@@ -70,6 +70,13 @@ export function plannotatorPlanActive(
   return (statuses ?? []).some((status) => status.key === "plannotator");
 }
 
+/** 宿主 setStatus("ui-design") 表示 UI 设计模式开着。 */
+export function uiDesignModeActive(
+  statuses: readonly { key: string }[] | null | undefined,
+): boolean {
+  return (statuses ?? []).some((status) => status.key === "ui-design");
+}
+
 /** Pi 终端菜单里的命令。compact / plan 已有 GUI 行为，其余提交不能变成用户消息。 */
 export function isTerminalOnlySlashCommand(
   content: string,

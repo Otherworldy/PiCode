@@ -14,6 +14,7 @@ import { BrowserViewportSurface } from "@/browser-use/BrowserViewportSurface.js"
 import { BrowserViewportToolbar } from "@/browser-use/BrowserViewportToolbar.js";
 import { useBrowserResizeOperationWarning } from "@/browser-use/useBrowserResizeOperationWarning.js";
 import { useBrowserScreenshotSurfaceReady } from "@/browser-use/useBrowserScreenshotSurfaceReady.js";
+import { usePlannotatorGlimpseClose } from "@/browser-use/usePlannotatorGlimpseClose.js";
 import { useEmbeddedBrowserWheelChain } from "@/browser-use/useEmbeddedBrowserWheelChain.js";
 import { useDesktopZoomFactor } from "@/browser-use/useDesktopZoomFactor.js";
 import { useResponsiveBrowserViewportControl } from "@/browser-use/useResponsiveBrowserViewportControl.js";
@@ -58,6 +59,7 @@ export function UnifiedBrowserView({
   navigationRequest,
   onUrlChange,
   onPageMetadataChange,
+  onGuestCloseRequest,
   onNavigationRequestHandled,
   workspacePath,
   workspaceIdentity,
@@ -92,6 +94,8 @@ export function UnifiedBrowserView({
   onUrlChange?: (url: string) => void;
   /** 页面标题/favicon 变化回传（驱动 tab 标签）。 */
   onPageMetadataChange?: (metadata: { title?: string; faviconUrl?: string | null }) => void;
+  /** Plannotator 审查页请求关闭窗口时关掉这个侧栏页。 */
+  onGuestCloseRequest?: () => void;
   /** navigationRequest 消费完回执。 */
   onNavigationRequestHandled?: (requestId: string) => void;
   /** 元素选择加入聊天所需的工作区路径（human 分支传入；agent 分支可不传）。 */
@@ -204,6 +208,7 @@ export function UnifiedBrowserView({
     isResponsiveMode: effectiveIsResponsiveMode,
     webview,
   });
+  usePlannotatorGlimpseClose(webview, onGuestCloseRequest);
 
   // dom-ready 前排队的导航 URL；webview 就绪后统一 loadURL（<webview> 的 src 只在首挂生效）。
   const pendingUrlRef = useRef<string | null>(null);

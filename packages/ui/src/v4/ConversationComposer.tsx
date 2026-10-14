@@ -158,7 +158,11 @@ import { useConversationSelectionReferences } from "@/v4/composer/useConversatio
 import { ConversationBackgroundWorkTrigger } from "@/v4/composer/ConversationBackgroundWorkTrigger.js";
 import { ExtensionChrome } from "@/v4/ExtensionChrome.js";
 import { useSlashCommands } from "@/hooks/useSlashCommands.js";
-import { plannotatorPlanActive, plannotatorPlanAvailable } from "@/v4/slashCommands.js";
+import {
+  plannotatorPlanActive,
+  plannotatorPlanAvailable,
+  uiDesignModeActive,
+} from "@/v4/slashCommands.js";
 import {
   V4ComposerModeSwitch,
   V4ComposerModelControls,
@@ -372,7 +376,7 @@ interface ConversationComposerProps {
   /** draft 态无 snapshot，但仍可 createSession 首发。 */
   draftMode?: boolean;
   /** renderer 当前草稿配置意图；只在 draftMode 下覆盖迟到的 prewarm projection。 */
-  draftConfig?: Partial<SessionConfigState>;
+  draftConfig?: Partial<SessionConfigState> & { uiDesignEnabled?: boolean };
   /** SessionPane 注入的完整 Draft owner；生产路径不再由编辑器直接覆盖持久记录。 */
   composerDraft: V4ComposerDraft;
   updateComposerContent: (
@@ -560,6 +564,8 @@ function ConversationComposerImpl({
   const planActive = plannotatorPlanActive(snapshot?.extensionStatuses);
   // 新建任务还没有会话，勾选只记在草稿上。已有会话以插件状态为准。
   const planChecked = sessionId == null ? draftConfig?.planEnabled === true : planActive;
+  const uiDesignActive = uiDesignModeActive(snapshot?.extensionStatuses);
+  const uiDesignChecked = sessionId == null ? draftConfig?.uiDesignEnabled === true : uiDesignActive;
   const conversationTelemetry = useScopedConversationTelemetrySupervisor({
     workspacePath,
     ...(workspaceIdentity ? { workspaceIdentity } : {}),
@@ -2215,6 +2221,7 @@ function ConversationComposerImpl({
           onSwitchMode={onSwitchMode}
           planAvailable={planAvailable}
           planActive={planChecked}
+          uiDesignActive={uiDesignChecked}
         />
         <ConversationBackgroundWorkTrigger
           backgroundWorks={snapshot?.backgroundWorks ?? []}
@@ -2232,6 +2239,7 @@ function ConversationComposerImpl({
       handleConfigPickerOpenChange,
       planChecked,
       planAvailable,
+      uiDesignChecked,
       backgroundWorkOpenTarget,
       onOpenRunningBackgroundWorks,
       onSwitchMode,

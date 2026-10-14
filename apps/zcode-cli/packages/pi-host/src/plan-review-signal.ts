@@ -38,6 +38,21 @@ export function takePlanDecision(pending: string[], text: string): boolean {
   return true;
 }
 
+const REVIEW_DISMISS_PREFIXES = [
+  "Annotation session closed.",
+  "Annotation closed (no feedback).",
+  "Annotation approved.",
+  "Code review session closed.",
+  "Code review closed (no feedback).",
+  "Message approved.",
+  "Plan review session was closed before a decision.",
+];
+
+/** 审查页关掉或没有新批注。工作中收到口，但不另开一轮。 */
+export function isPlannotatorReviewDismissed(message: string): boolean {
+  return REVIEW_DISMISS_PREFIXES.some((prefix) => message.startsWith(prefix));
+}
+
 export function textOfMessageContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";

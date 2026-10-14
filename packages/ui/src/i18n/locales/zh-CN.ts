@@ -169,6 +169,7 @@ const zhCN: Record<string, string> = {
   "common.retry": "重试",
   "common.close": "关闭",
   "chat.plan.removeMarker": "关闭计划模式",
+  "chat.uiDesign.removeMarker": "关闭 UI 设计模式",
   "common.confirm": "确认",
   "common.more": "更多",
   "common.refresh": "刷新",
@@ -5556,6 +5557,8 @@ const zhCN: Record<string, string> = {
 
   // 模式
   "mode.plan": "计划",
+  "mode.uiDesign": "UI 设计",
+  "mode.description.uiDesign": "先看 HTML 稿，再改产品。",
   "mode.label.glm.build": "变更前确认",
   "mode.label.glm.edit": "自动编辑",
   "mode.label.glm.plan": "计划模式",

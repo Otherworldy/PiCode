@@ -12,7 +12,7 @@ import { HostQueue } from "./host-queue.js";
 import { PluginViewRegistry } from "./plugin-adapters/registry.js";
 import { mapPiToolName } from "./presentation.js";
 import { PiToV4Projector } from "./projector.js";
-import { takePlanDecision } from "./plan-review-signal.js";
+import { isPlannotatorReviewDismissed, takePlanDecision } from "./plan-review-signal.js";
 import { gateTool } from "./permission-gate.js";
 import { HostSessionRegistry } from "./session-registry.js";
 import { contextUsagePublish } from "./types.js";
@@ -425,7 +425,7 @@ test("open plan review stays working until the decision or plan mode ends", () =
     undefined,
   );
   assert.equal(waiting.control.phase, "completedSuccess");
-  assert.equal(waiting.control.canStop, false);
+  assert.equal(waiting.control.canStop, true);
 
   projector.replaceStatuses([{ key: "plannotator", text: "plan" }]);
   const stillPlanning = projector.getSnapshot().rows.window.find((row) => row.kind === "turnHeader");
@@ -491,6 +491,47 @@ test("plan decisions match extension text and ignore the user's own messages", (
   assert.deepEqual(pending, ["Plan approved. Execute it."]);
   assert.equal(takePlanDecision(pending, "Plan approved. Execute it."), true);
   assert.deepEqual(pending, []);
+});
+
+test("plannotator feedback stays a user message", () => {
+  const projector = new PiToV4Projector("s1", "e1");
+  projector.apply({ type: "agent_start", at: 1_000 });
+  const feedback =
+    "Plannotator: hello world.html (pn-1ef1dc) — Feedback · 1 comment.\n\n# Markdown Annotations";
+  projector.apply({
+    type: "message_start",
+    message: { role: "user", content: feedback, id: "u-review" },
+  });
+  const users = projector
+    .getSnapshot()
+    .rows.window.filter((row) => row.kind === "userInput")
+    .map((row) => (row.kind === "userInput" ? row.text : ""));
+  assert.deepEqual(users, [feedback]);
+  assert.equal(isPlannotatorReviewDismissed("Annotation closed (no feedback)."), true);
+  assert.equal(isPlannotatorReviewDismissed("Annotation opened"), false);
+});
+
+test("ui design review stays working until the mode ends", () => {
+  const projector = new PiToV4Projector("s1", "e1");
+  projector.apply({ type: "agent_start", at: 1_000 });
+  projector.holdDesignReview();
+  projector.apply({ type: "agent_end", at: 1_600 });
+  const waiting = projector.getSnapshot();
+  const waitingHeader = waiting.rows.window.find((row) => row.kind === "turnHeader");
+  assert.equal(waitingHeader && waitingHeader.kind === "turnHeader" ? waitingHeader.state : "", "running");
+  assert.equal(waiting.control.phase, "completedSuccess");
+  assert.equal(waiting.control.canStop, true);
+
+  projector.replaceStatuses([{ key: "ui-design", text: "UI 设计" }]);
+  const stillDesigning = projector.getSnapshot().rows.window.find((row) => row.kind === "turnHeader");
+  assert.equal(
+    stillDesigning && stillDesigning.kind === "turnHeader" ? stillDesigning.state : "",
+    "running",
+  );
+
+  projector.replaceStatuses([]);
+  const finished = projector.getSnapshot().rows.window.find((row) => row.kind === "turnHeader");
+  assert.equal(finished && finished.kind === "turnHeader" ? finished.state : "", "completedSuccess");
 });
 
 test("message_end + agent_end flushes assistant text", () => {

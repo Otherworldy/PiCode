@@ -215,6 +215,8 @@ export interface PiSessionPort {
   abort(): Promise<void>;
   /** 插件 sendUserMessage 的原文。对上才结束计划审查的「工作中」。 */
   takeMatchingPlanDecision?(text: string): boolean;
+  /** UI 设计标注页刚打开。消费一次，让当前轮保持工作中。 */
+  consumeDesignReviewOpened?(): boolean;
   /** 模型失败后从当前上下文接着跑。命令在 agent_start 后返回。 */
   continueAfterError?(): Promise<void>;
   /** pi-processes 列表变化。没装插件时列表一直是空的。 */
@@ -270,6 +272,8 @@ export interface PiSessionPort {
   setThinkingLevel?(level: PiThinkingLevel): void;
   setSteeringMode?(mode: "all" | "one-at-a-time"): void;
   setFollowUpMode?(mode: "all" | "one-at-a-time"): void;
+  setUiDesignMode?(enabled: boolean): void;
+  isUiDesignMode?(): boolean;
   readonly sessionName?: string;
   setSessionName?(name: string): Promise<void> | void;
   bindUi?(ui: unknown): Promise<void>;

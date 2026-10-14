@@ -180,6 +180,7 @@ const enUS: Record<string, string> = {
   "common.retry": "Retry",
   "common.close": "Close",
   "chat.plan.removeMarker": "Turn off Plan mode",
+  "chat.uiDesign.removeMarker": "Turn off UI design mode",
   "common.confirm": "Confirm",
   "common.more": "More",
   "common.refresh": "Refresh",
@@ -5793,6 +5794,8 @@ const enUS: Record<string, string> = {
 
   // Modes
   "mode.plan": "Plan",
+  "mode.uiDesign": "UI design",
+  "mode.description.uiDesign": "Review an HTML mock before changing the product.",
   "mode.label.glm.build": "Ask before changes",
   "mode.label.glm.edit": "Edit automatically",
   "mode.label.glm.plan": "Plan mode",

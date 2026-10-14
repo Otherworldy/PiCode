@@ -17,6 +17,7 @@ interface BrowserUseSidePaneContentProps {
   residencyGeneration?: number;
   onUrlChange(url: string): void;
   onPageMetadataChange(metadata: BrowserSidePaneMetadata): void;
+  onGuestCloseRequest?(): void;
 }
 
 /** browser-use 专用 TabsContent：非活动 tab 仅在截图准备期间保留真实合成布局。 */
@@ -32,6 +33,7 @@ export function BrowserUseSidePaneContent({
   residencyGeneration,
   onUrlChange,
   onPageMetadataChange,
+  onGuestCloseRequest,
 }: BrowserUseSidePaneContentProps): React.JSX.Element {
   // 截图 surface 不能依赖收起的 ResizablePanel 提供尺寸：面板宽度为 0 时，Electron
   // guest 会被 Chromium 当成没有 compositor surface，capturePage 会直接失败。把同一份
@@ -92,6 +94,7 @@ export function BrowserUseSidePaneContent({
         browserResizeBaselineVersion={tab.browserUseResizeBaselineVersion}
         onUrlChange={onUrlChange}
         onPageMetadataChange={onPageMetadataChange}
+        onGuestCloseRequest={onGuestCloseRequest}
       />
     </TabsContent>
   );

@@ -74,12 +74,14 @@ function shouldHydrateWorkspaceCatalog(params: {
   return params.slashCommands.length === 0 || !hasModePresentation;
 }
 
+type ComposerDraftConfig = Partial<SessionConfigState> & { uiDesignEnabled?: boolean };
+
 interface DraftConfigControl {
   modelSelectionRead: ModelSelectionRead;
   /** Renderer 下一次提交的配置；Session 只在 scope 首次初始化时提供种子。 */
-  draftConfig: Partial<SessionConfigState>;
+  draftConfig: ComposerDraftConfig;
   /** 草稿已选 config（partial）；createSession 时经 buildDraftCreateConfigPayload 携带。 */
-  draftConfigRef: React.RefObject<Partial<SessionConfigState>>;
+  draftConfigRef: React.RefObject<ComposerDraftConfig>;
   /** 当前草稿生命周期冻结的初始化 config；只供 prewarm/createSession 建立时使用。 */
   resolveInitialDraftConfig: () => Partial<SessionConfigState> | undefined;
   composerDraft: V4ComposerDraft;
@@ -187,16 +189,17 @@ export function useDraftConfigControl(params: {
   const effectiveSelection = modelSelectionView
     ? (modelSelectionView.effectiveSelection ?? undefined)
     : draft.modelSelection;
-  const draftConfig = useMemo<Partial<SessionConfigState>>(
+  const draftConfig = useMemo<Partial<SessionConfigState> & { uiDesignEnabled?: boolean }>(
     () => ({
       mode: draft.mode,
       planEnabled: draft.planEnabled ?? false,
+      uiDesignEnabled: draft.uiDesignEnabled ?? false,
       modelSelection: effectiveSelection,
       provider: effectiveSelection?.providerId ?? "",
       model: effectiveSelection?.modelId ?? "",
       thought: effectiveSelection?.options?.reasoningLevel ?? "",
     }),
-    [draft.mode, draft.planEnabled, effectiveSelection],
+    [draft.mode, draft.planEnabled, draft.uiDesignEnabled, effectiveSelection],
   );
   const draftConfigRef = useRef(draftConfig);
   draftConfigRef.current = draftConfig;
@@ -227,6 +230,7 @@ export function useDraftConfigControl(params: {
       draftConfigRef.current = {
         mode: next.mode,
         planEnabled: next.planEnabled ?? false,
+        uiDesignEnabled: next.uiDesignEnabled ?? false,
         modelSelection: selection,
         provider: selection?.providerId ?? "",
         model: selection?.modelId ?? "",
@@ -472,6 +476,17 @@ export function useDraftConfigControl(params: {
           ...current,
           mode: current.mode === "plan" ? "build" : (current.mode ?? "build"),
           planEnabled: mode === "plan",
+          uiDesignEnabled: mode === "plan" ? false : current.uiDesignEnabled,
+          initializeFromNewTask: undefined,
+        }));
+        return;
+      }
+      if (mode === "ui-design" || mode === "ui-design-off") {
+        updateComposerDraft((current) => ({
+          ...current,
+          mode: current.mode === "plan" ? "build" : (current.mode ?? "build"),
+          uiDesignEnabled: mode === "ui-design",
+          planEnabled: mode === "ui-design" ? false : current.planEnabled,
           initializeFromNewTask: undefined,
         }));
         return;

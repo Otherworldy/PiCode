@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import { PlatformChannels } from "@zcode/shared";
+import { EmbeddedBrowserWebviewChannels, PlatformChannels } from "@zcode/shared";
 import { installEmbeddedBrowserWheelForwarding } from "./embeddedBrowserWheel.js";
 
 const BRIDGE_KEY = "__zcodeEmbeddedBrowserJavaScriptDialog__";
@@ -34,6 +34,35 @@ contextBridge.exposeInMainWorld(BRIDGE_KEY, {
       return { handled: false };
     }
   },
+});
+
+const GLIMPSE_BRIDGE_KEY = "__zcodePlannotatorGlimpse__";
+
+contextBridge.exposeInMainWorld(GLIMPSE_BRIDGE_KEY, {
+  close(): void {
+    ipcRenderer.sendToHost(EmbeddedBrowserWebviewChannels.PlannotatorGlimpseClose);
+  },
+});
+
+contextBridge.executeInMainWorld({
+  func: (bridgeKey: string) => {
+    const host = window.location.hostname;
+    // 只在本机审查页上补插件用来关窗口的入口。普通网站没有这个对象。
+    if (host !== "localhost" && host !== "127.0.0.1" && host !== "::1" && host !== "[::1]") {
+      return;
+    }
+    const bridge = (window as unknown as Record<string, { close?: () => void } | undefined>)[
+      bridgeKey
+    ];
+    const glimpse = (
+      window as unknown as { glimpse?: { close?: () => void } }
+    ).glimpse;
+    if (!bridge?.close || typeof glimpse?.close === "function") return;
+    (window as unknown as { glimpse: { close: () => void } }).glimpse = {
+      close: () => bridge.close?.(),
+    };
+  },
+  args: [GLIMPSE_BRIDGE_KEY],
 });
 
 contextBridge.executeInMainWorld({

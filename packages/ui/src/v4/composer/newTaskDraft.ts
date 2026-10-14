@@ -48,6 +48,7 @@ export function seedImportedSessionDraft(result: {
           text: "",
           mode: root.mode,
           planEnabled: root.planEnabled ?? false,
+          ...(root.uiDesignEnabled ? { uiDesignEnabled: true } : {}),
           modelSelection: root.modelSelection,
         }
       : { text: "", initializeFromNewTask: true },

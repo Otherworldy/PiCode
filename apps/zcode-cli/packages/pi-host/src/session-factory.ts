@@ -17,6 +17,7 @@ import {
 } from "./host-capabilities.js";
 import { readPiContextUsage } from "./context-breakdown.js";
 import { createPermissionExtension } from "./permission-gate.js";
+import { createUiDesignMode } from "./ui-design-mode.js";
 import { createPlanReviewSignalExtension, takePlanDecision } from "./plan-review-signal.js";
 import { captureAbandonedBranch, summarizeAbandonedBranch } from "./branch-summary.js";
 import {
@@ -410,6 +411,14 @@ export function createSdkSessionFactory(
         ])
       : [undefined, undefined];
     const planDecisions: string[] = [];
+    let designReviewOpened = false;
+    let stopDesignTurn = false;
+    let replyTurn = false;
+    let pendingAnnotate: { path: string; ctx: object } | undefined;
+    const annotateDesign: { open: (path: string, ctx: object) => Promise<void> } = {
+      open: async () => undefined,
+    };
+    const uiDesign = createUiDesignMode(input.cwd, (path, ctx) => annotateDesign.open(path, ctx));
     const resourceLoader = new (piCoding().DefaultResourceLoader)({
       cwd: input.cwd,
       agentDir,
@@ -417,8 +426,11 @@ export function createSdkSessionFactory(
       ...(pluginExtras?.loader ?? { additionalSkillPaths: options.skillPaths?.(input.cwd) ?? [] }),
       extensionFactories: [
         createPermissionExtension(input.checkPermission),
+        uiDesign.extension,
         createPlanReviewSignalExtension((text) => {
           planDecisions.push(text);
+          // 批注已经回来。这一轮要让模型把修改说完，不能一改文件就再次掐断。
+          if (uiDesign.isEnabled()) replyTurn = true;
         }),
         ...(usePiMcp && codingForMcp
           ? [
@@ -507,6 +519,50 @@ export function createSdkSessionFactory(
     });
     live = created.session;
     const session = created.session;
+    const runAnnotate = async (path: string, ctx: object) => {
+      const tool = (
+        session as { getToolDefinition?: (name: string) => { execute?: Function } | undefined }
+      ).getToolDefinition?.("plannotator");
+      if (!tool?.execute) return false;
+      const signal = (ctx as { signal?: AbortSignal }).signal;
+      await tool.execute(
+        `ui-design:${path}`,
+        { action: "annotate", target: path },
+        signal,
+        undefined,
+        ctx,
+      );
+      return true;
+    };
+    annotateDesign.open = async (path, ctx) => {
+      if (replyTurn) {
+        pendingAnnotate = { path, ctx };
+        return;
+      }
+      if (!(await runAnnotate(path, ctx))) return;
+      // 第一次打开沿用工具的 terminate：这一轮到此为止，决定以后才回来。
+      designReviewOpened = true;
+      stopDesignTurn = true;
+    };
+    const agent = session.agent;
+    const installedAfterTool = agent.afterToolCall?.bind(agent);
+    agent.afterToolCall = (async (context, signal) => {
+      const outcome = await installedAfterTool?.(context, signal);
+      if (!stopDesignTurn) return outcome;
+      stopDesignTurn = false;
+      return { ...(outcome ?? {}), terminate: true };
+    }) as NonNullable<typeof agent.afterToolCall>;
+    const installedFinishTurn = agent.finishTurn?.bind(agent);
+    agent.finishTurn = (async (turn, signal) => {
+      const decision = await installedFinishTurn?.(turn, signal);
+      const pending = pendingAnnotate;
+      pendingAnnotate = undefined;
+      if (!replyTurn && !pending) return decision;
+      replyTurn = false;
+      // 批注回来的这一轮先把说明写完，轮末再打开下一轮标注。
+      if (pending && (await runAnnotate(pending.path, pending.ctx))) designReviewOpened = true;
+      return decision;
+    }) as NonNullable<typeof agent.finishTurn>;
     // 编辑历史消息会先 abort 再 prompt。abort 的 agent_settled 和插件仍可能在
     // isStreaming 落下之前再进一次 prompt。Pi 抛 already processing，调用方经常不 await，
     // 进程错误边界会把 agent 打退出：模型第一句刚写出会话就没了。这里改成 followUp。
@@ -580,6 +636,11 @@ export function createSdkSessionFactory(
         return session.isIdle;
       },
       takeMatchingPlanDecision: (text: string) => takePlanDecision(planDecisions, text),
+      consumeDesignReviewOpened: () => {
+        const opened = designReviewOpened;
+        designReviewOpened = false;
+        return opened;
+      },
       prompt: (text, options) =>
         new Promise<boolean>((resolve, reject) => {
           // 还在跑就不要进 Pi。裸 prompt 会抛 "already processing"，
@@ -734,6 +795,10 @@ export function createSdkSessionFactory(
       setSessionName: (name) => {
         session.setSessionName(name);
       },
+      setUiDesignMode: (enabled) => {
+        uiDesign.setEnabled(enabled);
+      },
+      isUiDesignMode: () => uiDesign.isEnabled(),
       bindUi: async (ui) => {
         try {
           await session.bindExtensions({ uiContext: ui as never, mode: "rpc" });

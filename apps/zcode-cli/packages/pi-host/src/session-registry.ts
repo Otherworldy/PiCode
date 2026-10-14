@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import type { ConversationDelta, DeliveryProfileName } from "@zcode/shared/zcode-protocol-v4";
 import { CommandBridge, piHostBlocksResidency, type SubmissionModel } from "./command-bridge.js";
 import { createHostExtensionUi } from "./extension-ui-bridge.js";
-import { textOfMessageContent } from "./plan-review-signal.js";
+import { isPlannotatorReviewDismissed, textOfMessageContent } from "./plan-review-signal.js";
 import { ExtensionUiHost } from "./extension-ui-host.js";
 import { HostQueue } from "./host-queue.js";
 import { workspaceKey } from "./identity.js";
@@ -16,7 +16,9 @@ import {
   installPlannotatorEmbeddedBrowserRedirect,
   notePlannotatorBrowserSession,
   registerPlannotatorBrowserSession,
+  setPlannotatorBrowserStreaming,
 } from "./plannotator-browser-redirect.js";
+import { UI_DESIGN_STATUS_KEY, UI_DESIGN_STATUS_TEXT } from "./ui-design-mode.js";
 import {
   abortLiveSubagent,
   getLiveSubagentModel,
@@ -117,6 +119,9 @@ export interface HostedSession {
   applyAccessFrom(source: HostedSession): void;
   /** 立刻改这个会话的权限。完全访问会放掉正在等的工具授权。 */
   setCollaborationMode(mode: string): void;
+  /** UI 设计模式。只改宿主状态，不往会话里写消息。 */
+  setUiDesignMode(enabled: boolean): void;
+  isUiDesignMode(): boolean;
   publishUi(): void;
   dispose(): void | Promise<void>;
   hydrateHistory(content: string): void;
@@ -772,6 +777,10 @@ export class HostSessionRegistry {
       for (const effect of next.sideEffects) {
         if (effect.kind === "notify") {
           for (const listener of notifyListeners) listener(effect.message, effect.notifyType);
+          // 关掉审查页、没有批注或只是批准时，插件不发新消息。工作中要在这里收口。
+          if (isPlannotatorReviewDismissed(effect.message)) {
+            emit(projector.finishOpenPlanReview());
+          }
         }
         if (effect.kind === "title") emit(projector.setTitle(effect.title, "generated"));
       }
@@ -913,6 +922,10 @@ export class HostSessionRegistry {
     const unsubscribe = pi.subscribe((event: PiHostEvent) => {
       if (this.options.redirectPlannotatorToEmbeddedBrowser) {
         notePlannotatorBrowserSession(meta.sessionId);
+        if (event.type === "agent_start") setPlannotatorBrowserStreaming(meta.sessionId, true);
+        if (event.type === "agent_end" || event.type === "agent_settled") {
+          setPlannotatorBrowserStreaming(meta.sessionId, false);
+        }
       }
       try {
         if (event.type === "extension_ui_request") {
@@ -926,6 +939,7 @@ export class HostSessionRegistry {
             emit(projector.finishOpenPlanReview(event.at));
           }
         }
+        if (pi.consumeDesignReviewOpened?.()) emit(projector.holdDesignReview());
         emit(projector.apply(event));
         // 停止之后 Pi 仍可能把重试的下一跳发出来。再 abort 一次，别让它接着跑。
         if (
@@ -1047,6 +1061,8 @@ export class HostSessionRegistry {
         projector.markAborted();
         abortInflightNetwork();
         await pi.abort();
+        // 审查等待时模型已经停了，abort 不会再来一轮 agent_end。停止键要自己收口。
+        if (pi.isIdle ?? !pi.isStreaming) emit(projector.finishOpenPlanReview());
       },
       continueAfterError: () => {
         if (!pi.continueAfterError) return Promise.reject(new Error("continue unsupported"));
@@ -1250,6 +1266,18 @@ export class HostSessionRegistry {
         if (mode) setCollaborationMode(mode);
       },
       setCollaborationMode,
+      isUiDesignMode: () => pi.isUiDesignMode?.() ?? false,
+      setUiDesignMode: (enabled) => {
+        if (!pi.setUiDesignMode) return;
+        pi.setUiDesignMode(enabled);
+        handleUi({
+          type: "extension_ui_request",
+          id: randomUUID(),
+          method: "setStatus",
+          statusKey: UI_DESIGN_STATUS_KEY,
+          statusText: enabled ? UI_DESIGN_STATUS_TEXT : undefined,
+        });
+      },
       requestConfirm: async (toolName, reason, args) => {
         if (sessionAllowed.has(toolName)) return true;
         const id = `perm:${randomUUID()}`;

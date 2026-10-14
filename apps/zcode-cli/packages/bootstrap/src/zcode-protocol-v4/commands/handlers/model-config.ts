@@ -165,6 +165,31 @@ async function switchCollaborationMode(
   return undefined;
 }
 
+/** 勾选只翻宿主里的 UI 设计模式，不开新回合。 */
+function setUiDesignMode(
+  host: V4CommandCoreHost,
+  envelope: CommandEnvelope,
+): Promise<CommandResult | undefined> {
+  const payload = envelope.payload as CommandPayloadMap["setUiDesignMode"];
+  const record = requireRecord(host, envelope.sessionId);
+  const hosted = (
+    record.app as {
+      piHosted?: {
+        isUiDesignMode?: () => boolean;
+        setUiDesignMode?: (enabled: boolean) => void;
+      };
+    }
+  ).piHosted;
+  if (!hosted?.setUiDesignMode) {
+    throw new Error("UI design mode is unavailable");
+  }
+  if ((hosted.isUiDesignMode?.() ?? false) === payload.enabled) {
+    throw new V4CommandNoopError(CONFIG_UNCHANGED);
+  }
+  hosted.setUiDesignMode(payload.enabled);
+  return Promise.resolve(undefined);
+}
+
 /**
  * createSession.config 消费共用件（「createSession.config 必须被消费」）：
  * 以「请求 config 覆盖 runtime 缺省」归并，只对与 runtime 当前值不同的部分生效，
@@ -264,4 +289,4 @@ export async function applyRequestedSessionConfig(
   }
 }
 
-export const modelConfigHandlers = { switchModelConfig, switchCollaborationMode };
+export const modelConfigHandlers = { switchModelConfig, switchCollaborationMode, setUiDesignMode };

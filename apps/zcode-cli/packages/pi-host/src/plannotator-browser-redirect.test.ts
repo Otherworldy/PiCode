@@ -5,6 +5,7 @@ import {
   loadChildProcess,
   plannotatorBrowserLaunchUrl,
   registerPlannotatorBrowserSession,
+  setPlannotatorBrowserStreaming,
 } from "./plannotator-browser-redirect.js";
 
 const STACK = "at openBrowser (node_modules/@plannotator/pi-extension/server/network.ts:338:15)";
@@ -71,6 +72,16 @@ test("a single hosted session receives the url; two sessions do not guess", () =
         null,
       );
       assert.deepEqual(opened, ["http://localhost:9/a"]);
+      setPlannotatorBrowserStreaming("s2", true);
+      try {
+        assert.equal(
+          consumePlannotatorBrowserLaunch("xdg-open", ["http://localhost:9/c"], STACK, {}),
+          "http://localhost:9/c",
+        );
+        assert.deepEqual(opened, ["http://localhost:9/a", "s2"]);
+      } finally {
+        setPlannotatorBrowserStreaming("s2", false);
+      }
     } finally {
       unregisterSecond();
     }

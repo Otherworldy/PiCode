@@ -431,6 +431,8 @@ export type PlatformChannelName = (typeof PlatformChannels)[keyof typeof Platfor
 export const EmbeddedBrowserWebviewChannels = {
   /** Guest 无法继续消费某方向的滚动时，把二维 delta 转交自由尺寸画布。 */
   WheelBoundary: "zcode:embedded-browser-wheel-boundary",
+  /** Plannotator 审查页调用 window.glimpse.close 时，关掉这个内置浏览器页。 */
+  PlannotatorGlimpseClose: "zcode:plannotator-glimpse-close",
 } as const;
 
 export interface EmbeddedBrowserWheelBoundaryPayload {
