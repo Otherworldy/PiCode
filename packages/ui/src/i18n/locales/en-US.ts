@@ -1948,7 +1948,8 @@ const enUS: Record<string, string> = {
   "settings.messageStreamShowReasoningDescription":
     "Show full reasoning inside the message stream. When off, the first reasoning item in each turn remains visible.",
   "settings.messageStreamShowTodos": "Show todos",
-  "settings.messageStreamShowTodosDescription": "Show Todo tool cards inside the message stream. ",
+  "settings.messageStreamShowTodosDescription":
+    "Show the Plannotator to-do list in a drawer above the composer.",
   "settings.toolGroupingExplore": "Group exploration tools",
   "settings.toolGroupingExploreDescription":
     "Group consecutive reads and searches into an Explore section.",

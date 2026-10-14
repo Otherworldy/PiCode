@@ -2403,7 +2403,6 @@ const ToolCallRowView = memo(function ToolCallRowView({
           workspacePath={context.workspacePath}
           theme={context.theme}
           codePreviewSettings={context.codePreviewSettings}
-          showTodoToolCalls={context.messageStreamShowTodos === true}
           onOpenCodeViewer={context.onOpenCodeViewer}
           onOpenFileLink={context.onOpenFileLink}
           onOpenBrowserUrl={context.onOpenBrowserUrl}
@@ -2564,10 +2563,9 @@ function ConversationRowViewImpl({
     case "timelineMarker":
       return <TimelineMarkerRowView row={row} context={context} />;
     case "toolCall":
-      // 只在 ToolCallBlock 内返回 null 会留下空 RowShell 和多余间距；
-      // 在行分发处按同一工具身份规则裁剪，设置关闭时不产生任何 Todo DOM。
+      // 只在 ToolCallBlock 内返回 null 会留下空 RowShell 和多余间距。
+      // 历史 Todo 工具行始终不进消息流；待办开关改画末尾的 Plannotator 清单卡。
       if (
-        context.messageStreamShowTodos !== true &&
         resolveToolCallIdentity({ toolName: row.toolName, kind: row.toolName }).family === "todo"
       ) {
         return null;

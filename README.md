@@ -78,7 +78,7 @@ flowchart TD
 
 | 插件 | 界面上多出来的行为 |
 | --- | --- |
-| [`@plannotator/pi-extension`](https://pi.dev/packages/@plannotator/pi-extension) | 计划模式只认这个插件。启用后输入框才有计划开关；`/plan` 会先进入它的计划模式。进度挂件 `plannotator-progress` 出现在状态面板的待办里，不铺在输入框下面。 |
+| [`@plannotator/pi-extension`](https://pi.dev/packages/@plannotator/pi-extension) | 计划模式只认这个插件。启用后输入框才有计划开关；`/plan` 会先进入它的计划模式。进度挂件 `plannotator-progress` 出现在状态面板的待办里，不铺在输入框下面。设置里的「显示待办」打开后，同一份清单以抽屉贴在输入框上方。 |
 | [`pi-processes`](https://github.com/Otherworldy/pi-processes-bash) | 长驻命令的主人。正在跑的进程出现在状态面板的终端列表里，可以看日志、停止，不必打 `/ps`。停止只结束该进程，不中断当前对话。 |
 | [`pi-ask-me`](https://github.com/Otherworldy/pi-ask-me) | 工具名是 `ask_user_question`。调用后打开问卷卡，而不是一张空的工具卡。问题、短标题、选项和示意分开显示。 |
 

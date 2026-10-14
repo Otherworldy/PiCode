@@ -63,7 +63,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 - `custom()` 无 adapter：降级 widget 文本，不卡循环。
 - 插件抛错：`extension_error` → notify，会话继续。
 - 本地会话不把 `read` / `bash` / `edit` / `write` / `grep` / `find` / `ls` / `powershell` 注册成 customTools，也不关 Pi 内置工具。Pi 默认只激活 `read` / `bash` / `edit` / `write`；Host 在本地会话里补上已注册的 `grep` / `find` / `ls`。扩展仍可按原名替换，例如 pi-fff。卸掉替换扩展后，内置实现还在。权限走 `tool_call`，不换工具实现。SSH 工作区仍用远端实现替换 `read` / `bash` / `edit` / `write`，不把本机的 `grep` / `find` / `ls` 打开，否则这些工具打到本机盘。
-- PiCode 不再注册 `TodoRead` / `TodoWrite`，也不再提醒模型去调用它们。旧会话里的 todo 卡片和进程投影仍按工具名渲染。
+- PiCode 不再注册 `TodoRead` / `TodoWrite`，也不再提醒模型去调用它们。消息流不再渲染这些历史工具卡。快照里的 plan 仍给状态面板；没有 plan 时，状态面板用 `plannotator-progress`。
 - 桌面和 CLI 同一份 `zcode.cjs` 把 Pi 打进 CJS。入口先设 `globalThis.PI_BUNDLED_NODE`，Pi 才用内嵌模块表加载 extension，而不是按 bundle 路径去找 `../dist/babel.cjs`。`import.meta.url` 不能改写成 `module.filename`：extension loader 同一个函数里有 `const module`，那个标识符在死区里，extension 会在 import 之前就失败。文件名改记在 `globalThis.__zcodeBundleFilename`。
 - 同一个标志让 codemode 去 bundle 旁边找 `codemode-worker.js` 和 `quickjs.wasm`。wasm 不能放进 `glm/node_modules`：electron-builder 复制 extraResources 时会丢掉源目录根上的 `node_modules`，安装包里沙箱会报找不到模块。bundle 启动时把 `quickjs-wasi/quickjs.wasm` 指到旁边这个文件。wasm 取 Pi 依赖的 `quickjs-wasi@3.6.2`；仓库里被 hoist 的 2.2.0 没有这个导出。没标成 `direct` 的 MCP（包括 tdx）只能从这个沙箱里调。
 - Pi 缩放内联图片读同目录的 `photon_rs_bg.wasm`（`@silvia-odwyer/photon-node`，与 Pi 依赖锁定的版本一致）。缺这个文件时缩放返回空，任意图片都会被换成 `[Image omitted: could not be resized below the inline image size limit.]`。不能放进 `glm/node_modules`，原因同上。
@@ -106,7 +106,7 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 壳上新增：输入框 Extension Widget 槽。非计划插件的 status 收成上下文用量圆环左侧的一个 popup，不再平铺 chips，也不再占输入框上方。点开后列表向上展开。
 
-宿主 UI 带上纯文本 `theme`（`fg` / `bg` / `bold` / `italic` / `underline` / `inverse` / `strikethrough` 原样返回文字，不发 ANSI）。缺 `theme` 时 Plannotator 在 `ctx.ui.theme.fg` 上抛错：批准计划后的 `plannotator_submit_plan` 和 `plannotator_mark_done` 都失败，`plannotator-progress` 清单也写不出去。清单仍由插件 `setWidget` 持有，输入框下不平铺这份原文。没有 TodoWrite 的 `plan` 时，状态面板的原 Todo 段用这份 widget 列出进度，不另写一份 plan。
+宿主 UI 带上纯文本 `theme`（`fg` / `bg` / `bold` / `italic` / `underline` / `inverse` / `strikethrough` 原样返回文字，不发 ANSI）。缺 `theme` 时 Plannotator 在 `ctx.ui.theme.fg` 上抛错：批准计划后的 `plannotator_submit_plan` 和 `plannotator_mark_done` 都失败，`plannotator-progress` 清单也写不出去。清单仍由插件 `setWidget` 持有，输入框下不平铺这份原文。没有 TodoWrite 的 `plan` 时，状态面板的原 Todo 段用这份 widget 列出进度，不另写一份 plan。常规设置「显示待办」打开时，同一份 widget 在输入框上方画成可收起的待办抽屉，不写入会话行，也不进消息流。
 
 计划审查不占着工具调用。`plannotator_submit_plan` 的结果带 `details.pending: true` 时，这一轮的 `turnHeader` 保持 `running`，时间线继续显示「工作中」，时长接着走。`control.phase` 仍收成完成：输入框可以接着发消息，不因为审查而排队或停住。所有者是投影器里的这一轮 id。插件用 `sendUserMessage` 把批准、拒绝或批注送进来时，这条仍是用户消息，右侧气泡保留。input source 是 `extension`；对上原文后先把审查轮收成 `completedSuccess`，再开新回合。审查期间自己打的字 source 不是 `extension`，不收口。审查还开着时，时间线是「工作中」，输入框也是停止键，不是发送键。离开计划模式、状态 `plannotator` 被清掉时也收口。插件通知审查页已关、没有批注或已批准时同样收口，不另开一轮。用户停止这一轮时按中断收口，不继续挂着。冷重放的工具结果没有 `details`，历史会话不会停在工作中；已经落盘的审查决定仍按同一条规则不画用户气泡。
 

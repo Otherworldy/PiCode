@@ -233,7 +233,6 @@ export interface ToolCallBlockRenderContext {
   /** CUA Group 子项显式放大 App Icon；独立 CUA 保持默认尺寸。 */
   cuaAppIconClassName?: "size-4" | "size-5";
   kindLabelOverride?: ReactNode;
-  showTodoToolCalls?: boolean;
   disableSummaryContentAnimation?: boolean;
   /** Changes 子项可能在 diff 已存在后才挂载，首次数字也需要播放进入动画。 */
   animateDiffCountOnMount?: boolean;

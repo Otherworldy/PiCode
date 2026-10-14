@@ -78,7 +78,7 @@ These are not merely loadable. The host connects each plugin's own commands, eve
 
 | Plugin | What the interface adds |
 | --- | --- |
-| [`@plannotator/pi-extension`](https://pi.dev/packages/@plannotator/pi-extension) | Plan mode recognizes only this plugin. The composer shows the plan toggle after it is enabled, and `/plan` enters its plan mode first. The `plannotator-progress` widget appears as the to-do list in the status panel, not under the input. |
+| [`@plannotator/pi-extension`](https://pi.dev/packages/@plannotator/pi-extension) | Plan mode recognizes only this plugin. The composer shows the plan toggle after it is enabled, and `/plan` enters its plan mode first. The `plannotator-progress` widget appears as the to-do list in the status panel, not under the input. With Settings → Show todos on, the same list also sits in a drawer above the composer. |
 | [`pi-processes`](https://github.com/Otherworldy/pi-processes-bash) | Owns long-running commands. A running process shows up in the status panel's terminal list, where you can read its log and stop it, without typing `/ps`. Stopping ends that process and does not abort the current turn. |
 | [`pi-ask-me`](https://github.com/Otherworldy/pi-ask-me) | The tool name is `ask_user_question`. A call opens a questionnaire card instead of an empty tool card. The question, short header, options, and preview stay separate. |
 

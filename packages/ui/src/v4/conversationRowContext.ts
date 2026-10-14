@@ -63,8 +63,6 @@ export interface ConversationRowRenderContext {
   messageStreamFirstReasoningRowId?: number;
   /** 思考行缺少 durationMs 时，按相邻事件补上的时长。 */
   reasoningDurationMsByRowId?: ReadonlyMap<number, number>;
-  /** 常规设置：是否在对话消息流中渲染 Todo 工具卡片。 */
-  messageStreamShowTodos?: boolean;
   /** 常规设置：是否聚合连续的 Explore-compatible 工具。 */
   toolGroupingExploreEnabled?: boolean;
   /** 常规设置：是否聚合连续的非只读 Shell 工具。 */

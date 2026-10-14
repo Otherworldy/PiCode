@@ -145,6 +145,8 @@ import { WorkspaceHookPendingBanner } from "@/v4/WorkspaceHookPendingBanner.js";
 import { ConversationStatusPanel } from "@/v4/ConversationStatusPanel.js";
 import { SessionSubscriptionErrorPanel } from "@/v4/SessionSubscriptionErrorPanel.js";
 import { ConversationTimeline } from "@/v4/ConversationTimeline.js";
+import { ComposerTodoDrawer } from "@/v4/ComposerTodoDrawer.js";
+import { buildComposerTodo } from "@/v4/messageStreamTodoModel.js";
 import { ConversationShareImportNotice } from "@/v4/ConversationShareImportNotice.js";
 import { ConversationShareConfirmationDock } from "@/v4/ConversationShareConfirmationDock.js";
 import { ConversationShareSuccessDock } from "@/v4/ConversationShareSuccessDock.js";
@@ -2331,7 +2333,6 @@ export function SessionPane({
       chatLoadingBlockedByActiveWork,
       chatLoadingBlockedByInteraction,
       messageStreamShowReasoning,
-      messageStreamShowTodos,
       toolGroupingExploreEnabled,
       toolGroupingTerminalEnabled,
       toolGroupingChangesEnabled,
@@ -2401,7 +2402,6 @@ export function SessionPane({
       chatLoadingBlockedByActiveWork,
       chatLoadingBlockedByInteraction,
       messageStreamShowReasoning,
-      messageStreamShowTodos,
       toolGroupingExploreEnabled,
       toolGroupingTerminalEnabled,
       toolGroupingChangesEnabled,
@@ -4205,6 +4205,10 @@ export function SessionPane({
     !isDraft && (lease === null || sessionLeaseReady) && snapshot?.sessionId === sessionId
       ? snapshot
       : null;
+  const composerTodo = buildComposerTodo(
+    messageStreamShowTodos,
+    snapshot?.sessionId === sessionId ? snapshot.extensionWidgets : undefined,
+  );
   const shareHandoverContext =
     snapshot?.sharedContextImport && "contextId" in snapshot.sharedContextImport
       ? snapshot.sharedContextImport
@@ -4916,6 +4920,11 @@ export function SessionPane({
       updateComposerContent={updateComposerContent}
       createSubmissionFromComposer={createSubmissionFromComposer}
       contextHeader={isDraft ? draftComposerHeader : undefined}
+      aboveInput={
+        composerTodo ? (
+          <ComposerTodoDrawer key={sessionId ?? "draft"} model={composerTodo} />
+        ) : undefined
+      }
       centered={isDraft}
       blockingRequestId={blockingInteractionId}
       listenAddToChatEvents={focused}
