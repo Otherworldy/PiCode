@@ -1982,6 +1982,10 @@ const enUS: Record<string, string> = {
     "Choose Yes on the Windows prompt. You do not need to open firewall settings.",
   "mobileRemote.firewallBlocked":
     "The phone still cannot connect. Close this dialog, open it again, and choose Yes on the Windows prompt.",
+  "mobileRemote.port": "Port",
+  "mobileRemote.portApply": "Use",
+  "mobileRemote.portInvalid": "Use a port from 1 to 65535.",
+  "mobileRemote.portInUse": "That port is already in use. Choose another port.",
   "sidebar.settings.systemDefault": "System default",
   "sidebar.settings.locale.en-US": "English",
   "sidebar.settings.locale.zh-CN": "中文简体",

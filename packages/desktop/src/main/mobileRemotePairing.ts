@@ -7,6 +7,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { type MessagePortLike } from "@zcode/rpc";
 import {
   HostMessageTypes,
+  resolveMobileRemoteListenPort,
   type MobileRemoteFirewallState,
   type MobileRemotePairingStatus,
   type MobileRemoteWorkspaceListItem,
@@ -111,9 +112,28 @@ function isInsideRoot(root: string, filePath: string): boolean {
 export function createMobileRemotePairingController(options: MobileRemotePairingControllerOptions) {
   const sessions = new Map<number, PairingSession>();
   const catalogs = new Map<number, WindowWorkspaceCatalogEntry[]>();
+  const closeHooks = new Set<number>();
   const selectAddress = options.selectAddress ?? selectLanIPv4;
   const listenHost = options.listenHost ?? "0.0.0.0";
   const logger = options.logger;
+
+  function watchClose(windowId: number): void {
+    if (closeHooks.has(windowId)) return;
+    closeHooks.add(windowId);
+    options.resolveWindow(windowId)?.onClosed(() => {
+      closeHooks.delete(windowId);
+      stop(windowId);
+    });
+  }
+
+  function isAddrInUse(error: unknown): boolean {
+    return (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (error as { code?: unknown }).code === "EADDRINUSE"
+    );
+  }
 
   function workspacesFor(windowId: number): MobileRemoteWorkspaceListItem[] {
     return listMobileRemoteWorkspaces(catalogs.get(windowId) ?? []);
@@ -298,16 +318,23 @@ export function createMobileRemotePairingController(options: MobileRemotePairing
     return options.ensureFirewall?.(port).catch(() => "blocked" as const);
   }
 
-  async function start(windowId: number): Promise<MobileRemotePairingStatus> {
+  async function start(windowId: number, requestedPort?: unknown): Promise<MobileRemotePairingStatus> {
+    const port = resolveMobileRemoteListenPort(requestedPort);
+    if (port == null) return { status: "unavailable", reason: "invalid-port" };
     const existing = sessions.get(windowId);
     if (existing) {
-      const firewall = await firewallFor(existing);
-      return { status: "ready", url: existing.url, ...(firewall ? { firewall } : {}) };
+      const listened = existing.server.address();
+      const current = listened && typeof listened === "object" ? listened.port : null;
+      if (current === port) {
+        const firewall = await firewallFor(existing);
+        return { status: "ready", url: existing.url, ...(firewall ? { firewall } : {}) };
+      }
     }
     const address = await selectAddress();
     if (!address || address === "127.0.0.1" || address === "::1") {
       return { status: "unavailable", reason: "no-lan-address" };
     }
+    if (existing) stop(windowId);
     const token = randomBytes(32).toString("base64url");
     const session: PairingSession = {
       windowId,
@@ -360,17 +387,22 @@ export function createMobileRemotePairingController(options: MobileRemotePairing
     sessions.set(windowId, session);
     try {
       await new Promise<void>((resolve, reject) => {
-        server.once("error", reject);
-        server.listen(0, listenHost, () => resolve());
+        const onError = (error: Error) => reject(error);
+        server.once("error", onError);
+        server.listen(port, listenHost, () => {
+          server.off("error", onError);
+          resolve();
+        });
       });
     } catch (error) {
       sessions.delete(windowId);
       server.close();
+      if (isAddrInUse(error)) return { status: "unavailable", reason: "port-in-use" };
       throw error;
     }
     const listened = server.address() as AddressInfo;
     session.url = `http://${address}:${listened.port}/?pair=${encodeURIComponent(token)}`;
-    options.resolveWindow(windowId)?.onClosed(() => stop(windowId));
+    watchClose(windowId);
     logger.info(`[mobile-remote] pairing listening windowId=${windowId} port=${listened.port}`);
     const firewall = await firewallFor(session);
     return { status: "ready", url: session.url, ...(firewall ? { firewall } : {}) };

@@ -317,7 +317,13 @@ export * from "./clientConfig.js";
 export * from "./pluginStoreOrdering.js";
 export * from "./session-debug.js";
 export { redactFeedbackText } from "./feedbackPrivacy.js";
-export { windowWorkspaceCatalogEntrySchema, windowWorkspaceCatalogSchema } from "./mobileRemote.js";
+export {
+  MOBILE_REMOTE_DEFAULT_PORT,
+  parseMobileRemotePort,
+  resolveMobileRemoteListenPort,
+  windowWorkspaceCatalogEntrySchema,
+  windowWorkspaceCatalogSchema,
+} from "./mobileRemote.js";
 export type {
   MobileRemoteFirewallState,
   MobileRemotePairingStatus,

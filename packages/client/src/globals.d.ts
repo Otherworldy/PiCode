@@ -116,7 +116,9 @@ declare global {
       syncWindowWorkspaceCatalog?(
         entries: import("@zcode/shared").WindowWorkspaceCatalogEntry[],
       ): void;
-      startMobileRemotePairing?(): Promise<import("@zcode/shared").MobileRemotePairingStatus>;
+      startMobileRemotePairing?(
+        port?: number,
+      ): Promise<import("@zcode/shared").MobileRemotePairingStatus>;
       stopMobileRemotePairing?(): Promise<void>;
       /** 同步当前窗口的未读 task 数到 main 进程 */
       syncWindowUnreadCount(count: number): void;

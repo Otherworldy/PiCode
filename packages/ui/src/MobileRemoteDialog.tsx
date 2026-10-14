@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
-import type { MobileRemotePairingStatus } from "@zcode/shared";
+import {
+  MOBILE_REMOTE_DEFAULT_PORT,
+  parseMobileRemotePort,
+  type MobileRemotePairingStatus,
+} from "@zcode/shared";
 import { Button } from "@/components/ui/button.js";
+import { Input } from "@/components/ui/input.js";
 import {
   Dialog,
   DialogContent,
@@ -10,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
+import { useSettings } from "@/hooks/useSettingService.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 
 export function MobileRemoteDialog({
@@ -20,18 +26,25 @@ export function MobileRemoteDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const platform = usePlatform();
+  const { settings, loading, update } = useSettings();
   const { intl } = useZCodeIntl();
   const [status, setStatus] = useState<MobileRemotePairingStatus | "starting" | "failed">(
     "starting",
   );
   const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [portText, setPortText] = useState(String(MOBILE_REMOTE_DEFAULT_PORT));
+  const [portInvalid, setPortInvalid] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const savedPort = settings?.mobileRemotePort ?? MOBILE_REMOTE_DEFAULT_PORT;
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || loading) return;
     let cancelled = false;
+    setPortText(String(savedPort));
+    setPortInvalid(false);
     setStatus("starting");
     setQrUrl(null);
-    void platform.startMobileRemotePairing?.().then(
+    void platform.startMobileRemotePairing?.(savedPort).then(
       (next) => {
         if (!cancelled) setStatus(next ?? { status: "unavailable", reason: "no-lan-address" });
       },
@@ -42,7 +55,30 @@ export function MobileRemoteDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, platform]);
+  }, [open, loading, platform, savedPort]);
+
+  async function applyPort() {
+    const port = parseMobileRemotePort(portText);
+    if (port == null) {
+      setPortInvalid(true);
+      return;
+    }
+    setPortInvalid(false);
+    setApplying(true);
+    try {
+      if (port !== savedPort) {
+        await update({ mobileRemotePort: port });
+        return;
+      }
+      setStatus("starting");
+      const next = await platform.startMobileRemotePairing?.(port);
+      setStatus(next ?? { status: "unavailable", reason: "no-lan-address" });
+    } catch {
+      setStatus("failed");
+    } finally {
+      setApplying(false);
+    }
+  }
 
   const address =
     status !== "starting" && status !== "failed" && status.status === "ready" ? status.url : null;
@@ -85,9 +121,43 @@ export function MobileRemoteDialog({
             {intl.formatMessage({ id: "mobileRemote.failed" })}
           </p>
         ) : null}
-        {status !== "starting" && status !== "failed" && status.status === "unavailable" ? (
+        {status !== "starting" && status !== "failed" && status.status === "unavailable" && status.reason === "no-lan-address" ? (
           <p className="text-ui-sm text-foreground-subtle">
             {intl.formatMessage({ id: "mobileRemote.noLan" })}
+          </p>
+        ) : null}
+        <div className="flex items-center gap-2">
+          <label className="shrink-0 text-ui-sm text-foreground" htmlFor="mobile-remote-port">
+            {intl.formatMessage({ id: "mobileRemote.port" })}
+          </label>
+          <Input
+            id="mobile-remote-port"
+            inputMode="numeric"
+            value={portText}
+            onChange={(event) => {
+              setPortText(event.target.value);
+              setPortInvalid(false);
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={applying || loading}
+            onClick={() => {
+              void applyPort();
+            }}
+          >
+            {intl.formatMessage({ id: "mobileRemote.portApply" })}
+          </Button>
+        </div>
+        {portInvalid ? (
+          <p className="text-ui-xs text-destructive">
+            {intl.formatMessage({ id: "mobileRemote.portInvalid" })}
+          </p>
+        ) : null}
+        {status !== "starting" && status !== "failed" && status.status === "unavailable" && status.reason === "port-in-use" ? (
+          <p className="text-ui-xs text-destructive">
+            {intl.formatMessage({ id: "mobileRemote.portInUse" })}
           </p>
         ) : null}
         {address ? (

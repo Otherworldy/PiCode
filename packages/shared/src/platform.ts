@@ -709,8 +709,8 @@ export interface IPlatformService {
   /** 同步当前窗口已打开的工作区，供手机选择后挂到现有 Host。 */
   syncWindowWorkspaceCatalog?(entries: WindowWorkspaceCatalogEntry[]): void;
 
-  /** 打开或复用当前窗口的局域网手机配对。没有局域网地址时不监听。 */
-  startMobileRemotePairing?(): Promise<MobileRemotePairingStatus>;
+  /** 打开或复用当前窗口的局域网手机配对。没有局域网地址时不监听。缺省端口见 MOBILE_REMOTE_DEFAULT_PORT。 */
+  startMobileRemotePairing?(port?: number): Promise<MobileRemotePairingStatus>;
 
   /** 断开当前窗口的手机配对，口令立即失效。 */
   stopMobileRemotePairing?(): Promise<void>;

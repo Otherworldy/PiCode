@@ -296,8 +296,8 @@ contextBridge.exposeInMainWorld("zcode", {
   syncWindowTabs: (paths: string[]) => ipcRenderer.send(PlatformChannels.SyncWindowTabs, paths),
   syncWindowWorkspaceCatalog: (entries: import("@zcode/shared").WindowWorkspaceCatalogEntry[]) =>
     ipcRenderer.send(PlatformChannels.SyncWindowWorkspaceCatalog, entries),
-  startMobileRemotePairing: () =>
-    ipcRenderer.invoke(PlatformChannels.StartMobileRemotePairing) as Promise<
+  startMobileRemotePairing: (port?: number) =>
+    ipcRenderer.invoke(PlatformChannels.StartMobileRemotePairing, port) as Promise<
       import("@zcode/shared").MobileRemotePairingStatus
     >,
   stopMobileRemotePairing: () =>

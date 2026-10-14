@@ -279,6 +279,8 @@ export interface AppSettings {
   taskAutoArchiveOlderThanDays?: number;
   /** Windows 桌面端关闭窗口时隐藏到托盘；其它平台忽略 */
   closeToTrayOnWindows?: boolean;
+  /** 手机远程控制监听端口。缺省 47321。只在桌面配对时使用。 */
+  mobileRemotePort?: number;
   /** 存在执行中的闲时任务时阻止系统闲置休眠（手动开关，防不了合盖）。 */
   keepAwakeWhileRunning?: boolean;
   /** Windows 关闭到托盘默认值是否已执行过一次性迁移；只用于设置迁移，不参与业务判断。 */

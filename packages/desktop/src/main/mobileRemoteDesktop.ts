@@ -84,10 +84,10 @@ export function installMobileRemotePairing(options: {
     },
   });
 
-  ipcMain.handle(PlatformChannels.StartMobileRemotePairing, (event) => {
+  ipcMain.handle(PlatformChannels.StartMobileRemotePairing, (event, port: unknown) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return { status: "unavailable", reason: "no-lan-address" } as const;
-    return pairing.start(win.id);
+    return pairing.start(win.id, port);
   });
   ipcMain.handle(PlatformChannels.StopMobileRemotePairing, (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);

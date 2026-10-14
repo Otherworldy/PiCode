@@ -79,8 +79,8 @@ export function createDesktopPlatform(options: {
     showTaskNotification: (payload) => window.zcode.showTaskNotification(payload),
     syncWindowTabs: (paths) => window.zcode.syncWindowTabs(paths),
     syncWindowWorkspaceCatalog: (entries) => window.zcode.syncWindowWorkspaceCatalog?.(entries),
-    startMobileRemotePairing: () =>
-      window.zcode.startMobileRemotePairing?.() ??
+    startMobileRemotePairing: (port) =>
+      window.zcode.startMobileRemotePairing?.(port) ??
       Promise.resolve({ status: "unavailable", reason: "no-lan-address" } as const),
     stopMobileRemotePairing: () => window.zcode.stopMobileRemotePairing?.() ?? Promise.resolve(),
     syncWindowUnreadCount: (count) => window.zcode.syncWindowUnreadCount(count),

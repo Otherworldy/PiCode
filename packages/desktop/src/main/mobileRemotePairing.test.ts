@@ -1,7 +1,7 @@
 import type { NetworkInterfaceInfo } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
-import { HostMessageTypes } from "@zcode/shared";
+import { HostMessageTypes, MOBILE_REMOTE_DEFAULT_PORT } from "@zcode/shared";
 import { join } from "node:path";
 import {
   createMobileRemotePairingController,
@@ -149,6 +149,7 @@ describe("mobile remote pairing", () => {
     const url = new URL(started.url);
     expect(url.hostname).toBe("192.168.1.20");
     expect(url.hostname).not.toBe("127.0.0.1");
+    expect(url.port).toBe(String(MOBILE_REMOTE_DEFAULT_PORT));
     expect(firewallPorts).toEqual([Number(url.port)]);
     expect(await ready.start(7)).toMatchObject({ status: "ready", firewall: "allowed" });
     expect(firewallPorts).toEqual([Number(url.port), Number(url.port)]);
@@ -210,5 +211,46 @@ describe("mobile remote pairing", () => {
     );
     expect(rejected == null || rejected.status === 401).toBe(true);
     second.close();
+  });
+
+  it("keeps a requested port and refuses to move when that port is taken", async () => {
+    const first = createMobileRemotePairingController({
+      logger: { info() {}, warn() {} },
+      selectAddress: () => "192.168.1.20",
+      listenHost: "127.0.0.1",
+      getHost: () => ({ postMessage() {} }),
+      attachRemote: () => {
+        throw new Error("should not attach");
+      },
+      createChannel: () => ({ port1: fakePort(), port2: {} }),
+      resolveWindow: () => ({ id: 1, webContentsId: 1, onClosed() {} }),
+    });
+    const second = createMobileRemotePairingController({
+      logger: { info() {}, warn() {} },
+      selectAddress: () => "192.168.1.20",
+      listenHost: "127.0.0.1",
+      getHost: () => ({ postMessage() {} }),
+      attachRemote: () => {
+        throw new Error("should not attach");
+      },
+      createChannel: () => ({ port1: fakePort(), port2: {} }),
+      resolveWindow: () => ({ id: 2, webContentsId: 2, onClosed() {} }),
+    });
+    controllers.push(first, second);
+    const started = await first.start(1, 47322);
+    expect(started).toMatchObject({ status: "ready" });
+    expect(await second.start(2, 47322)).toEqual({
+      status: "unavailable",
+      reason: "port-in-use",
+    });
+    expect(await first.start(1, 0)).toEqual({ status: "unavailable", reason: "invalid-port" });
+    const moved = await first.start(1, 47323);
+    expect(moved.status).toBe("ready");
+    if (moved.status !== "ready") return;
+    expect(new URL(moved.url).port).toBe("47323");
+    if (started.status !== "ready") return;
+    expect(new URL(moved.url).searchParams.get("pair")).not.toBe(
+      new URL(started.url).searchParams.get("pair"),
+    );
   });
 });

@@ -1864,6 +1864,10 @@ const zhCN: Record<string, string> = {
   "mobileRemote.firewallPrompted": "请在弹出的 Windows 窗口里点「是」。不用自己去设置防火墙。",
   "mobileRemote.firewallBlocked":
     "手机还是打不开。请关掉这个窗口再打开一次，并在弹出的 Windows 窗口里点「是」。",
+  "mobileRemote.port": "端口",
+  "mobileRemote.portApply": "使用",
+  "mobileRemote.portInvalid": "端口要在 1 到 65535 之间。",
+  "mobileRemote.portInUse": "这个端口已被占用。换一个端口后再试。",
   "sidebar.settings.systemDefault": "系统默认",
   "sidebar.settings.locale.en-US": "English",
   "sidebar.settings.locale.zh-CN": "中文简体",
