@@ -2301,16 +2301,13 @@ function ConversationComposerImpl({
           />
         </div>
       ) : null}
+      {aboveInput}
       <div
         className={cn(
           "chat-composer-input-surface w-full",
-          (contextHeader || aboveInput) && "rounded-2xl shadow-xl/5",
-          // surface 是半透明的，正文滚到 sticky 输入框后面会透出来叠字。
-          // 有待办时用指定的不透明底色和边框；新建任务仍用原来的 surface。
-          aboveInput ? "border border-input-border bg-[#f0f0f0]" : contextHeader && "bg-surface",
+          contextHeader && "rounded-2xl bg-surface shadow-xl/5",
         )}
       >
-        {aboveInput ? <div className="p-1.5">{aboveInput}</div> : null}
         {contextHeader ? (
           // 旧 ChatViewComposer contextHeaderContent 同款包装（workspace 菜单 + Git 分支）。
           <div className="p-1.5 flex min-w-0 flex-wrap items-center gap-0">{contextHeader}</div>
