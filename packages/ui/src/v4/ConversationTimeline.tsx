@@ -94,6 +94,7 @@ import {
   type TimelineUserScrollIntent,
 } from "@/v4/timelineScrollAnchor.js";
 import { useConversationTimelineFind } from "@/v4/useConversationTimelineFind.js";
+import { useConversationFirstFrameTiming } from "@/v4/useConversationFirstFrameTiming.js";
 import { ConversationSelectionTooltip } from "@/v4/ConversationSelectionTooltip.js";
 import type { ConversationSelectionReference } from "@/lib/conversationSelectionReference.js";
 
@@ -384,6 +385,7 @@ function ConversationTimelineImpl({
   shareSelection,
   hideTurnNavigator = false,
 }: ConversationTimelineProps) {
+  useConversationFirstFrameTiming(sessionKey, rows.length);
   const { intl } = useZCodeIntl();
   const scrollRef = useRef<HTMLDivElement>(null);
   const headerSlotRef = useRef<HTMLDivElement>(null);

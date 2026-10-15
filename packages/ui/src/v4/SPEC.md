@@ -1,3 +1,7 @@
+# 打开耗时
+
+时间线第一次把某个 `sessionKey` 的行提交进 DOM 后，打一行 `ui.v4.conversation.first_frame`。`firstFrameRenderMs` 只算这次渲染到 layout，不算宿主读 jsonl 或建 Pi 会话。没有行不打。草稿（`sessionKey` 为 `draft`）不打。换会话再打一次。生产构建走 lifecycle 日志。宿主三段耗时见 `apps/zcode-cli/packages/pi-host/SPEC.md`。
+
 # 对话工作折叠
 
 ## 行为

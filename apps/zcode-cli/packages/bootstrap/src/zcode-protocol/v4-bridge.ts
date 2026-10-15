@@ -1382,11 +1382,15 @@ export function createConversationV4Gateway(
     ) => {
       if (context.piHost) {
         if (context.sessions.get(sessionId)) return { status: "resumed" };
+        const findStarted = performance.now();
         const found = await context.piHost.find(sessionId);
+        const openReadMs = Math.max(0, Math.round(performance.now() - findStarted));
         if (!found) return { status: "notFound" };
         const record = await createPiSessionRecord(context, {
           workspace: workspace ?? resolveWorkspaceRefFromId(found.identity),
           sessionId,
+          openReadMs,
+          storedSession: found,
         });
         context.sessions.set(record.app.sessionId, record);
         return { status: "resumed" };

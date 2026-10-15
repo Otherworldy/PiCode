@@ -11,6 +11,7 @@ export { CommandBridge, sendDelivery } from "./command-bridge.js";
 export {
   HostSessionRegistry,
   setInflightNetworkAbort,
+  type ConversationOpenTiming,
   type HostedSession,
   type PiStoredSession,
   type PiStoredSummary,

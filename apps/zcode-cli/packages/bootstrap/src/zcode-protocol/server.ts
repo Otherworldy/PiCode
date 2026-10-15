@@ -291,6 +291,16 @@ export class ZCodeProtocolAgentServer {
       piHost: new HostSessionRegistry({
         storageRoot: join(ensureAppDataDir(homedir())),
         redirectPlannotatorToEmbeddedBrowser: true,
+        onConversationOpenTiming: (timing) => {
+          this.logger?.info(
+            `conversation open timing session=${timing.sessionId} readJsonlMs=${String(timing.readJsonlMs)} createPiSessionMs=${String(timing.createPiSessionMs)} replayMs=${String(timing.replayMs)} bytes=${String(timing.bytes)} events=${String(timing.eventCount)}`,
+            {
+              event: "pi_host.conversation.open_timing",
+              module: "pi-host",
+              ...timing,
+            },
+          );
+        },
         createSession: createSdkSessionFactory({
           capabilities: createPiCapabilityPorts(() => this.context),
           mcpCompat: {

@@ -35,6 +35,14 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 常驻池只卸真正空闲的会话。投影 `phase` 已经离开 `running`，但 Pi 仍在 streaming、压缩或重试（`isStreaming` / `isCompacting` / `isIdle === false`），或队列、后台任务、子会话、分支总结、未决交互还在，都不算空闲。只看 `phase === "running"` 会在超过高水位或空闲超时后把还在跑的 runtime 拆掉，内存里的对话投影一起没了。再点开要冷恢复，界面停在「正在加载会话」。事实归 `HostedSession.hasResidencyBlockingWork`，常驻池只读这一个布尔。
 
+冷打开（注册表里还没有这个会话，真正走了 `openFile`）打一行 `pi_host.conversation.open_timing`。已经在注册表里的再次 `create` 不打。打开失败也不打。三段互不包含：
+
+- `readJsonlMs`：冷恢复那一次 `find`，加上把目标 jsonl 读成字符串和 `readPiJsonl` 解析。不含投影重放，也不含 Pi `SessionManager.open` 自己读文件。`find` 先按文件名（`sessionId.jsonl` 或 `*_<sessionId>.jsonl`）命中，对不上再只读首行 session header；不再为了比对 id 把其它会话整份读进来。找到的路径传给 `create`，不再扫第二遍。
+- `createPiSessionMs`：`createSession`（含 Pi `createAgentSession`）。
+- `replayMs`：只包 `projector.replay`。
+
+这行只用来看打开慢在哪一段，不改投影、订阅或常驻。首帧渲染在 renderer，见 `packages/ui/src/v4/SPEC.md`。
+
 卸掉 runtime 时先发 `session_shutdown`，再调 `AgentSession.dispose()`。Pi 的 MCP 扩展只在 `session_shutdown` 里关掉 stdio 子进程；`dispose()` 本身不发这个事件。不先发的话，常驻回收之后 `node_repl` 和 `chrome-devtools-mcp` 仍挂在 app-server 下面。同一次关闭只跑一遍，后来的 `dispose()` 等同一个 Promise。注册表在这次关闭开始时同步摘掉，不等子进程退出。
 
 `chrome-devtools-mcp` 不在 `session_start` 时连接。命令行里带这个包、且工具不是 `direct` 的 stdio 服务器从启动配置里拿掉，只在 codemode / `tool_search` 点名它时才 `registerMcpServer`。全局 `searchTools()` 不会把它拉起来。`node_repl` 和其他 MCP 仍按原来的时机连接。会话结束时，这次迟到的注册走同一条 `session_shutdown` 关闭。

@@ -11,6 +11,7 @@ import {
   summarizePiJsonl,
   type HostedSession,
   type HostSessionRegistry,
+  type PiStoredSession,
 } from "@zcode/pi-host";
 import { isBareSlashCommandTitle, type ZCodeWorkspaceRef } from "@zcode/shared";
 import { projectIdFromDirectory } from "../app/paths.js";
@@ -198,6 +199,10 @@ export async function createPiSessionRecord(
     parentSessionId?: string;
     mcpServers?: ZCodeProtocolMcpServer[];
     workingDirectory?: string;
+    /** 冷恢复在 create 之前那次 find 的耗时，并进 open timing 的 readJsonlMs。 */
+    openReadMs?: number;
+    /** 冷恢复已经找到的 jsonl。传入后 create 不再 find。 */
+    storedSession?: PiStoredSession;
   },
 ): Promise<ZCodeProtocolSessionRecord> {
   const registry = context.piHost;
@@ -208,6 +213,8 @@ export async function createPiSessionRecord(
     workingDirectory: params.workingDirectory,
     sessionId: params.sessionId ?? createSessionId(),
     parentSessionId: params.parentSessionId,
+    ...(params.openReadMs !== undefined ? { openReadMs: params.openReadMs } : {}),
+    ...(params.storedSession ? { storedSession: params.storedSession } : {}),
   });
   return bindHostedSession(context, hosted, params.workspace);
 }

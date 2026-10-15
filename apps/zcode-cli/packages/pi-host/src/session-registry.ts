@@ -13,6 +13,10 @@ import { HostQueue } from "./host-queue.js";
 import { workspaceKey } from "./identity.js";
 import { readPiJsonl, shouldApplyStoredSessionTitle } from "./jsonl-history.js";
 import {
+  readSessionHeaderId,
+  sessionFileNameMatches,
+} from "./session-file-lookup.js";
+import {
   installPlannotatorEmbeddedBrowserRedirect,
   notePlannotatorBrowserSession,
   registerPlannotatorBrowserSession,
@@ -105,6 +109,7 @@ export interface HostedSession {
   deleteSessionBranch(entryId: string): PiSessionTreeNode[];
   branchFrom?(entryId: string): { sessionId: string; sessionFile: string };
   reloadHistory(content: string): void;
+  hydrateHistory(content: string): HistoryHydrationTiming;
   setModel(provider: string, modelId: string, thought?: string): Promise<void>;
   setThinkingLevel(level: string): void;
   setSessionName(name: string): void;
@@ -124,7 +129,6 @@ export interface HostedSession {
   isUiDesignMode(): boolean;
   publishUi(): void;
   dispose(): void | Promise<void>;
-  hydrateHistory(content: string): void;
   onDeltas(listener: (deltas: ConversationDelta[]) => void): () => void;
   onNotify(
     listener: (message: string, notifyType: "info" | "warning" | "error") => void,
@@ -155,9 +159,30 @@ export type PiStoredSession = {
   workspacePath: string;
 };
 
+/** 冷打开一次的三段耗时。已在注册表里的会话不产生这条。 */
+export interface ConversationOpenTiming {
+  sessionId: string;
+  /** find + 读文件 + 解析。不含重放，不含 Pi 自己读文件。 */
+  readJsonlMs: number;
+  /** createSession，含 Pi createAgentSession。 */
+  createPiSessionMs: number;
+  /** projector.replay，不含解析。 */
+  replayMs: number;
+  bytes: number;
+  eventCount: number;
+}
+
+export interface HistoryHydrationTiming {
+  parseMs: number;
+  replayMs: number;
+  eventCount: number;
+}
+
 export interface RegistryOptions {
   storageRoot: string;
   createSession: CreatePiSession;
+  /** 冷打开完成后调用一次。缺省不打日志。 */
+  onConversationOpenTiming?: (timing: ConversationOpenTiming) => void;
   profile?: DeliveryProfileName;
   loadExtensions?: boolean;
   createToolPermission?: (hosted: HostedSession) => ToolPermissionCheck;
@@ -229,6 +254,10 @@ function permissionAllowed(response: PiExtensionUiResponse): boolean {
   return response.value !== "deny" && response.value !== "no" && response.value !== "";
 }
 
+function elapsedMs(startedAt: number): number {
+  return Math.max(0, Math.round(performance.now() - startedAt));
+}
+
 function branchedSessionTitle(parentTitle: string): string {
   const title = parentTitle.trim();
   return title ? `分支-${title}` : "分支";
@@ -265,11 +294,37 @@ export class HostSessionRegistry {
     parentSessionId?: string;
     viaRegistry?: boolean;
     omitHostExtensions?: boolean;
+    /**
+     * 调用方在这次 create 之前已经花在 find 上的时间。
+     * 冷恢复把找到的文件从 storedSession 传进来，这里不再扫第二遍。
+     */
+    openReadMs?: number;
+    /** 已经定位到的 jsonl。传入后不再 find。 */
+    storedSession?: PiStoredSession;
   }): Promise<HostedSession> {
+    let priorReadMs = input.openReadMs ?? 0;
     if (input.sessionId) {
       const existing = this.sessions.get(input.sessionId);
       if (existing) return existing;
+    }
+    if (input.storedSession) {
+      const stored = input.storedSession;
+      return this.openFile({
+        sessionId: stored.sessionId,
+        identity: stored.identity,
+        workspacePath: input.workspacePath,
+        cwd: stored.workspacePath,
+        sessionFile: stored.sessionFile,
+        parentSessionId: input.parentSessionId,
+        viaRegistry: input.viaRegistry,
+        omitHostExtensions: input.omitHostExtensions,
+        priorReadMs,
+      });
+    }
+    if (input.sessionId) {
+      const findStarted = performance.now();
       const stored = await this.find(input.sessionId);
+      priorReadMs += elapsedMs(findStarted);
       if (stored) {
         return this.openFile({
           sessionId: stored.sessionId,
@@ -280,6 +335,7 @@ export class HostSessionRegistry {
           parentSessionId: input.parentSessionId,
           viaRegistry: input.viaRegistry,
           omitHostExtensions: input.omitHostExtensions,
+          priorReadMs,
         });
       }
     }
@@ -297,6 +353,7 @@ export class HostSessionRegistry {
       parentSessionId: input.parentSessionId,
       viaRegistry: input.viaRegistry,
       omitHostExtensions: input.omitHostExtensions,
+      priorReadMs,
     });
   }
 
@@ -499,9 +556,11 @@ export class HostSessionRegistry {
     parentSessionId?: string;
     viaRegistry?: boolean;
     omitHostExtensions?: boolean;
+    priorReadMs?: number;
   }): Promise<HostedSession> {
     const live = this.sessions.get(input.sessionId);
     if (live) return live;
+    const createStarted = performance.now();
     const pi = await this.options.createSession({
       sessionId: input.sessionId,
       cwd: input.cwd ?? input.workspacePath,
@@ -515,6 +574,7 @@ export class HostSessionRegistry {
         return check(request);
       },
     });
+    const createPiSessionMs = elapsedMs(createStarted);
     const hosted = this.wrap(pi, {
       sessionId: input.sessionId,
       identity: input.identity,
@@ -525,7 +585,16 @@ export class HostSessionRegistry {
       viaRegistry: input.viaRegistry ?? Boolean(input.parentSessionId),
       workId: input.parentSessionId ? input.sessionId : undefined,
     });
-    return this.register(hosted);
+    const registered = await this.register(hosted, input.priorReadMs ?? 0);
+    this.options.onConversationOpenTiming?.({
+      sessionId: registered.hosted.sessionId,
+      readJsonlMs: registered.readJsonlMs,
+      createPiSessionMs,
+      replayMs: registered.replayMs,
+      bytes: registered.bytes,
+      eventCount: registered.eventCount,
+    });
+    return registered.hosted;
   }
 
   private async listDir(dir: string, idFrom: "file" | "header"): Promise<PiStoredSummary[]> {
@@ -581,22 +650,46 @@ export class HostSessionRegistry {
         if (hit) return hit;
         continue;
       }
-      let files: string[] = [];
-      try {
-        files = await readdir(folder);
-      } catch {
-        continue;
-      }
-      for (const file of files) {
-        if (!file.endsWith(".jsonl")) continue;
-        const sessionFile = join(folder, file);
-        const hit = await this.readStored(sessionFile, sessionId, dir, options.decodeDir);
-        if (hit) return hit;
-      }
+      const hit = await this.findJsonlInDir(folder, sessionId, dir, options.decodeDir);
+      if (hit) return hit;
       if (options.match === "header") {
         const nested = await this.findNestedJsonl(folder, sessionId, dir, 3);
         if (nested) return nested;
       }
+    }
+    return null;
+  }
+
+  /**
+   * 文件名能对上就只读那一个文件。对不上再看首行 session id。
+   * 打开慢是因为以前每个 jsonl 都整份读进来比 id。
+   */
+  private async findJsonlInDir(
+    folder: string,
+    sessionId: string,
+    dir: string,
+    decodeDir: boolean,
+  ): Promise<PiStoredSession | null> {
+    let entries: string[] = [];
+    try {
+      entries = await readdir(folder);
+    } catch {
+      return null;
+    }
+    const jsonl = entries.filter((entry) => entry.endsWith(".jsonl"));
+    for (const file of jsonl) {
+      if (!sessionFileNameMatches(file, sessionId)) continue;
+      const hit = await this.readStored(join(folder, file), sessionId, dir, decodeDir);
+      if (hit) return hit;
+    }
+    for (const file of jsonl) {
+      if (sessionFileNameMatches(file, sessionId)) continue;
+      const sessionFile = join(folder, file);
+      const probe = await readSessionHeaderId(sessionFile);
+      if (probe.status === "miss") continue;
+      if (probe.status === "id" && probe.id !== sessionId) continue;
+      const hit = await this.readStored(sessionFile, sessionId, dir, decodeDir);
+      if (hit) return hit;
     }
     return null;
   }
@@ -615,13 +708,11 @@ export class HostSessionRegistry {
       return null;
     }
     for (const entry of entries) {
-      const full = join(folder, entry);
-      if (entry.endsWith(".jsonl")) {
-        const hit = await this.readStored(full, sessionId, dir, false);
-        if (hit) return hit;
-        continue;
-      }
-      const nested = await this.findNestedJsonl(full, sessionId, dir, depth - 1);
+      if (entry.endsWith(".jsonl")) continue;
+      const nestedFolder = join(folder, entry);
+      const hit = await this.findJsonlInDir(nestedFolder, sessionId, dir, false);
+      if (hit) return hit;
+      const nested = await this.findNestedJsonl(nestedFolder, sessionId, dir, depth - 1);
       if (nested) return nested;
     }
     return null;
@@ -658,9 +749,21 @@ export class HostSessionRegistry {
     };
   }
 
-  private async register(hosted: HostedSession): Promise<HostedSession> {
+  private async register(
+    hosted: HostedSession,
+    priorReadMs: number,
+  ): Promise<{
+    hosted: HostedSession;
+    readJsonlMs: number;
+    replayMs: number;
+    bytes: number;
+    eventCount: number;
+  }> {
+    // 读文件和解析算 readJsonlMs，重放单独记。混在一起就看不出几万行慢在 IO 还是 reducer。
+    const readStarted = performance.now();
     const content = await readFile(hosted.sessionFile, "utf8").catch(() => "");
-    hosted.hydrateHistory(content);
+    const readMs = elapsedMs(readStarted);
+    const hydrated = hosted.hydrateHistory(content);
     this.sessions.set(hosted.sessionId, hosted);
     if (this.options.createToolPermission) {
       this.toolChecks.set(hosted.sessionId, this.options.createToolPermission(hosted));
@@ -670,7 +773,13 @@ export class HostSessionRegistry {
       set.add(hosted.sessionId);
       this.children.set(hosted.parentSessionId, set);
     }
-    return hosted;
+    return {
+      hosted,
+      readJsonlMs: priorReadMs + readMs + hydrated.parseMs,
+      replayMs: hydrated.replayMs,
+      bytes: Buffer.byteLength(content),
+      eventCount: hydrated.eventCount,
+    };
   }
 
   private wrap(
@@ -1320,11 +1429,17 @@ export class HostSessionRegistry {
       hydrateHistory: (content) => {
         const live = hasLiveSubagent(meta.sessionId);
         lastHistory = content;
+        const parseStarted = performance.now();
         const parsed = readPiJsonl(content, { settle: !live });
-        emit(projector.replay(parsed.events));
+        const parseMs = elapsedMs(parseStarted);
+        const replayStarted = performance.now();
+        const deltas = projector.replay(parsed.events);
+        const replayMs = elapsedMs(replayStarted);
+        emit(deltas);
         applyStoredTitle(parsed.summary);
         void publishSubagents();
         if (live) startHistoryWatch();
+        return { parseMs, replayMs, eventCount: parsed.events.length };
       },
       reloadHistory: (content) => {
         const live = hasLiveSubagent(meta.sessionId);
