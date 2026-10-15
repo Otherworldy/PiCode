@@ -88,6 +88,7 @@ import { getGitDirtyFileCount } from "@/git-branch-switcher/display.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { getPathLeaf, toFileUrl } from "@/lib/path.js";
+import { formatRemoteWorkspaceDisplayLabel } from "@/lib/remoteWorkspaceHistory.js";
 import { shouldOpenAssistantHtmlInBrowser } from "@/lib/assistantPreviewCards.js";
 import { setWorkspaceSidebarResizeActive } from "@/lib/workspaceSidebarResizeState.js";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
@@ -773,6 +774,10 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
       )?.remoteTarget,
     [workspaceAbsPath, workspaceIdentity, workspaceTabs],
   );
+  const workspaceProjectDisplayName = useMemo(
+    () => formatRemoteWorkspaceDisplayLabel(projectName, workspaceRemoteTarget),
+    [projectName, workspaceRemoteTarget],
+  );
   const workspaceLocalPathForRemoteMcpSync = useMemo(
     () =>
       workspaceTabs.find(
@@ -1361,7 +1366,10 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
           openFileTreeRequest({
             target: {
               workspacePath: ownerWorkspace.workspacePath,
-              workspaceName: ownerWorkspace.label,
+              workspaceName: formatRemoteWorkspaceDisplayLabel(
+                ownerWorkspace.label,
+                ownerWorkspace.remoteTarget,
+              ),
               workspaceIdentity: ownerWorkspace.workspaceIdentity,
               workspaceRemoteSessionId: ownerWorkspace.remoteSessionId,
               revealPath: areWorkspaceFilePathsEqual(ownerWorkspace.workspacePath, target.path)
@@ -1427,7 +1435,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
       openFileTreeRequest({
         target: {
           workspacePath: workspaceAbsPath,
-          workspaceName: projectName,
+          workspaceName: workspaceProjectDisplayName,
           workspaceIdentity,
           workspaceRemoteSessionId,
           revealPath: path,
@@ -1436,7 +1444,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
     },
     [
       openFileTreeRequest,
-      projectName,
+      workspaceProjectDisplayName,
       workspaceAbsPath,
       workspaceIdentity,
       workspaceRemoteSessionId,
@@ -1556,7 +1564,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
 
   return (
     <DesktopWindowFrame
-      title={`PiCode / ${getPathLeaf(workspaceAbsPath)}`}
+      title={`PiCode / ${workspaceProjectDisplayName}`}
       showHeader
       isDesktop={isDesktop}
       isMacDesktop={isMacDesktop}

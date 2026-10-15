@@ -485,7 +485,7 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
 
       onOpenFileTree({
         workspacePath: tab.workspacePath,
-        workspaceName: tab.label,
+        workspaceName: workspaceSidebarLabel,
         workspaceIdentity: tab.workspaceIdentity,
         workspaceRemoteSessionId: tab.remoteSessionId,
       });
@@ -494,10 +494,10 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
       isDisconnectedRemoteWorkspace,
       onOpenFileTree,
       readOnlyReason,
-      tab.label,
       tab.remoteSessionId,
       tab.workspaceIdentity,
       tab.workspacePath,
+      workspaceSidebarLabel,
     ],
   );
 

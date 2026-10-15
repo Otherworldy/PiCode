@@ -194,8 +194,11 @@ export function WorkspaceHeaderTitleSection({
     ? formatRemoteWorkspaceHeaderHostLabel(remoteTarget)
     : null;
   const workspaceDisplayLabel = formatRemoteWorkspaceDisplayLabel(projectName, remoteTarget);
+  // SSH 项目名已经是主机地址，再拼 @ host 会重复。WSL / Docker 仍用目录名，继续补连接标识。
   const showRemoteWorkspaceHostLabel = Boolean(
-    remoteWorkspaceHostLabel && workspaceDisplayLabel === projectName,
+    remoteTarget?.kind !== "ssh" &&
+    remoteWorkspaceHostLabel &&
+    workspaceDisplayLabel === projectName,
   );
   const workspaceContextLabel = showRemoteWorkspaceHostLabel
     ? `${workspaceDisplayLabel} @ ${remoteWorkspaceHostLabel}`

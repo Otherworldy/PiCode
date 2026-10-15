@@ -63,7 +63,9 @@ import {
   setActiveWorkbenchSessionDragPayload,
 } from "@/v4/workbenchDragDrop.js";
 import { useOptionalTabStore } from "@/store/TabStoreProvider.js";
-import { isWorkspaceReadOnly } from "@/store/tabStore.js";
+import { isWorkspaceReadOnly, isWorkspaceTab, type WorkspaceTabState } from "@/store/tabStore.js";
+import { isSameWorkspaceTab } from "@/store/tabWorkspaceIdentity.js";
+import { formatRemoteWorkspaceDisplayLabel } from "@/lib/remoteWorkspaceHistory.js";
 import { TaskTitleOverflowText } from "@/components/TaskTitleOverflowText.js";
 import { createTaskWorkbenchDragPreview } from "@/lib/taskWorkbenchDragPreview.js";
 import { runUserAction } from "@/lib/userActionTelemetry.js";
@@ -415,7 +417,18 @@ export const MemoTaskItem = memo(function TaskListItem({
     id: isArchiveConfirming ? "common.confirm" : "taskList.archive",
   });
   const taskTitleWithChanges = formatTaskTitleWithChanges(taskTitle, taskChangeSummary, intl);
-  const workspaceLabel = getPathLeaf(task.workspacePath);
+  const workspaceLabel = useOptionalTabStore((state) => {
+    const folderLabel = getPathLeaf(task.workspacePath) || task.workspacePath;
+    const tab = state.tabs.find((candidate): candidate is WorkspaceTabState => {
+      return (
+        isWorkspaceTab(candidate) &&
+        isSameWorkspaceTab(candidate, task.workspacePath, {
+          workspaceIdentity: task.workspaceIdentity,
+        })
+      );
+    });
+    return formatRemoteWorkspaceDisplayLabel(folderLabel, tab?.remoteTarget);
+  });
   const taskItemKey = `${buildTaskWorkspaceKey(task.workspacePath, task.workspaceIdentity)}:${task.taskId}`;
   // 工作流运行行：标题下的第二条通道，
   // 与前置 16px 槽（error > unread > spinner）互不占位。只在会话带 run 摘要时挂组件。

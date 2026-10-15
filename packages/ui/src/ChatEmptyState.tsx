@@ -31,6 +31,7 @@ import { useRemoteConnectionEntryVisibility } from "@/hooks/useRemoteConnectionE
 import { cn } from "@/components/lib/utils.js";
 import { getPathLeaf } from "@/lib/path.js";
 import {
+  formatRemoteWorkspaceDisplayLabel,
   formatRemoteWorkspaceTargetSubtitle,
   hasRemoteWorkspaceIdentity,
 } from "@/lib/remoteWorkspaceHistory.js";
@@ -255,7 +256,10 @@ export function ChatEmptyWorkspacePreviewMenu({
   );
   const currentWorkspaceTitle = isConversationWorkspace
     ? intl.formatMessage({ id: "chat.empty.selectProject" })
-    : getWorkspaceTriggerTitle(workspacePath, homeWorkspaceLabel);
+    : formatRemoteWorkspaceDisplayLabel(
+        getWorkspaceTriggerTitle(workspacePath, homeWorkspaceLabel),
+        currentWorkspaceTab?.remoteTarget,
+      );
   const CurrentWorkspaceIcon = isCurrentRemoteWorkspace
     ? Cloud
     : homeWorkspacePath === workspacePath
@@ -345,9 +349,9 @@ export function ChatEmptyWorkspacePreviewMenu({
         </div>
         <div className="p-1">
           {visibleWorkspaceTabs.map((workspaceTab, index) => {
-            const workspaceTitle = getWorkspaceListTitle(
-              workspaceTab.workspacePath,
-              homeWorkspaceLabel,
+            const workspaceTitle = formatRemoteWorkspaceDisplayLabel(
+              getWorkspaceListTitle(workspaceTab.workspacePath, homeWorkspaceLabel),
+              workspaceTab.remoteTarget,
             );
             const isRemoteWorkspace = hasRemoteWorkspaceIdentity(workspaceTab);
             const WorkspaceIcon = isRemoteWorkspace

@@ -1,4 +1,5 @@
 import { resolveWorkspaceKey, type RemoteTarget, type WorkspacePurpose } from "@zcode/shared";
+import { formatRemoteWorkspaceDisplayLabel } from "@/lib/remoteWorkspaceHistory.js";
 import { isWorkspaceTab, isWorkspaceTabReadOnly, type WindowTabState } from "@/store/tabStore.js";
 
 export interface AutomationWorkspaceOption {
@@ -76,7 +77,10 @@ export function buildAutomationWorkspaceOptions(
       ...(tab.workspaceIdentity ? { workspaceIdentity: tab.workspaceIdentity } : {}),
       ...(tab.remoteSessionId ? { remoteSessionId: tab.remoteSessionId } : {}),
       ...(tab.remoteTarget ? { remoteTarget: tab.remoteTarget } : {}),
-      label: tab.label || workspaceLabelFromPath(tab.workspacePath),
+      label: formatRemoteWorkspaceDisplayLabel(
+        tab.label || workspaceLabelFromPath(tab.workspacePath),
+        tab.remoteTarget,
+      ),
     });
   }
   return [...byKey.values()];

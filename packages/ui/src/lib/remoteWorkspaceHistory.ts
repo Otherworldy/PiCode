@@ -103,8 +103,12 @@ export function formatRemoteWorkspaceDisplayLabel(
     return label;
   }
 
-  const sshConfigAlias = target.sshConfigAlias?.trim();
-  return sshConfigAlias ? `${label} [SSH: ${sshConfigAlias}]` : label;
+  // 远程项目名用连接地址，不用目录名。22 端口省略，其它端口保留，避免同主机不同端口混成一个名字。
+  const host = target.host.trim();
+  if (!host) {
+    return label;
+  }
+  return formatRemoteWorkspaceHeaderHostLabel({ ...target, host });
 }
 
 function normalizeWorkspacePathForIdentity(path: string): string {

@@ -32,6 +32,7 @@ import { FileDisplayIcon, resolveFileDisplayDescriptor } from "@/lib/fileDisplay
 import { formatTaskRelativeTime } from "@/lib/taskListItemPresentation.js";
 import { toWorkspaceRelativePath } from "@/lib/taskChangeSummary.js";
 import { getPathLeaf } from "@/lib/path.js";
+import { formatRemoteWorkspaceDisplayLabel } from "@/lib/remoteWorkspaceHistory.js";
 import { logger } from "@/logger.js";
 import { HighlightedMatchText } from "@/quickpick/HighlightedMatchText.js";
 import { QUICK_PICK_SECTION_ORDER, type QuickPickCommand } from "@/quickpick/quickPickCommands.js";
@@ -492,7 +493,7 @@ export const CommandCenterDialog = memo(function CommandCenterDialogComponent({
       new Map(
         effectiveWorkspaceTabs.map((tab) => [
           tab.workspaceIdentity?.trim() || tab.workspacePath,
-          tab.label,
+          formatRemoteWorkspaceDisplayLabel(tab.label, tab.remoteTarget),
         ]),
       ),
     [effectiveWorkspaceTabs],
