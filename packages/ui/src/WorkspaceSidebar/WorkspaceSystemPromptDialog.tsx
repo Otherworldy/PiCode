@@ -16,6 +16,10 @@ import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
 import { runUserActionAsync } from "@/lib/userActionTelemetry.js";
+import {
+  SETTINGS_SEGMENTED_TABS_LIST_CLASS,
+  SETTINGS_SEGMENTED_TABS_TRIGGER_CLASS,
+} from "@/settings/SettingsSegmentedTabs.js";
 import { WorkspaceProjectCommandPane } from "@/WorkspaceSidebar/WorkspaceProjectCommandPane.js";
 
 type PromptKind = "append" | "replace";
@@ -246,20 +250,19 @@ export function WorkspaceSystemPromptDialog({
           onValueChange={(value) => void selectTab(value)}
           value={tab}
         >
-          <TabsList
-            className="h-auto w-full justify-start rounded-none border-b border-border px-3"
-            variant="line"
-          >
-            <TabsTrigger className="flex-none px-3 py-2" value="append">
-              {intl.formatMessage({ id: "workspaceSidebar.systemPrompt.append" })}
-            </TabsTrigger>
-            <TabsTrigger className="flex-none px-3 py-2" value="replace">
-              {intl.formatMessage({ id: "workspaceSidebar.systemPrompt.replace" })}
-            </TabsTrigger>
-            <TabsTrigger className="flex-none px-3 py-2" value="commands">
-              {intl.formatMessage({ id: "workspaceSidebar.systemPrompt.commands" })}
-            </TabsTrigger>
-          </TabsList>
+          <div className="border-b border-border px-4 py-2.5">
+            <TabsList className={SETTINGS_SEGMENTED_TABS_LIST_CLASS}>
+              <TabsTrigger className={SETTINGS_SEGMENTED_TABS_TRIGGER_CLASS} value="append">
+                {intl.formatMessage({ id: "workspaceSidebar.systemPrompt.append" })}
+              </TabsTrigger>
+              <TabsTrigger className={SETTINGS_SEGMENTED_TABS_TRIGGER_CLASS} value="replace">
+                {intl.formatMessage({ id: "workspaceSidebar.systemPrompt.replace" })}
+              </TabsTrigger>
+              <TabsTrigger className={SETTINGS_SEGMENTED_TABS_TRIGGER_CLASS} value="commands">
+                {intl.formatMessage({ id: "workspaceSidebar.systemPrompt.commands" })}
+              </TabsTrigger>
+            </TabsList>
+          </div>
           <TabsContent className="flex min-h-0 flex-col overflow-hidden" value="append">
             <SystemTextPane
               failed={append.failed}
@@ -299,13 +302,14 @@ export function WorkspaceSystemPromptDialog({
             {intl.formatMessage({ id: "workspaceSidebar.systemPrompt.pending" })}
           </p>
           <div className="flex items-center gap-2">
-            <Button onClick={() => void requestClose()} type="button" variant="outline">
+            <Button onClick={() => void requestClose()} size="lg" type="button" variant="outline">
               {intl.formatMessage({ id: "common.cancel" })}
             </Button>
             <Button
               data-testid="workspace-system-prompt-save"
               disabled={!dirty || busy}
               onClick={() => void save()}
+              size="lg"
               type="button"
             >
               {intl.formatMessage({ id: "settings.systemPrompt.save" })}

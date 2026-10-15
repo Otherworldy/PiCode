@@ -22,6 +22,9 @@
  * 通过独立平台 variant 使用真实 Window Controls Overlay 安全区；普通 Web 不继承该规则。 */
 @custom-variant platform-windows-desktop (&:where(.platform-windows-desktop, .platform-windows-desktop *));
 
+/* 确保 data-active 能够稳定命中 Radix UI 组件渲染出的 data-state="active" */
+@custom-variant data-active (&:where([data-active]:not([data-active="false"]), [data-state="active"]));
+
 /*
  * 当前 UI 直接使用了 shadcn 的 radix-mira 风格组件源码，这些组件大量依赖
  * data-active / data-horizontal / data-vertical 这类语义 variant。

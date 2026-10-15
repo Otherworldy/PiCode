@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PiCode - 编辑 AI 服务设计提案</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            zai: {
+              bgDark: '#161616',
+              bgLight: '#f8f8f8',
+              cardDark: '#202020',
+              cardLight: '#ffffff',
+              borderDark: 'rgba(255, 255, 255, 0.08)',
+              borderLight: 'rgba(13, 13, 13, 0.08)',
+              surfaceDark: 'rgba(255, 255, 255, 0.04)',
+              surfaceLight: 'rgba(13, 13, 13, 0.03)',
+              hoverDark: 'rgba(255, 255, 255, 0.06)',
+              hoverLight: 'rgba(13, 13, 13, 0.05)',
+              fgDark: '#ededed',
+              fgLight: '#171717',
+              fgSubtleDark: '#909090',
+              fgSubtleLight: '#666666',
+              fgSubtlestDark: '#555555',
+              fgSubtlestLight: '#999999',
+              brandDark: '#fafafa',
+              brandLight: '#111111',
+            }
+          },
+          fontFamily: {
+            sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', '"PingFang SC"', '"Hiragino Sans GB"', '"Microsoft YaHei"', 'sans-serif'],
+            mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', '"Liberation Mono"', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    :root {
+      --ui-font-size: 14px;
+      --bg: #f8f8f8;
+      --card: #ffffff;
+      --border: rgba(13, 13, 13, 0.08);
+      --border-hover: rgba(13, 13, 13, 0.16);
+      --input: #ffffff;
+      --surface: rgba(13, 13, 13, 0.03);
+      --surface-hover: rgba(13, 13, 13, 0.06);
+      --fg: #171717;
+      --fg-subtle: #666666;
+      --fg-subtlest: #999999;
+      --primary: #111111;
+      --primary-fg: #ffffff;
+    }
+    html.dark {
+      --bg: #161616;
+      --card: #202020;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-hover: rgba(255, 255, 255, 0.16);
+      --input: #1a1a1a;
+      --surface: rgba(255, 255, 255, 0.04);
+      --surface-hover: rgba(255, 255, 255, 0.08);
+      --fg: #ededed;
+      --fg-subtle: #909090;
+      --fg-subtlest: #666666;
+      --primary: #fafafa;
+      --primary-fg: #111111;
+    }
+    body {
+      background-color: var(--bg);
+      color: var(--fg);
+      font-size: var(--ui-font-size);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-thumb { background: rgba(150, 150, 150, 0.2); border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(150, 150, 150, 0.35); }
+    
+    .theme-transition {
+      transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    }
+    .modal-box {
+      background-color: var(--card);
+      border: 1px solid var(--border);
+      box-shadow: 0 20px 48px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border);
+    }
+    @keyframes modalEnter {
+      from { opacity: 0; transform: scale(0.98) translateY(6px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .anim-modal {
+      animation: modalEnter 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4 selection:bg-neutral-500/30 theme-transition">
+
+  <!-- 顶部调试控制胶囊 -->
+  <header class="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-3.5 py-1.5 rounded-full bg-neutral-900/80 dark:bg-neutral-800/80 border border-white/10 backdrop-blur-md shadow-xl text-xs text-neutral-200">
+    <div class="flex items-center gap-1.5 font-medium">
+      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+      <span>PiCode 设计方案</span>
+    </div>
+    <span class="text-white/20">|</span>
+    <span class="text-neutral-400">单页无向导 · 原生色板 · 完整思考等级配置</span>
+    <span class="text-white/20">|</span>
+    <button onclick="toggleDarkMode()" class="px-2 py-0.5 rounded-full bg-white/10 hover:bg-white/20 transition-colors flex items-center gap-1 font-medium text-[11px]">
+      <span id="theme-icon">🌙</span>
+      <span id="theme-text">切换浅色</span>
+    </button>
+  </header>
+
+  <!-- 模拟编辑器背景点阵 -->
+  <div class="fixed inset-0 pointer-events-none opacity-20 dark:opacity-10 bg-[radial-gradient(#888_1px,transparent_1px)] [background-size:20px_20px]"></div>
+
+  <!-- 编辑 AI 服务弹窗 (单页完整视窗，无分步向导，PiCode 统一标准尺寸) -->
+  <main class="modal-box anim-modal w-full max-w-[800px] rounded-xl flex flex-col overflow-hidden relative z-10">
+
+    <!-- 1. 弹窗标题栏 -->
+    <header class="px-5 py-3.5 border-b border-[var(--border)] flex items-center justify-between shrink-0">
+      <div class="flex items-center gap-2.5">
+        <h2 class="text-ui-base font-medium tracking-tight text-[var(--fg)]">
+          编辑 AI 服务
+        </h2>
+        <span class="text-ui-xs font-mono text-[var(--fg-subtle)] bg-[var(--surface)] px-1.5 py-0.5 rounded border border-[var(--border)]">
+          deepseek
+        </span>
+      </div>
+
+      <button onclick="showToast('点击了关闭')" class="size-7 rounded-md flex items-center justify-center text-[var(--fg-subtle)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)] transition-colors">
+        <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </header>
+
+    <!-- 2. 弹窗主体可滚动内容 (单页分为接入端点和模型管理两块) -->
+    <div class="max-h-[min(580px,calc(100vh-140px))] overflow-y-auto p-5 space-y-6">
+
+      <!-- ================= Section 1: 接入端点与凭据 ================= -->
+      <section class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-ui-base font-medium text-[var(--fg)] flex items-center gap-1.5">
+            <span>端点接入与认证</span>
+          </h3>
+          <span class="text-ui-xs text-[var(--fg-subtlest)]">凭据仅保存在当前机器</span>
+        </div>
+
+        <div class="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3.5 space-y-3">
+          <!-- 行 1: 服务名称 + API 协议 -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="space-y-1">
+              <label class="text-ui-sm font-medium text-[var(--fg-subtle)]">服务名称</label>
+              <input type="text" id="input-name" value="DeepSeek" class="w-full h-8 px-2.5 rounded-md border border-[var(--border)] bg-[var(--input)] text-ui-base text-[var(--fg)] focus:outline-none focus:border-[var(--border-hover)] transition-colors">
+            </div>
+            <div class="space-y-1">
+              <label class="text-ui-sm font-medium text-[var(--fg-subtle)]">接口协议 (API Format)</label>
+              <select class="w-full h-8 px-2.5 rounded-md border border-[var(--border)] bg-[var(--input)] text-ui-base text-[var(--fg)] focus:outline-none focus:border-[var(--border-hover)] transition-colors">
+                <option value="openai-completions">OpenAI 兼容 (openai-completions)</option>
+                <option value="anthropic-messages">Anthropic 规范 (anthropic-messages)</option>
+                <option value="gemini-content">Google Gemini (gemini-content)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 行 2: 接口地址 Base URL + 测试连接 -->
+          <div class="space-y-1">
+            <label class="text-ui-sm font-medium text-[var(--fg-subtle)] flex items-center justify-between">
+              <span>接口地址 (Base URL)</span>
+              <span class="text-ui-xs font-mono text-[var(--fg-subtlest)]">支持兼容端点地址</span>
+            </label>
+            <div class="flex items-center gap-2">
+              <input type="text" id="input-url" value="https://api.deepseek.com/v1" class="flex-1 h-8 px-2.5 rounded-md border border-[var(--border)] bg-[var(--input)] font-mono text-ui-base text-[var(--fg)] focus:outline-none focus:border-[var(--border-hover)] transition-colors">
+              <button onclick="testConnection()" id="btn-test" class="h-8 px-2.5 rounded-md border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--surface-hover)] text-ui-sm text-[var(--fg)] flex items-center gap-1.5 shrink-0 transition-colors">
+                <svg class="size-3.5 text-[var(--fg-subtle)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>测试连接</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 行 3: API Key 密码输入 -->
+          <div class="space-y-1">
+            <label class="text-ui-sm font-medium text-[var(--fg-subtle)]">API 密钥 (API Key)</label>
+            <div class="relative flex items-center">
+              <input type="password" id="input-key" value="sk-9a7f32bc018e472df" class="w-full h-8 pl-2.5 pr-8 rounded-md border border-[var(--border)] bg-[var(--input)] font-mono text-ui-base text-[var(--fg)] focus:outline-none focus:border-[var(--border-hover)] transition-colors">
+              <button onclick="toggleKeyVisibility()" class="absolute right-2 text-[var(--fg-subtlest)] hover:text-[var(--fg)] transition-colors">
+                <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= Section 2: 模型列表与配置 ================= -->
+      <section class="space-y-3">
+        <!-- 模型栏标题与紧凑操作区 -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div class="flex items-center gap-2">
+            <h3 class="text-ui-base font-medium text-[var(--fg)]">已配置模型</h3>
+            <span id="model-count-tag" class="px-1.5 py-0.2 rounded-md bg-[var(--surface)] text-ui-xs font-mono text-[var(--fg-subtle)] border border-[var(--border)]">
+              2 个模型
+            </span>
+          </div>
+
+          <!-- 右侧操作工具条：搜索 + 手动录入 + 从端点同步 -->
+          <div class="flex items-center gap-2">
+            <!-- 快速筛选 -->
+            <div class="relative w-36">
+              <input type="text" oninput="filterModels(this.value)" placeholder="筛选模型..." class="w-full h-8 pl-2.5 pr-6 rounded-md border border-[var(--border)] bg-[var(--input)] text-ui-sm text-[var(--fg)] placeholder:text-[var(--fg-subtlest)] focus:outline-none focus:border-[var(--border-hover)] transition-colors">
+            </div>
+
+            <!-- 添加自定义模型输入组 (高度统一为 h-8) -->
+            <div class="flex items-center">
+              <input type="text" id="custom-model-id" placeholder="输入模型 ID..." class="w-36 h-8 px-2.5 rounded-l-md border border-r-0 border-[var(--border)] bg-[var(--input)] font-mono text-ui-sm text-[var(--fg)] placeholder:text-[var(--fg-subtlest)] focus:outline-none focus:border-[var(--border-hover)] transition-colors">
+              <button onclick="addModel()" class="h-8 px-2.5 rounded-r-md border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--surface-hover)] text-ui-sm font-medium text-[var(--fg)] flex items-center gap-1 shrink-0 transition-colors">
+                <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                <span>添加</span>
+              </button>
+            </div>
+
+            <!-- 从端点拉取模型 (PiCode 统一次要按钮) -->
+            <button onclick="syncModels()" id="btn-sync" class="h-8 px-2.5 rounded-md border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--surface-hover)] text-ui-sm font-medium text-[var(--fg)] flex items-center gap-1.5 shrink-0 transition-colors">
+              <svg class="size-3.5 text-[var(--fg-subtle)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              <span>从端点同步</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 模型列表统一容器 (整体外边框，行间用细线分隔) -->
+        <div class="rounded-lg border border-[var(--border)] bg-[var(--card)] overflow-hidden divide-y divide-[var(--border)]" id="models-list">
+
+          <!-- 模型行 1: deepseek-chat -->
+          <div class="model-item group" data-model="deepseek-chat">
+            <!-- 摘要条 -->
+            <div class="flex items-center justify-between px-3 py-2.5 hover:bg-[var(--surface)] transition-colors gap-3">
+              <!-- 左侧：默认星标 + ID + 别名 + 徽章 -->
+              <div class="flex items-center gap-2.5 min-w-0">
+                <button onclick="setDefault('deepseek-chat')" title="已设为默认模型" class="text-amber-500 hover:scale-110 transition-transform">
+                  <svg class="size-4 fill-current" viewBox="0 0 20 20">
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                  </svg>
+                </button>
+                <span class="font-mono text-ui-base font-semibold text-[var(--fg)] truncate">deepseek-chat</span>
+                <span class="text-ui-xs text-[var(--fg-subtlest)] truncate">DeepSeek-V3</span>
+                <span class="rounded bg-[var(--surface)] px-1.5 py-0.5 text-ui-xs font-mono text-[var(--fg-subtlest)] border border-[var(--border)]">
+                  跟随服务
+                </span>
+                <span class="rounded bg-amber-500/10 px-1.5 py-0.5 text-ui-xs text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                  当前默认
+                </span>
+              </div>
+
+              <!-- 右侧：容量标签 + 折叠箭头 + 删除 -->
+              <div class="flex items-center gap-2 shrink-0">
+                <span class="font-mono text-ui-xs text-[var(--fg-subtle)] bg-[var(--surface)] px-2 py-0.5 rounded border border-[var(--border)]">
+                  128K · 8K
+                </span>
+                <button onclick="toggleDetail('deepseek-chat')" class="size-7 rounded flex items-center justify-center text-[var(--fg-subtle)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)] transition-colors">
+                  <svg class="size-3.5 transform transition-transform" id="chevron-deepseek-chat" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                <button onclick="deleteModel('deepseek-chat')" title="移除此模型" class="size-7 rounded flex items-center justify-center text-[var(--fg-subtle)] hover:text-red-500 hover:bg-red-500/10 transition-colors">
+                  <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- 折叠展开的完整高级参数配置面板 -->
+            <div id="detail-deepseek-chat" class="hidden px-4 py-3.5 bg-[var(--surface)] border-t border-[var(--border)] text-ui-sm space-y-3.5">
+              <!-- 基本参数：别名 + 独立协议 -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="space-y-1">
+                  <label class="text-ui-xs text-[var(--fg-subtle)] font-medium">模型显示别名</label>
+                  <input type="text" value="DeepSeek-V3" class="w-full h-8 px-2.5 rounded-md border border-[var(--border)] bg-[var(--input)] text-ui-sm text-[var(--fg)] focus:outline-none focus:border-[var(--border-hover)]">
+                </div>
+                <div class="space-y-1">
+                  <label class="text-ui-xs text-[var(--fg-subtle)] font-medium">独立 API 格式 (可选覆盖)</label>
+                  <select class="w-full h-8 px-2 rounded-md border border-[var(--border)] bg-[var(--input)] text-ui-sm text-[var(--fg)]">
+                    <option value="">跟随服务设置 (openai-completions)</option>
+                    <option value="anthropic-messages">anthropic-messages</option>
+                  </select>
+                </div>
+
+                <!-- 容量参数 + 快捷预设档位 -->
+                <div class="space-y-1.5">
+                  <div class="flex items-center justify-between">
+                    <label class="text-ui-xs text-[var(--fg-subtle)] font-medium">上下文窗口 (Context Window)</label>
+                    <div class="flex items-center gap-1 font-mono text-[10px]">
+                      <button type="button" onclick="setPresetValue('ctx-chat', 131072)" class="px-1.5 py-0.2 rounded bg-[var(--card)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--fg-subtle)]">128k</button>
+                      <button type="button" onclick="setPresetValue('ctx-chat', 200000)" class="px-1.5 py-0.2 rounded bg-[var(--card)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--fg-subtle)]">200k</button>
+                      <button type="button" onclick="setPresetValue('ctx-chat', 1048576)" class="px-1.5 py-0.2 rounded bg-[var(--card)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--fg-subtle)]">1M</button>
+                    </div>
+                  </div>
+                  <input type="number" id="ctx-chat" value="131072" class="w-full h-8 px-2.5 rounded-md border border-[var(--border)] bg-[var(--input)] font-mono text-ui-sm text-[var(--fg)]">
+                </div>
+
+                <div class="space-y-1.5">
+                  <div class="flex items-center justify-between">
+                    <label class="text-ui-xs text-[var(--fg-subtle)] font-medium">最大输出 Token</label>
+                    <div class="flex items-center gap-1 font-mono text-[10px]">
+                      <button type="button" onclick="setPresetValue('out-chat', 4096)" class="px-1.5 py-0.2 rounded bg-[var(--card)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--fg-subtle)]">4k</button>
+                      <button type="button" onclick="setPresetValue('out-chat', 8192)" class="px-1.5 py-0.2 rounded bg-[var(--card)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--fg-subtle)]">8k</button>
+                      <button type="button" onclick="setPresetValue('out-chat', 32768)" class="px-1.5 py-0.2 rounded bg-[var(--card)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--fg-subtle)]">32k</button>
+                    </div>
+                  </div>
+                  <input type="number" id="out-chat" value="8192" class="w-full h-8 px-2.5 rounded-md border border-[var(--border)] bg-[var(--input)] font-mono text-ui-sm text-[var(--fg)]">
+                </div>
+              </div>
+
+              <!-- 输入模态支持 -->
+              <div class="flex items-center gap-5 pt-1 border-t border-[var(--border)]">
+                <span class="text-ui-xs text-[var(--fg-subtle)] font-medium shrink-0">输入模态:</span>
+                <label class="flex items-center gap-1.5 cursor-pointer text-ui-sm">
+                  <input type="checkbox" checked disabled class="rounded border-[var(--border)]">
+                  <span>文本 (Text)</span>
+                </label>
+                <label class="flex items-center gap-1.5 cursor-pointer text-ui-sm">
+                  <input type="checkbox" class="rounded border-[var(--border)]">
+                  <span>图片 / 视觉 (Vision)</span>
+                </label>
+              </div>
+
+              <!-- 思考等级列表配置 (Thinking Levels) -->
+              <div class="space-y-1.5 pt-1 border-t border-[var(--border)]">
+                <div class="flex items-center justify-between">
+                  <label class="text-ui-xs text-[var(--fg-subtle)] font-medium">思考等级列表 (Thinking Levels)</label>
+                  <span class="text-[11px] text-[var(--fg-subtlest)]">勾选该模型支持的思考强度档位</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <label class="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--surface-hover)] cursor-pointer text-ui-sm transition-colors">
+                    <input type="checkbox" checked class="rounded border-[var(--border)]">
+                    <span class="font-mono text-ui-xs">off</span>
+                    <span class="text-[11px] text-[var(--fg-subtlest)]">(关闭)</span>
+                  </label>
+                  <label class="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--surface-hover)] cursor-pointer text-ui-sm transition-colors">
+                    <input type="checkbox" class="rounded border-[var(--border)]">
+                    <span class="font-mono text-ui-xs">low</span>
+                    <span class="text-[11px] text-[var(--fg-subtlest)]">(轻度)</span>
+                  </label>
+                  <label class="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--surface-hover)] cursor-pointer text-ui-sm transition-colors">
+                    <input type="checkbox" class="rounded border-[var(--border)]">
+                    <span class="font-mono text-ui-xs">medium</span>
+                    <span class="text-[11px] text-[var(--fg-subtlest)]">(适中)</span>
+                  </label>
+                  <label class="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--surface-hover)] cursor-pointer text-ui-sm transition-colors">
+                    <input type="checkbox" class="rounded border-[var(--border)]">
+                    <span class="font-mono text-ui-xs">high</span>
+                    <span class="text-[11px] text-[var(--fg-subtlest)]">(深度)</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 模型行 2: deepseek-reasoner (R1 推理模型) -->
+          <div class="model-item group" data-model="deepseek-reasoner">
+            <div class="flex items-center justify-between px-3 py-2.5 hover:bg-[var(--surface)] transition-colors gap-3">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <button onclick="setDefault('deepseek-reasoner')" title="设为默认模型" class="text-[var(--fg-subtlest)] hover:text-amber-500 hover:scale-110 transition-transform">
+                  <svg class="size-4 fill-none stroke-current" viewBox="0 0 24 24" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                  </svg>
+                </button>
+                <span class="font-mono text-ui-base font-semibold text-[var(--fg)] truncate">deepseek-reasoner</span>
+                <span class="text-ui-xs text-[var(--fg-subtlest)] truncate">DeepSeek-R1</span>
+                <span class="rounded bg-purple-500/10 px-1.5 py-0.5 text-ui-xs text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                  深度思考
+                </span>
+              </div>
+
+              <div class="flex items-center gap-2 shrink-0">
+                <span class="font-mono text-ui-xs text-[var(--fg-subtle)] bg-[var(--surface)] px-2 py-0.5 rounded border border-[var(--border)]">
+                  128K · 64K
+                </span>
+                <button onclick="toggleDetail('deepseek-reasoner')" class="size-7 rounded flex items-center justify-center text-[var(--fg-subtle)] hover:text-[var(--fg)] hover:bg-[var(--surface-hover)] transition-colors">
+                  <svg class="size-3.5 transform transition-transform" id="chevron-deepseek-reasoner" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                <button onclick="deleteModel('deepseek-reasoner')" title="移除此模型" class="size-7 rounded flex items-center justify-center text-[var(--fg-subtle)] hover:text-red-500 hover:bg-red-500/10 transition-colors">
+                  <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- R1 详情区 -->
+            <div id="detail-deepseek-reasoner" class="hidden px-4 py-3.5 bg-[var(--surface)] border-t border-[var(--border)] text-ui-sm space-y-3.5">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="space-y-1">
+                  <label class="text-ui-xs text-[var(--fg-subtle)] font-medium">模型显示别名</label>
+                  <input type="text" value="DeepSeek-R1" class="w-full h-8 px-2.5 rounded-md border border-[var(--border)] bg-[var(--input)] text-ui-sm text-[var(--fg)]">
+                </div>
+                <div class="space-y-1">
+                  <label class="text-ui-xs text-[var(--fg-subtle)] font-medium">最大思考输出 (Tokens)</label>
+                  <input type="number" value="65536" class="w-full h-8 px-2.5 rounded-md border border-[var(--border)] bg-[var(--input)] font-mono text-ui-sm text-[var(--fg)]">
+                </div>
+              </div>
+
+              <!-- 思考等级支持 -->
+              <div class="space-y-1.5 pt-1 border-t border-[var(--border)]">
+                <div class="flex items-center justify-between">
+                  <label class="text-ui-xs text-[var(--fg-subtle)] font-medium">思考等级列表 (Thinking Levels)</label>
+                  <span class="text-[11px] text-[var(--fg-subtlest)]">推理模型强制深度思考</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <label class="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--surface-hover)] cursor-pointer text-ui-sm transition-colors">
+                    <input type="checkbox" checked class="rounded border-[var(--border)]">
+                    <span class="font-mono text-ui-xs">high</span>
+                    <span class="text-[11px] text-[var(--fg-subtlest)]">(默认深度推理)</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+    </div>
+
+    <!-- 3. 弹窗底部操作栏 (PiCode 经典按钮样式与尺寸) -->
+    <footer class="px-5 py-3 border-t border-[var(--border)] bg-[var(--card)] flex items-center justify-between shrink-0">
+      <div class="flex items-center gap-2 text-ui-xs text-[var(--fg-subtle)]">
+        <span class="inline-block size-2 rounded-full bg-emerald-500"></span>
+        <span>端点配置就绪</span>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button onclick="showToast('已取消修改')" class="h-8 px-3.5 rounded-md border border-[var(--border)] hover:bg-[var(--surface-hover)] text-ui-base text-[var(--fg)] transition-colors">
+          取消
+        </button>
+        <button onclick="saveService()" class="h-8 px-4 rounded-md bg-[var(--primary)] text-[var(--primary-fg)] font-medium text-ui-base hover:opacity-90 flex items-center gap-1.5 transition-opacity shadow-sm">
+          <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+          <span>保存服务</span>
+        </button>
+      </div>
+    </footer>
+
+  </main>
+
+  <!-- 吐司通知提示 -->
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-3.5 py-1.5 rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-ui-sm font-medium shadow-xl border border-white/10 flex items-center gap-2 transform translate-y-8 opacity-0 pointer-events-none transition-all duration-150">
+    <span id="toast-text">已更新</span>
+  </div>
+
+  <script>
+    let isDark = true;
+
+    // 展开/收起详情
+    function toggleDetail(id) {
+      const panel = document.getElementById(`detail-${id}`);
+      const chevron = document.getElementById(`chevron-${id}`);
+      if (panel) {
+        const isHidden = panel.classList.contains('hidden');
+        if (isHidden) {
+          panel.classList.remove('hidden');
+          chevron.classList.add('rotate-180');
+        } else {
+          panel.classList.add('hidden');
+          chevron.classList.remove('rotate-180');
+        }
+      }
+    }
+
+    // 快捷填充预设值
+    function setPresetValue(inputId, value) {
+      const input = document.getElementById(inputId);
+      if (input) {
+        input.value = value;
+        showToast(`已设置为 ${value}`);
+      }
+    }
+
+    // 设为默认
+    function setDefault(id) {
+      showToast(`已将 ${id} 设为当前服务默认模型`);
+    }
+
+    // 删除模型
+    function deleteModel(id) {
+      const el = document.querySelector(`[data-model="${id}"]`);
+      if (el) {
+        el.remove();
+        showToast(`已移除模型 ${id}`);
+        updateCount();
+      }
+    }
+
+    // 手动添加模型
+    function addModel() {
+      const input = document.getElementById('custom-model-id');
+      const val = input.value.trim();
+      if (!val) {
+        showToast("请输入模型 ID");
+        return;
+      }
+      const list = document.getElementById('models-list');
+      const item = document.createElement('div');
+      item.className = "model-item group";
+      item.setAttribute('data-model', val);
+      item.innerHTML = `
+        <div class="flex items-center justify-between px-3 py-2.5 hover:bg-[var(--surface)] transition-colors gap-3">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <button onclick="setDefault('${val}')" title="设为默认模型" class="text-[var(--fg-subtlest)] hover:text-amber-500 hover:scale-110 transition-transform">
+              <svg class="size-4 fill-none stroke-current" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+              </svg>
+            </button>
+            <span class="font-mono text-ui-base font-semibold text-[var(--fg)] truncate">${val}</span>
+            <span class="rounded bg-[var(--surface)] px-1.5 py-0.5 text-ui-xs font-mono text-[var(--fg-subtlest)] border border-[var(--border)]">
+              跟随服务
+            </span>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="font-mono text-ui-xs text-[var(--fg-subtle)] bg-[var(--surface)] px-2 py-0.5 rounded border border-[var(--border)]">
+              128K · 4K
+            </span>
+            <button onclick="deleteModel('${val}')" title="移除此模型" class="size-7 rounded flex items-center justify-center text-[var(--fg-subtle)] hover:text-red-500 hover:bg-red-500/10 transition-colors">
+              <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      `;
+      list.prepend(item);
+      input.value = '';
+      showToast(`已添加模型 ${val}`);
+      updateCount();
+    }
+
+    // 从端点同步拉取模型
+    function syncModels() {
+      const btn = document.getElementById('btn-sync');
+      const origin = btn.innerHTML;
+      btn.innerHTML = `<span class="size-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span><span>同步中...</span>`;
+      btn.disabled = true;
+
+      setTimeout(() => {
+        btn.innerHTML = origin;
+        btn.disabled = false;
+        showToast("已从服务端点成功同步 2 个模型");
+      }, 700);
+    }
+
+    // 筛选模型
+    function filterModels(keyword) {
+      const q = keyword.toLowerCase().trim();
+      const items = document.querySelectorAll('.model-item');
+      items.forEach(item => {
+        const id = item.getAttribute('data-model') || '';
+        if (id.toLowerCase().includes(q)) {
+          item.style.display = 'block';
+        } else {
+          item.style.display = 'none';
+        }
+      });
+    }
+
+    // 测试连接
+    function testConnection() {
+      const btn = document.getElementById('btn-test');
+      btn.innerHTML = `<span class="size-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span><span>测试中</span>`;
+      setTimeout(() => {
+        btn.innerHTML = `<span class="text-emerald-500 font-medium">✓ 28ms</span>`;
+        showToast("端点握手成功，延迟 28ms");
+      }, 500);
+    }
+
+    // 密钥明密文切换
+    function toggleKeyVisibility() {
+      const input = document.getElementById('input-key');
+      input.type = input.type === 'password' ? 'text' : 'password';
+    }
+
+    // 更新模型计数
+    function updateCount() {
+      const count = document.querySelectorAll('.model-item').length;
+      document.getElementById('model-count-tag').textContent = `${count} 个模型`;
+    }
+
+    // 保存服务
+    function saveService() {
+      showToast("已保存 AI 服务配置");
+    }
+
+    // 深色模式切换
+    function toggleDarkMode() {
+      isDark = !isDark;
+      if (isDark) {
+        document.documentElement.classList.add('dark');
+        document.getElementById('theme-icon').textContent = '🌙';
+        document.getElementById('theme-text').textContent = '切换浅色';
+      } else {
+        document.documentElement.classList.remove('dark');
+        document.getElementById('theme-icon').textContent = '☀️';
+        document.getElementById('theme-text').textContent = '切换深色';
+      }
+    }
+
+    // 吐司
+    let timer = null;
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      document.getElementById('toast-text').textContent = msg;
+      t.classList.remove('translate-y-8', 'opacity-0', 'pointer-events-none');
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        t.classList.add('translate-y-8', 'opacity-0', 'pointer-events-none');
+      }, 1800);
+    }
+  </script>
+</body>
+</html>

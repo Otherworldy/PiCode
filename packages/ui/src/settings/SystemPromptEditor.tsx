@@ -260,6 +260,7 @@ export function SystemPromptEditor({
       ) : null}
       <div className="flex gap-2">
         <Input
+          size="lg"
           aria-label={intl.formatMessage({ id: "settings.systemPrompt.newPlaceholder" })}
           disabled={loading || saving}
           onChange={(event) => setNewName(event.target.value)}
@@ -275,7 +276,7 @@ export function SystemPromptEditor({
         <Button
           disabled={loading || saving || !newName.trim()}
           onClick={() => void createFile()}
-          size="sm"
+          size="lg"
           type="button"
           variant="outline"
         >
@@ -288,7 +289,7 @@ export function SystemPromptEditor({
         </p>
       ) : (
         <div className="grid gap-3 md:grid-cols-[12rem_minmax(0,1fr)]">
-          <div className="flex h-64 flex-col gap-1 overflow-y-auto rounded-lg border border-input-border bg-input p-1">
+          <div className="flex h-[30rem] flex-col gap-1 overflow-y-auto rounded-lg border border-input-border bg-input p-1">
             {files.length === 0 ? (
               <p className="px-2 py-1 text-ui-sm text-foreground-subtle">
                 {intl.formatMessage({ id: "settings.systemPrompt.empty" })}
@@ -298,7 +299,7 @@ export function SystemPromptEditor({
                 <button
                   key={name}
                   className={cn(
-                    "truncate rounded-md px-2 py-1 text-left font-mono text-ui-sm",
+                    "truncate rounded-md px-2.5 py-1.5 text-left font-mono text-ui-base",
                     name === selected
                       ? "bg-surface-hover text-foreground"
                       : "text-foreground-subtle hover:bg-surface-hover hover:text-foreground",
@@ -314,7 +315,7 @@ export function SystemPromptEditor({
           </div>
           <Textarea
             aria-label={editorLabel}
-            className="field-sizing-fixed h-64 max-h-64 min-h-64 w-full resize-none overflow-y-auto rounded-lg border border-input-border bg-input font-mono text-ui-base whitespace-pre-wrap break-words hover:border-input-border-hover focus-visible:border-input-border-focused focus-visible:bg-input-focused focus-visible:ring-0"
+            className="field-sizing-fixed h-[30rem] max-h-[30rem] min-h-[30rem] w-full resize-none overflow-y-auto rounded-lg border border-input-border bg-input font-mono text-ui-base whitespace-pre-wrap break-words hover:border-input-border-hover focus-visible:border-input-border-focused focus-visible:bg-input-focused focus-visible:ring-0"
             data-testid={`${testIdPrefix}-editor`}
             disabled={!selected || loading || saving}
             onChange={(event) => setDraft(event.target.value)}
@@ -335,9 +336,10 @@ export function SystemPromptEditor({
           data-testid={`${testIdPrefix}-save`}
           disabled={!selected || !dirty || saving || loading}
           onClick={() => void save()}
-          size="sm"
+          size="lg"
           type="button"
           variant="default"
+          className="gap-1.5"
         >
           <Save className="size-4" />
           {intl.formatMessage({ id: "settings.systemPrompt.save" })}
@@ -345,9 +347,10 @@ export function SystemPromptEditor({
         <Button
           disabled={!selected || saving || loading}
           onClick={() => void removeFile()}
-          size="sm"
+          size="lg"
           type="button"
           variant="outline"
+          className="gap-1.5"
         >
           <Trash2 className="size-4" />
           {intl.formatMessage({ id: "settings.systemPrompt.delete" })}

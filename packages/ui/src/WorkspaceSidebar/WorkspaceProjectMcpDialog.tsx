@@ -312,17 +312,18 @@ export function WorkspaceProjectMcpDialog({
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
+                  size="lg"
                   disabled={probing}
                   onClick={() => {
                     void handleRefresh();
                   }}
+                  className="gap-1.5"
                 >
                   <RefreshCw className={probing ? "size-4 animate-spin" : "size-4"} />
                   <span>{intl.formatMessage({ id: "common.refresh" })}</span>
                 </Button>
                 {servers.length > 0 ? (
-                  <Button type="button" variant="outline" size="sm" onClick={openCreate}>
+                  <Button type="button" variant="outline" size="lg" onClick={openCreate} className="gap-1.5">
                     <Plus className="size-4" />
                     <span>{intl.formatMessage({ id: "settings.mcp.create.open" })}</span>
                   </Button>

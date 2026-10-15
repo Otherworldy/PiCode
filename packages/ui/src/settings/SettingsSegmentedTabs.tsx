@@ -5,7 +5,13 @@ interface SettingsSegmentedTabItem<TValue extends string> {
   value: TValue;
 }
 
-/** 设置详情页共用的紧凑分段切换，避免相同层级出现多套 Tabs 视觉。 */
+export const SETTINGS_SEGMENTED_TABS_LIST_CLASS =
+  "flex h-8 items-center rounded-full bg-surface p-0.5 group-data-horizontal/tabs:h-8";
+
+export const SETTINGS_SEGMENTED_TABS_TRIGGER_CLASS =
+  "h-7 flex-none rounded-full border-transparent bg-transparent px-3 text-ui-base font-medium text-foreground-subtle transition-all hover:text-foreground data-[state=active]:border-transparent data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs data-[state=active]:font-semibold data-active:border-transparent data-active:bg-card data-active:text-foreground data-active:shadow-xs data-active:font-semibold";
+
+/** 设置详情页与弹窗共用的胶囊药丸分段切换（rounded-full）。 */
 export function SettingsSegmentedTabs<TValue extends string>({
   items,
   value,
@@ -21,12 +27,12 @@ export function SettingsSegmentedTabs<TValue extends string>({
       onValueChange={(nextValue) => onValueChange(nextValue as TValue)}
       className="gap-0"
     >
-      <TabsList className="flex h-8 rounded-full bg-surface p-0.5 group-data-horizontal/tabs:h-8">
+      <TabsList className={SETTINGS_SEGMENTED_TABS_LIST_CLASS}>
         {items.map((item) => (
           <TabsTrigger
             key={item.value}
             value={item.value}
-            className="h-7 flex-none rounded-full border-transparent bg-transparent px-2.5 text-ui-base font-medium text-foreground-subtle data-active:border-transparent data-active:bg-background data-active:text-foreground data-active:shadow-none dark:data-active:border-transparent dark:data-active:bg-background"
+            className={SETTINGS_SEGMENTED_TABS_TRIGGER_CLASS}
           >
             {item.label}
           </TabsTrigger>

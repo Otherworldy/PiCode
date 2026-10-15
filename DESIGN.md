@@ -335,7 +335,7 @@ Control size and primary/secondary action emphasis do not independently change r
 
 ### Shape exceptions and consistency
 
-- `rounded-full` is reserved exclusively for deliberate pill shapes or circles.
+- `rounded-full` is reserved exclusively for deliberate pill shapes or circles, such as segmented pill tabs (`SettingsSegmentedTabs`) and rounded switches.
 - Buttons, tags, counters, and icon buttons do not qualify for `rounded-full` merely because of their component type.
 - Do not introduce arbitrary radius values or use the ambiguous bare `rounded` utility.
 - Use `rounded-none` or side-specific radius removal only where joined surfaces must form a continuous shape.
@@ -353,6 +353,8 @@ Control size and primary/secondary action emphasis do not independently change r
 
 - `size-4` is the default UI icon baseline.
 - Reuse existing button sizes instead of creating new height systems.
+- Settings sections, their resource forms, and their dialogs share one control step: form controls (`Input`, `SelectTrigger`, `Textarea`) render at `size="lg"` (`h-8`), and the buttons of a form, dialog, or section-level action group use `size="lg"`.
+- Do not leave one settings section on the `default` or `sm` control step while its sibling settings sections use `lg`; a section that looks denser is not a reason to shrink its buttons and fields.
 - Prefer fluid widths for content containers.
 - Fixed widths are acceptable for menus, popovers, dialogs, and stable side panels.
 - Avoid arbitrary `w-[...]` and `h-[...]` for ordinary business UI.

@@ -45,17 +45,19 @@ export function WorkspaceProjectCommandList({
         <Button
           disabled={loading || saving}
           onClick={onStartCreate}
-          size="sm"
+          size="lg"
           type="button"
           variant="outline"
+          className="gap-1.5"
         >
-          <Plus className="size-3.5" />
+          <Plus className="size-4" />
           {intl.formatMessage({ id: "settings.systemPrompt.new" })}
         </Button>
       </div>
       {creating ? (
         <div className="border-b border-border p-2">
           <Input
+            size="lg"
             aria-label={intl.formatMessage({ id: "settings.systemPrompt.newPlaceholder" })}
             autoFocus
             disabled={saving}
@@ -102,7 +104,7 @@ export function WorkspaceProjectCommandList({
                 {name}
               </button>
               <Button
-                className="size-6 opacity-0 group-hover:opacity-100"
+                className="opacity-0 group-hover:opacity-100"
                 disabled={saving}
                 onClick={() => onDelete(name)}
                 size="icon-sm"

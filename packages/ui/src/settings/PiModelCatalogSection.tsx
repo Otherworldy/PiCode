@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, PlugZap, Plus, RefreshCw, Star, Trash2 } from "lucide-react";
+import { Pencil, PlugZap, Plus, Star, Trash2 } from "lucide-react";
 import type { ZCodePiModelsMutateParams, ZCodePiModelsMutateResult } from "@zcode/shared";
 import { useZCodeSessionService } from "@/hooks/useZCodeSessionService.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -244,22 +244,10 @@ export function PiModelCatalogSection({
             count={view?.providers.length ?? 0}
             title={intl.formatMessage({ id: "settings.modelProvider.pi.providers" })}
             actions={
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={loading}
-                  onClick={() => void load()}
-                >
-                  <RefreshCw />
-                  {intl.formatMessage({ id: "settings.modelProvider.pi.refresh" })}
-                </Button>
-                <Button type="button" size="sm" onClick={() => setEditing(emptyProviderDraft())}>
-                  <Plus />
-                  {intl.formatMessage({ id: "settings.modelProvider.add" })}
-                </Button>
-              </>
+              <Button type="button" size="lg" onClick={() => setEditing(emptyProviderDraft())}>
+                <Plus />
+                {intl.formatMessage({ id: "settings.modelProvider.add" })}
+              </Button>
             }
           />
           {loading && !view ? (
@@ -308,7 +296,7 @@ export function PiModelCatalogSection({
                         <Button
                           type="button"
                           variant="outline"
-                          size="sm"
+                          size="lg"
                           disabled={busy}
                           onClick={() =>
                             void mutate({
@@ -325,7 +313,7 @@ export function PiModelCatalogSection({
                       <Button
                         type="button"
                         variant="outline"
-                        size="sm"
+                        size="lg"
                         onClick={() => setEditing(providerDraft(provider))}
                       >
                         <Pencil />
@@ -334,7 +322,7 @@ export function PiModelCatalogSection({
                       <Button
                         type="button"
                         variant="outline"
-                        size="sm"
+                        size="lg"
                         disabled={busy}
                         onClick={() => void testProvider(provider)}
                       >
@@ -344,7 +332,7 @@ export function PiModelCatalogSection({
                       <Button
                         type="button"
                         variant="outline"
-                        size="sm"
+                        size="lg"
                         disabled={busy}
                         onClick={() => void mutate({ action: "delete", providerId: provider.id })}
                       >

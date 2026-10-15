@@ -1,16 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, PlugZap, X } from "lucide-react";
+import { useRef, useState } from "react";
+import { Check, Eye, EyeOff, Loader2, PlugZap, X } from "lucide-react";
 import type { ZCodePiModelsMutateParams } from "@zcode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select.js";
 import {
   Dialog,
   DialogContent,
@@ -19,16 +12,19 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { toast } from "@/components/ui/toast.js";
-import { cn } from "@/components/lib/utils.js";
 import { ApiSelect, Field, ModelDraftList } from "@/settings/ModelDraftCard.js";
 import {
-  SERVICE_PRESETS,
   defaultChosen,
   slugProviderId,
   type CatalogView,
   type ProviderDraft,
 } from "@/settings/provider-draft.js";
 
+/**
+ * 编辑/新建 AI 服务弹窗：
+ * 取消分步向导，采用一体化单页结构（上方端点接入与认证，下方模型列表与配置），
+ * 统一各表单元素与操作按钮规格，符合 PiCode 极简桌面端交互规范。
+ */
 export function ProviderSetupDialog({
   busy,
   draft,
@@ -45,17 +41,10 @@ export function ProviderSetupDialog({
   onChange: (draft: ProviderDraft | null) => void;
 }) {
   const { intl } = useZCodeIntl();
-  const [step, setStep] = useState<1 | 2>(1);
-  const [preset, setPreset] = useState("custom");
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
   const draftRef = useRef(draft);
   draftRef.current = draft;
-  const dialogOpen = Boolean(draft);
-  const dialogSeed = draft ? `${draft.existing ? "e" : "n"}:${draft.id}` : "";
-
-  useEffect(() => {
-    setStep(1);
-    setPreset("custom");
-  }, [dialogOpen, dialogSeed]);
 
   const patch = (partial: Partial<ProviderDraft>) => {
     const current = draftRef.current;
@@ -68,6 +57,9 @@ export function ProviderSetupDialog({
     if (!current?.baseUrl.trim()) {
       toast(intl.formatMessage({ id: "settings.modelProvider.pi.needNameUrl" }));
       return;
+    }
+    if (!importModels) {
+      setTestingConnection(true);
     }
     try {
       const next = await mutate({
@@ -93,16 +85,11 @@ export function ProviderSetupDialog({
       );
     } catch {
       toast(intl.formatMessage({ id: "settings.modelProvider.pi.discoverFailed" }));
+    } finally {
+      if (!importModels) {
+        setTestingConnection(false);
+      }
     }
-  };
-
-  const goNext = () => {
-    const current = draftRef.current;
-    if (!current?.name.trim() || !current.baseUrl.trim()) {
-      toast(intl.formatMessage({ id: "settings.modelProvider.pi.needNameUrl" }));
-      return;
-    }
-    setStep(2);
   };
 
   const save = async () => {
@@ -112,7 +99,6 @@ export function ProviderSetupDialog({
     const baseUrl = current.baseUrl.trim();
     if (!name || !baseUrl) {
       toast(intl.formatMessage({ id: "settings.modelProvider.pi.needNameUrl" }));
-      setStep(1);
       return;
     }
     if (current.models.length === 0) {
@@ -122,7 +108,6 @@ export function ProviderSetupDialog({
     const id = current.existing ? current.id : current.id.trim() || slugProviderId(name, baseUrl);
     if (!current.existing && existingIds.includes(id)) {
       toast(intl.formatMessage({ id: "settings.modelProvider.pi.duplicateId" }));
-      setStep(1);
       return;
     }
     await mutate({
@@ -153,190 +138,160 @@ export function ProviderSetupDialog({
 
   return (
     <Dialog open={draft !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[min(40rem,calc(100dvh-2rem))] max-w-3xl flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader className="shrink-0 space-y-3 border-b border-border px-5 py-4 pr-12">
-          <DialogTitle>
-            {intl.formatMessage({
-              id: draft?.existing
-                ? "settings.modelProvider.pi.editService"
-                : "settings.modelProvider.pi.addService",
-            })}
-          </DialogTitle>
-          <div className="flex items-center gap-2 text-ui-sm">
-            <StepChip
-              active={step === 1}
-              done={step === 2}
-              index={1}
-              label={intl.formatMessage({ id: "settings.modelProvider.pi.stepEndpoint" })}
-              onClick={() => setStep(1)}
-            />
-            <span className="h-px w-8 bg-border" />
-            <StepChip
-              active={step === 2}
-              done={false}
-              index={2}
-              label={intl.formatMessage({ id: "settings.modelProvider.pi.stepModels" })}
-              onClick={goNext}
-            />
+      <DialogContent className="flex max-h-[min(48rem,calc(100dvh-2rem))] max-w-3xl flex-col gap-0 overflow-hidden p-0">
+        {/* 弹窗标题栏 */}
+        <DialogHeader className="shrink-0 flex-row items-center justify-between border-b border-border px-5 py-3.5 pr-12">
+          <div className="flex items-center gap-2.5">
+            <DialogTitle className="text-ui-base font-semibold">
+              {intl.formatMessage({
+                id: draft?.existing
+                  ? "settings.modelProvider.pi.editService"
+                  : "settings.modelProvider.pi.addService",
+              })}
+            </DialogTitle>
+            {draft?.id ? (
+              <span className="rounded-md border border-border bg-surface px-1.5 py-0.5 font-mono text-ui-xs text-foreground-subtle">
+                {draft.id}
+              </span>
+            ) : null}
           </div>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-        {draft && step === 1 ? (
-          <div className="grid gap-3 px-5 py-4 sm:grid-cols-2">
-            <Field
-              className="sm:col-span-2"
-              label={intl.formatMessage({ id: "settings.modelProvider.pi.service" })}
-            >
-              <Select
-                value={preset}
-                onValueChange={(value) => {
-                  setPreset(value);
-                  const selected = SERVICE_PRESETS.find((item) => item.value === value);
-                  if (!selected || !("name" in selected)) return;
-                  patch({
-                    name: selected.name,
-                    baseUrl: selected.baseUrl,
-                    api: selected.api,
-                    ...(draft.existing ? {} : { id: selected.value }),
-                  });
-                }}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SERVICE_PRESETS.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {"name" in item
-                        ? item.name
-                        : intl.formatMessage({ id: "settings.modelProvider.pi.serviceCustom" })}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label={intl.formatMessage({ id: "settings.modelProvider.name" })}>
-              <Input value={draft.name} onChange={(event) => patch({ name: event.target.value })} />
-            </Field>
-            <Field label={intl.formatMessage({ id: "settings.modelProvider.pi.providerId" })}>
-              <Input
-                className="font-mono"
-                disabled={draft.existing}
-                value={draft.id}
-                onChange={(event) => patch({ id: event.target.value })}
-              />
-            </Field>
-            <Field
-              className="sm:col-span-2"
-              label={intl.formatMessage({ id: "settings.modelProvider.pi.baseUrl" })}
-            >
-              <Input
-                className="font-mono"
-                value={draft.baseUrl}
-                onChange={(event) => patch({ baseUrl: event.target.value })}
-              />
-            </Field>
-            <Field
-              className="sm:col-span-2"
-              label={intl.formatMessage({ id: "settings.modelProvider.apiKey" })}
-            >
-              <Input
-                className="font-mono"
-                value={draft.apiKey}
-                onChange={(event) => patch({ apiKey: event.target.value })}
-              />
-            </Field>
-            <Field
-              className="sm:col-span-2"
-              label={intl.formatMessage({ id: "settings.modelProvider.pi.defaultApi" })}
-            >
-              <ApiSelect value={draft.api} onChange={(value) => patch({ api: value })} />
-            </Field>
-          </div>
-        ) : null}
+        {/* 主体连续滚动内容：上部端点与认证，下部模型列表 */}
+        <div className="min-h-0 flex-1 overflow-y-auto p-5 space-y-6">
+          {draft ? (
+            <>
+              {/* Section 1: 端点接入与凭据 */}
+              <section className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-ui-base font-medium text-foreground">
+                    {intl.formatMessage({ id: "settings.modelProvider.pi.endpoint" })}
+                  </h3>
+                  <span className="text-ui-xs text-foreground-subtle">
+                    {intl.formatMessage({ id: "settings.modelProvider.pi.apiKeyKeep" })}
+                  </span>
+                </div>
 
-        {draft && step === 2 ? (
-          <ModelDraftList
-            busy={busy}
-            draft={draft}
-            onChange={onChange}
-            onFetch={() => void fetchModels(true)}
-          />
-        ) : null}
+                <div className="rounded-lg border border-border bg-surface/50 p-3.5 space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label={intl.formatMessage({ id: "settings.modelProvider.name" })}>
+                      <Input
+                        size="lg"
+                        value={draft.name}
+                        onChange={(event) => patch({ name: event.target.value })}
+                        placeholder="例如 DeepSeek"
+                      />
+                    </Field>
+                    <Field label={intl.formatMessage({ id: "settings.modelProvider.pi.providerId" })}>
+                      <Input
+                        size="lg"
+                        className="font-mono"
+                        disabled={draft.existing}
+                        value={draft.id}
+                        onChange={(event) => patch({ id: event.target.value })}
+                        placeholder="例如 deepseek"
+                      />
+                    </Field>
+                  </div>
+
+                  {/* 接口地址 + 测试连接复合输入行 */}
+                  <div className="space-y-1">
+                    <label className="text-ui-base font-medium text-foreground">
+                      {intl.formatMessage({ id: "settings.modelProvider.baseUrl" })}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        size="lg"
+                        className="flex-1 font-mono"
+                        value={draft.baseUrl}
+                        onChange={(event) => patch({ baseUrl: event.target.value })}
+                        placeholder="https://api.example.com/v1"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="lg"
+                        disabled={busy || testingConnection || !draft.baseUrl.trim()}
+                        onClick={() => void fetchModels(false)}
+                        className="shrink-0"
+                      >
+                        {testingConnection ? (
+                          <Loader2 className="animate-spin" />
+                        ) : (
+                          <PlugZap />
+                        )}
+                        {intl.formatMessage({ id: "settings.modelProvider.pi.testConnection" })}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* API 密钥（带明密文切换） */}
+                  <div className="space-y-1">
+                    <label className="text-ui-base font-medium text-foreground">
+                      {intl.formatMessage({ id: "settings.modelProvider.apiKey" })}
+                    </label>
+                    <div className="relative flex items-center">
+                      <Input
+                        size="lg"
+                        type={showApiKey ? "text" : "password"}
+                        className="font-mono pr-10"
+                        value={draft.apiKey}
+                        onChange={(event) => patch({ apiKey: event.target.value })}
+                        placeholder="sk-..."
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className="absolute right-2.5 text-foreground-subtle hover:text-foreground transition-colors"
+                        title={showApiKey ? "隐藏密钥" : "显示密钥"}
+                      >
+                        {showApiKey ? (
+                          <EyeOff className="size-4" />
+                        ) : (
+                          <Eye className="size-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 默认协议选择 */}
+                  <Field label={intl.formatMessage({ id: "settings.modelProvider.pi.defaultApi" })}>
+                    <ApiSelect value={draft.api} onChange={(value) => patch({ api: value })} />
+                  </Field>
+                </div>
+              </section>
+
+              {/* Section 2: 模型列表管理与配置 */}
+              <section className="space-y-3">
+                <ModelDraftList
+                  busy={busy}
+                  draft={draft}
+                  onChange={onChange}
+                  onFetch={() => void fetchModels(true)}
+                />
+              </section>
+            </>
+          ) : null}
         </div>
 
+        {/* 弹窗底部统一操作栏 */}
         <DialogFooter className="shrink-0 border-t border-border px-5 py-3 sm:justify-between">
-          {step === 1 ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => void fetchModels(false)}
-            >
-              <PlugZap />
-              {intl.formatMessage({ id: "settings.modelProvider.pi.testConnection" })}
-            </Button>
-          ) : (
-            <Button type="button" variant="outline" size="sm" onClick={() => setStep(1)}>
-              <ArrowLeft />
-              {intl.formatMessage({ id: "settings.modelProvider.pi.back" })}
-            </Button>
-          )}
+          <div className="flex items-center gap-2 text-ui-xs text-foreground-subtle">
+            <span>{draft ? `已添加 ${draft.models.length} 个模型` : ""}</span>
+          </div>
+
           <div className="flex gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            <Button type="button" variant="outline" size="lg" onClick={onClose}>
               <X />
               {intl.formatMessage({ id: "settings.modelProvider.cancel" })}
             </Button>
-            {step === 1 ? (
-              <Button type="button" size="sm" onClick={goNext}>
-                {intl.formatMessage({ id: "settings.modelProvider.pi.next" })}
-                <ArrowRight />
-              </Button>
-            ) : (
-              <Button type="button" size="sm" disabled={busy} onClick={() => void save()}>
-                <Check />
-                {intl.formatMessage({ id: "settings.modelProvider.pi.saveService" })}
-              </Button>
-            )}
+            <Button type="button" size="lg" disabled={busy} onClick={() => void save()}>
+              <Check />
+              {intl.formatMessage({ id: "settings.modelProvider.pi.saveService" })}
+            </Button>
           </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function StepChip({
-  active,
-  done,
-  index,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  done: boolean;
-  index: number;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={cn("flex items-center gap-1.5", active ? "text-primary" : "text-foreground-subtle")}
-      onClick={onClick}
-    >
-      <span
-        className={cn(
-          "inline-flex size-5 items-center justify-center rounded-full text-ui-xs",
-          active && "bg-primary text-primary-foreground",
-          done && "bg-success text-background",
-          !active && !done && "border border-border",
-        )}
-      >
-        {index}
-      </span>
-      {label}
-    </button>
   );
 }

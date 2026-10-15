@@ -9,7 +9,7 @@ import { logger } from "@/logger.js";
 import { runUserActionAsync } from "@/lib/userActionTelemetry.js";
 
 const PROMPT_TEXTAREA_CLASS =
-  "field-sizing-fixed h-64 max-h-64 min-h-64 w-full resize-none overflow-y-auto rounded-lg border border-input-border bg-input font-mono text-ui-base whitespace-pre-wrap break-words hover:border-input-border-hover focus-visible:border-input-border-focused focus-visible:bg-input-focused focus-visible:ring-0";
+  "field-sizing-fixed h-[30rem] max-h-[30rem] min-h-[30rem] w-full resize-none overflow-y-auto rounded-lg border border-input-border bg-input font-mono text-ui-base whitespace-pre-wrap break-words hover:border-input-border-hover focus-visible:border-input-border-focused focus-visible:bg-input-focused focus-visible:ring-0";
 
 export function AgentSystemPromptField({
   description,
@@ -156,9 +156,10 @@ export function AgentSystemPromptField({
         }
         disabled={!dirty || saving || loading}
         onClick={() => void save()}
-        size="sm"
+        size="lg"
         type="button"
         variant="default"
+        className="gap-1.5"
       >
         <Save className="size-4" />
         {intl.formatMessage({ id: "settings.systemPrompt.save" })}

@@ -194,7 +194,7 @@ export function McpServerList({
             <div className="text-ui-base font-medium text-foreground">{emptyTitle}</div>
             <div className="text-ui-base text-foreground-subtle">{emptyDescription}</div>
           </div>
-          <Button variant="outline" size="sm" onClick={onCreate}>
+          <Button variant="outline" size="lg" className="gap-1.5" onClick={onCreate}>
             <Plus className="size-4" />
             <span>{intl.formatMessage({ id: "settings.mcp.create.open" })}</span>
           </Button>

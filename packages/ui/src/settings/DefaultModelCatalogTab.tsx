@@ -70,7 +70,7 @@ export function DefaultModelCatalogTab({
           <p className="text-ui-base text-foreground-subtle">
             {intl.formatMessage({ id: "settings.modelProvider.pi.noModelsConfigured" })}
           </p>
-          <Button type="button" className="mt-4 gap-1.5" size="sm" onClick={onAddProvider}>
+          <Button type="button" className="mt-4 gap-1.5" size="lg" onClick={onAddProvider}>
             <Plus className="size-4" />
             {intl.formatMessage({ id: "settings.modelProvider.pi.goToAddProvider" })}
           </Button>
@@ -88,7 +88,7 @@ export function DefaultModelCatalogTab({
           controlLayout="wide"
           control={
             <Select value={defaultValue} onValueChange={onDefaultModelChange}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger size="lg" className="w-full">
                 <SelectValue
                   placeholder={intl.formatMessage({ id: "settings.modelProvider.pi.defaultModel" })}
                 />
@@ -119,7 +119,7 @@ export function DefaultModelCatalogTab({
                 }
                 onValueChange={onDefaultThoughtChange}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger size="lg" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -162,7 +162,7 @@ export function DefaultModelCatalogTab({
               onValueChange={onTitleSummaryModelChange}
               disabled={!titleSummaryEnabled}
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger size="lg" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -187,22 +187,22 @@ export function DefaultModelCatalogTab({
               {intl.formatMessage({ id: "settings.modelProvider.pi.currentModelSpecs" })}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="rounded-md bg-surface px-2 py-0.5 font-mono text-ui-sm text-foreground-subtle ring-1 ring-border">
+              <span className="rounded-md bg-surface px-2.5 py-1 font-mono text-ui-base text-foreground-subtle ring-1 ring-border">
                 {currentDefault.providerName}
               </span>
-              <span className="rounded-md bg-surface px-2 py-0.5 font-mono text-ui-sm text-foreground-subtle ring-1 ring-border">
+              <span className="rounded-md bg-surface px-2.5 py-1 font-mono text-ui-base text-foreground-subtle ring-1 ring-border">
                 {currentDefault.model.id}
               </span>
-              <span className="rounded-md bg-surface px-2 py-0.5 font-mono text-ui-sm text-foreground-subtle ring-1 ring-border">
+              <span className="rounded-md bg-surface px-2.5 py-1 font-mono text-ui-base text-foreground-subtle ring-1 ring-border">
                 {currentDefault.model.api || currentDefault.providerApi}
               </span>
               {currentDefault.model.input.includes("image") ? (
-                <span className="rounded-md bg-surface px-2 py-0.5 text-ui-sm text-foreground-subtle ring-1 ring-border">
+                <span className="rounded-md bg-surface px-2.5 py-1 text-ui-base text-foreground-subtle ring-1 ring-border">
                   {intl.formatMessage({ id: "settings.modelProvider.pi.vision" })}
                 </span>
               ) : null}
               {currentDefault.model.contextWindow ? (
-                <span className="rounded-md bg-surface px-2 py-0.5 font-mono text-ui-sm text-foreground-subtle ring-1 ring-border">
+                <span className="rounded-md bg-surface px-2.5 py-1 font-mono text-ui-base text-foreground-subtle ring-1 ring-border">
                   {intl.formatMessage({ id: "settings.modelProvider.contextWindow" })}:{" "}
                   {currentDefault.model.contextWindow}
                 </span>
@@ -212,11 +212,11 @@ export function DefaultModelCatalogTab({
         </SettingsGroupCard>
       ) : null}
 
-      <div className="flex justify-end">
+      <div className="flex justify-end pt-1">
         <Button
           type="button"
           variant="outline"
-          size="sm"
+          size="lg"
           className="gap-1.5"
           onClick={onGoToProviders}
         >
