@@ -265,6 +265,54 @@ export function applyZcodePluginPlan(
   prompts.splice(0, prompts.length, ...nextPrompts);
 }
 
+type PlanRetainedLoader = Parameters<typeof applyZcodePluginPlan>[0] & {
+  reload: (options?: unknown) => Promise<void>;
+  extendResources: (paths?: unknown) => void;
+};
+
+/**
+ * 关掉的包先从当前数组拿掉。
+ * 别的扩展 `resources_discover` 会让 Pi 按原来的技能路径整表重载，只改数组会被盖回去。
+ * 因此 `reload` / `extendResources` 返回后再套一次同一份开关。
+ */
+export function retainZcodePluginPlan(
+  loader: Parameters<typeof applyZcodePluginPlan>[0],
+  plan: ZcodePluginSessionPlan,
+): void {
+  const retained = loader as PlanRetainedLoader;
+  applyZcodePluginPlan(retained, plan);
+  const reload = retained.reload.bind(retained);
+  const extendResources = retained.extendResources.bind(retained);
+  retained.reload = async (options) => {
+    await reload(options);
+    applyZcodePluginPlan(retained, plan);
+  };
+  retained.extendResources = (paths) => {
+    extendResources(paths);
+    applyZcodePluginPlan(retained, plan);
+  };
+}
+
+/** 只读开关和已配置的包，不 resolve、不加载扩展。技能目录用它掉掉已关闭的包。 */
+export async function disabledPiPackageIds(
+  cwd: string,
+  agentDir?: string,
+  switchRoot?: string,
+): Promise<Set<string>> {
+  await ensurePiSdk();
+  const { DefaultPackageManager: PackageManager, SettingsManager, getAgentDir } = piCoding();
+  const dir = agentDir ?? getAgentDir();
+  const settings = SettingsManager.create(cwd, dir);
+  const packages = new PackageManager({ cwd, agentDir: dir, settingsManager: settings });
+  const switches = await readSwitches(switchRoot);
+  const disabled = new Set<string>();
+  for (const pkg of packages.listConfiguredPackages()) {
+    const id = `pkg:${pkg.scope}:${pkg.source}`;
+    if (switches[id] === false) disabled.add(id);
+  }
+  return disabled;
+}
+
 export function piPluginPackageSource(id: string): { scope: PiPluginScope; source: string } {
   const match = /^pkg:(user|project):(.+)$/u.exec(id);
   const scope = match?.[1];

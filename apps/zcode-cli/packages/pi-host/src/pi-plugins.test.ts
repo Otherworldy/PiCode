@@ -8,6 +8,8 @@ import type { SpawnOptions } from "node:child_process";
 import { isRecommendedPiPluginInstalled, normalizePiPluginInstallSource } from "@zcode/shared";
 import {
   applyZcodePluginPlan,
+  planZcodePluginSession,
+  retainZcodePluginPlan,
   installPiPlugin,
   isPlannotatorPiExtension,
   listPiPlugins,
@@ -374,4 +376,58 @@ test("lists and toggles Pi packages and extension files", async () => {
     { extensionPaths: [], skillPaths: [], promptPaths: [], disabled: new Set([pkg!.id, ext!.id]) },
   );
   assert.equal(extensions.length, 0);
+});
+
+test("disabled package skills stay out when another extension reloads the skill table", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-plugin-plan-"));
+  const agentDir = join(root, "agent");
+  const cwd = join(root, "proj");
+  const hidden = join(root, "hidden-pack");
+  const kept = join(root, "kept-pack");
+  await mkdir(join(hidden, "skills", "hidden-skill"), { recursive: true });
+  await mkdir(join(kept, "skills", "kept-skill"), { recursive: true });
+  await mkdir(join(cwd, ".pi"), { recursive: true });
+  await mkdir(agentDir, { recursive: true });
+  const skill = (name: string) => `---\nname: ${name}\ndescription: ${name}\n---\n`;
+  await writeFile(join(hidden, "skills", "hidden-skill", "SKILL.md"), skill("hidden-skill"));
+  await writeFile(join(kept, "skills", "kept-skill", "SKILL.md"), skill("kept-skill"));
+  await writeFile(join(hidden, "package.json"), JSON.stringify({ pi: { skills: ["./skills"] } }));
+  await writeFile(join(kept, "package.json"), JSON.stringify({ pi: { skills: ["./skills"] } }));
+  await writeFile(join(agentDir, "settings.json"), JSON.stringify({ packages: [hidden, kept] }));
+  await writeFile(
+    join(root, "pi-plugin-switches.json"),
+    JSON.stringify({ [`pkg:user:${hidden}`]: false }),
+  );
+  const { DefaultResourceLoader, SettingsManager } = await import("@earendil-works/pi-coding-agent");
+  const plan = await planZcodePluginSession(cwd, agentDir, root);
+  const loader = new DefaultResourceLoader({
+    cwd,
+    agentDir,
+    settingsManager: SettingsManager.create(cwd, agentDir),
+    noExtensions: true,
+  });
+  await loader.reload();
+  retainZcodePluginPlan(loader, plan);
+  const names = () => loader.getSkills().skills.map((item) => item.name);
+  assert.equal(names().includes("hidden-skill"), false);
+  assert.equal(names().includes("kept-skill"), true);
+
+  const extra = join(root, "extra", "SKILL.md");
+  await mkdir(join(root, "extra"), { recursive: true });
+  await writeFile(extra, skill("extra-skill"));
+  loader.extendResources({
+    skillPaths: [
+      {
+        path: extra,
+        metadata: { source: "extension:demo", scope: "temporary", origin: "top-level" },
+      },
+    ],
+  });
+  assert.equal(names().includes("hidden-skill"), false);
+  assert.equal(names().includes("kept-skill"), true);
+  assert.equal(names().includes("extra-skill"), true);
+
+  await loader.reload();
+  assert.equal(names().includes("hidden-skill"), false);
+  assert.equal(names().includes("kept-skill"), true);
 });

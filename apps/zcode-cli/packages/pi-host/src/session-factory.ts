@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { CreateAgentSessionOptions, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
 import { createPiProcessBridge } from "./pi-process-bridge.js";
-import { applyZcodePluginPlan, zcodePluginLoaderExtras } from "./pi-plugins.js";
+import { retainZcodePluginPlan, zcodePluginLoaderExtras } from "./pi-plugins.js";
 import { expandUnloadedPromptTemplate, listSessionSlashCommands } from "./pi-slash-commands.js";
 import { toPiSkillView } from "./pi-skills.js";
 import { branchPiSessionFile, openOrCreateSession } from "./session-files.js";
@@ -469,7 +469,8 @@ export function createSdkSessionFactory(
         : {}),
     });
     await resourceLoader.reload();
-    if (pluginExtras) applyZcodePluginPlan(resourceLoader, pluginExtras.plan);
+    // 关掉的包技能不能只摘一次：后面的 resources_discover 会整表重载。
+    if (pluginExtras) retainZcodePluginPlan(resourceLoader, pluginExtras.plan);
     // 本地不塞 read/bash/grep/find。Pi 自己有，扩展（pi-fff）才能按原名换掉。
     // SSH 必须换成远端读写，否则这些工具打到本机盘。
     const sshTools = ssh ? piCoding().createCodingTools(input.cwd, sshCodingToolOptions(ssh)) : [];

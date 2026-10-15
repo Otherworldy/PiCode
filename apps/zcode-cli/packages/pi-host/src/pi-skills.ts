@@ -1,4 +1,5 @@
 import { dirname } from "node:path";
+import { disabledPiPackageIds, zcodePluginSourceId } from "./pi-plugins.js";
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
 import type { PiSkillView } from "./types.js";
 
@@ -29,7 +30,11 @@ export function toPiSkillView(skill: PiLoadedSkill): PiSkillView {
  * 用户 `~/.pi/agent/skills`、`~/.agents/skills`、工作区 `.pi/skills`、
  * 沿 git 根向上的 `.agents/skills`，以及 settings 里启用的包技能。
  */
-export async function listPiSkills(cwd: string, agentDir?: string): Promise<PiSkillView[]> {
+export async function listPiSkills(
+  cwd: string,
+  agentDir?: string,
+  switchRoot?: string,
+): Promise<PiSkillView[]> {
   await ensurePiSdk();
   const coding = piCoding();
   const dir = agentDir ?? coding.getAgentDir();
@@ -41,17 +46,36 @@ export async function listPiSkills(cwd: string, agentDir?: string): Promise<PiSk
   }).resolve();
   const enabled = resolved.skills.filter((entry) => entry.enabled);
   const metadataByPath = new Map(enabled.map((entry) => [entry.path, entry.metadata]));
+  const disabled = await disabledPiPackageIds(cwd, dir, switchRoot);
   const loaded = coding.loadSkills({
     cwd,
     agentDir: dir,
     skillPaths: enabled.map((entry) => entry.path),
     includeDefaults: false,
   });
-  return loaded.skills.map((skill) =>
-    toPiSkillView({
-      ...skill,
-      sourceInfo: metadataFor(metadataByPath, skill.filePath) ?? skill.sourceInfo,
-    }),
+  const views: PiSkillView[] = [];
+  for (const skill of loaded.skills) {
+    const sourceInfo = metadataFor(metadataByPath, skill.filePath) ?? skill.sourceInfo;
+    const id = packageSwitchId(sourceInfo, skill.filePath);
+    if (id && disabled.has(id)) continue;
+    views.push(toPiSkillView({ ...skill, sourceInfo }));
+  }
+  return views;
+}
+
+function packageSwitchId(
+  info: { origin?: string; source?: string; scope?: string; baseDir?: string } | undefined,
+  filePath: string,
+): string | undefined {
+  if (!info?.origin || !info.source || !info.scope) return undefined;
+  return zcodePluginSourceId(
+    {
+      origin: info.origin,
+      source: info.source,
+      scope: info.scope,
+      ...(info.baseDir ? { baseDir: info.baseDir } : {}),
+    },
+    filePath,
   );
 }
 
