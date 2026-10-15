@@ -18,7 +18,7 @@ Plannotator 的 `annotate` 已经能把 `.html` 按真实页面打开，批注�
 
 模式开着时，`tool_call` 只放行 `designs/` 下的 `.html` / `.htm` 写入。`write` 和 `edit` 的路径必须落在当前工作区的 `designs/` 里，扩展名只能是这两种。`bash` 整段拒绝，避免用命令改别的文件。读文件、搜索可以照常用，这样设计时仍能看 SYSTEM.md 和现有界面。`plannotator` 工具放行。其它写入拒绝。
 
-设计请求到来时，Agent 在 `designs/` 写一份自包含 HTML（样式和脚本都在这个文件里），对这个文件调用 `plannotator` 的 `annotate`，然后结束本轮。审查页走现有的 `embeddedBrowser.open`。批注回来后只改同一份 HTML，再打开一次。关掉审查页不是通过。不要把 HTML 转成 Markdown，也不要审一个正在跑的 dev server。
+设计请求到来时，Agent 在 `designs/` 写一份自包含 HTML（样式和脚本都在这个文件里），对这个文件调用 `plannotator` 的 `annotate`，然后结束本轮。只写进系统提示不够：模型仍可以用文字方案结束，标注页不会开。用户消息后面再附一条不进时间线的说明；若仍无工具调用地说完且没写成 HTML，宿主续一次模型请求。一次用户消息只续一次。审查页走现有的 `embeddedBrowser.open`。批注回来后只改同一份 HTML，再打开一次。关掉审查页不是通过。不要把 HTML 转成 Markdown，也不要审一个正在跑的 dev server。
 
 ## Files to modify
 
