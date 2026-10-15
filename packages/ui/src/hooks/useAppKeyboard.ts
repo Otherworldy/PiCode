@@ -7,6 +7,11 @@ import {
   matchesShortcutBinding,
 } from "@/shortcuts/bindings.js";
 import { useEffectiveShortcutBindings } from "@/shortcuts/useShortcutBindings.js";
+import {
+  isTerminalSessionEventTarget,
+  shouldOpenTerminalFind,
+  TERMINAL_FIND_EVENT,
+} from "@/terminal/terminalFind.js";
 
 /** window 通道快捷键的处理器表：命令 ID → 回调；null/缺失表示该命令当前不可用。 */
 type AppKeyboardHandlers = Partial<Record<ShortcutCommandId, (() => void) | null>>;
@@ -48,9 +53,6 @@ export function useAppKeyboard(handlers: AppKeyboardHandlers) {
           continue;
         }
         const handler = currentHandlers[entry.id];
-        if (!handler) {
-          continue;
-        }
         const bindings = currentEffective[entry.id];
         if (!bindings || bindings.length === 0) {
           continue;
@@ -59,11 +61,23 @@ export function useAppKeyboard(handlers: AppKeyboardHandlers) {
           if (editableTarget && isShiftOnlyPrintableBinding(binding)) {
             continue;
           }
-          if (matchesShortcutBinding(event, binding)) {
+          if (!matchesShortcutBinding(event, binding)) {
+            continue;
+          }
+          // 终端焦点下的「任务内查找」改走终端内容搜索。
+          // 这个监听在 window capture，不拦截的话快捷键会打开任务查找，xterm 也收不到按键。
+          if (shouldOpenTerminalFind(entry.id, isTerminalSessionEventTarget(event.target))) {
             event.preventDefault();
-            handler();
+            event.stopPropagation();
+            window.dispatchEvent(new CustomEvent(TERMINAL_FIND_EVENT, { detail: event.target }));
             return;
           }
+          if (!handler) {
+            continue;
+          }
+          event.preventDefault();
+          handler();
+          return;
         }
       }
     }

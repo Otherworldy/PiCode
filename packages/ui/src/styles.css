@@ -782,16 +782,17 @@ body {
 }
 
 /*
- * xterm 自己的 viewport 会吃到全局滚动条样式，在终端右侧露出一条独立滚动条。
- * 终端滚动仍交给 xterm 内部处理，这里只隐藏原生滚动条，避免终端面板出现额外视觉噪音。
+ * 终端纵向滚动条跟全局滚动条同一套样式。
+ * FitAddon 会减去 xterm 测到的 scrollBarWidth，滚动条占位不会盖住最后一列字符。
+ * 横向滚动条仍然关掉：列宽已经按 viewport 拟合，底部再出一条横向条没有对应内容。
  */
 .terminal-xterm-shell .xterm-viewport {
-  scrollbar-width: none;
+  overflow-x: hidden;
+  scrollbar-width: auto;
+  scrollbar-color: var(--color-border) transparent;
 }
 
 .terminal-xterm-shell .xterm-viewport::-webkit-scrollbar {
-  display: none;
-  width: 0;
   height: 0;
 }
 

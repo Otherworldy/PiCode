@@ -13,6 +13,7 @@
 // 仅 SidePaneTerminalPane 通过 TerminalSession 的 persistentKey prop 接入；下侧不传 persistentKey，
 // 走 TerminalSession 原 effect 路径，与 registry 完全无关。
 
+import type { SearchAddon } from "@xterm/addon-search";
 import type { FitAddon } from "@xterm/addon-fit";
 import type { ITheme, Terminal as XTerm } from "@xterm/xterm";
 import { uiMemoryDiagnosticsRegistry } from "@/lib/memoryDiagnostics.js";
@@ -31,6 +32,11 @@ export interface SidePaneTerminalSessionEntry {
   key: string;
   term: XTerm;
   fitAddon: FitAddon;
+  /**
+   * 内容查找。和 term 一起常驻：组件卸载只取消结果订阅，不 dispose addon，
+   * 否则重挂后的查找条会绑到已经失效的搜索实例。
+   */
+  searchAddon?: SearchAddon;
   terminalId: string;
   cwd: string;
   /**

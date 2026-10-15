@@ -2,8 +2,9 @@
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XTerm } from "@xterm/xterm";
-import { ClipboardPaste, Copy } from "lucide-react";
-import { useCallback, useEffect, useRef } from "react";
+import { ClipboardPaste, Copy, Search } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { SearchAddon } from "@xterm/addon-search";
 import type { ILink, ILinkHandler, ITheme, IWindowsPty } from "@xterm/xterm";
 import type { IServiceAccessor } from "@zcode/services";
 import type { IDisposable } from "@zcode/rpc";
@@ -30,6 +31,9 @@ import {
 import { normalizePowerShellReadlineRedraw } from "@/terminal/terminalDataTransform.js";
 import { getHttpLinksForTerminalBufferLine } from "@/terminal/terminalLinks.js";
 import { mergeTerminalTheme } from "@/terminal/terminalTheme.js";
+import { TerminalFindControls } from "@/terminal/TerminalFindControls.js";
+import { TERMINAL_FIND_EVENT, type TerminalFindResult } from "@/terminal/terminalFind.js";
+import { attachTerminalSearchAddon } from "@/terminal/terminalSearchAddon.js";
 import {
   sidePaneTerminalSessionRegistry,
   type SidePaneTerminalSessionEntry,
@@ -122,8 +126,16 @@ export function TerminalSession({
   workspaceKey?: string;
 }) {
   const { intl } = useZCodeIntl();
+  const rootRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<XTerm | null>(null);
+  const searchAddonRef = useRef<SearchAddon | null>(null);
+  const findInputRef = useRef<HTMLInputElement>(null);
+  const focusFindAfterMenuRef = useRef(false);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findResult, setFindResult] = useState<TerminalFindResult | null>(null);
+  const findResultListenerRef = useRef<(result: TerminalFindResult) => void>(() => {});
+  findResultListenerRef.current = setFindResult;
   const fitAddonRef = useRef<FitAddon | null>(null);
   const terminalIdRef = useRef<string | undefined>(undefined);
   const isVisibleRef = useRef(isVisible);
@@ -342,6 +354,13 @@ export function TerminalSession({
       if (existingEntry) {
         termRef.current = existingEntry.term;
         fitAddonRef.current = existingEntry.fitAddon;
+        const searchAddon =
+          existingEntry.searchAddon ?? attachTerminalSearchAddon(existingEntry.term);
+        existingEntry.searchAddon = searchAddon;
+        searchAddonRef.current = searchAddon;
+        const reuseSearchSubscription = searchAddon.onDidChangeResults((result) => {
+          findResultListenerRef.current(result);
+        });
         terminalIdRef.current = existingEntry.terminalId || undefined;
         el.appendChild(existingEntry.hostEl);
         const reuseThemeObserver = new MutationObserver(() => {
@@ -378,9 +397,12 @@ export function TerminalSession({
           reuseResizeObserver.disconnect();
           if (reuseResizeRAF) cancelAnimationFrame(reuseResizeRAF);
           sidePaneTerminalSessionRegistry.detachDom(persistentKey);
-          // 不 dispose：term/PTY/订阅都留在 registry 供下次复用
+          // 不 dispose：term/PTY/订阅都留在 registry 供下次复用。
+          // 结果订阅是这次挂载的，必须解除，避免卸载后的 setState。
+          reuseSearchSubscription.dispose();
           termRef.current = null;
           fitAddonRef.current = null;
+          searchAddonRef.current = null;
         };
       }
 
@@ -394,6 +416,8 @@ export function TerminalSession({
       const localDisposers: IDisposable[] = [];
 
       const term = new XTerm({
+        // 与下侧终端一致：匹配高亮的 registerDecoration 需要 proposed API。
+        allowProposedApi: true,
         fontSize: 13,
         fontFamily: DEFAULT_TERMINAL_FONT_FAMILY,
         theme: mergeTerminalTheme(terminalProfileThemeRef.current),
@@ -413,6 +437,13 @@ export function TerminalSession({
       fitAddonRef.current = fitAddon;
       term.loadAddon(fitAddon);
       term.loadAddon(new ClipboardAddon());
+      const searchAddon = attachTerminalSearchAddon(term);
+      searchAddonRef.current = searchAddon;
+      localDisposers.push(
+        searchAddon.onDidChangeResults((result) => {
+          findResultListenerRef.current(result);
+        }),
+      );
       term.open(hostEl);
 
       let initialTerminalSize: TerminalSize | null = null;
@@ -520,6 +551,7 @@ export function TerminalSession({
         // workspaceKey 用于 workspace tab 真正关闭时按 workspace 批量回收（对称下侧 openWorkspaceKeys）。
         workspaceKey: workspaceKey ?? cwd ?? "",
         hostEl,
+        searchAddon,
         dispose: () => {}, // 紧接着补全
       };
       entry.dispose = () => {
@@ -750,6 +782,7 @@ export function TerminalSession({
         }
         termRef.current = null;
         fitAddonRef.current = null;
+        searchAddonRef.current = null;
       };
     }
     // ===== persistentKey 路径结束 =====
@@ -758,6 +791,9 @@ export function TerminalSession({
     terminalProfileThemeRef.current = undefined;
 
     const term = new XTerm({
+      // SearchAddon 的匹配高亮调用 registerDecoration，xterm 把这算作 proposed API。
+      // 不打开时，一旦查到结果就会抛错：输入事件里表现为搜不到，再次打开查找条则打进错误边界。
+      allowProposedApi: true,
       fontSize: 13,
       fontFamily: DEFAULT_TERMINAL_FONT_FAMILY,
       theme: mergeTerminalTheme(terminalProfileThemeRef.current),
@@ -780,6 +816,8 @@ export function TerminalSession({
     term.loadAddon(fitAddon);
     // 接入 ClipboardAddon 以支持 OSC 52，并让 xterm 的 copy 事件把选区写入系统剪贴板。
     term.loadAddon(new ClipboardAddon());
+    const searchAddon = attachTerminalSearchAddon(term);
+    searchAddonRef.current = searchAddon;
     term.open(el);
     let initialTerminalSize: TerminalSize | null = null;
     if (isVisibleRef.current && el.clientWidth > 0 && el.clientHeight > 0) {
@@ -854,6 +892,11 @@ export function TerminalSession({
     });
 
     const disposables: IDisposable[] = [];
+    disposables.push(
+      searchAddon.onDidChangeResults((result) => {
+        findResultListenerRef.current(result);
+      }),
+    );
     const { terminalService } = services;
     disposables.push(
       // 交互说明：plain URL 不属于 React DOM，必须通过 xterm link provider 从 buffer
@@ -1068,6 +1111,7 @@ export function TerminalSession({
       }
       terminalIdRef.current = undefined;
       fitAddonRef.current = null;
+      searchAddonRef.current = null;
       term.dispose();
       termRef.current = null;
     };
@@ -1101,24 +1145,81 @@ export function TerminalSession({
       .catch((err) => logger.warn("[Terminal] paste via context menu failed:", err));
   };
 
+  const openFind = useCallback(() => {
+    setFindOpen(true);
+    requestAnimationFrame(() => {
+      findInputRef.current?.focus();
+      findInputRef.current?.select();
+    });
+  }, []);
+
+  const closeFind = useCallback(() => {
+    searchAddonRef.current?.clearDecorations();
+    setFindResult(null);
+    setFindOpen(false);
+    termRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const onFindRequest = (event: Event) => {
+      const target = (event as CustomEvent<EventTarget | null>).detail;
+      const root = rootRef.current;
+      if (!root || !(target instanceof Node) || !root.contains(target)) return;
+      openFind();
+    };
+    window.addEventListener(TERMINAL_FIND_EVENT, onFindRequest);
+    return () => window.removeEventListener(TERMINAL_FIND_EVENT, onFindRequest);
+  }, [openFind]);
+
   return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <div
-          ref={containerRef}
-          className="terminal-xterm-shell h-full min-h-0 w-full overflow-hidden"
-        />
-      </ContextMenuTrigger>
-      <ContextMenuContent>
-        <ContextMenuItem onSelect={handleCopy}>
-          <Copy className="mr-2 h-4 w-4" />
-          {intl.formatMessage({ id: "terminal.contextMenu.copy" })}
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={handlePaste}>
-          <ClipboardPaste className="mr-2 h-4 w-4" />
-          {intl.formatMessage({ id: "terminal.contextMenu.paste" })}
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+    <div
+      ref={rootRef}
+      data-terminal-session=""
+      className="group/terminal relative h-full min-h-0 w-full"
+    >
+      <TerminalFindControls
+        open={findOpen}
+        result={findResult}
+        addonRef={searchAddonRef}
+        inputRef={findInputRef}
+        onOpen={openFind}
+        onClose={closeFind}
+        onResult={setFindResult}
+      />
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div
+            ref={containerRef}
+            className="terminal-xterm-shell h-full min-h-0 w-full overflow-hidden"
+          />
+        </ContextMenuTrigger>
+        <ContextMenuContent
+          onCloseAutoFocus={(event) => {
+            // 菜单关闭会把焦点还给终端 textarea，查找输入框还没提交完就会被抢走。
+            if (!focusFindAfterMenuRef.current) return;
+            focusFindAfterMenuRef.current = false;
+            event.preventDefault();
+          }}
+        >
+          <ContextMenuItem onSelect={handleCopy}>
+            <Copy className="mr-2 h-4 w-4" />
+            {intl.formatMessage({ id: "terminal.contextMenu.copy" })}
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={handlePaste}>
+            <ClipboardPaste className="mr-2 h-4 w-4" />
+            {intl.formatMessage({ id: "terminal.contextMenu.paste" })}
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => {
+              focusFindAfterMenuRef.current = true;
+              openFind();
+            }}
+          >
+            <Search className="mr-2 h-4 w-4" />
+            {intl.formatMessage({ id: "terminal.contextMenu.find" })}
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+    </div>
   );
 }
