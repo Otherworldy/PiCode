@@ -78,6 +78,20 @@ export function uiDesignModeActive(
 }
 
 /** Pi 终端菜单里的命令。compact / plan 已有 GUI 行为，其余提交不能变成用户消息。 */
+/** 当前目录里的扩展命令。新建任务上跑它不能提升成新会话。 */
+export function isExtensionSlashCommand(
+  content: string,
+  commands: readonly { name: string; source?: "builtin" | "custom" | "extension" }[],
+): boolean {
+  const name = /^\/([^\s]+)/.exec(content.trim())?.[1]?.toLowerCase();
+  if (!name) return false;
+  return commands.some(
+    (command) =>
+      command.source === "extension" &&
+      command.name.trim().replace(/^\/+/, "").toLowerCase() === name,
+  );
+}
+
 export function isTerminalOnlySlashCommand(
   content: string,
   commands: readonly { name: string; source?: "builtin" | "custom" | "extension" }[],

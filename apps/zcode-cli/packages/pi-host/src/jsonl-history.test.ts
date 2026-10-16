@@ -78,6 +78,19 @@ test("summarize skips header-only jsonl", () => {
   assert.equal(parsed.events.length, 0);
 });
 
+test("extension command output is replayed and is not a user message", () => {
+  const content = [
+    '{"type":"session","id":"s1","timestamp":"2026-01-02T03:04:05.000Z"}',
+    '{"type":"custom","customType":"zcode-extension-output","id":"c1","parentId":null,"timestamp":"2026-01-02T03:04:06.000Z","data":{"command":"web-tools","text":"workflow: none"}}',
+  ].join("\n");
+  const parsed = readPiJsonl(content);
+  const event = parsed.events.find((item) => item.type === "extension_output");
+  assert.equal(event?.type, "extension_output");
+  if (event?.type !== "extension_output") return;
+  assert.equal(event.command, "web-tools");
+  assert.equal(event.text, "workflow: none");
+});
+
 test("summarize skips a bare slash command and a command session name", () => {
   const content = [
     '{"type":"session","id":"s1","timestamp":"2026-01-02T03:04:05.000Z","cwd":"C:\\\\work"}',

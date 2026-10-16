@@ -307,6 +307,13 @@ async function sendText(
       inputId: envelope.commandId,
     };
   }
+  if (started.admission.kind === "handled") {
+    return {
+      type: "inputAccepted",
+      delivery: "command",
+      inputId: envelope.commandId,
+    };
+  }
   return {
     type: "inputAccepted",
     delivery: "startNow",

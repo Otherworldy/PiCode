@@ -511,6 +511,61 @@ test("plannotator feedback stays a user message", () => {
   assert.equal(isPlannotatorReviewDismissed("Annotation opened"), false);
 });
 
+test("PLANNOTATOR_BROWSER=none 时审查页地址从通知进内置浏览器", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const fakes = new Map<string, FakePiSession>();
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    redirectPlannotatorToEmbeddedBrowser: true,
+    createSession: async (input) => {
+      const fake = new FakePiSession(input.sessionId, input.sessionFile);
+      fakes.set(input.sessionId, fake);
+      return fake;
+    },
+  });
+  const previous = process.env.PLANNOTATOR_BROWSER;
+  // 上游 0.28.22 起 none 值不再 spawn 任何浏览器，spawn 拦截拿不到地址。
+  process.env.PLANNOTATOR_BROWSER = "none";
+  try {
+    const hosted = await registry.create({ workspacePath: root });
+    const fake = fakes.get(hosted.sessionId);
+    assert.ok(fake);
+    const opened: string[] = [];
+    const unsubscribe = hosted.onDeltas((deltas) => {
+      for (const delta of deltas) {
+        if (delta.op === "embeddedBrowser.open") opened.push(delta.url);
+      }
+    });
+    const notify = (message: string) => {
+      fake.emit({
+        type: "extension_ui_request",
+        id: "n1",
+        method: "notify",
+        message,
+        notifyType: "info",
+      });
+    };
+    const reviewUrl = "http://127.0.0.1:5300/plan-review/abc";
+    notify(
+      `Plannotator: plan review opened at ${reviewUrl}. Not opening a browser (PLANNOTATOR_BROWSER=none). You can keep chatting while it runs.`,
+    );
+    assert.deepEqual(opened, [reviewUrl]);
+    // 同一个地址再来一条通知不开第二个页。
+    notify(`Plannotator session ready: ${reviewUrl}`);
+    assert.deepEqual(opened, [reviewUrl]);
+    // 审查页关掉之后，同一个地址（固定端口时）可以再开一次。
+    notify("Annotation closed (no feedback).");
+    notify(`Plannotator session ready: ${reviewUrl}`);
+    assert.deepEqual(opened, [reviewUrl, reviewUrl]);
+    unsubscribe();
+  } finally {
+    if (previous === undefined) delete process.env.PLANNOTATOR_BROWSER;
+    else process.env.PLANNOTATOR_BROWSER = previous;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("ui design review stays working until the mode ends", () => {
   const projector = new PiToV4Projector("s1", "e1");
   projector.apply({ type: "agent_start", at: 1_000 });
@@ -601,6 +656,74 @@ test("replayable streams tool progress not inputText", () => {
   );
   const tool = projector.getSnapshot().rows.window.find((row) => row.kind === "toolCall");
   assert.ok(tool && tool.kind === "toolCall" && tool.progress);
+});
+
+test("an extension command returns before its dialog is answered", async () => {
+  const session = new FakePiSession("s");
+  session.slashCommands = [
+    {
+      name: "web-tools",
+      description: "show config",
+      inputHint: "/web-tools",
+      source: "extension",
+    },
+  ];
+  session.prompt = () => new Promise(() => undefined);
+  const bridge = new CommandBridge(session, new HostQueue(), undefined, undefined, {
+    uiReady: Promise.resolve(),
+    run: async (_command, execute) => {
+      await execute();
+    },
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const result = await Promise.race([
+    bridge.admitSend({
+      text: "/web-tools --show",
+      clientId: "c",
+      commandId: "1",
+      delivery: "startNow",
+      streaming: false,
+    }),
+    new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error("extension command waited for its own dialog")), 200);
+    }),
+  ]);
+  if (timer) clearTimeout(timer);
+  assert.equal(result.kind, "handled");
+});
+
+test("an extension slash command runs while streaming and is not queued", async () => {
+  const session = new FakePiSession("s");
+  session.isStreaming = true;
+  session.acceptPrompt = "handled";
+  session.slashCommands = [
+    {
+      name: "web-tools",
+      description: "show config",
+      inputHint: "/web-tools",
+      source: "extension",
+    },
+  ];
+  const seen: string[] = [];
+  const bridge = new CommandBridge(session, new HostQueue(), undefined, undefined, {
+    run: async (command, execute) => {
+      seen.push(command);
+      await execute();
+    },
+  });
+  const result = await bridge.admitSend({
+    text: "/Web-Tools --show",
+    clientId: "c",
+    commandId: "1",
+    delivery: "queue",
+    streaming: true,
+  });
+  assert.equal(result.kind, "handled");
+  assert.deepEqual(seen, ["web-tools"]);
+  for (let i = 0; i < 5 && session.prompts.length === 0; i += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.deepEqual(session.prompts, ["/web-tools --show"]);
 });
 
 test("submission model is applied when the prompt starts, not while queued", async () => {

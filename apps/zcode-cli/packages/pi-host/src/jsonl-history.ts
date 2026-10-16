@@ -204,6 +204,19 @@ export function readPiJsonl(
       });
       continue;
     }
+    if (type === "custom" && entry.customType === "zcode-extension-output") {
+      const data = asRecord(entry.data);
+      const text = typeof data?.text === "string" ? data.text : "";
+      const command = typeof data?.command === "string" ? data.command : "";
+      if (!text.trim()) continue;
+      events.push({
+        type: "extension_output",
+        command,
+        text,
+        ...(timestamp > 0 ? { at: timestamp } : {}),
+      });
+      continue;
+    }
     if (type === "custom_message" && entry.display !== false) {
       const text = messageText(entry.content);
       if (!text.trim()) continue;
@@ -306,7 +319,8 @@ export function readPiJsonl(
   // 还在跑的子会话文件没有轮次结束标记。提前 settle 会把工时收成重放墙钟（约 1 秒）并折叠工具。
   if (options?.settle !== false) endTurn();
 
-  if (!firstUser && !namedTitle) return { summary: null, events: [] };
+  // 只有扩展命令输出、还没有用户消息时也要重放这些输出。没有标题不等于没有事件。
+  if (!firstUser && !namedTitle) return { summary: null, events };
   const title = namedTitle ?? clip(firstUser, 60);
   const createdAt = headerAt || firstAt || now;
   return {

@@ -81,7 +81,10 @@ export async function startPromptTurn(
   if (!usesExecutionSelection) {
     await host.ensureModelReady?.(record);
   }
-  if (record.persistence === "deferred") record.persistence = "immediate";
+  // 扩展命令没有用户消息。草稿预热会话被提升后会以新任务出现在侧栏。
+  if (record.persistence === "deferred" && !isExtensionSlashText(record, params.content)) {
+    record.persistence = "immediate";
+  }
 
   const previousAutomationId = record.activeAutomationId;
   const previousOffPeakTaskId = record.activeOffPeakTaskId;
@@ -145,7 +148,7 @@ export async function startPromptTurn(
     );
   }
 
-  if (admission.kind === "queued") {
+  if (admission.kind === "queued" || admission.kind === "handled") {
     clearPromptRecordState(record, previousAutomationId, previousOffPeakTaskId);
     return { admission, turnStarted: Promise.resolve() };
   }
@@ -174,6 +177,23 @@ export async function startPromptTurn(
     textLength: params.content.length,
   });
   return { admission, completion, turnStarted: Promise.resolve() };
+}
+
+function isExtensionSlashText(record: V4SessionRecordView, text: string): boolean {
+  const name = /^\/([^\s]+)/.exec(text.trim())?.[1]?.toLowerCase();
+  if (!name) return false;
+  const commands =
+    (
+      record.app as {
+        piHosted?: {
+          listSlashCommands?: () => Array<{ name: string; source?: string }>;
+        };
+      }
+    ).piHosted?.listSlashCommands?.() ?? [];
+  return commands.some(
+    (command) =>
+      command.source === "extension" && command.name.replace(/^\/+/, "").toLowerCase() === name,
+  );
 }
 
 function clearPromptRecordState(

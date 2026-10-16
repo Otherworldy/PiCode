@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  isExtensionSlashCommand,
   isTerminalOnlySlashCommand,
   plannotatorPlanActive,
   plannotatorPlanAvailable,
@@ -13,6 +14,16 @@ const commands = [
 ];
 
 test("terminal-only pi commands are not sent to the model", () => {
+  assert.equal(
+    isExtensionSlashCommand("/web-tools --show", [
+      { name: "web-tools", source: "extension" },
+    ]),
+    true,
+  );
+  assert.equal(
+    isExtensionSlashCommand("/compact", [{ name: "compact", source: "builtin" }]),
+    false,
+  );
   assert.equal(isTerminalOnlySlashCommand("/settings", []), true);
   assert.equal(isTerminalOnlySlashCommand("/copy", []), true);
   assert.equal(isTerminalOnlySlashCommand("/new", []), true);

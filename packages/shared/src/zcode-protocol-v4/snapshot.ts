@@ -533,6 +533,17 @@ export const conversationSnapshotSchema = z.object({
       }),
     )
     .optional(),
+  // 扩展命令的 notify。弹窗展示，不进对话行。optional 兼容旧快照。
+  extensionNotice: z
+    .object({
+      id: z.string().min(1),
+      command: z.string(),
+      text: z.string(),
+    })
+    .nullable()
+    .optional(),
+  // 扩展命令还在跑（含它内部的提问）。optional 兼容旧快照。
+  extensionCommandActive: z.boolean().optional(),
   // B 区
   rows: rowsWindowSchema,
 });

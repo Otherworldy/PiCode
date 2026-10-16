@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   applyTitleSummaryPatch,
   cleanSummarizedTitle,
+  createSessionFirstGate,
   readTitleSummarySettings,
   scheduleSessionTitleSummary,
   shouldAutoSummarizeTitle,
@@ -220,6 +221,32 @@ test("scheduleSessionTitleSummary skips custom titles and falls back when the su
   });
   await waitFor(() => calls.length === 2);
   assert.deepEqual(calls, ["gone/missing", "talk/main"]);
+});
+
+test("title summary waits for the session request, then runs without waiting for idle", async () => {
+  const gate = createSessionFirstGate();
+  let released = false;
+  const pending = gate.ready().then(() => {
+    released = true;
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(released, false);
+  gate.sessionGoesFirst();
+  await pending;
+  assert.equal(released, true);
+  await gate.ready();
+});
+
+test("closing a session unblocks a title summary that was waiting for the session", async () => {
+  const gate = createSessionFirstGate();
+  let released = false;
+  const pending = gate.ready().then(() => {
+    released = true;
+  });
+  gate.close();
+  await pending;
+  assert.equal(released, true);
+  assert.equal(gate.closed, true);
 });
 
 async function waitFor(ready: () => boolean): Promise<void> {

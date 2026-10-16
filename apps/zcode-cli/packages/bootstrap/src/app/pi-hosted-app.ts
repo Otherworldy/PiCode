@@ -127,6 +127,9 @@ export function createPiHostedApp(
         turnId: hosted.sessionId as TurnId,
       };
     }
+    if (result.kind === "handled") {
+      return { kind: "handled", turnId: hosted.sessionId as TurnId };
+    }
     const turnId = hosted.sessionId as TurnId;
     return {
       kind: "started_turn",
@@ -438,6 +441,7 @@ export function createPiHostedApp(
         }
       }
       const started = await send(input, "startNow");
+      if (started.kind === "handled") return dummyCompletion("extension-command");
       if (started.kind === "started_turn") return started.completion;
       throw new Error("pi-host submitPrompt queued");
     },

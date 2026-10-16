@@ -7,6 +7,7 @@ import {
   assemblePiSlashCommands,
   expandUnloadedPromptTemplate,
   listPiSlashCommands,
+  registeredExtensionCommandText,
 } from "./pi-slash-commands.js";
 
 test("pi slash commands keep gui builtins, then prompts, then extensions", () => {
@@ -32,6 +33,14 @@ test("pi slash commands keep gui builtins, then prompts, then extensions", () =>
   assert.equal(commands.find((command) => command.name === "ship")?.source, "custom");
   assert.equal(commands.find((command) => command.name === "subagents")?.source, "extension");
   assert.equal(names.filter((name) => name === "compact").length, 1);
+});
+
+test("registered extension commands keep their invocation name", () => {
+  const commands = [{ name: "web-tools", source: "extension" as const }];
+  assert.equal(registeredExtensionCommandText("/web-tools --show", commands), "/web-tools --show");
+  assert.equal(registeredExtensionCommandText("/Web-Tools --show", commands), "/web-tools --show");
+  assert.equal(registeredExtensionCommandText("/compact", commands), null);
+  assert.equal(registeredExtensionCommandText("hello", commands), null);
 });
 
 test("pi slash commands read prompt files without a session", async () => {

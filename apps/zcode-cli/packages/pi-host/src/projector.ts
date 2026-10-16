@@ -273,6 +273,16 @@ export class PiToV4Projector {
     return this.applyState({ extensionWidgets: widgets });
   }
 
+  setExtensionNotice(
+    notice: NonNullable<ConversationSnapshot["extensionNotice"]> | null,
+  ): ConversationDelta[] {
+    return this.applyState({ extensionNotice: notice });
+  }
+
+  setExtensionCommandActive(active: boolean): ConversationDelta[] {
+    return this.applyState({ extensionCommandActive: active });
+  }
+
   replaceStatuses(
     statuses: NonNullable<ConversationSnapshot["extensionStatuses"]>,
   ): ConversationDelta[] {
@@ -546,6 +556,19 @@ export class PiToV4Projector {
               kind: "timelineMarker",
               lane: "turnTailBoundary",
               marker: { type: "branchSummary", summary: event.summary, status: "done" },
+            },
+          },
+        ];
+      case "extension_output":
+        if (!event.text.trim()) return [];
+        return [
+          {
+            op: "row.appended",
+            row: {
+              ...this.base(this.turnId || "extension"),
+              kind: "timelineMarker",
+              lane: "turnTailBoundary",
+              marker: { type: "extensionOutput", command: event.command, text: event.text },
             },
           },
         ];

@@ -446,7 +446,7 @@ export const commandResultSchema = z.discriminatedUnion("type", [
     sessionId: z.string(),
     input: z
       .object({
-        delivery: z.enum(["startNow", "queue", "guide"]),
+        delivery: z.enum(["startNow", "queue", "guide", "command"]),
         inputId: z.string(),
         // Core admission ACK 不等待 TurnStarted；messageId 可能由后续事件补齐。
         messageId: z.string().optional(),
@@ -486,7 +486,7 @@ export const commandResultSchema = z.discriminatedUnion("type", [
     // messageId 只在 TurnStarted 后作为旁路归因补齐；Core admission ACK 不等待
     // projection commit，不能把 messageId 作为输入 accepted 的必要条件。
     type: z.literal("inputAccepted"),
-    delivery: z.enum(["startNow", "queue", "guide"]),
+    delivery: z.enum(["startNow", "queue", "guide", "command"]),
     inputId: z.string(),
     messageId: z.string().optional(),
   }),

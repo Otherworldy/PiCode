@@ -17,8 +17,11 @@ import {
   sessionFileNameMatches,
 } from "./session-file-lookup.js";
 import {
+  deliverPlannotatorSessionUrl,
+  forgetPlannotatorSessionUrls,
   installPlannotatorEmbeddedBrowserRedirect,
   notePlannotatorBrowserSession,
+  plannotatorSessionNotifyUrl,
   registerPlannotatorBrowserSession,
   setPlannotatorBrowserStreaming,
 } from "./plannotator-browser-redirect.js";
@@ -43,7 +46,10 @@ import { mapThought } from "./model-delegate.js";
 import { PiToV4Projector } from "./projector.js";
 import type { ToolPermissionCheck } from "./permission-gate.js";
 import { scheduleLiveSessionTitleSummary } from "./session-title-live.js";
-import { shouldAutoSummarizeTitle } from "./session-title-summary.js";
+import {
+  createSessionFirstGate,
+  shouldAutoSummarizeTitle,
+} from "./session-title-summary.js";
 import { runSessionResume } from "./session-tree.js";
 import {
   contextUsagePublish,
@@ -78,7 +84,7 @@ export interface HostedSession {
   readonly isIdle: boolean;
   /** 常驻池唯一读的忙闲事实。投影 phase 不是 running 时也要算上 Pi 自己还在跑。 */
   readonly hasResidencyBlockingWork: boolean;
-  prompt(text: string): Promise<boolean>;
+  prompt(text: string): Promise<boolean | "handled">;
   waitTurn(): Promise<void>;
   abort(): Promise<void>;
   continueAfterError(): Promise<void>;
@@ -537,7 +543,20 @@ export class HostSessionRegistry {
       if (stored) files.add(stored.sessionFile);
     }
     if (files.size === 0) return false;
-    await Promise.all([...files].map((file) => rm(file, { force: true })));
+    await Promise.all(
+      [...files].map(async (file) => {
+        // 会话文件可能还被刚关掉的句柄占着。Windows 上立刻删会失败，会话就留在列表里。
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          try {
+            await rm(file, { force: true });
+            return;
+          } catch {
+            await new Promise((resolve) => setTimeout(resolve, 40 * (attempt + 1)));
+          }
+        }
+        await rm(file, { force: true });
+      }),
+    );
     return true;
   }
 
@@ -872,10 +891,9 @@ export class HostSessionRegistry {
       }
       for (const listener of deltaListeners) listener(deltas);
     };
+    const openPlannotatorReview = (url: string) => emit([{ op: "embeddedBrowser.open", url }]);
     const unregisterBrowser = this.options.redirectPlannotatorToEmbeddedBrowser
-      ? registerPlannotatorBrowserSession(meta.sessionId, (url) => {
-          emit([{ op: "embeddedBrowser.open", url }]);
-        })
+      ? registerPlannotatorBrowserSession(meta.sessionId, openPlannotatorReview)
       : () => undefined;
     // 入队、删除、改写都走 replaceQueue。不推出去，界面看不到，也取消不了。
     projector.bindQueuePublish(emit);
@@ -902,9 +920,51 @@ export class HostSessionRegistry {
         }),
       );
     };
-    const bridge = new CommandBridge(pi, queue, applyModel, (attachments) => {
-      projector.noteUserAttachments(attachments);
-    });
+    const extensionRuntime = {
+      depth: 0,
+      command: "",
+      dismissed: false,
+      noticeId: "",
+      noticeText: "",
+      uiReady: Promise.resolve() as Promise<unknown>,
+    };
+    const respondToExtensionUi = ui.respond.bind(ui);
+    ui.respond = (response) => {
+      if ("cancelled" in response && response.cancelled && extensionRuntime.depth > 0) {
+        // 关掉当前提问就结束这一次命令里后面的全部提问，不用把向导走完。
+        extensionRuntime.dismissed = true;
+      }
+      return respondToExtensionUi(response);
+    };
+    const bridge = new CommandBridge(
+      pi,
+      queue,
+      applyModel,
+      (attachments) => {
+        projector.noteUserAttachments(attachments);
+      },
+      {
+        get uiReady() {
+          return extensionRuntime.uiReady;
+        },
+        run: async (command, execute) => {
+          extensionRuntime.depth += 1;
+          extensionRuntime.command = command;
+          extensionRuntime.dismissed = false;
+          extensionRuntime.noticeId = "";
+          extensionRuntime.noticeText = "";
+          emit(projector.setExtensionCommandActive(true));
+          emit(projector.setExtensionNotice(null));
+          try {
+            await execute();
+          } finally {
+            extensionRuntime.depth -= 1;
+            extensionRuntime.command = "";
+            emit(projector.setExtensionCommandActive(false));
+          }
+        },
+      },
+    );
     const publishContext = () => {
       const usage = pi.contextUsage?.();
       if (!usage) return;
@@ -927,15 +987,50 @@ export class HostSessionRegistry {
       }, 250);
     };
     const handleUi = (event: Extract<PiHostEvent, { type: "extension_ui_request" }>) => {
+      if (
+        extensionRuntime.dismissed &&
+        (event.method === "select" ||
+          event.method === "confirm" ||
+          event.method === "input" ||
+          event.method === "editor" ||
+          event.method === "ask" ||
+          event.method === "custom")
+      ) {
+        ui.respond({ id: event.id, cancelled: true });
+        emit(projector.replaceInteractions(ui.snapshot().pending));
+        return;
+      }
       const next = ui.handle(event);
       emit(projector.replaceInteractions(next.pending));
       emit(projector.replaceWidgets(next.widgets));
       emit(projector.replaceStatuses(next.statuses));
       for (const effect of next.sideEffects) {
         if (effect.kind === "notify") {
+          if (extensionRuntime.depth > 0 && effect.message.trim()) {
+            // 连续 notify 叠进同一个弹窗，不写进对话。
+            extensionRuntime.noticeText = extensionRuntime.noticeText
+              ? `${extensionRuntime.noticeText}\n${effect.message}`
+              : effect.message;
+            if (!extensionRuntime.noticeId) extensionRuntime.noticeId = randomUUID();
+            emit(
+              projector.setExtensionNotice({
+                id: extensionRuntime.noticeId,
+                command: extensionRuntime.command,
+                text: extensionRuntime.noticeText,
+              }),
+            );
+          }
           for (const listener of notifyListeners) listener(effect.message, effect.notifyType);
+          // 插件不 spawn 的路径（none 值、远程会话）拦截拿不到地址，
+          // 从部署通知里的会话地址交给内置浏览器；重复地址由交付入口去重。
+          if (this.options.redirectPlannotatorToEmbeddedBrowser) {
+            const reviewUrl = plannotatorSessionNotifyUrl(effect.message, process.env);
+            if (reviewUrl) deliverPlannotatorSessionUrl(meta.sessionId, reviewUrl);
+          }
           // 关掉审查页、没有批注或只是批准时，插件不发新消息。工作中要在这里收口。
           if (isPlannotatorReviewDismissed(effect.message)) {
+            // 会话固定端口时前后两轮审查同地址，关掉之后要能再开一次。
+            forgetPlannotatorSessionUrls(meta.sessionId);
             emit(projector.finishOpenPlanReview());
           }
         }
@@ -1068,6 +1163,21 @@ export class HostSessionRegistry {
         if (notice.role !== "assistant") return;
         emit(projector.bindPersistedEntry(notice.entryId));
       }) ?? (() => undefined);
+    const titleGate = createSessionFirstGate();
+    let pendingTitleName: string | undefined;
+    const titleNameWritable = () =>
+      !titleGate.closed &&
+      projector.getSnapshot().meta.titleSource !== "custom" &&
+      !pi.sessionName?.trim() &&
+      !pi.isStreaming &&
+      !pi.isCompacting &&
+      pi.isIdle !== false;
+    const flushPendingTitleName = () => {
+      const title = pendingTitleName;
+      if (!title || !titleNameWritable()) return;
+      pendingTitleName = undefined;
+      pi.setSessionName?.(title);
+    };
     const unsubscribe = pi.subscribe((event: PiHostEvent) => {
       if (this.options.redirectPlannotatorToEmbeddedBrowser) {
         notePlannotatorBrowserSession(meta.sessionId);
@@ -1112,9 +1222,21 @@ export class HostSessionRegistry {
           event.type === "agent_settled" || (event.type === "agent_end" && !event.willRetry);
         // 手动压缩不发 agent_end。轮次里的自动压缩仍在 streaming，那时不能把队列提前 prompt。
         const compactDone = event.type === "compaction_end" && !pi.isStreaming;
-        // 用户消息落地就总结。等 agent_end 的话，这一轮被关掉就永远不会再跑。
+        // 助手回复已经开始，会话请求在飞，总结可以并行。整轮被打断、还没有助手消息时也要放行。
+        if (
+          (event.type === "message_start" && event.message.role === "assistant") ||
+          (event.type === "agent_end" && event.willRetry !== true)
+        ) {
+          titleGate.sessionGoesFirst();
+        }
+        // 用户消息落地就排上总结。请求等会话自己的模型请求发出后再并行，不能抢先把页面停在标题上。
         if (shouldAutoSummarizeTitle(event)) {
           const snapshot = projector.getSnapshot();
+          const titleStillEligible = () => {
+            if (titleGate.closed) return false;
+            const latest = projector.getSnapshot();
+            return latest.meta.titleSource !== "custom" && !pi.sessionName?.trim();
+          };
           scheduleLiveSessionTitleSummary({
             sessionId: meta.sessionId,
             parentSessionId: meta.parentSessionId,
@@ -1123,13 +1245,14 @@ export class HostSessionRegistry {
             rows: snapshot.rows.window,
             fallbackProvider: snapshot.config.provider,
             fallbackModel: snapshot.config.model,
-            stillEligible: () => {
-              const latest = projector.getSnapshot();
-              return latest.meta.titleSource !== "custom" && !pi.sessionName?.trim();
-            },
+            ready: () => titleGate.ready(),
+            stillEligible: titleStillEligible,
             commit: (title) => {
-              pi.setSessionName?.(title);
+              if (!titleStillEligible()) return;
               emit(projector.setTitle(title, "generated"));
+              // session_info 会把 jsonl 叶子换掉。流式中途写会把正在生成的分支截断，页面停在标题上。
+              pendingTitleName = title;
+              flushPendingTitleName();
             },
           });
         }
@@ -1141,6 +1264,7 @@ export class HostSessionRegistry {
           // 上一轮的 agent_end 可能先于 isStreaming 落下。这时 prompt 会抛
           // "already processing"，没人接的 rejection 会把 agent 进程打退出。
           if (pi.isStreaming || pi.isCompacting || pi.isIdle === false) return;
+          flushPendingTitleName();
           void bridge
             .drainNext()
             .then((drained) => {
@@ -1155,7 +1279,9 @@ export class HostSessionRegistry {
       }
     });
     let summarizingBranch = false;
-    void pi.bindUi?.(createHostExtensionUi(ui, handleUi));
+    extensionRuntime.uiReady = Promise.resolve(
+      pi.bindUi?.(createHostExtensionUi(ui, handleUi)),
+    ).catch(() => undefined);
     if (pi.currentModel) {
       projector.setConfig({
         provider: pi.currentModel.providerId,
@@ -1203,6 +1329,11 @@ export class HostSessionRegistry {
       prompt: (text) => pi.prompt(text),
       waitTurn: () => pi.waitTurn?.() ?? Promise.resolve(),
       abort: async () => {
+        extensionRuntime.dismissed = true;
+        for (const item of ui.snapshot().pending) {
+          ui.respond({ id: item.interactionId, cancelled: true });
+        }
+        emit(projector.replaceInteractions(ui.snapshot().pending));
         if (summarizingBranch) {
           pi.abortBranchSummary?.();
           return;
@@ -1448,6 +1579,8 @@ export class HostSessionRegistry {
       },
       dispose: () => {
         if (disposing) return disposing;
+        flushPendingTitleName();
+        titleGate.close();
         if (contextTimer) clearTimeout(contextTimer);
         if (subagentTimer) clearTimeout(subagentTimer);
         stopHistoryWatch();

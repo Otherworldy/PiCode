@@ -21,17 +21,22 @@ export function scheduleLiveSessionTitleSummary(input: {
   fallbackModel?: string;
   stillEligible: () => boolean;
   commit: (title: string) => void;
+  /** 会话自己的模型请求已经发出后再开始。之后与这一轮并行，不取消。 */
+  ready?: () => Promise<void>;
 }): void {
   scheduleSessionTitleSummary({
     ...input,
     readSettings: () => readTitleSummarySettings(piCoding().getAgentDir()),
-    complete: async (request) =>
-      completePiPrompt({
+    complete: async (request) => {
+      await input.ready?.();
+      if (!input.stillEligible()) return null;
+      return completePiPrompt({
         providerId: request.providerId,
         modelId: request.modelId,
         prompt: request.prompt,
         system: request.system,
-      }),
+      });
+    },
     onError: (error) => {
       const message = error instanceof Error ? error.message : String(error);
       console.error("session title summary failed", input.sessionId, message);

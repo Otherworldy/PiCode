@@ -86,6 +86,7 @@ export type PiHostEvent =
       result?: { summary?: string; tokensBefore?: number; estimatedTokensAfter?: number };
     }
   | { type: "branch_summary"; summary: string }
+  | { type: "extension_output"; command: string; text: string; at?: number }
   | { type: "extension_error"; extensionPath?: string; error: string }
   | PiExtensionUiEvent;
 
@@ -202,7 +203,9 @@ export interface PiSessionPort {
   prompt(
     text: string,
     options?: { images?: Array<{ type: "image"; data: string; mimeType: string }> },
-  ): Promise<boolean>;
+  ): Promise<boolean | "handled">;
+  /** 扩展命令的 notify 原文。只进会话文件，不进模型上下文。 */
+  recordExtensionOutput?(command: string, text: string): void;
   waitTurn?(): Promise<void>;
   steer(
     text: string,

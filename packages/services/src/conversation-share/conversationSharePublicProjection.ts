@@ -244,6 +244,8 @@ function projectTimelineMarker(
       return { ...row.marker };
     case "branchSummary":
       return { ...row.marker };
+    case "extensionOutput":
+      return { type: "extensionOutput", command: row.marker.command, text: row.marker.text };
     case "forkNotice":
     case "forkCreated":
     case "checkpointRestored":

@@ -6,6 +6,7 @@ import {
   promptAttachmentRefs,
   type PiPromptAttachment,
 } from "./prompt-images.js";
+import { registeredExtensionCommandText } from "./pi-slash-commands.js";
 import type { PiSessionPort } from "./types.js";
 
 export type SendDelivery = "startNow" | "queue" | "guide";
@@ -87,7 +88,14 @@ export type AdmitSendResult =
   | { kind: "prompt" }
   | { kind: "steer" }
   | { kind: "followUp" }
+  | { kind: "handled" }
   | { kind: "queued"; queueItemId: string };
+
+/** 扩展命令执行期间收 notify。会话忙时也走这里，不进用户队列。 */
+export interface ExtensionCommandRunner {
+  uiReady?: Promise<unknown>;
+  run(command: string, execute: () => Promise<void>): Promise<void>;
+}
 
 export class CommandBridge {
   constructor(
@@ -95,9 +103,27 @@ export class CommandBridge {
     private readonly queue: HostQueue,
     private readonly applyModel?: (selection: SubmissionModel) => Promise<void>,
     private readonly noteAttachments?: (attachments: AttachmentRef[]) => void,
+    private readonly extensionCommands?: ExtensionCommandRunner,
   ) {}
 
   async admitSend(input: AdmitSendInput): Promise<AdmitSendResult> {
+    const extensionText = registeredExtensionCommandText(
+      input.text,
+      this.session.listSlashCommands?.(),
+    );
+    if (extensionText) {
+      await this.extensionCommands?.uiReady;
+      const command = /^\/([^\s]+)/.exec(extensionText)?.[1] ?? "";
+      // 命令里的 select/input 要等用户答。答走另一条 RPC，而 stdio 队列要等这条发送返回。
+      // 所以这里只负责启动，不跟着命令内部的提问一起挂起。
+      const pending = this.extensionCommands
+        ? this.extensionCommands.run(command, () =>
+            this.promptNow("prompt", extensionText, input.attachments, true).then(() => undefined),
+          )
+        : this.promptNow("prompt", extensionText, input.attachments, true).then(() => undefined);
+      void pending.catch(() => undefined);
+      return { kind: "handled" };
+    }
     // 调用方的 streaming 只看投影 phase。Pi 仍在跑时这里必须自己再判一次，
     // 否则会裸 prompt，Pi 抛 "already processing" 把进程打退出。
     const busy = input.streaming || piSessionBusy(this.session);
@@ -152,24 +178,28 @@ export class CommandBridge {
     kind: "prompt" | "steer",
     text: string,
     attachments: readonly PiPromptAttachment[] | undefined,
-  ): Promise<void> {
+    allowBusy = false,
+  ): Promise<"prompt" | "steer" | "handled"> {
     const body = await appendFileAttachments(text, attachments);
     const images = await loadPromptImages(attachments);
     const refs = promptAttachmentRefs(attachments);
     if (refs.length > 0) this.noteAttachments?.(refs);
     if (kind === "steer") {
       await this.session.steer(body, images.length > 0 ? images : undefined);
-      return;
+      return "steer";
     }
     // 等附件的空档里上一轮可能又开始跑。这时不能再 prompt。
-    if (piSessionBusy(this.session)) {
+    // 扩展命令例外：Pi 在流式输出时也会立刻执行。
+    if (!allowBusy && piSessionBusy(this.session)) {
       throw new Error("pi prompt rejected: already streaming");
     }
     const accepted = await this.session.prompt(body, images.length > 0 ? { images } : undefined);
+    if (accepted === "handled") return "handled";
     if (!accepted) {
       if (refs.length > 0) this.noteAttachments?.([]);
       throw new Error("pi prompt rejected");
     }
+    return "prompt";
   }
 
   private async useModel(selection: SubmissionModel | undefined): Promise<void> {

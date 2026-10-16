@@ -4,7 +4,11 @@ import type { CreateAgentSessionOptions, ModelRuntime } from "@earendil-works/pi
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
 import { createPiProcessBridge } from "./pi-process-bridge.js";
 import { retainZcodePluginPlan, zcodePluginLoaderExtras } from "./pi-plugins.js";
-import { expandUnloadedPromptTemplate, listSessionSlashCommands } from "./pi-slash-commands.js";
+import {
+  expandUnloadedPromptTemplate,
+  listSessionSlashCommands,
+  registeredExtensionCommandText,
+} from "./pi-slash-commands.js";
 import { toPiSkillView } from "./pi-skills.js";
 import { branchPiSessionFile, openOrCreateSession } from "./session-files.js";
 import { shutdownPiSession } from "./session-shutdown.js";
@@ -643,21 +647,23 @@ export function createSdkSessionFactory(
         return opened;
       },
       prompt: (text, options) =>
-        new Promise<boolean>((resolve, reject) => {
+        new Promise<boolean | "handled">((resolve, reject) => {
+          const extension = registeredExtensionCommandText(text, listSessionSlashCommands(session));
           // 还在跑就不要进 Pi。裸 prompt 会抛 "already processing"，
           // 推迟执行的那次 rejection 接不住，进程会直接退出。
-          if (session.isStreaming) {
+          // 扩展命令是 Pi 在跑的时候也立刻执行的，不走这条拒绝。
+          if (session.isStreaming && !extension) {
             reject(new Error("pi prompt rejected: already streaming"));
             return;
           }
-          const prepared = preparePromptText(text);
+          const prepared = extension ?? preparePromptText(text);
           let settled = false;
           const pending = session
             .prompt(prepared, {
               ...(options?.images?.length ? { images: options.images } : {}),
-              preflightResult: () => {
+              preflightResult: (result) => {
                 settled = true;
-                resolve(true);
+                resolve(result === "handled" ? "handled" : true);
               },
             })
             .then(() => {
@@ -666,8 +672,17 @@ export function createSdkSessionFactory(
             .catch((error: unknown) => {
               if (!settled) reject(error);
             });
-          lastTurn = pending;
+          // 扩展命令不是模型回合。盖掉 lastTurn 会让还在跑的那一轮被当成已经结束。
+          if (!extension) lastTurn = pending;
         }),
+      recordExtensionOutput: (command, text) => {
+        const body = text.trim();
+        if (!body) return;
+        session.sessionManager.appendCustomEntry("zcode-extension-output", {
+          command,
+          text: body,
+        });
+      },
       waitTurn: () => lastTurn,
       steer: async (text, images) => {
         await session.steer(preparePromptText(text), images);

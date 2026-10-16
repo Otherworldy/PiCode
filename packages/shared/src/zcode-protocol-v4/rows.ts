@@ -351,6 +351,12 @@ export const timelineMarkerPayloadSchema = z.union([
     // running：正在总结被裁掉的分支。done 或缺省：摘要已写入。
     status: z.enum(["running", "done"]).optional(),
   }),
+  // 扩展斜杠命令的 notify。不是用户消息，也不进模型上下文。
+  z.object({
+    type: z.literal("extensionOutput"),
+    command: z.string(),
+    text: z.string(),
+  }),
   // 出现在 child 会话首部（forkTimelineIsBoundary）。
   z.object({
     type: z.literal("forkNotice"),

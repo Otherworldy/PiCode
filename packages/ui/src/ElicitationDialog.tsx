@@ -9,7 +9,7 @@ import {
 } from "react";
 import type { ZCodeElicitationQuestion, ZCodeElicitationRequest } from "@zcode/shared";
 import type { InteractionAutoResolution } from "@zcode/shared/zcode-protocol-v4";
-import { CheckIcon, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Info } from "lucide-react";
+import { CheckIcon, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Info, XIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { cn } from "@/components/lib/utils.js";
@@ -33,6 +33,8 @@ interface ElicitationDialogProps {
   ) => boolean | void | Promise<boolean | void>;
   initialFormDraft?: ElicitationFormDraft;
   onFormDraftChange?: (requestId: string, draft: ElicitationFormDraft) => void;
+  /** 放进已有弹窗时去掉自己的卡片边框，避免再套一层。 */
+  flush?: boolean;
 }
 
 type ElicitationAutoResolutionSnoozeSource = "panelHover" | "answer" | "navigation" | "countdown";
@@ -356,6 +358,7 @@ function ElicitationDialogContent({
   onFirstInteraction,
   initialFormDraft,
   onFormDraftChange,
+  flush = false,
 }: ElicitationDialogProps) {
   const { intl } = useZCodeIntl();
   const questions = useMemo(() => normalizeElicitationQuestions(request), [request]);
@@ -832,11 +835,18 @@ function ElicitationDialogContent({
           }
         }}
         className={cn(
-          "flex w-full cursor-text items-center gap-3 rounded-xl px-3 py-2 transition-colors",
-          isSelected ? "bg-selected" : isActive ? "bg-hover" : "hover:bg-hover",
+          "flex w-full cursor-text items-center gap-3 transition-colors",
+          flush ? "rounded-lg" : "rounded-xl px-3 py-2",
+          flush
+            ? undefined
+            : isSelected
+              ? "bg-selected"
+              : isActive
+                ? "bg-hover"
+                : "hover:bg-hover",
         )}
       >
-        {question.multiSelect ? (
+        {flush ? null : question.multiSelect ? (
           <span
             className={cn(
               "flex size-4 shrink-0 items-center justify-center rounded-sm border",
@@ -876,7 +886,11 @@ function ElicitationDialogContent({
             customInputCompositionActiveRef.current = false;
           }}
           onKeyDown={handleCustomInputKeyDown}
-          className="h-auto !min-h-5 max-h-[5lh] min-w-0 max-w-full overflow-y-auto rounded-none border-transparent bg-transparent !px-0 !py-0 text-ui-base font-medium leading-normal shadow-none hover:border-transparent focus-visible:border-transparent focus-visible:bg-transparent focus-visible:ring-0"
+          className={
+          flush
+            ? "field-sizing-fixed h-8 max-h-8 min-h-8 min-w-0 rounded-lg px-3 py-1.5 text-ui-base"
+            : "h-auto !min-h-5 max-h-[5lh] min-w-0 max-w-full overflow-y-auto rounded-none border-transparent bg-transparent !px-0 !py-0 text-ui-base font-medium leading-normal shadow-none hover:border-transparent focus-visible:border-transparent focus-visible:bg-transparent focus-visible:ring-0"
+        }
         />
       </div>
     );
@@ -984,11 +998,16 @@ function ElicitationDialogContent({
         ref={cardRef}
         tabIndex={activeOptionIndex < 0 ? 0 : -1}
         data-elicitation-dialog-card="true"
-        className="relative z-1 flex w-full max-h-[min(72dvh,42rem)] flex-col overflow-hidden rounded-2xl border border-border bg-popover shadow-xs outline-none"
+        className={cn(
+          "relative z-1 flex w-full max-h-[min(72dvh,42rem)] flex-col overflow-hidden outline-none",
+          flush
+            ? "bg-transparent"
+            : "rounded-2xl border border-border bg-popover shadow-xs",
+        )}
         onMouseEnter={() => reportFirstInteraction("panelHover")}
         onKeyDown={handleCardKeyDown}
       >
-        <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+        <div className={cn("flex min-h-0 flex-1 flex-col gap-3", flush ? "p-5" : "p-3")}>
           <div
             data-elicitation-dialog-body="true"
             className={cn(
@@ -1090,6 +1109,18 @@ function ElicitationDialogContent({
                 >
                   <ChevronRight className="size-3" />
                 </Button>
+                {flush ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-lg"
+                    className="shrink-0 rounded-xl"
+                    aria-label={intl.formatMessage({ id: "common.close" })}
+                    onClick={dismiss}
+                  >
+                    <XIcon className="size-4" />
+                  </Button>
+                ) : null}
               </div>
             </div>
 
@@ -1156,10 +1187,7 @@ function ElicitationDialogContent({
 
           <div
             data-elicitation-dialog-footer="true"
-            className={cn(
-              "flex shrink-0 items-center justify-between gap-2 px-1 max-sm:flex-wrap",
-              !isDialogExpanded ? "max-md:hidden" : undefined,
-            )}
+            className="flex shrink-0 items-center justify-between gap-2 px-1 max-sm:flex-wrap"
           >
             <p className="flex min-w-0 flex-1 items-center gap-2 text-ui-base text-foreground-subtle max-sm:basis-full">
               <Info className="size-4 shrink-0 text-foreground" />
@@ -1168,14 +1196,23 @@ function ElicitationDialogContent({
               </span>
             </p>
             <div className="flex shrink-0 items-center gap-2">
-              <Button type="button" size="lg" variant="outline" onClick={dismiss}>
+              <Button
+                type="button"
+                size="lg"
+                variant="outline"
+                onClick={dismiss}
+                className={flush ? "h-9 px-4" : undefined}
+              >
                 {intl.formatMessage({ id: "chat.elicitation.dismiss" })}
               </Button>
               <Button
                 type="button"
                 size="lg"
                 onClick={questions.length === 0 ? submit : continueOrSubmit}
-                className="bg-brand text-foreground-inverse hover:bg-brand/80"
+                className={cn(
+                  "bg-brand text-foreground-inverse hover:bg-brand/80",
+                  flush && "h-9 px-4",
+                )}
               >
                 {intl.formatMessage({ id: primaryActionMessageId })}
               </Button>

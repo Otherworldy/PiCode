@@ -565,6 +565,19 @@ function renderReadonlyRow(
         />
       );
     case "timelineMarker": {
+      if (row.marker.type === "extensionOutput") {
+        return (
+          <div
+            key={row.rowId}
+            data-conversation-share-row-kind="timelineMarker"
+            data-marker-type="extensionOutput"
+            className="px-4 py-2 text-ui-base"
+          >
+            <div className="text-foreground-subtle">/{row.marker.command}</div>
+            <pre className="mt-1 whitespace-pre-wrap font-sans text-foreground">{row.marker.text}</pre>
+          </div>
+        );
+      }
       // 这里原本直接把 row.marker.type 当文案渲染，于是分享页会出现一条写着
       // 字面量 compact / modelChange / goalVerify 的分割线（发布只剥掉 fork/checkpoint 类）。
       // 改为取本地化文案；识别不了的类型不渲染，不再泄漏枚举名。

@@ -72,7 +72,7 @@ async function createSession(
   }
   let firstInput:
     | {
-        delivery: "startNow" | "queue" | "guide";
+        delivery: "startNow" | "queue" | "guide" | "command";
         inputId: string;
         messageId?: string;
       }
@@ -103,7 +103,12 @@ async function createSession(
         ...(attachments ? { attachments } : {}),
       });
       firstInput = {
-        delivery: started.admission.kind === "queued" ? "queue" : "startNow",
+        delivery:
+          started.admission.kind === "queued"
+            ? "queue"
+            : started.admission.kind === "handled"
+              ? "command"
+              : "startNow",
         inputId: envelope.commandId,
         ...(started.messageId ? { messageId: started.messageId } : {}),
       };

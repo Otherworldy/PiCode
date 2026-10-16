@@ -76,6 +76,15 @@ export const statePatchSchema = z.object({
       }),
     )
     .optional(),
+  extensionNotice: z
+    .object({
+      id: z.string().min(1),
+      command: z.string(),
+      text: z.string(),
+    })
+    .nullable()
+    .optional(),
+  extensionCommandActive: z.boolean().optional(),
 });
 export type StatePatch = z.infer<typeof statePatchSchema>;
 

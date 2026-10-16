@@ -270,6 +270,11 @@ export type SendInputResult =
       kind: "started_turn";
       turnId: TurnId;
     }
+  | {
+      /** 扩展斜杠命令已执行。没有用户消息，也没有模型回合。 */
+      kind: "handled";
+      turnId: TurnId;
+    }
   | TurnSteerResult;
 
 export interface ResumeOptions {

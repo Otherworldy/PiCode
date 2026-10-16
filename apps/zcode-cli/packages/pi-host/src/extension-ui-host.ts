@@ -189,6 +189,7 @@ export class ExtensionUiHost {
         kind: "userInput",
         prompt: event.message ?? event.title ?? "Confirm",
         freeText: false,
+        toolName: "extension",
         options: [
           { optionId: "yes", label: "Allow" },
           { optionId: "no", label: "Block" },
@@ -233,7 +234,7 @@ export class ExtensionUiHost {
         kind: "userInput",
         prompt: questions[0]?.question ?? "",
         freeText: false,
-        toolName: "AskUserQuestion",
+        toolName: "extension",
         ...(questions.length > 0 ? { questions } : {}),
       },
     };
@@ -253,6 +254,7 @@ export class ExtensionUiHost {
         kind: "userInput",
         prompt: questions?.[0]?.question ?? event.title ?? event.message ?? "",
         freeText: event.method !== "select",
+        toolName: "extension",
         ...(options.length > 0 ? { options } : {}),
         ...(questions ? { questions } : {}),
       },

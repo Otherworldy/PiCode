@@ -36,6 +36,45 @@ export type TitleSummarySeed = {
 const attempted = new Set<string>();
 const inflight = new Set<string>();
 
+/**
+ * 会话的模型请求先走。总结在它发出之后并行开始，不等整轮结束。
+ * 用户消息一落地就排上总结会抢在会话请求前面，页面会停在标题上。
+ */
+export function createSessionFirstGate(): {
+  readonly closed: boolean;
+  ready: () => Promise<void>;
+  sessionGoesFirst: () => void;
+  close: () => void;
+} {
+  let closed = false;
+  let open = false;
+  const waiters: Array<() => void> = [];
+  const wake = () => {
+    const pending = waiters.splice(0, waiters.length);
+    for (const resolve of pending) resolve();
+  };
+  return {
+    get closed() {
+      return closed;
+    },
+    ready() {
+      if (closed || open) return Promise.resolve();
+      return new Promise((resolve) => {
+        waiters.push(resolve);
+      });
+    },
+    sessionGoesFirst() {
+      if (open) return;
+      open = true;
+      wake();
+    },
+    close() {
+      closed = true;
+      wake();
+    },
+  };
+}
+
 export function titleSummaryUserContent(userPrompt: string, assistantReply?: string): string {
   const prompt = userPrompt.trim().slice(0, 1000);
   const reply = assistantReply?.trim().slice(0, 500) ?? "";
@@ -219,7 +258,7 @@ export async function writeTitleSummarySettings(
   await writeFile(join(agentDir, TITLE_SUMMARY_FILE), `${JSON.stringify(body, null, 2)}\n`, "utf8");
 }
 
-/** 第一条用户消息就总结。只等 agent_end 的话，首轮被关掉或收口前进程退出，标题会一直停在原文。重放的 agent_settled 不算。 */
+/** 第一条用户消息就排上总结。模型请求等会话自己的请求发出后并行开始，不等整轮结束。重放的 agent_settled 不算。 */
 export function shouldAutoSummarizeTitle(event: {
   type: string;
   willRetry?: boolean;

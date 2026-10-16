@@ -2252,6 +2252,22 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
     return () => onNavigate(marker.parentSessionId, marker.parentRowId);
   }, [foldableSummary, marker, onNavigate, row.rowId]);
 
+  if (marker.type === "extensionOutput") {
+    return (
+      <div
+        data-row-id={row.rowId}
+        data-row-kind="timelineMarker"
+        data-marker-type="extensionOutput"
+        data-testid={testId(TID_V4_ROW, String(row.rowId))}
+        className="px-4 py-2"
+      >
+        <div className="text-ui-sm text-[var(--color-foreground-subtle)]">/{marker.command}</div>
+        <pre className="mt-1 whitespace-pre-wrap font-sans text-ui-base text-[var(--color-foreground)]">
+          {marker.text}
+        </pre>
+      </div>
+    );
+  }
   if (!view) {
     return null;
   }

@@ -49,7 +49,12 @@ async function createSelectionSideSession(
       }),
     });
     const input = {
-      delivery: started.admission.kind === "queued" ? ("queue" as const) : ("startNow" as const),
+      delivery:
+        started.admission.kind === "queued"
+          ? ("queue" as const)
+          : started.admission.kind === "handled"
+            ? ("command" as const)
+            : ("startNow" as const),
       inputId: envelope.commandId,
       ...(started.messageId ? { messageId: started.messageId } : {}),
     };

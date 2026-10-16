@@ -226,6 +226,7 @@ import type {
   ConversationFindMatchState,
 } from "@/v4/legacyChatViewTypes.js";
 import type { SessionLease } from "@/v4/sessionDataLayer.js";
+import { ExtensionCommandChrome } from "@/v4/ExtensionCommandChrome.js";
 import { V4InteractionDialogs } from "@/v4/V4InteractionDialogs.js";
 import {
   useScopedConversationTelemetryForegroundEnabled,
@@ -236,6 +237,7 @@ import { resolveSendAckSettlement } from "@/v4/telemetry/conversationTelemetrySu
 import { useSessionSubscriptionErrorTelemetry } from "@/v4/telemetry/useSessionSubscriptionErrorTelemetry.js";
 import { useSessionOpenArmsTelemetry } from "@/v4/telemetry/useSessionOpenArmsTelemetry.js";
 import {
+  isExtensionSlashCommand,
   isTerminalOnlySlashCommand,
   parseV4VisibleSlashCommand,
   parseSelectionSideSlashCommand,
@@ -1542,14 +1544,18 @@ export function SessionPane({
         acceptSelection?.();
         acceptRecent?.();
       }
+      const extensionCommandHandled =
+        (ack.status === "accepted" || ack.status === "duplicate") &&
+        ack.result?.type === "inputAccepted" &&
+        ack.result.delivery === "command";
       if (
         lease?.store &&
         type === "sendText" &&
         (ack.status === "accepted" || ack.status === "duplicate")
       ) {
-        // ACK 只代表 CLI admission；若自己的 conversation topic 随后静默，store watchdog
-        // 会在宽限期后复用同一 owned subscription 恢复权威 row/queue，不重放 command。
-        lease.store.expectAcceptedInputProjection(envelope.commandId);
+        // 扩展命令没有用户气泡。再等 userInput 只会在静默后触发恢复。
+        if (extensionCommandHandled) lease.store.settleCommand(envelope.commandId);
+        else lease.store.expectAcceptedInputProjection(envelope.commandId);
       }
       if (ack.status === "accepted" && telemetrySeed) {
         const acceptedSessionId =
@@ -1575,7 +1581,15 @@ export function SessionPane({
               ? ack.result.sessionId
               : (targetSessionId ??
                 (ack.result?.type === "createSession" ? ack.result.sessionId : null));
-          if (outcome.kind === "awaitRender") {
+          if (extensionCommandHandled) {
+            conversationTelemetry?.settleSendResult({
+              seed: telemetrySeed,
+              sessionId: settledSessionId,
+              commandId: envelope.commandId,
+              status: "success",
+              ackStatus: outcome.ackStatus,
+            });
+          } else if (outcome.kind === "awaitRender") {
             // ACK 只代表 Host 收下了命令，用户气泡此刻还没画出来；
             // 等投影回流出 userInput row（或 30s 超时）再落定端到端耗时。
             conversationTelemetry?.awaitSendRender({
@@ -2993,6 +3007,27 @@ export function SessionPane({
           submission,
           (messageId) => reportDraftCreated(newSessionId, createSourceAtSend, messageId),
         );
+        return;
+      }
+      if (!sessionId && isExtensionSlashCommand(effectiveText, slashCommands ?? [])) {
+        // 扩展命令留在新建任务页上跑，不把预热草稿提升成侧栏里的新会话。
+        const prewarm = prewarmBindingRef.current;
+        if (!prewarm?.sessionId) return "blocked" as const;
+        const ack = await dispatchSubmissionCommand(
+          "sendText",
+          {
+            text: effectiveText,
+            ...submission,
+            ...(options?.source ? { source: options.source } : {}),
+          },
+          prewarm.sessionId,
+          undefined,
+          undefined,
+          options?.telemetrySeed,
+        );
+        if (ack.status !== "accepted" && ack.status !== "duplicate") {
+          throw new Error(ack.reasonCode ?? "sendText 被拒绝");
+        }
         return;
       }
       if (!sessionId) {
@@ -5091,16 +5126,19 @@ export function SessionPane({
       ) : null}
       {/* v4 权限/问答等待态只是 runtime 的阻塞交互，必须和 composer
           共享 timeline bottom dock；渲染在 SessionPane 外层会脱离主列宽度并挤占下半屏。 */}
-      {sessionId && snapshot ? (
-        <V4InteractionDialogs
-          key="conversation-interactions"
-          sessionId={sessionId}
-          workspacePath={workspacePath}
-          workspaceIdentity={workspaceIdentity}
-          remoteSessionId={remoteSessionId ?? undefined}
-          provider={provider}
-          snapshot={snapshot}
-        />
+      {snapshot && (sessionId || isDraft) ? (
+        <>
+          <V4InteractionDialogs
+            key="conversation-interactions"
+            sessionId={sessionId ?? snapshot.sessionId}
+            workspacePath={workspacePath}
+            workspaceIdentity={workspaceIdentity}
+            remoteSessionId={remoteSessionId ?? undefined}
+            provider={provider}
+            snapshot={snapshot}
+          />
+          <ExtensionCommandChrome snapshot={snapshot} />
+        </>
       ) : null}
       {composerNode}
       {/* 办公模式显示主动任务推荐；编程模式保留原有小型场景入口。 */}

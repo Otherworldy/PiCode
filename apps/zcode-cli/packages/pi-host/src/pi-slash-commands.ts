@@ -205,6 +205,27 @@ function substitutePromptArgs(content: string, args: string[]): string {
   );
 }
 
+/**
+ * 当前会话已经注册的扩展命令。
+ * 命中时把命令名换成注册名，避免大小写不一致时 Pi 找不到命令、把原文当成用户消息。
+ * 没注册就返回 null，提示词模板仍走原来的展开。
+ */
+export function registeredExtensionCommandText(
+  text: string,
+  commands: readonly { name: string; source?: string }[] | undefined,
+): string | null {
+  const match = /^\/([^\s]+)([\s\S]*)$/.exec(text.trim());
+  const typed = match?.[1];
+  if (!typed) return null;
+  const hit = (commands ?? []).find(
+    (command) =>
+      command.source === "extension" &&
+      command.name.trim().replace(/^\/+/, "").toLowerCase() === typed.toLowerCase(),
+  );
+  if (!hit) return null;
+  return `/${hit.name}${match?.[2] ?? ""}`;
+}
+
 function toView(command: NamedCommand, source: PiSlashCommandView["source"]): PiSlashCommandView {
   const hint = command.argumentHint?.trim();
   return {

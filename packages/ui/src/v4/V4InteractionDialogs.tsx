@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { ZCodeElicitationRequest, ZCodePermissionOption, ZCodeProvider } from "@zcode/shared";
 import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
 import { ElicitationDialog } from "@/ElicitationDialog.js";
+import { Dialog, DialogContent } from "@/components/ui/dialog.js";
 import { PermissionDialog } from "@/PermissionDialog.js";
 import { useOptionalPlatform } from "@/hooks/usePlatform.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -362,12 +363,32 @@ export function V4InteractionDialogs({
     projectedElicitationRequest,
     botElicitationProgress,
   );
+  const extensionPrompt = pending.payload.toolName === "extension";
+  const dismissExtensionPrompt = () => {
+    void resolveInteraction(pending.interactionId, { action: "decline" });
+  };
+  const asPopup = (node: ReactNode) =>
+    extensionPrompt ? (
+      <Dialog
+        open
+        onOpenChange={(open) => {
+          if (!open) dismissExtensionPrompt();
+        }}
+      >
+        <DialogContent showCloseButton={false} className="max-w-xl gap-0 overflow-hidden p-0">
+          {node}
+        </DialogContent>
+      </Dialog>
+    ) : (
+      node
+    );
+
   if (elicitationRequest) {
     const isExitPlanMode = pending.payload.toolName?.trim().toLowerCase() === "exitplanmode";
     const isAskUserQuestion =
       pending.payload.toolName?.trim().toLowerCase() === "askuserquestion" ||
       pending.autoResolution !== undefined;
-    return (
+    return asPopup(
       <ElicitationDialog
         key={buildV4ElicitationProgressKey(elicitationRequest)}
         request={elicitationRequest}
@@ -376,6 +397,7 @@ export function V4InteractionDialogs({
             ? undefined
             : localElicitationDraft
         }
+        flush={extensionPrompt}
         onFormDraftChange={persistElicitationDraft}
         autoResolution={isAskUserQuestion ? pending.autoResolution : undefined}
         onFirstInteraction={
@@ -407,7 +429,7 @@ export function V4InteractionDialogs({
             }
           });
         }}
-      />
+      />,
     );
   }
 
@@ -415,12 +437,14 @@ export function V4InteractionDialogs({
     ...pending,
     payload: pending.payload,
   });
-  return (
+  return asPopup(
     <V4UserInputDialog
       model={model}
+      flush={extensionPrompt}
+      onDismiss={extensionPrompt ? dismissExtensionPrompt : undefined}
       onSubmit={(answer) => {
         void resolveInteraction(pending.interactionId, answer);
       }}
-    />
+    />,
   );
 }
