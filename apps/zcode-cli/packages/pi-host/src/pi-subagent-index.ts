@@ -2,6 +2,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { readPiJsonl } from "./jsonl-history.js";
+import { hasLiveSubagent } from "./live-subagents.js";
 
 export type PiSubagentPanelStatus =
   | "running"
@@ -177,5 +178,20 @@ export async function listPiSubagentChildren(input: {
     if (!next.childSessionId) continue;
     byFile.set(sessionFile || next.childSessionId, next);
   }
-  return [...byFile.values()];
+  return [...byFile.values()].map(applyLiveChild);
+}
+
+/** 文件启发式会把没正文的记成在跑、把已有正文的记成完成。活表才是还在不在。 */
+function applyLiveChild(child: PiSubagentChild): PiSubagentChild {
+  if (hasLiveSubagent(child.childSessionId)) {
+    if (child.status === "waiting" || child.status === "blocked") return child;
+    if (child.status === "running" && child.endedAt === undefined) return child;
+    const { endedAt: _endedAt, ...open } = child;
+    return { ...open, status: "running" };
+  }
+  if (child.status !== "running" && child.status !== "waiting" && child.status !== "blocked") {
+    return child;
+  }
+  const endedAt = child.endedAt ?? child.startedAt;
+  return { ...child, status: "success", ...(endedAt ? { endedAt } : {}) };
 }
