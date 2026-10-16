@@ -71,3 +71,6 @@ packages/desktop/.e2e-network-capture/
 .zcode-runtime/
 
 *.pi
+
+# 本地设计稿（手工 mockup，仅本地参考，不入库）
+designs/
