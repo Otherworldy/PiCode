@@ -26,6 +26,7 @@ export {
   sessionIdFromPiJsonlName,
   type PiSubagentChild,
 } from "./pi-subagent-index.js";
+export { hasLiveSubagent, liveSubagentPanelStatus, selectLiveSubagents } from "./live-subagents.js";
 export {
   createDelegateModel,
   createDelegateProvider,

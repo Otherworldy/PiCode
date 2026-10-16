@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { trackLiveSubagent } from "./live-subagents.js";
 import { listPiSubagentChildren } from "./pi-subagent-index.js";
 
 test("lists a Pi child jsonl beside the parent session file", async () => {
@@ -70,4 +71,65 @@ test("lists a child written beside the unused pre-create filename", async () => 
     parentSessionId: "parent",
   });
   assert.equal(children[0]?.childSessionId, "child-2");
+});
+
+test("live children stay running and a dead file with no assistant text does not", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-subagent-index-"));
+  const parentFile = join(root, "parent.jsonl");
+  await writeFile(
+    parentFile,
+    `${JSON.stringify({ type: "session", version: 3, id: "parent", cwd: root })}\n`,
+  );
+  const childDir = join(root, "parent");
+  await mkdir(childDir, { recursive: true });
+  const writeChild = async (id: string, assistant: string | undefined) => {
+    await writeFile(
+      join(childDir, `${id}.jsonl`),
+      [
+        JSON.stringify({
+          type: "session",
+          version: 3,
+          id,
+          cwd: root,
+          timestamp: "2026-09-22T00:00:00.000Z",
+        }),
+        JSON.stringify({
+          type: "message",
+          message: { role: "user", content: [{ type: "text", text: "scout" }] },
+        }),
+        ...(assistant
+          ? [
+              JSON.stringify({
+                type: "message",
+                message: { role: "assistant", content: [{ type: "text", text: assistant }] },
+              }),
+            ]
+          : []),
+      ].join("\n"),
+    );
+  };
+  await writeChild("child-live", "I'll start by mapping the target directories.");
+  await writeChild("child-dead", undefined);
+  const release = trackLiveSubagent("child-live", {
+    abort() {},
+    getModel: () => ({ provider: "", model: "", thought: "" }),
+    setModel: async () => false,
+  });
+  try {
+    const children = await listPiSubagentChildren({
+      parentSessionFile: parentFile,
+      parentSessionId: "parent",
+    });
+    const byId = new Map(children.map((child) => [child.childSessionId, child]));
+    assert.equal(byId.get("child-live")?.status, "running");
+    assert.equal(byId.get("child-live")?.endedAt, undefined);
+    assert.equal(byId.get("child-dead")?.status, "success");
+  } finally {
+    release();
+  }
+  const finished = await listPiSubagentChildren({
+    parentSessionFile: parentFile,
+    parentSessionId: "parent",
+  });
+  assert.equal(finished.find((child) => child.childSessionId === "child-live")?.status, "success");
 });

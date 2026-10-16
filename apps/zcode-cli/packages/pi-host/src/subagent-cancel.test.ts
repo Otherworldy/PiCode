@@ -4,6 +4,8 @@ import {
   abortLiveSubagent,
   getLiveSubagentModel,
   hasLiveSubagent,
+  liveSubagentPanelStatus,
+  selectLiveSubagents,
   setLiveSubagentModel,
   subagentControlWorks,
   trackLiveSubagent,
@@ -37,6 +39,22 @@ test("cancel aborts only the tracked subagent", async () => {
   release();
   assert.equal(hasLiveSubagent("child-1"), false);
   assert.equal(abortLiveSubagent("child-1"), false);
+});
+
+test("running rows follow the live table, not the file status", () => {
+  const children = [
+    { childSessionId: "ghost", status: "running" },
+    { childSessionId: "live", status: "success" },
+    { childSessionId: "stopped", status: "running" },
+  ];
+  const live = new Set(["live", "stopped"]);
+  const visible = selectLiveSubagents(children, (id) => live.has(id), new Set(["stopped"]));
+  assert.deepEqual(
+    visible.map((child) => child.childSessionId),
+    ["live"],
+  );
+  assert.equal(liveSubagentPanelStatus("success"), "running");
+  assert.equal(liveSubagentPanelStatus("blocked"), "blocked");
 });
 
 test("stop control is only the live child, and bash works stay put", () => {

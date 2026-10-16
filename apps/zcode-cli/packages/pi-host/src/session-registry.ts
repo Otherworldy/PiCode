@@ -27,6 +27,8 @@ import {
   abortLiveSubagent,
   getLiveSubagentModel,
   hasLiveSubagent,
+  liveSubagentPanelStatus,
+  selectLiveSubagents,
   setLiveSubagentModel,
   subagentControlWorks,
   subscribeLiveSubagents,
@@ -952,19 +954,11 @@ export class HostSessionRegistry {
         parentSessionId: meta.sessionId,
       }).catch(() => [] as PiSubagentChild[]);
       if (gen !== subagentPublishGen) return;
-      const running = children.filter(
-        (child) =>
-          child.status === "running" || child.status === "waiting" || child.status === "blocked",
-      );
       for (const id of cancelledSubagents) {
-        const child = children.find((item) => item.childSessionId === id);
-        // 文件还没被扫到时不能忘掉取消，否则这一行会又出现在「正在运行」。
-        if (child && !running.includes(child)) cancelledSubagents.delete(id);
+        // 进程里已经没有这个子会话，取消标记可以丢掉。还活着时不能丢，否则停止键会把它留在「正在运行」。
+        if (!hasLiveSubagent(id)) cancelledSubagents.delete(id);
       }
-      // 用户已经按下停止。磁盘状态还没落成终态时，不要把它留在「正在运行」。
-      const visibleRunning = running.filter(
-        (child) => !cancelledSubagents.has(child.childSessionId),
-      );
+      const visibleRunning = selectLiveSubagents(children, hasLiveSubagent, cancelledSubagents);
       const next = {
         revision: piSubagentRevision(children),
         childSessionIds: children.map((child) => child.childSessionId),
@@ -974,7 +968,7 @@ export class HostSessionRegistry {
             childSessionId: child.childSessionId,
             subagentType: child.subagentType,
             title: child.title,
-            status: child.status as "running" | "waiting" | "blocked",
+            status: liveSubagentPanelStatus(child.status),
             ...(child.summary ? { summary: child.summary } : {}),
             ...(child.startedAt ? { startedAt: child.startedAt } : {}),
             ...(model
