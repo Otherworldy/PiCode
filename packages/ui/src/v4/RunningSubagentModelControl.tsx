@@ -8,6 +8,10 @@ import { buildRegistryModelSelectGroups } from "@/lib/modelSelectionGroups.js";
 import { resolveModelThoughtOption } from "@/lib/modelThoughtOption.js";
 import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
 
+/** 状态面板一行里的模型 / 思考档。24px，和停止按钮同高。 */
+const COMPACT_CONTROL_CLASS =
+  "h-6 justify-between gap-1 rounded-md border border-[var(--color-border)] bg-transparent px-1.5 py-0 text-ui-sm text-[var(--color-foreground)] hover:bg-[var(--color-hover)]";
+
 const THOUGHT_LABEL_IDS: Record<string, string> = {
   off: "chat.toolbar.thoughtLevel.value.off",
   minimal: "chat.toolbar.thoughtLevel.value.minimal",
@@ -65,14 +69,15 @@ export function RunningSubagentModelControl({
 
   const commit = (next: { provider: string; model: string; thought: string }) => {
     if (!onChange || pending) return;
-    if (next.provider === modelProvider && next.model === modelId && next.thought === thought) return;
+    if (next.provider === modelProvider && next.model === modelId && next.thought === thought)
+      return;
     setPending(true);
     void Promise.resolve(onChange(next)).finally(() => setPending(false));
   };
 
   if (modelGroups.length === 0 || !onChange) {
     return (
-      <span className="pointer-events-none text-ui-sm text-[var(--color-foreground-subtle)]">
+      <span className="pointer-events-none min-w-0 truncate text-ui-sm text-[var(--color-foreground-subtle)]">
         {modelId}
         {thoughtLabel ? ` · ${thoughtLabel}` : ""}
       </span>
@@ -81,7 +86,7 @@ export function RunningSubagentModelControl({
 
   return (
     <span
-      className="pointer-events-auto relative z-[2] inline-flex min-w-0 flex-wrap items-center gap-1"
+      className="pointer-events-auto relative z-[2] inline-flex min-w-0 max-w-full flex-nowrap items-center gap-1"
       onClick={(event) => event.stopPropagation()}
       onMouseDown={(event) => event.stopPropagation()}
     >
@@ -97,7 +102,7 @@ export function RunningSubagentModelControl({
         contentAlign="end"
         focusSelectorOnClose={null}
         labelVisibilityClassName="inline-flex min-w-0"
-        triggerClassName="h-6 w-fit max-w-40 min-w-0 justify-between rounded-md border border-[var(--color-border)] bg-transparent px-1.5 py-0 text-ui-sm text-[var(--color-foreground)]"
+        triggerClassName={`w-auto min-w-0 max-w-40 shrink ${COMPACT_CONTROL_CLASS}`}
         triggerLabelClassName="inline-flex min-w-0 truncate text-left"
         onValueChange={(value) => {
           const decoded = decodeCustomModelValue(value);
@@ -110,7 +115,9 @@ export function RunningSubagentModelControl({
             formatLevelName,
           });
           const nextThought =
-            option?.type === "select" && typeof option.currentValue === "string" && option.currentValue
+            option?.type === "select" &&
+            typeof option.currentValue === "string" &&
+            option.currentValue
               ? option.currentValue
               : (option?.options?.at(-1)?.value ?? thought);
           commit({
@@ -124,10 +131,9 @@ export function RunningSubagentModelControl({
         intl={intl}
         disabled={locked}
         labelVisibilityClassName="inline-flex"
+        triggerClassName={`w-auto shrink-0 ${COMPACT_CONTROL_CLASS}`}
         state={
-          thoughtOption
-            ? { kind: "supported", option: thoughtOption }
-            : { kind: "unsupported" }
+          thoughtOption ? { kind: "supported", option: thoughtOption } : { kind: "unsupported" }
         }
         onValueCommit={(nextThought) => {
           commit({ provider: modelProvider, model: modelId, thought: nextThought });

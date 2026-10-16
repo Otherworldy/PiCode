@@ -2,7 +2,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { readPiJsonl } from "./jsonl-history.js";
-import { hasLiveSubagent } from "./live-subagents.js";
+import { getLiveSubagentAgentName, hasLiveSubagent } from "./live-subagents.js";
 
 export type PiSubagentPanelStatus =
   | "running"
@@ -118,6 +118,34 @@ function firstStep(status: Record<string, unknown>): Record<string, unknown> | u
   return Array.isArray(status.steps) ? asRecord(status.steps[0]) ?? undefined : undefined;
 }
 
+const AGENT_NAME = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/u;
+
+function agentName(value: string): string {
+  const name = value.trim();
+  return name && name !== "subagent" && AGENT_NAME.test(name) ? name : "";
+}
+
+/**
+ * 更早的子会话没有 `.role`。内置角色的系统提示第一句是 `You are <name>.`，
+ * 这是当时写进文件的唯一角色名。
+ */
+export function subagentRoleFromSessionText(content: string): string {
+  return agentName(/You are ([A-Za-z0-9][A-Za-z0-9_.:-]{0,63})\./u.exec(content)?.[1] ?? "");
+}
+
+async function readRoleFile(sessionFile: string): Promise<string> {
+  const raw = await readFile(`${sessionFile}.role`, "utf8").catch(() => "");
+  return agentName(raw);
+}
+
+function roleFromSources(...values: readonly string[]): string {
+  for (const value of values) {
+    const name = agentName(value);
+    if (name) return name;
+  }
+  return "subagent";
+}
+
 export function piSubagentRevision(children: readonly PiSubagentChild[]): number {
   if (children.length === 0) return 0;
   let revision = 1;
@@ -150,12 +178,17 @@ export async function listPiSubagentChildren(input: {
     const content = await readFile(file, "utf8").catch(() => "");
     const summary = readPiJsonl(content).summary;
     if (!summary) continue;
+    const childSessionId = summary.sessionId || fileStem(file);
     const fileStat = await stat(file).catch(() => undefined);
     const fresh = fileStat ? Date.now() - fileStat.mtimeMs < 4000 && !summary.lastAssistantPreview : false;
     byFile.set(file, {
-      childSessionId: summary.sessionId || fileStem(file),
+      childSessionId,
       sessionFile: file,
-      subagentType: "subagent",
+      subagentType: roleFromSources(
+        getLiveSubagentAgentName(childSessionId),
+        await readRoleFile(file),
+        subagentRoleFromSessionText(content),
+      ),
       title: summary.title || fileStem(file),
       ...(summary.lastAssistantPreview ? { summary: summary.lastAssistantPreview } : {}),
       status: fresh ? "running" : summary.lastAssistantPreview ? "success" : "running",
@@ -170,16 +203,22 @@ export async function listPiSubagentChildren(input: {
       (typeof status.sessionFile === "string" ? status.sessionFile : "");
     const existing = sessionFile ? byFile.get(sessionFile) : undefined;
     const runId = typeof status.runId === "string" ? status.runId : "";
-    const agent = typeof step?.agent === "string" ? step.agent : "subagent";
     const description = typeof step?.description === "string" ? step.description : undefined;
     const mapped = mapRunState(step?.status ?? status.state);
     const startedAt = typeof status.startedAt === "number" ? status.startedAt : existing?.startedAt;
     const endedAt = typeof status.endedAt === "number" ? status.endedAt : undefined;
+    const childSessionId = existing?.childSessionId || runId || fileStem(sessionFile);
+    const subagentType = roleFromSources(
+      typeof step?.agent === "string" ? step.agent : "",
+      getLiveSubagentAgentName(childSessionId),
+      existing?.subagentType ?? "",
+    );
     const next: PiSubagentChild = {
-      childSessionId: existing?.childSessionId || runId || fileStem(sessionFile),
+      childSessionId,
       ...(sessionFile ? { sessionFile } : {}),
-      subagentType: agent,
-      title: existing?.title && existing.title !== existing.childSessionId ? existing.title : agent,
+      subagentType,
+      title:
+        existing?.title && existing.title !== existing.childSessionId ? existing.title : subagentType,
       ...(description ? { summary: description } : existing?.summary ? { summary: existing.summary } : {}),
       status: mapped,
       ...(startedAt ? { startedAt } : {}),

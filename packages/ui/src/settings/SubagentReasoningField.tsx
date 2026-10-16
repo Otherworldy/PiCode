@@ -16,12 +16,15 @@ export function SubagentReasoningField({
   labelVisibilityClassName,
   onValueCommit,
   state,
+  triggerClassName,
 }: {
   disabled: boolean;
   intl: ReturnType<typeof useZCodeIntl>["intl"];
   labelVisibilityClassName: string;
   onValueCommit: (value: string) => void;
   state: SubagentReasoningFieldState;
+  /** 缺省沿用设置页的 32px 触发器。状态面板传入 24px，与同行按钮对齐。 */
+  triggerClassName?: string;
 }) {
   const triggerRef = useRef<HTMLSpanElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -50,7 +53,10 @@ export function SubagentReasoningField({
         aria-label={placeholderLabel}
         data-subagent-thought-level-loading={loading ? "true" : undefined}
         data-subagent-thought-level-unavailable={loading ? undefined : "true"}
-        className="inline-flex h-8 items-center gap-1 rounded-lg border border-input-border bg-input px-2 py-1.5 text-ui-base text-foreground-subtle"
+        className={
+          triggerClassName ??
+          "inline-flex h-8 items-center gap-1 rounded-lg border border-input-border bg-input px-2 py-1.5 text-ui-base text-foreground-subtle"
+        }
       >
         {loading ? (
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -80,7 +86,10 @@ export function SubagentReasoningField({
       triggerRef={triggerRef}
       restoreFocusSelector={null}
       labelVisibilityClassName={labelVisibilityClassName}
-      triggerClassName="h-8 rounded-lg border border-input-border bg-input px-2 py-1.5 text-foreground hover:border-input-border-hover hover:bg-input"
+      triggerClassName={
+        triggerClassName ??
+        "h-8 rounded-lg border border-input-border bg-input px-2 py-1.5 text-foreground hover:border-input-border-hover hover:bg-input"
+      }
       onValueChange={onValueCommit}
     />
   );

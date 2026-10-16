@@ -151,6 +151,8 @@ UI 设计模式是输入框模式菜单里的勾选，不是斜杠命令。点�
 
 活着的子会话把当前 `provider` / `model` / `thought` 放进 `subagents.running`。状态面板用这份值和会话已有的模型目录展示下拉框。`setRunningSubagentModel` 只调用这个子会话的 `setModel` / `setThinkingLevel`，不改父会话，也不写设置里的默认。已经发出的请求不打断，下一次模型请求用新的。本进程没有的运行记录只显示目录，不能改。
 
+运行列表上的角色名是 `picode_subagent` 的 `agent`，不是工具名 `subagent`。新子会话把这个名字写在 jsonl 旁边的 `.role`，并放进本进程活表。更早的文件没有 `.role` 时，从系统提示第一句 `You are <name>.` 读。两边都没有才留 `subagent`。
+
 设置页拥有代理定义：用户 `~/.PiCode/agents`，项目 `<workspace>/.PiCode/agents`，内置 `scout`、`researcher`、`evidence-auditor`、`worker`、`reviewer`、`oracle`、`delegate`。这些角色对齐 [pi-subagents](https://github.com/nicobailon/pi-subagents) 的内置分工、工具和默认思考档位，不再提供 `general-purpose` / `Explore`。Pi 会话挂一个 `picode_subagent` 工具，按这份定义起子会话。子会话不再挂这个工具，也不挂 MCP。同名的 Pi 插件工具 `subagent` 在主会话上禁用，避免两套定义争用。
 
 子会话模型的优先级与插件一致：设置里该角色的模型，然后是 Pi `settings.json` 的 `subagents.defaultModel`，最后是父会话当前模型。角色写了思考档位时用那一档，除非这次选择自己带了档位。`defaultModel` 写了但目录里没有时直接失败，不改用父会话。显式指定的模型同样找不到就失败。

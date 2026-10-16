@@ -262,30 +262,56 @@ const STATUS_SECTION_SCROLL_POLICY = {
 function StatusSectionHeader({
   children,
   isOpen,
+  onTitleActivate,
   section,
   title,
+  titleActivateLabel,
 }: {
   children?: ReactNode;
   isOpen: boolean;
+  onTitleActivate?: () => void;
   section: StatusSectionKind;
   title: string;
+  titleActivateLabel?: string;
 }) {
+  const titleText = (
+    <span className="shrink-0 text-ui-base text-[var(--color-foreground-subtle)]">{title}</span>
+  );
+  const hoverChevronClass =
+    "size-3.5 shrink-0 text-[var(--color-foreground-subtle)] opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100";
   return (
-    <div className="mb-0.5 flex h-8 min-w-0 shrink-0 items-center gap-1.5 px-2 pr-8">
+    <div className="mb-0.5 flex h-8 min-w-0 shrink-0 items-center gap-1 px-2 pr-8">
+      {onTitleActivate ? (
+        <button
+          type="button"
+          data-subagent-directory-trigger="section-title"
+          aria-label={titleActivateLabel ?? title}
+          onClick={onTitleActivate}
+          className="shrink-0 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-input-border-focused)]"
+        >
+          {titleText}
+        </button>
+      ) : null}
       <CollapsibleTrigger asChild>
         <button
           type="button"
           aria-expanded={isOpen}
           data-status-section-trigger={section}
-          className="group flex min-w-0 shrink-0 items-center gap-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-input-border-focused)]"
+          className={
+            onTitleActivate
+              ? "flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--color-foreground-subtle)] hover:bg-[var(--color-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-input-border-focused)]"
+              : "group flex min-w-0 shrink-0 items-center gap-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-input-border-focused)]"
+          }
         >
-          <span className="shrink-0 text-ui-base text-[var(--color-foreground-subtle)]">
-            {title}
-          </span>
+          {onTitleActivate ? null : titleText}
           {isOpen ? (
-            <ChevronDownIcon className="size-3.5 shrink-0 text-[var(--color-foreground-subtle)] opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+            <ChevronDownIcon
+              className={onTitleActivate ? "size-3.5 shrink-0" : hoverChevronClass}
+            />
           ) : (
-            <ChevronRightIcon className="size-3.5 shrink-0 text-[var(--color-foreground-subtle)] opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+            <ChevronRightIcon
+              className={onTitleActivate ? "size-3.5 shrink-0" : hoverChevronClass}
+            />
           )}
         </button>
       </CollapsibleTrigger>
@@ -302,19 +328,23 @@ function StatusSection({
   children,
   defaultOpen = true,
   onOpenChange,
+  onTitleActivate,
   open,
   separated = false,
   section,
   title,
+  titleActivateLabel,
   trailing,
 }: {
   children: ReactNode;
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
+  onTitleActivate?: () => void;
   open?: boolean;
   separated?: boolean;
   section: StatusSectionKind;
   title: string;
+  titleActivateLabel?: string;
   trailing?: (isOpen: boolean) => ReactNode;
 }) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
@@ -341,7 +371,13 @@ function StatusSection({
       className={cn("min-w-0 flex-none", separated && "border-t border-[var(--color-border)] pt-2")}
     >
       <section className="min-w-0 flex-none">
-        <StatusSectionHeader isOpen={isOpen} section={section} title={title}>
+        <StatusSectionHeader
+          isOpen={isOpen}
+          onTitleActivate={onTitleActivate}
+          section={section}
+          title={title}
+          titleActivateLabel={titleActivateLabel}
+        >
           {trailing?.(isOpen)}
         </StatusSectionHeader>
         <CollapsibleContent>
@@ -945,9 +981,12 @@ function PlanStatusSection({
 }
 
 function RunningWorkCancelButton({
+  presentation = "labeled",
   workId,
   onCancel,
 }: {
+  /** 子智能体行用同高图标，避免「停止」文字和下拉框挤在一起。终端 / 工作流仍带文字。 */
+  presentation?: "labeled" | "icon";
   workId: string;
   onCancel?: (workId: string) => void;
 }) {
@@ -962,22 +1001,32 @@ function RunningWorkCancelButton({
 
   if (!onCancel) return null;
 
+  const iconOnly = presentation === "icon";
   return (
     <Button
       type="button"
-      variant="ghost"
-      size="sm"
+      variant={iconOnly ? "outline" : "ghost"}
+      size={iconOnly ? "icon-sm" : "sm"}
       data-testid={testId(TID_V4_BACKGROUND_WORK_CANCEL, workId)}
       aria-label={intl.formatMessage({
         id: "chat.summaryPanel.stopRunningBackgroundTask",
       })}
       onClick={handleClick}
-      className="pointer-events-auto relative z-[2] ml-auto h-6 shrink-0 px-1.5 text-ui-base text-[var(--color-foreground)]"
+      className={
+        iconOnly
+          ? "pointer-events-auto relative z-[2] shrink-0 border-[var(--color-border)] bg-transparent"
+          : "pointer-events-auto relative z-[2] ml-auto h-6 shrink-0 px-1.5 text-ui-base text-[var(--color-foreground)]"
+      }
     >
       <SquareIcon aria-hidden className="size-3 fill-current" />
-      {intl.formatMessage({ id: "chat.statusPanel.runningStop" })}
+      {iconOnly ? null : intl.formatMessage({ id: "chat.statusPanel.runningStop" })}
     </Button>
   );
+}
+
+/** 运行列表只展示角色。空角色不回退到任务摘要。 */
+function runningSubagentListLabel(subagent: { subagentType: string }): string {
+  return subagent.subagentType.trim();
 }
 
 function buildRunningSubagentOpenRequest({
@@ -1395,6 +1444,14 @@ function SubagentStatusSection({
     (longest, item) => Math.max(longest, Math.max(0, now - (item.startedAt ?? now))),
     0,
   );
+  const openDirectory =
+    parentSessionId && onOpenSubagentDirectory
+      ? () =>
+          onOpenSubagentDirectory({
+            rootSessionId: rootSessionId ?? parentSessionId,
+            parentSessionId,
+          })
+      : undefined;
 
   return (
     <StatusSection
@@ -1402,8 +1459,10 @@ function SubagentStatusSection({
       defaultOpen={false}
       open={open}
       onOpenChange={onOpenChange}
+      onTitleActivate={openDirectory}
       separated={separated}
       title={title}
+      titleActivateLabel={intl.formatMessage({ id: "chat.statusPanel.openSubagentDirectory" })}
       trailing={(isOpen) =>
         subagents.length === 0 ? (
           endedSubagentCount > 0 ? (
@@ -1469,17 +1528,17 @@ function SubagentStatusSection({
                 />
               ) : null}
               <BotIcon className="pointer-events-none relative z-[1] mt-0.5 size-4 shrink-0 text-[var(--color-foreground-subtle)]" />
-              <div className="pointer-events-none relative z-[1] flex min-w-0 flex-1 flex-col gap-1.5">
-                <span className="line-clamp-2 text-ui-base leading-5 text-[var(--color-foreground)]">
-                  {subagent.title}
+              <div className="pointer-events-none relative z-[1] flex min-w-0 flex-1 flex-col gap-1">
+                <span className="truncate text-ui-base leading-5 text-[var(--color-foreground)]">
+                  {runningSubagentListLabel(subagent)}
                 </span>
-                <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-ui-base">
-                  <span className="text-ui-base tabular-nums text-[var(--color-foreground-subtle)]">
-                    {formatBackgroundTaskElapsedLabel(
-                      Math.max(0, now - (subagent.startedAt ?? now)),
-                      intl.formatMessage,
-                    )}
-                  </span>
+                <span className="text-ui-base tabular-nums text-[var(--color-foreground-subtle)]">
+                  {formatBackgroundTaskElapsedLabel(
+                    Math.max(0, now - (subagent.startedAt ?? now)),
+                    intl.formatMessage,
+                  )}
+                </span>
+                <span className="pointer-events-auto relative z-[2] flex min-w-0 flex-nowrap items-center gap-1">
                   {subagent.modelProvider && subagent.modelId ? (
                     <RunningSubagentModelControl
                       modelProvider={subagent.modelProvider}
@@ -1496,6 +1555,7 @@ function SubagentStatusSection({
                   ) : null}
                   {subagent.controlWorkId && subagent.cancellable !== false ? (
                     <RunningWorkCancelButton
+                      presentation="icon"
                       workId={subagent.controlWorkId}
                       onCancel={onCancelBackgroundWork}
                     />

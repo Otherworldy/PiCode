@@ -10,6 +10,8 @@ type LiveSubagent = {
   abort: () => void;
   getModel: () => LiveSubagentModel;
   setModel: (next: LiveSubagentModel) => Promise<boolean>;
+  /** `picode_subagent` 的 agent 参数。缺席时目录只能从文件里找角色。 */
+  agentName?: string;
 };
 
 // ponytail: 进程内一张表。子会话都活在这个 agent 进程里；拆成多进程再按宿主分表。
@@ -38,6 +40,11 @@ export function subscribeLiveSubagents(listener: () => void): () => void {
 
 export function hasLiveSubagent(id: string): boolean {
   return running.has(id);
+}
+
+/** 这次运行的角色名。文件还没写上之前，面板用它，不用工具名 `subagent`。 */
+export function getLiveSubagentAgentName(id: string): string {
+  return running.get(id)?.agentName?.trim() ?? "";
 }
 
 /** 「正在运行」只认本进程活表。文件看着还在跑不算。 */

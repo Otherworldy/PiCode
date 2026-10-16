@@ -4705,6 +4705,7 @@ const enUS: Record<string, string> = {
   "chat.statusPanel.todoWaitingFold": "{count} waiting",
   "chat.statusPanel.terminals": "Terminals",
   "chat.statusPanel.agents": "Agents",
+  "chat.statusPanel.openSubagentDirectory": "Open subagent directory",
   "chat.statusPanel.workflows": "Workflows",
   "chat.statusPanel.runningStatusValue": "{count} in background",
   "chat.statusPanel.runningStatusValuePlural": "{count} in background",

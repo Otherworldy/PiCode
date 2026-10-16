@@ -4,7 +4,69 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { trackLiveSubagent } from "./live-subagents.js";
-import { listPiSubagentChildren } from "./pi-subagent-index.js";
+import { listPiSubagentChildren, subagentRoleFromSessionText } from "./pi-subagent-index.js";
+
+test("subagent role comes from the system prompt, not the tool name", () => {
+  assert.equal(
+    subagentRoleFromSessionText("You are reviewer. Inspect the change."),
+    "reviewer",
+  );
+  assert.equal(subagentRoleFromSessionText("You are evidence-auditor. Check claims."), "evidence-auditor");
+  assert.equal(subagentRoleFromSessionText("no role here"), "");
+});
+
+test("a child jsonl keeps the task title and reports the agent role", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-subagent-index-"));
+  const parentFile = join(root, "parent.jsonl");
+  await writeFile(
+    parentFile,
+    `${JSON.stringify({ type: "session", version: 3, id: "parent", cwd: root })}\n`,
+  );
+  const childDir = join(root, "parent", "picode-subagent");
+  await mkdir(childDir, { recursive: true });
+  const childFile = join(childDir, "child.jsonl");
+  await writeFile(
+    childFile,
+    [
+      JSON.stringify({
+        type: "session",
+        version: 3,
+        id: "child-role",
+        cwd: root,
+        timestamp: "2026-09-22T00:00:00.000Z",
+      }),
+      JSON.stringify({
+        type: "message",
+        message: {
+          role: "system",
+          content: "",
+          sections: { addendum: "You are reviewer. Inspect the change." },
+        },
+      }),
+      JSON.stringify({
+        type: "message",
+        message: {
+          role: "user",
+          content: [{ type: "text", text: "Repo: D:/Study/Code/Github/ZCode audit the desktop host" }],
+        },
+      }),
+    ].join("\n"),
+  );
+
+  const children = await listPiSubagentChildren({
+    parentSessionFile: parentFile,
+    parentSessionId: "parent",
+  });
+  assert.equal(children[0]?.subagentType, "reviewer");
+  assert.match(children[0]?.title ?? "", /ZCode/);
+
+  await writeFile(`${childFile}.role`, "scout\n");
+  const named = await listPiSubagentChildren({
+    parentSessionFile: parentFile,
+    parentSessionId: "parent",
+  });
+  assert.equal(named[0]?.subagentType, "scout");
+});
 
 test("lists a Pi child jsonl beside the parent session file", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-subagent-index-"));

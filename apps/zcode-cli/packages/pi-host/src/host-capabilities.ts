@@ -1,4 +1,4 @@
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { CreateAgentSessionOptions } from "@earendil-works/pi-coding-agent";
 import { trackLiveSubagent } from "./live-subagents.js";
@@ -304,8 +304,17 @@ export async function runZcodeSubagent(input: {
   });
   // 父会话的工具 signal 和面板上的停止按钮都只停这一个子会话。
   // 模型切换同样只打到这个 session，不写子智能体设置。
+  const agentName = input.profile.name.trim();
+  // 角色名不在 Pi 的会话头里。写在 jsonl 旁边，目录不用从提示词猜。
+  const writeRole = async () => {
+    const sessionFile = session.sessionFile;
+    if (!sessionFile || !agentName) return;
+    await writeFile(`${sessionFile}.role`, `${agentName}\n`, "utf8").catch(() => undefined);
+  };
+  await writeRole();
   const release = trackLiveSubagent(session.sessionId, {
     abort: stopChild,
+    agentName,
     getModel: readModel,
     setModel: async (next) => {
       const model = input.modelRuntime?.getModel(next.provider, next.model);
@@ -324,6 +333,7 @@ export async function runZcodeSubagent(input: {
     if (cancelled || input.signal?.aborted) return "subagent cancelled";
     return `subagent failed: ${error instanceof Error ? error.message : String(error)}`;
   } finally {
+    await writeRole();
     release();
     input.signal?.removeEventListener("abort", stopChild);
     session.dispose();
