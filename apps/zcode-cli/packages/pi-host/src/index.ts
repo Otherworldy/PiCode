@@ -20,8 +20,10 @@ export {
 export { readPiJsonl, replayPiJsonl, summarizePiJsonl } from "./jsonl-history.js";
 export { queryPiSessionUsage, type PiAppUsageQuery } from "./pi-usage.js";
 export {
+  isPicodeSubagentSessionFile,
   listPiSubagentChildren,
   piSubagentRevision,
+  sessionIdFromPiJsonlName,
   type PiSubagentChild,
 } from "./pi-subagent-index.js";
 export {

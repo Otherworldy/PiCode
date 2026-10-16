@@ -1734,6 +1734,53 @@ test("list and resume native Pi jsonl by header id", async () => {
   await rm(root, { recursive: true, force: true });
 });
 
+test("picode subagent jsonl stays out of the session list but is identifiable", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const nativeRoot = join(root, "pi-sessions");
+  const cwd = join(root, "proj");
+  await mkdir(cwd, { recursive: true });
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: nativeRoot,
+    createSession: async (input) => new FakePiSession(input.sessionId, input.sessionFile),
+  });
+  const resolved = resolve(cwd);
+  const safePath = `--${resolved.replace(/^[\\/]/u, "").replace(/[\\/:]/gu, "-")}--`;
+  const dir = join(nativeRoot, safePath);
+  const parentFile = join(dir, "2026-01-02T03-04-05Z_sess_parent.jsonl");
+  await mkdir(join(dir, "2026-01-02T03-04-05Z_sess_parent", "picode-subagent"), {
+    recursive: true,
+  });
+  await writeFile(
+    parentFile,
+    [
+      '{"type":"session","id":"sess_parent","timestamp":"2026-01-02T03:04:05.000Z","cwd":"/work"}',
+      '{"type":"message","id":"u1","timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"user","content":[{"type":"text","text":"review"}]}}',
+    ].join("\n"),
+  );
+  await writeFile(
+    join(
+      dir,
+      "2026-01-02T03-04-05Z_sess_parent",
+      "picode-subagent",
+      "2026-01-02T03-04-06Z_01child.jsonl",
+    ),
+    [
+      '{"type":"session","id":"01child","timestamp":"2026-01-02T03:04:06.000Z","cwd":"/work"}',
+      '{"type":"message","id":"u1","timestamp":"2026-01-02T03:04:07.000Z","message":{"role":"user","content":[{"type":"text","text":"Repo: hidden"}]}}',
+    ].join("\n"),
+  );
+  const listed = await registry.list(cwd);
+  assert.deepEqual(
+    listed.map((item) => item.sessionId),
+    ["sess_parent"],
+  );
+  const hidden = await registry.listPicodeSubagentSessionIds(cwd);
+  assert.equal(hidden.has("01child"), true);
+  assert.equal(hidden.has("sess_parent"), false);
+  await rm(root, { recursive: true, force: true });
+});
+
 test("ssh sessions stay under the remote identity and still list the old drive-letter dir", async () => {
   const root = await mkdtemp(join(tmpdir(), "pi-host-"));
   const nativeRoot = join(root, "pi-sessions");

@@ -34,6 +34,7 @@ import {
 import {
   listPiSubagentChildren,
   piSubagentRevision,
+  sessionIdFromPiJsonlName,
   type PiSubagentChild,
 } from "./pi-subagent-index.js";
 import { mapThought } from "./model-delegate.js";
@@ -241,6 +242,30 @@ function nativeSessionDir(cwd: string, root: string): string {
 
 function fileStem(file: string): string {
   return file.replace(/\.jsonl$/u, "");
+}
+
+async function collectPicodeSubagentSessionIds(dir: string, ids: Set<string>): Promise<void> {
+  let entries: string[] = [];
+  try {
+    entries = await readdir(dir);
+  } catch {
+    return;
+  }
+  await Promise.all(
+    entries.map(async (entry) => {
+      let files: string[] = [];
+      try {
+        files = await readdir(join(dir, entry, "picode-subagent"));
+      } catch {
+        return;
+      }
+      for (const file of files) {
+        if (!file.endsWith(".jsonl")) continue;
+        const sessionId = sessionIdFromPiJsonlName(file);
+        if (sessionId) ids.add(sessionId);
+      }
+    }),
+  );
 }
 
 function piSessionFileName(sessionId: string, at = new Date()): string {
@@ -532,6 +557,27 @@ export class HostSessionRegistry {
     const byId = new Map<string, PiStoredSummary>();
     for (const item of [...hosted, ...native, ...legacy]) byId.set(item.sessionId, item);
     return [...byId.values()];
+  }
+
+  /**
+   * 父会话目录下 `picode-subagent` 里的 jsonl。左侧列表不扫这里；
+   * 按 id 认身份时用这份集合把漏进任务索引的行标成子会话。
+   */
+  async listPicodeSubagentSessionIds(identity: string): Promise<Set<string>> {
+    const ids = new Set<string>();
+    const sessionsRoot = nativeSessionsRoot(this.options.nativeSessionsRoot);
+    const dirs = [
+      join(this.options.storageRoot, "pi-host-sessions", encodeKey(identity)),
+      nativeSessionDir(identity, sessionsRoot),
+    ];
+    const legacyRemotePath = identity.startsWith("remote:")
+      ? identity.slice(identity.indexOf(":/") + 1)
+      : "";
+    if (legacyRemotePath.startsWith("/") && legacyRemotePath !== "/") {
+      dirs.push(nativeSessionDir(legacyRemotePath, sessionsRoot));
+    }
+    await Promise.all(dirs.map((dir) => collectPicodeSubagentSessionIds(dir, ids)));
+    return ids;
   }
 
   async find(sessionId: string): Promise<PiStoredSession | null> {

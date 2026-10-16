@@ -30,6 +30,18 @@ function fileStem(file: string): string {
   return basename(file).replace(/\.jsonl$/u, "");
 }
 
+/** `picode_subagent` 的 jsonl 只属于父会话目录，不能进左侧会话列表。 */
+export function isPicodeSubagentSessionFile(sessionFile: string): boolean {
+  return sessionFile.split(/[\\/]/u).includes("picode-subagent");
+}
+
+/** Pi 文件名是 `timestamp_<sessionId>.jsonl`。没有时间戳前缀时整段就是 id。 */
+export function sessionIdFromPiJsonlName(fileName: string): string {
+  const stem = basename(fileName).replace(/\.jsonl$/u, "");
+  const matched = stem.match(/^\d{4}-\d{2}-\d{2}T[\d-]+Z_(.+)$/u);
+  return matched?.[1] || stem;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)

@@ -7,6 +7,7 @@ import {
   type WorkspaceId,
 } from "@zcode/contracts";
 import {
+  isPicodeSubagentSessionFile,
   readPiJsonl,
   summarizePiJsonl,
   type HostedSession,
@@ -72,6 +73,10 @@ export async function bindHostedSession(
           hosted.projector.getSnapshot().config.mode,
         ),
         traceID: createRootTraceContext({ sessionId }).traceId,
+        // 打开子代理转录会走到这里。写成普通会话后，左侧列表会多出一行。
+        ...(isPicodeSubagentSessionFile(hosted.sessionFile)
+          ? { taskType: "subagent_child" as const }
+          : {}),
       });
     },
     onCollaborationMode: (mode) => {
@@ -108,6 +113,10 @@ export async function bindHostedSession(
     ...(hosted.parentSessionId
       ? { parentSessionId: hosted.parentSessionId as SessionId }
       : {}),
+    // 子代理 jsonl 在父目录的 picode-subagent 下。挂上类型后 sessions-index 不会收它。
+    ...(isPicodeSubagentSessionFile(hosted.sessionFile)
+      ? { taskType: "subagent_child" as const }
+      : {}),
     protocolEventSequences: new Map(),
     protocolToolInputTransmissions: new Map(),
     stateRevision: 0,
@@ -129,8 +138,10 @@ export async function bindHostedSession(
   };
   const snapshot = hosted.projector.getSnapshot();
   const title = snapshot.meta.title.trim() || summary?.title || "";
+  const subagentTranscript = isPicodeSubagentSessionFile(hosted.sessionFile);
   // 分支文件已经在磁盘上。增量如果被 draft 过滤掉，当前列表要到重启重扫才看得到。
-  if (title) {
+  // 子代理转录只在父会话里看。reveal 会把它写成左侧一行。
+  if (title && !subagentTranscript) {
     record.persistence = "immediate";
     context.v4Gateway?.revealStoredSession(workspace.workspaceKey, {
       sessionId,

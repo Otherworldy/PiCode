@@ -1653,13 +1653,21 @@ export async function listSessions(context: ZCodeProtocolAgentServerContext, raw
     );
   });
   const storedIds = new Set(stored.map((session) => String(session.id)));
-  const sessions = stored.map((session) =>
-    mapSessionInfo({
+  // 打开子代理转录时曾按普通会话落库。文件仍在 picode-subagent 下，按 id 查时改回子会话，
+  // 任务索引修复才能把左侧多出来的行删掉。普通列表本来就不扫这些文件。
+  const subagentSessionIds =
+    params.sessionIds && params.workspace && context.piHost
+      ? await context.piHost.listPicodeSubagentSessionIds(params.workspace.workspaceKey)
+      : undefined;
+  const sessions = stored.map((session) => {
+    const info = mapSessionInfo({
       session,
       workspace:
         params.workspace ?? buildWorkspaceRef({ workspacePath: session.path ?? session.directory }),
-    }),
-  );
+    });
+    if (!subagentSessionIds?.has(String(session.id))) return info;
+    return { ...info, sessionKind: "subagent_child" as const };
+  });
   if (params.sessionIds) return { sessions };
   for (const record of context.sessions.values()) {
     if (record.persistence === "deferred") continue;
