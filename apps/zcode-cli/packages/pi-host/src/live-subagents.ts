@@ -40,6 +40,24 @@ export function hasLiveSubagent(id: string): boolean {
   return running.has(id);
 }
 
+/** 「正在运行」只认本进程活表。文件看着还在跑不算。 */
+export function selectLiveSubagents<T extends { childSessionId: string }>(
+  children: readonly T[],
+  isLive: (id: string) => boolean,
+  cancelled?: ReadonlySet<string>,
+): T[] {
+  return children.filter(
+    (child) =>
+      child.childSessionId.length > 0 &&
+      isLive(child.childSessionId) &&
+      !cancelled?.has(child.childSessionId),
+  );
+}
+
+export function liveSubagentPanelStatus(status: string): "running" | "waiting" | "blocked" {
+  return status === "waiting" || status === "blocked" ? status : "running";
+}
+
 export function getLiveSubagentModel(id: string): LiveSubagentModel | undefined {
   const model = running.get(id)?.getModel();
   if (!model?.provider || !model.model) return undefined;

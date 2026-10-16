@@ -1,9 +1,12 @@
 /* eslint-disable max-lines -- PiCode Protocol 的 session/workspace 方法共享同一个 server context 与 snapshot helpers，迁移期先集中维护。 */
 import {
   completePiPrompt,
+  hasLiveSubagent,
   listPiSubagentChildren,
+  liveSubagentPanelStatus,
   piSubagentRevision,
   queryPiSessionUsage,
+  selectLiveSubagents,
   workspaceKey,
   type PiSubagentChild,
 } from "@zcode/pi-host";
@@ -1683,10 +1686,14 @@ function pagePiSubagentChildren(
   children: readonly PiSubagentChild[],
   cursor: string | undefined,
   limit: number,
+  isLive?: (id: string) => boolean,
 ) {
-  const running = children.filter(
-    (child) => child.status === "running" || child.status === "waiting" || child.status === "blocked",
-  );
+  const running = isLive
+    ? selectLiveSubagents(children, isLive)
+    : children.filter(
+        (child) =>
+          child.status === "running" || child.status === "waiting" || child.status === "blocked",
+      );
   const ended = children.filter((child) => !running.includes(child));
   const offset = cursor && /^\d+$/u.test(cursor) ? Number(cursor) : 0;
   const items = ended.slice(offset, offset + limit);
@@ -1698,7 +1705,10 @@ function pagePiSubagentChildren(
       childSessionId: child.childSessionId,
       subagentType: child.subagentType,
       title: child.title,
-      status: child.status as "running" | "waiting" | "blocked",
+      status: (isLive ? liveSubagentPanelStatus(child.status) : child.status) as
+        | "running"
+        | "waiting"
+        | "blocked",
       ...(child.summary ? { summary: child.summary } : {}),
       ...(child.startedAt ? { startedAt: child.startedAt } : {}),
     })),
@@ -1734,7 +1744,12 @@ export async function listSessionSubagents(
           parentSessionId: params.sessionId,
         })
       : [];
-    return pagePiSubagentChildren(children, params.endedCursor, params.endedLimit);
+    return pagePiSubagentChildren(
+      children,
+      params.endedCursor,
+      params.endedLimit,
+      hasLiveSubagent,
+    );
   }
   const store = context.deps.sessionStore;
   const liveParent = context.sessions.get(params.sessionId);

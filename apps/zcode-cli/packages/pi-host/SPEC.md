@@ -141,11 +141,13 @@ UI 设计模式是输入框模式菜单里的勾选，不是斜杠命令。点�
 
 ## 子代理面板
 
-目录和只读侧栏仍用现有 V4 `subagents` 字段。子运行的 jsonl 写在父会话文件同名目录下，面板仍读这份文件。不读 PiCode `subagent_child` 会话库，也不依赖 `pi-subagents` 插件是否安装。
+目录和只读侧栏仍用现有 V4 `subagents` 字段。子运行的 jsonl 写在父会话文件同名目录下，标题、摘要和启动时间仍读这份文件。不读 PiCode `subagent_child` 会话库，也不依赖 `pi-subagents` 插件是否安装。
+
+`subagents.running` 只收录本进程活表里还在的子会话。文件没有助手正文、最后一条仍是 `toolUse`、或已经写下 `aborted`，都不能单独把一行留在「正在运行」。本进程已经没有的记录算已结束。
 
 仍在跑的子会话打开侧栏时，jsonl 重放不把最后一轮收成完成。轮次保持 `running`，工时用消息时间戳，不用重放当时的墙钟。侧栏因此显示「工作中」并展开工具，而不是「已工作 1 秒」。文件在子会话结束前按秒重读；结束后再按完整轮次收口。已结束的历史文件仍按消息时间戳计工时。
 
-正在跑的 `picode_subagent` 只活在当前进程里。父会话把这些活会话写进 `backgroundWorks`（`kind: subagent`，`workId` 和 `childSessionId` 都是子会话 id，`cancellable: true`），状态面板因此出现停止按钮。`cancelBackgroundWork` 只 abort 这个子会话，不停父会话。按下停止后这一行立刻离开「正在运行」，即使 jsonl 还没写成终态。磁盘上看起来还在跑、但本进程已经没有的记录不给按钮。
+正在跑的 `picode_subagent` 只活在当前进程里。父会话把这些活会话写进 `backgroundWorks`（`kind: subagent`，`workId` 和 `childSessionId` 都是子会话 id，`cancellable: true`），状态面板因此出现停止按钮。`cancelBackgroundWork` 只 abort 这个子会话，不停父会话。按下停止后这一行立刻离开「正在运行」，即使 jsonl 还没写成终态。
 
 活着的子会话把当前 `provider` / `model` / `thought` 放进 `subagents.running`。状态面板用这份值和会话已有的模型目录展示下拉框。`setRunningSubagentModel` 只调用这个子会话的 `setModel` / `setThinkingLevel`，不改父会话，也不写设置里的默认。已经发出的请求不打断，下一次模型请求用新的。本进程没有的运行记录只显示目录，不能改。
 
