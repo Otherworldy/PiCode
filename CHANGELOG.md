@@ -1,5 +1,41 @@
 # Changelog
 
+## [3.16.0](https://github.com/Otherworldy/PiCode/compare/v3.15.2...v3.16.0) (2026-10-16)
+
+### Features
+
+* 给终端加上内容搜索和纵向滚动条 ([10a02c2](https://github.com/Otherworldy/PiCode/commit/10a02c2e45f799daa1bbcdc17e8b55568f49633f))
+
+* **ui:** standardize settings controls and redesign model provider setup dialog ([f980e0b](https://github.com/Otherworldy/PiCode/commit/f980e0b97d12a871ed25282a2c03db016b96b317))
+  * Redesign ProviderSetupDialog into a single-scroll view with inline connection test and key visibility toggle
+  * Refactor ModelDraftCard with model filtering, compact toolbar, visual hierarchy for model ID, and thinking levels
+  * Standardize settings buttons, inputs, and dialog footers to size lg (h-8)
+  * Unify segmented tabs across model settings, prompt settings, and workspace dialogs into rounded-full pill style
+  * Fix active tab styling for Radix data-state=active attribute
+  * Expand prompt textarea height to h-[30rem] on prompt settings page
+  * Update DESIGN.md and archive prototype in designs/model-provider-dialog.html
+
+
+### Bug Fixes
+
+* 打开会话时按文件名定位 jsonl，避免扫完全部历史 ([6fcd196](https://github.com/Otherworldy/PiCode/commit/6fcd196d2735e6f788a39c69d76edec556c0cfd6))
+
+* 关掉的 Pi 包技能在资源重载后不再回到系统提示 ([dc8f28e](https://github.com/Otherworldy/PiCode/commit/dc8f28e990658b72b76a49acd2bbcbac62205fb9))
+
+* 关掉内置审查页时关掉侧栏，而不是留下空白页 ([1552245](https://github.com/Otherworldy/PiCode/commit/15522452bc6a18a8265d8fa632a530b416ca30f9))
+
+* 状态面板显示子智能体角色名 ([fc916c4](https://github.com/Otherworldy/PiCode/commit/fc916c487ae6d460703974fe5fc8658cac60d1b9))
+
+* 子代理不出现在左侧会话列表 ([2f23945](https://github.com/Otherworldy/PiCode/commit/2f239457c36c3e62ba99bbaf2a753ddd65e94ff8))
+
+* **pi-host:** 「正在运行」只认本进程活表 ([2895e16](https://github.com/Otherworldy/PiCode/commit/2895e16ef28a318e3f658a422ee0ffbbdbe65004))
+
+* **pi-host:** 扫 jsonl 时也只把活表里的子会话标成在跑 ([171c00b](https://github.com/Otherworldy/PiCode/commit/171c00becd2138ee45f19ea9caa04704cf3c1f36))
+
+* SSH 远程项目名显示主机地址而不是目录名 ([c63403f](https://github.com/Otherworldy/PiCode/commit/c63403f6cdbabf5d1af27c6172c9352c31a7f4af))
+
+* UI 设计模式没写成 HTML 时续一次请求 ([94b9b38](https://github.com/Otherworldy/PiCode/commit/94b9b386b0e663134cc52f580bfaeb3a14655e79))
+
 ## [3.15.2](https://github.com/Otherworldy/PiCode/compare/v3.15.0...v3.15.2) (2026-10-14)
 
 ### Bug Fixes
