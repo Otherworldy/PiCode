@@ -234,7 +234,8 @@ export class ExtensionUiHost {
         kind: "userInput",
         prompt: questions[0]?.question ?? "",
         freeText: false,
-        toolName: "extension",
+        // ask 是问卷（含 pi-ask-me），留在对话里。只有 select/input/confirm 进扩展命令弹窗。
+        toolName: "AskUserQuestion",
         ...(questions.length > 0 ? { questions } : {}),
       },
     };
