@@ -127,7 +127,8 @@ export function createPiProcessBridge(): PiProcessBridge {
         "processes:request:log_files",
         { id },
       );
-      const text = lines.map((line) => line.text).join("");
+      // 插件按行返回 text，行尾换行已被吃掉；join("") 会把所有行黏成一坨。
+      const text = lines.map((line) => line.text).join("\n");
       return Promise.resolve({
         kind: "output" as const,
         workId,

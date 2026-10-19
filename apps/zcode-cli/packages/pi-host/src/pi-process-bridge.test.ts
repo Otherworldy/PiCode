@@ -79,7 +79,11 @@ test("bridge lists, reads, and kills through the plugin bus", async () => {
     });
   });
   bus.on("processes:request:combined_output", (payload) => {
-    (payload as { reply: (lines: unknown) => void }).reply([{ text: "ready\n" }]);
+    // 插件合同的 text 不含行尾换行，桥接必须自己补回。
+    (payload as { reply: (lines: unknown) => void }).reply([
+      { type: "stdout", text: "ready" },
+      { type: "stderr", text: "warning" },
+    ]);
   });
   bus.on("processes:request:log_files", (payload) => {
     (payload as { reply: (files: unknown) => void }).reply({ combinedFile: "combined.log" });
@@ -100,7 +104,7 @@ test("bridge lists, reads, and kills through the plugin bus", async () => {
   const output = await bridge.output("pi-process:proc_1");
   assert.equal(seen.at(-1), "pi-process:proc_1");
   assert.equal(output.kind, "output");
-  if (output.kind === "output") assert.equal(output.output, "ready\n");
+  if (output.kind === "output") assert.equal(output.output, "ready\nwarning");
   assert.equal(await bridge.kill("proc_1"), true);
   assert.equal(killed, "proc_1");
 });

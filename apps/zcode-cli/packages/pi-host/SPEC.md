@@ -223,7 +223,7 @@ SSH 工作区不部署远端 zcode-server，也不从 PiCode CDN 下载或上传
 
 长驻命令的主人是 Pi 插件 `pi-processes`，不是旧的后台 bash。加载扩展的会话会挂一个隐藏 inline extension，只听 `processes:changed`，把仍在跑的进程写成 `backgroundWorks`：`kind` 仍是 `bash`，`workId` 前缀是 `pi-process:`。状态面板里已有的「终端」列表、日志侧栏和停止按钮因此能用，不必再打 `/ps` 或 `/ps:kill`。
 
-停止这个前缀只发插件的 `processes:command:kill`，不调用 `session.abort()`。日志走原来的 `readBackgroundBashOutput`，读插件的合并输出；侧栏仍按一秒轮询，跑着就继续读。进程结束就离开列表，不写入会话 jsonl。
+停止这个前缀只发插件的 `processes:command:kill`，不调用 `session.abort()`。日志走原来的 `readBackgroundBashOutput`，读插件的合并输出；侧栏仍按一秒轮询，跑着就继续读。进程结束就离开列表，不写入会话 jsonl。插件的 `combined_output` 按行返回 `text`，行尾换行不在文本里，桥接必须逐行拼回换行，否则多行输出会黏成一行。命令自身把输出重定向到文件时（`> log 2>&1`），插件日志本来就是空的，侧栏显示空不是读取失败。
 
 `/ps` 和 `ps:` 开头的命令是 Pi TUI 的。GUI 不展示，打出来也不发给模型。模型继续用插件的 `process` 工具。没装这个插件时列表为空，停止和读日志都当不存在。SSH 工作区里插件起的是本机进程，不是远端 shell；远端命令仍走现有的 ssh bash。
 
