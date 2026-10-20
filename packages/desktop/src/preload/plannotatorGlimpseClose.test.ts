@@ -13,7 +13,7 @@ type FakeWindow = Window & {
 function fakeWindow(hostname: string, bridge?: { close: () => void }): FakeWindow {
   const listeners: FakeWindow["listeners"] = [];
   const win = {
-    location: { hostname },
+    location: { hostname, href: hostname ? `http://${hostname}/` : "about:blank" },
     listeners,
     close() {
       throw new Error("native close");
@@ -71,6 +71,26 @@ test("other sites keep their own close", () => {
   installPlannotatorGuestClose(BRIDGE_KEY);
   assert.equal(win.close, native);
   assert.equal(win.glimpse, undefined);
+});
+
+test("about:blank waits, then installs once the review host is committed", () => {
+  let notifies = 0;
+  const win = fakeWindow("");
+  win.location.href = "about:blank";
+  useWindow(win);
+  installPlannotatorGuestClose(BRIDGE_KEY);
+  assert.equal(win.glimpse, undefined);
+  win.location.hostname = "127.0.0.1";
+  win.location.href = "http://127.0.0.1:9/review";
+  (win as unknown as Record<string, unknown>)[BRIDGE_KEY] = {
+    close() {
+      notifies += 1;
+    },
+  };
+  const ready = win.listeners.find((listener) => listener.type === "DOMContentLoaded");
+  ready?.fn({});
+  win.close();
+  assert.equal(notifies, 1);
 });
 
 test("the bridge can appear on DOMContentLoaded", () => {

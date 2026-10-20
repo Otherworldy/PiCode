@@ -257,6 +257,50 @@ contextBridge.exposeInMainWorld("zcode", {
     ipcRenderer.invoke(PlatformChannels.SelectDirectory),
   /** 打开系统文件选择框，返回选中文件路径或 null */
   selectFile: (): Promise<string | null> => ipcRenderer.invoke(PlatformChannels.SelectFile),
+  getDesktopPetSettings: () =>
+    ipcRenderer.invoke(PlatformChannels.DesktopPetState, { action: "get" }) as Promise<
+      import("@zcode/shared").DesktopPetPersistedSettings | null
+    >,
+  findDesktopPetReaderText: async (query: string): Promise<boolean> => {
+    const result = (await ipcRenderer.invoke(PlatformChannels.DesktopPetState, {
+      action: "find",
+      query,
+    })) as { found?: boolean } | null;
+    return result?.found === true;
+  },
+  setDesktopPetMood: (mood: import("@zcode/shared").DesktopPetMood) => {
+    ipcRenderer.send(PlatformChannels.DesktopPetMood, { mood });
+  },
+  getDesktopPetDownloadStatus: () =>
+    ipcRenderer.invoke(PlatformChannels.DesktopPetState, { action: "download" }) as Promise<
+      import("@zcode/shared").DesktopPetDownloadStatus | null
+    >,
+  onDesktopPetDownload: (
+    callback: (status: import("@zcode/shared").DesktopPetDownloadStatus) => void,
+  ) => {
+    const handler = (_event: unknown, payload: unknown) =>
+      callback(payload as import("@zcode/shared").DesktopPetDownloadStatus);
+    ipcRenderer.on(PlatformChannels.DesktopPetDownload, handler);
+    return () => ipcRenderer.removeListener(PlatformChannels.DesktopPetDownload, handler);
+  },
+  stopDesktopPetDownload: () =>
+    ipcRenderer.invoke(PlatformChannels.DesktopPetState, { action: "stop" }) as Promise<void>,
+  listDesktopPetInstalledPacks: () =>
+    ipcRenderer.invoke(PlatformChannels.DesktopPetState, { action: "packs" }) as Promise<
+      import("@zcode/shared").DesktopPetInstalledPack[]
+    >,
+  importDesktopPetPack: (dir: string) =>
+    ipcRenderer.invoke(PlatformChannels.DesktopPetState, { action: "import", dir }) as Promise<{
+      success: boolean;
+      error?: string;
+      pack?: import("@zcode/shared").DesktopPetInstalledPack;
+    }>,
+  deleteDesktopPetPack: (id: string, sourceType: "download" | "local") =>
+    ipcRenderer.invoke(PlatformChannels.DesktopPetState, {
+      action: "delete",
+      id,
+      sourceType,
+    }) as Promise<boolean>,
   /** 打开系统多文件选择框，返回选中文件路径；取消时返回空数组 */
   selectFiles: (): Promise<string[]> => ipcRenderer.invoke(PlatformChannels.SelectFiles),
   /** 通过 main process 的原生另存为对话框明确落盘 */

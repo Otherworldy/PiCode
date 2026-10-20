@@ -72,6 +72,7 @@ import { SystemPromptSettingsSection } from "@/settings/SystemPromptSettingsSect
 import { BrowserSettingsSection } from "@/settings/BrowserSettingsSection.js";
 import { ComputerUseSection } from "@/settings/ComputerUseSection.js";
 import { AboutSettingsSection } from "@/settings/AboutSettingsSection.js";
+import { DesktopPetSettings } from "@/settings/DesktopPetSettings.js";
 import { ShortcutSettingsSection } from "@/settings/ShortcutSettingsSection.js";
 import { MigrationSection } from "@/settings/MigrationSection.js";
 import {
@@ -1715,6 +1716,8 @@ export function SettingsPage({
                           />
                         ) : activeSection === "about" ? (
                           <AboutSettingsSection />
+                        ) : activeSection === "desktopPet" ? (
+                          <DesktopPetSettings />
                         ) : activeSection === "computerUse" ? (
                           <ComputerUseSection
                             isDesktop={Boolean(isDesktop)}

@@ -34,6 +34,17 @@ test("completion reminder uses the latest message", () => {
   assert.equal(payload?.body, "最新回复");
 });
 
+test("model error uses the failure reminder", () => {
+  const [payload] = collectTerminalTaskNotificationPayloads({
+    previousBySessionId: new Map([["s", session("running")]]),
+    sessions: [session("error", "请求失败")],
+    formatMessage,
+  });
+  assert.equal(payload?.status, "failed");
+  assert.equal(payload?.title, "notification.error");
+  assert.equal(payload?.body, "请求失败");
+});
+
 test("completion reminder falls back to the session title", () => {
   const [payload] = collectTerminalTaskNotificationPayloads({
     previousBySessionId: new Map([["s", session("running")]]),

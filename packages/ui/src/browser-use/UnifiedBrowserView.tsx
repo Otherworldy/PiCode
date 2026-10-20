@@ -14,7 +14,12 @@ import { BrowserViewportSurface } from "@/browser-use/BrowserViewportSurface.js"
 import { BrowserViewportToolbar } from "@/browser-use/BrowserViewportToolbar.js";
 import { useBrowserResizeOperationWarning } from "@/browser-use/useBrowserResizeOperationWarning.js";
 import { useBrowserScreenshotSurfaceReady } from "@/browser-use/useBrowserScreenshotSurfaceReady.js";
-import { usePlannotatorGlimpseClose } from "@/browser-use/usePlannotatorGlimpseClose.js";
+import {
+  isLoopbackHttpUrl,
+  PLANNOTATOR_GUEST_CLOSE_MAIN_WORLD_SCRIPT,
+  shouldCloseBlankedLoopbackPage,
+  usePlannotatorGlimpseClose,
+} from "@/browser-use/usePlannotatorGlimpseClose.js";
 import { useEmbeddedBrowserWheelChain } from "@/browser-use/useEmbeddedBrowserWheelChain.js";
 import { useDesktopZoomFactor } from "@/browser-use/useDesktopZoomFactor.js";
 import { useResponsiveBrowserViewportControl } from "@/browser-use/useResponsiveBrowserViewportControl.js";
@@ -219,6 +224,10 @@ export function UnifiedBrowserView({
   const lastRestorableUrlRef = useRef<string | null>(
     initialUrl && initialUrl !== DEFAULT_BROWSER_URL ? initialUrl : null,
   );
+  // 启动 src 就是 about:blank。只有真正进过本机审查页之后，再落到空白页才关标签。
+  const loopbackPageCommittedRef = useRef(false);
+  const onGuestCloseRequestRef = useRef(onGuestCloseRequest);
+  onGuestCloseRequestRef.current = onGuestCloseRequest;
   const guestRecoveryInProgressRef = useRef(false);
   // 失败 guest 接到外部导航时，回执必须等替代 guest 实际接管 loadURL 后再完成。
   const pendingGuestNavigationCompletionRef = useRef<PendingGuestNavigationCompletion | null>(null);
@@ -495,7 +504,18 @@ export function UnifiedBrowserView({
       }
       guestRecoveryInProgressRef.current = false;
       syncBrowserState(webview);
+      installLoopbackGuestClose();
     };
+
+    const installLoopbackGuestClose = () => {
+      const pageUrl = safeWebviewCall(() => webview.getURL(), "");
+      if (!isLoopbackHttpUrl(pageUrl)) return;
+      // preload 可能只在启动用的 about:blank 上跑过。审查页文档提交后再装一次，window.close 才不会把标签清成空白。
+      void Promise.resolve(
+        webview.executeJavaScript(PLANNOTATOR_GUEST_CLOSE_MAIN_WORLD_SCRIPT, false),
+      ).catch(() => undefined);
+    };
+    installLoopbackGuestClose();
 
     const handleDidStartLoading = () => {
       void cancelWebElementPicking();
@@ -513,8 +533,24 @@ export function UnifiedBrowserView({
       syncBrowserState(webview);
     };
 
-    const handleNavigation = () => {
+    const handleNavigation = (event: { url?: string }) => {
+      const nextUrl = event.url ?? "";
+      if (isLoopbackHttpUrl(nextUrl)) {
+        loopbackPageCommittedRef.current = true;
+      } else if (nextUrl.length > 0 && nextUrl !== DEFAULT_BROWSER_URL) {
+        loopbackPageCommittedRef.current = false;
+      }
+      const closeBlank = shouldCloseBlankedLoopbackPage(
+        loopbackPageCommittedRef.current,
+        nextUrl,
+        {
+          recovering: guestRecoveryInProgressRef.current,
+          canGoForward: safeWebviewCall(() => webview.canGoForward(), false),
+        },
+      );
+      if (closeBlank) loopbackPageCommittedRef.current = false;
       syncBrowserState(webview);
+      if (closeBlank) onGuestCloseRequestRef.current?.();
     };
 
     const handleTitleUpdated = (event: ElectronWebviewTitleEvent) => {

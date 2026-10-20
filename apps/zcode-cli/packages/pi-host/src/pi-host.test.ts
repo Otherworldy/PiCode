@@ -322,7 +322,9 @@ test("retry keeps one working turn and shows the final error", () => {
   projector.apply({ type: "agent_end" });
   const done = projector.getSnapshot();
   assert.equal(done.rows.window.filter((row) => row.kind === "turnHeader").length, 1);
-  assert.equal(done.control.phase, "completedSuccess");
+  assert.equal(done.control.phase, "error");
+  const failedHeader = done.rows.window.find((row) => row.kind === "turnHeader");
+  assert.equal(failedHeader && failedHeader.kind === "turnHeader" ? failedHeader.state : "", "failed");
   assert.equal(
     done.rows.window.some((row) => row.kind === "assistantText"),
     false,

@@ -26,6 +26,24 @@ import {
   installLocalMediaPreviewProtocol,
   registerLocalMediaPreviewScheme,
 } from "./localMediaPreviewProtocol.js";
+import {
+  bindDesktopPet,
+  disposeDesktopPet,
+  isDesktopPetMediaPath,
+  isDesktopPetWindow,
+  clearDesktopPetMood,
+  findDesktopPetReaderText,
+  getDesktopPetDownloadStatus,
+  getDesktopPetSettingsSnapshot,
+  importDesktopPetPack,
+  deleteDesktopPetPack,
+  listDesktopPetInstalledPacks,
+  noteDesktopPetMood,
+  noteDesktopPetSettings,
+  resolveDesktopPetRootDir,
+  stopDesktopPetDownload,
+  takeDesktopPetSettingsRestore,
+} from "./pet/petController.js";
 import { createDesktopBrowserScreenshotSurfaceCoordinator } from "./browserView/browserScreenshotSurfaceCoordinatorWiring.js";
 import { EMBEDDED_BROWSER_PARTITION } from "./browserDataManager.js";
 import { EmbeddedBrowserJavaScriptDialogController } from "./embeddedBrowserJavaScriptDialog.js";
@@ -923,6 +941,7 @@ function syncCloseToTrayOnWindows(value: unknown) {
 
 function syncImmediateAppSettings(patch: Partial<AppSettings>) {
   syncCloseToTrayOnWindows(patch.closeToTrayOnWindows);
+  noteDesktopPetSettings(patch);
 
   if (typeof patch.keepAwakeWhileRunning === "boolean") {
     keepAwakeWhileRunning = patch.keepAwakeWhileRunning;
@@ -954,6 +973,7 @@ async function prepareAppQuit(reason: string): Promise<void> {
 
   markForceQuit(reason);
   windowsCuaOperationIndicator.dispose();
+  disposeDesktopPet();
   browserScreenshotSurfaceCoordinator.dispose();
   // Bug 根因：资源样本改为 5 分钟窗口后，退出仍直接 stop 会清空未满窗口的数据。
   // 退出时只排空已存在的角色 / Agent 内存窗口，不启动新采样、目录扫描或外部探针。
@@ -1230,7 +1250,10 @@ function resolveFocusedDesktopZoomLevel(): number {
 
 function getApplicationWindowsExcludingCuaIndicator(): BrowserWindow[] {
   return BrowserWindow.getAllWindows().filter(
-    (win) => !win.isDestroyed() && !windowsCuaOperationIndicator.ownsWindow(win),
+    (win) =>
+      !win.isDestroyed() &&
+      !windowsCuaOperationIndicator.ownsWindow(win) &&
+      !isDesktopPetWindow(win),
   );
 }
 
@@ -1424,7 +1447,18 @@ app.on("second-instance", (_event, argv, _workingDirectory, additionalData) => {
 app.whenReady().then(async () => {
   markMainLaunchAppReady();
   installLocalMediaPreviewProtocol(session.defaultSession.protocol, {
-    isPathAuthorized: localMediaPreviewPathRegistry.isAuthorized,
+    isPathAuthorized: (path) =>
+      localMediaPreviewPathRegistry.isAuthorized(path) || isDesktopPetMediaPath(path),
+  });
+  bindDesktopPet({
+    logger,
+    petRootDir: resolveDesktopPetRootDir({
+      isPackaged: app.isPackaged,
+      platform: process.platform,
+      resourcesPath: process.resourcesPath,
+      appPath: app.getAppPath(),
+    }),
+    preloadPath: join(import.meta.dirname, "../preload/pet.cjs"),
   });
   // 插件 UI 沙箱：注册表 + renderer 可调 IPC；scheme 的 privileged 注册已随 zcode-media 在 ready 前完成。
   installPluginSandboxHost({
@@ -1461,6 +1495,22 @@ app.whenReady().then(async () => {
       currentApplicationLocale = bootstrapSettings.locale;
     }
     closeToTrayOnWindows = bootstrapSettings.closeToTrayOnWindows ?? true;
+    noteDesktopPetSettings(bootstrapSettings, true);
+    const restoredPetSettings = takeDesktopPetSettingsRestore();
+    if (restoredPetSettings) {
+      // 把宠物自己记住的设置写回 setting.json。写回失败不影响这次启动。
+      await mainSettingService
+        .update({
+          desktopPetEnabled: restoredPetSettings.enabled,
+          desktopPetPackDir: restoredPetSettings.packDir,
+          desktopPetPackUrl: restoredPetSettings.packUrl,
+          desktopPetBubbleTone: restoredPetSettings.bubbleTone,
+          desktopPetReaderPath: restoredPetSettings.readerPath,
+          desktopPetReaderHotkey: restoredPetSettings.readerHotkey,
+          desktopPetReaderHotkeyMode: restoredPetSettings.readerHotkeyMode,
+        })
+        .catch(() => undefined);
+    }
     keepAwakeWhileRunning = bootstrapSettings.keepAwakeWhileRunning ?? false;
     currentDesktopZoomLevel = clampDesktopZoomLevel(bootstrapSettings.desktopZoomLevel ?? 0);
     currentDesktopWindowSize = bootstrapSettings.desktopWindowSize;
@@ -1657,6 +1707,15 @@ app.whenReady().then(async () => {
       runningAgentSessionCount: getRunningAgentSessionCount(),
     }),
     syncAppSettings: syncImmediateAppSettings,
+    getDesktopPetSettings: getDesktopPetSettingsSnapshot,
+    getDesktopPetDownloadStatus,
+    listDesktopPetInstalledPacks,
+    importDesktopPetPack,
+    deleteDesktopPetPack,
+    stopDesktopPetDownload,
+    findDesktopPetReaderText,
+    noteDesktopPetMood,
+    clearDesktopPetMood,
     setShortcutRecordingActive,
     deviceMid,
   });

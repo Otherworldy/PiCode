@@ -15,6 +15,10 @@ import type {
   SaveCliMcpToUserDirectoryRequest,
 } from "./mcp.js";
 import type { OAuthStateRegistration } from "./oauth.js";
+import type { DesktopPetDownloadStatus } from "./desktopPetDownload.js";
+import type { DesktopPetInstalledPack } from "./desktopPetInstalled.js";
+import type { DesktopPetMood } from "./desktopPetMood.js";
+import type { DesktopPetPersistedSettings } from "./desktopPetReader.js";
 import type { AppSettings, Locale } from "./protocol.js";
 import type { ArmsCustomEventPayload, RendererTelemetryEventPayload } from "./telemetry.js";
 import type {
@@ -525,6 +529,35 @@ export interface IPlatformService {
 
   /** 打开系统文件选择框，返回选中文件路径或 null */
   selectFile(): Promise<string | null>;
+
+  /** 桌面宠物自己记住的设置。旧的设置服务会丢掉这些字段时，设置页用这份。 */
+  getDesktopPetSettings?(): Promise<DesktopPetPersistedSettings | null>;
+
+  /** 在摸鱼文本里查找并让气泡从那里开始。找不到返回 false。 */
+  findDesktopPetReaderText?(query: string): Promise<boolean>;
+
+  /** 上报本窗口工作区的宠物心情。只在桌面端实现，不产生系统通知。 */
+  setDesktopPetMood?(mood: DesktopPetMood): void;
+
+  /** 当前宠物包下载状态。设置页打开时用来补上已经开始的进度。 */
+  getDesktopPetDownloadStatus?(): Promise<DesktopPetDownloadStatus | null>;
+
+  /** 订阅宠物包下载进度。返回取消订阅。 */
+  onDesktopPetDownload?(handler: (status: DesktopPetDownloadStatus) => void): () => void;
+
+  /** 停止当前宠物包下载。没在下载时不做任何事。 */
+  stopDesktopPetDownload?(): Promise<void>;
+
+  /** 已经下载并能打开的宠物包。 */
+  listDesktopPetInstalledPacks?(): Promise<DesktopPetInstalledPack[]>;
+
+  /** 从本地文件夹导入宠物，校验有效后记录并返回。 */
+  importDesktopPetPack?(
+    dir: string,
+  ): Promise<{ success: boolean; error?: string; pack?: DesktopPetInstalledPack }>;
+
+  /** 删除已下载缓存包（彻底删除磁盘文件）或移除本地导入链接（不删物理文件）。 */
+  deleteDesktopPetPack?(id: string, sourceType: "download" | "local"): Promise<boolean>;
 
   /** 打开系统多文件选择框，返回选中的文件路径；取消时返回空数组 */
   selectFiles?(): Promise<string[]>;

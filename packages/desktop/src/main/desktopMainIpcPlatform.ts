@@ -80,6 +80,19 @@ export function registerPlatformIpcHandlers(options: {
     runningAgentSessionCount: number;
   };
   syncAppSettings: (patch: unknown) => void;
+  getDesktopPetSettings?: () => import("@zcode/shared").DesktopPetPersistedSettings;
+  getDesktopPetDownloadStatus?: () => import("@zcode/shared").DesktopPetDownloadStatus;
+  listDesktopPetInstalledPacks?: () => import("@zcode/shared").DesktopPetInstalledPack[];
+  importDesktopPetPack?: (dir: string) => {
+    success: boolean;
+    error?: string;
+    pack?: import("@zcode/shared").DesktopPetInstalledPack;
+  };
+  deleteDesktopPetPack?: (id: string, sourceType: "download" | "local") => boolean;
+  stopDesktopPetDownload?: () => void;
+  findDesktopPetReaderText?: (query: string) => Promise<boolean>;
+  noteDesktopPetMood?: (senderId: number, mood: unknown) => void;
+  clearDesktopPetMood?: (senderId: number) => void;
   /** 快捷键设置页录制态开关：true 时 main 重建菜单摘除可配置 accelerator */
   setShortcutRecordingActive?: (active: boolean, ownerWebContentsId?: number | null) => void;
   /** 桌面端设备标识符（基于 userData 路径的 SHA-256） */
@@ -101,6 +114,54 @@ export function registerPlatformIpcHandlers(options: {
       return null;
     }
     return result.filePaths[0];
+  });
+
+  ipcMain.handle(PlatformChannels.DesktopPetState, async (_event, payload: unknown) => {
+    const request = payload as { action?: string; query?: string };
+    if (request?.action === "get") return options.getDesktopPetSettings?.() ?? null;
+    if (request?.action === "download") {
+      return options.getDesktopPetDownloadStatus?.() ?? { phase: "idle" };
+    }
+    if (request?.action === "stop") {
+      options.stopDesktopPetDownload?.();
+      return null;
+    }
+    if (request?.action === "packs") return options.listDesktopPetInstalledPacks?.() ?? [];
+    if (request?.action === "import") {
+      const dir =
+        typeof (request as { dir?: unknown }).dir === "string"
+          ? (request as { dir: string }).dir
+          : "";
+      return options.importDesktopPetPack?.(dir) ?? { success: false, error: "not-supported" };
+    }
+    if (request?.action === "delete") {
+      const req = request as { id?: string; sourceType?: "download" | "local" };
+      return (
+        options.deleteDesktopPetPack?.(
+          req.id ?? "",
+          req.sourceType === "local" ? "local" : "download",
+        ) ?? false
+      );
+    }
+    if (request?.action === "find") {
+      const found = await options.findDesktopPetReaderText?.(request.query ?? "");
+      return { found: found === true };
+    }
+    return null;
+  });
+
+  const moodSenders = new Set<number>();
+  ipcMain.on(PlatformChannels.DesktopPetMood, (event, payload: unknown) => {
+    const senderId = event.sender.id;
+    const mood =
+      payload && typeof payload === "object" ? (payload as { mood?: unknown }).mood : undefined;
+    options.noteDesktopPetMood?.(senderId, mood);
+    if (moodSenders.has(senderId) || event.sender.isDestroyed()) return;
+    moodSenders.add(senderId);
+    event.sender.once("destroyed", () => {
+      moodSenders.delete(senderId);
+      options.clearDesktopPetMood?.(senderId);
+    });
   });
 
   ipcMain.handle(PlatformChannels.SelectFile, async () => {

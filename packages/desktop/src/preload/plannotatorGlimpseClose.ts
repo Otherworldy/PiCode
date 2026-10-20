@@ -4,9 +4,13 @@
  */
 export function installPlannotatorGuestClose(bridgeKey: string): void {
   const installed = "__zcodePlannotatorCloseInstalled";
+  const isLoopbackHost = (host: string): boolean =>
+    host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
   const attempt = (): "done" | "skip" | "wait" => {
     const host = window.location.hostname.toLowerCase();
-    if (host !== "localhost" && host !== "127.0.0.1" && host !== "::1" && host !== "[::1]") {
+    // 同一次文档的 preload 可能先看到 about:blank。先别放弃，等这次文档提交地址后再装。
+    if (!isLoopbackHost(host)) {
+      if (window.location.href === "about:blank" || host === "") return "wait";
       return "skip";
     }
     const marked = window as Window & { [installed]?: boolean };
@@ -38,11 +42,9 @@ export function installPlannotatorGuestClose(bridgeKey: string): void {
     return "done";
   };
   if (attempt() !== "wait") return;
-  window.addEventListener(
-    "DOMContentLoaded",
-    () => {
-      attempt();
-    },
-    { once: true },
-  );
+  const retry = (): void => {
+    attempt();
+  };
+  window.addEventListener("DOMContentLoaded", retry, { once: true });
+  window.addEventListener("load", retry, { once: true });
 }

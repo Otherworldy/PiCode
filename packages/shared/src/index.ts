@@ -318,6 +318,22 @@ export * from "./pluginStoreOrdering.js";
 export * from "./session-debug.js";
 export { redactFeedbackText } from "./feedbackPrivacy.js";
 export {
+  DESKTOP_PET_READER_HOTKEY_DEFAULT,
+  normalizeDesktopPetReaderHotkey,
+  normalizeDesktopPetReaderHotkeyMode,
+} from "./desktopPetReader.js";
+export type { DesktopPetPersistedSettings } from "./desktopPetReader.js";
+export {
+  deriveDesktopPetMood,
+  desktopPetMoodSlot,
+  mergeDesktopPetMoods,
+  normalizeDesktopPetMood,
+} from "./desktopPetMood.js";
+export type { DesktopPetMood } from "./desktopPetMood.js";
+export { DESKTOP_PET_RECOMMENDED_PACK_URL } from "./desktopPetDownload.js";
+export type { DesktopPetDownloadFailure, DesktopPetDownloadStatus } from "./desktopPetDownload.js";
+export type { DesktopPetInstalledPack } from "./desktopPetInstalled.js";
+export {
   MOBILE_REMOTE_DEFAULT_PORT,
   parseMobileRemotePort,
   resolveMobileRemoteListenPort,

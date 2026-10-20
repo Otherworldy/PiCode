@@ -2,17 +2,12 @@ import { app, BrowserWindow, Notification } from "electron";
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import type { TaskNotificationPayload } from "@zcode/shared";
 import { formatZodError, PlatformChannels, taskNotificationPayloadSchema } from "@zcode/shared";
+import { tryPresentTaskOnPet } from "./pet/petController.js";
 
 const TASK_NOTIFICATION_DEDUPE_WINDOW_MS = 3000;
 const MAX_ACTIVE_TASK_NOTIFICATIONS = 100;
 const recentTaskNotificationTimestamps = new Map<string, number>();
 const activeTaskNotifications = new Set<Notification>();
-
-function isAnyAppWindowFocused() {
-  return BrowserWindow.getAllWindows().some(
-    (window) => !window.isDestroyed() && window.isFocused(),
-  );
-}
 
 function shouldSuppressDuplicateTaskNotification(
   taskId: string,
@@ -96,10 +91,7 @@ export function dispatchTaskNotification(options: {
     return false;
   }
 
-  if (isAnyAppWindowFocused()) {
-    return false;
-  }
-
+  // 以前窗口聚焦时直接丢掉任务通知。宠物提醒和系统通知都要在前台出现，所以这里不再看焦点。
   const { taskId, status, requestId, title, body } = result.data;
   const notificationTitle = title.trim();
   const notificationBody = body.trim();
@@ -120,6 +112,24 @@ export function dispatchTaskNotification(options: {
   }
 
   const senderWindow = BrowserWindow.fromWebContents(options.event.sender);
+  if (
+    tryPresentTaskOnPet({
+      taskId,
+      status,
+      title: notificationTitle,
+      body: notificationBody,
+      onActivate: () => {
+        if (!senderWindow || senderWindow.isDestroyed()) return;
+        focusTaskNotificationWindow(senderWindow);
+        senderWindow.webContents.send(PlatformChannels.TaskNotificationClick, taskId);
+      },
+    })
+  ) {
+    options.event.sender.send(PlatformChannels.TaskNotificationSound);
+    options.logger.info("[show-task-notification] presented on desktop pet", { taskId, status });
+    return true;
+  }
+
   const notification = new Notification({
     title: notificationTitle,
     body: notificationBody,

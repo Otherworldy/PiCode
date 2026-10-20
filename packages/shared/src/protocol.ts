@@ -295,6 +295,20 @@ export interface AppSettings {
   };
   /** 桌面端 Chromium 硬件加速开关；只在下次启动 main 进程早期生效，Web/手机端忽略。 */
   desktopChromiumHardwareAccelerationEnabled?: boolean;
+  /** 桌面宠物。缺省关闭。Web/手机端忽略，安装包不带宠物资源。 */
+  desktopPetEnabled?: boolean;
+  /** 用户选择的 dsh 兼容宠物目录。非空时优先于下载地址。 */
+  desktopPetPackDir?: string;
+  /** 宠物资源 zip 的 http(s) 地址。由桌面主进程下载到安装目录下的 pets。 */
+  desktopPetPackUrl?: string;
+  /** 桌面宠物提醒气泡底色。缺省黑底。Web/手机端忽略。 */
+  desktopPetBubbleTone?: "dark" | "light";
+  /** 摸鱼时在宠物气泡里显示的本地文本路径。空表示不启用。 */
+  desktopPetReaderPath?: string;
+  /** 摸鱼文本快捷键，Electron accelerator。缺省 F9。 */
+  desktopPetReaderHotkey?: string;
+  /** 摸鱼快捷键是点击切换还是按住显示。缺省点击切换。 */
+  desktopPetReaderHotkeyMode?: "toggle" | "hold";
   /** 是否在消息流中展示模型思考过程 */
   messageStreamShowReasoning?: boolean;
   // TODO(settings-schema-version): 能证明所有受支持升级路径都已执行本次迁移后，改用统一 settings schema version，并一起删除此 marker、迁移函数和持久化判断。

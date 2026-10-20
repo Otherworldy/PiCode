@@ -1251,7 +1251,10 @@ export class PiToV4Projector {
       this.openPlanReviewTurnId = null;
       this.openReviewKind = null;
     }
-    const state = this.aborted ? "completedInterrupted" : "completedSuccess";
+    // 模型报错不能收成 completedSuccess。通知和任务列表只看 phase，
+    // 收成成功会让失败也走完成提醒。用户中断仍算 interrupted。
+    const failed = Boolean(presented) && !this.aborted;
+    const state = this.aborted ? "completedInterrupted" : failed ? "failed" : "completedSuccess";
     const failureLines = this.retryFailures.map(
       (failure) => `${failure.attempt}. ${failure.message}`,
     );
@@ -1304,7 +1307,7 @@ export class PiToV4Projector {
       op: "state.updated",
       patch: {
         control: {
-          phase: this.aborted ? "completedInterrupted" : "completedSuccess",
+          phase: this.aborted ? "completedInterrupted" : failed ? "error" : "completedSuccess",
           sessionEnded: false,
           canStop: holdPlanReview,
           stopState: holdPlanReview ? "stoppable" : "idle",

@@ -192,6 +192,7 @@ export default defineConfig([
       "preload/resourceManager": "src/preload/resourceManager.ts",
       "preload/cuaPermissionPanel": "src/preload/cuaPermissionPanel.ts",
       "preload/pluginSandbox": "src/preload/pluginSandbox/index.ts",
+      "preload/pet": "src/preload/pet.ts",
     },
     outDir: "out",
     format: "cjs",

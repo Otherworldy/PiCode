@@ -8,6 +8,10 @@ import type {
   SaveCliMcpToUserDirectoryRequest,
 } from "./index.js";
 import type { OAuthStateRegistration } from "./oauth.js";
+import type { DesktopPetDownloadStatus } from "./desktopPetDownload.js";
+import type { DesktopPetInstalledPack } from "./desktopPetInstalled.js";
+import type { DesktopPetMood } from "./desktopPetMood.js";
+import type { DesktopPetPersistedSettings } from "./desktopPetReader.js";
 import type { AppSettings, Locale } from "./protocol.js";
 import type { StorageCleanRequest, StorageCleanResult, StorageUsageSnapshot } from "./storage.js";
 import type {
@@ -170,6 +174,12 @@ export const PlatformChannels = {
   SelectDirectory: "zcode:select-directory",
   /** 打开系统文件选择框 */
   SelectFile: "zcode:select-file",
+  /** 读取桌面宠物设置，或在摸鱼文本里查找并跳转 */
+  DesktopPetState: "zcode:desktop-pet-state",
+  /** renderer → main：上报本窗口工作区的宠物心情 */
+  DesktopPetMood: "zcode:desktop-pet-mood",
+  /** Main → Renderer：宠物包下载进度 */
+  DesktopPetDownload: "zcode:desktop-pet-download",
   /** 打开系统多文件选择框 */
   SelectFiles: "zcode:select-files",
   /** Renderer → Main：写入宿主 ~/.PiCode 临时文本附件 */
@@ -685,6 +695,31 @@ export interface PlatformChannelMap {
   [PlatformChannels.SelectFile]: {
     request: void;
     response: string | null;
+  };
+  [PlatformChannels.DesktopPetState]: {
+    request:
+      | { action: "get" }
+      | { action: "find"; query: string }
+      | { action: "download" }
+      | { action: "stop" }
+      | { action: "packs" }
+      | { action: "import"; dir: string }
+      | { action: "delete"; id: string; sourceType: "download" | "local" };
+    response:
+      | DesktopPetPersistedSettings
+      | { found: boolean }
+      | DesktopPetDownloadStatus
+      | DesktopPetInstalledPack[]
+      | { success: boolean; error?: string; pack?: DesktopPetInstalledPack }
+      | null;
+  };
+  [PlatformChannels.DesktopPetMood]: {
+    request: { mood: DesktopPetMood };
+    response: void;
+  };
+  [PlatformChannels.DesktopPetDownload]: {
+    request: DesktopPetDownloadStatus;
+    response: void;
   };
   [PlatformChannels.SelectFiles]: {
     request: void;

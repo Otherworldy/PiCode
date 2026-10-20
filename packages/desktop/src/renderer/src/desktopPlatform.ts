@@ -14,6 +14,21 @@ export function createDesktopPlatform(options: {
     isLocalDevelopmentRuntime: options.isLocalDevelopmentRuntime,
     selectDirectory: () => window.zcode.selectDirectory(),
     selectFile: () => window.zcode.selectFile(),
+    getDesktopPetSettings: () => window.zcode.getDesktopPetSettings?.() ?? Promise.resolve(null),
+    findDesktopPetReaderText: (query) =>
+      window.zcode.findDesktopPetReaderText?.(query) ?? Promise.resolve(false),
+    setDesktopPetMood: (mood) => window.zcode.setDesktopPetMood?.(mood),
+    getDesktopPetDownloadStatus: () =>
+      window.zcode.getDesktopPetDownloadStatus?.() ?? Promise.resolve(null),
+    onDesktopPetDownload: (handler) => window.zcode.onDesktopPetDownload?.(handler) ?? (() => {}),
+    stopDesktopPetDownload: () => window.zcode.stopDesktopPetDownload?.() ?? Promise.resolve(),
+    listDesktopPetInstalledPacks: () =>
+      window.zcode.listDesktopPetInstalledPacks?.() ?? Promise.resolve([]),
+    importDesktopPetPack: (dir) =>
+      window.zcode.importDesktopPetPack?.(dir) ??
+      Promise.resolve({ success: false, error: "not-supported" }),
+    deleteDesktopPetPack: (id, sourceType) =>
+      window.zcode.deleteDesktopPetPack?.(id, sourceType) ?? Promise.resolve(false),
     selectFiles: () => window.zcode.selectFiles?.() ?? Promise.resolve([]),
     createTempTextAttachment: (payload) => window.zcode.createTempTextAttachment(payload),
     onRemoteConnectionLog: (handler) => window.zcode.onRemoteConnectionLog(handler),

@@ -95,6 +95,32 @@ declare global {
       selectDirectory(): Promise<string | null>;
       /** 打开系统文件选择框，返回选中文件路径或 null */
       selectFile(): Promise<string | null>;
+      /** 读取桌面宠物已经记住的设置 */
+      getDesktopPetSettings?(): Promise<import("@zcode/shared").DesktopPetPersistedSettings | null>;
+      /** 在摸鱼文本里查找并跳转 */
+      findDesktopPetReaderText?(query: string): Promise<boolean>;
+      /** 上报本窗口工作区的宠物心情 */
+      setDesktopPetMood?(mood: import("@zcode/shared").DesktopPetMood): void;
+      /** 读取当前宠物包下载状态 */
+      getDesktopPetDownloadStatus?(): Promise<
+        import("@zcode/shared").DesktopPetDownloadStatus | null
+      >;
+      /** 订阅宠物包下载进度 */
+      onDesktopPetDownload?(
+        handler: (status: import("@zcode/shared").DesktopPetDownloadStatus) => void,
+      ): () => void;
+      /** 停止当前宠物包下载 */
+      stopDesktopPetDownload?(): Promise<void>;
+      /** 已经下载并能打开的宠物包 */
+      listDesktopPetInstalledPacks?(): Promise<import("@zcode/shared").DesktopPetInstalledPack[]>;
+      /** 导入本地宠物文件夹 */
+      importDesktopPetPack?(dir: string): Promise<{
+        success: boolean;
+        error?: string;
+        pack?: import("@zcode/shared").DesktopPetInstalledPack;
+      }>;
+      /** 删除已下载包或移除导入的本地宠物 */
+      deleteDesktopPetPack?(id: string, sourceType: "download" | "local"): Promise<boolean>;
       /** 打开系统多文件选择框，返回选中文件路径；取消时返回空数组 */
       selectFiles?(): Promise<string[]>;
       /** 通过系统原生另存为对话框保存文件 */
