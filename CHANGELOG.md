@@ -1,5 +1,28 @@
 # Changelog
 
+## [3.17.0](https://github.com/Otherworldy/PiCode/compare/v3.16.0...v3.17.0) (2026-10-20)
+
+### Features
+
+* **desktop:** 新增桌面宠物模块及卡片化管理设置页 ([a9d32a2](https://github.com/Otherworldy/PiCode/commit/a9d32a2f4e48999bb2554e6cd5345d36521b64e8))
+  * 支持加载 dsh-pet 兼容格式角色包，提供透明小窗交互、右键动作点播与任务状态提醒
+  * 联动全部窗口的会话活跃状态呈现宠物心情（等待、思考、忙碌），支持气泡摸鱼阅读与全局热键
+  * 重构桌面宠物设置页：提供待机动作素材预览卡片、本地宠物导入、下载弹窗与差异化安全删除
+
+
+### Bug Fixes
+
+* 扩展命令不再当成用户消息，标题总结不抢会话 ([bcaf225](https://github.com/Otherworldy/PiCode/commit/bcaf2257150ec054aac9f14742321c58bd161508))
+
+* 问卷留在对话里，不再进扩展命令弹窗 ([031b7f4](https://github.com/Otherworldy/PiCode/commit/031b7f4163e0f312ebcc018c0685280a9b492fe1))
+
+* **pi-host:** 终端侧栏按行拼回换行，多行输出不再黏成一行 ([7aea3f2](https://github.com/Otherworldy/PiCode/commit/7aea3f23a441a89348504ca3ba0024d1e84e066b))
+
+
+### Chores
+
+* untrack local design mockups and ignore designs/ ([96a7f71](https://github.com/Otherworldy/PiCode/commit/96a7f719ca1c74ae57a4380206fa7f714b111e95))
+
 ## [3.16.0](https://github.com/Otherworldy/PiCode/compare/v3.15.2...v3.16.0) (2026-10-16)
 
 ### Features
