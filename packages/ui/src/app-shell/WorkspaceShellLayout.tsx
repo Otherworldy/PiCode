@@ -1816,9 +1816,14 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                         />
                       </ScopedErrorBoundary>
                     ) : null}
-                    <div className="min-h-0 flex-1 overflow-hidden">
+                    {/* 待办 / 自动化盖在聊天区之上而不是替掉它：三元分支替换会把
+                        V4WorkspaceChatArea 整棵卸载，pane 跟着释放租约，回来就得重新走一次订阅。
+                        这里沿用设置页的做法（保留布局盒、只关交互），并且必须把前台遥测判为
+                        不可见，否则隐藏着的 pane 会继续挂 foreground，composer 也会提前消费
+                        一次性预填。 */}
+                    <div className="relative min-h-0 flex-1 overflow-hidden">
                       {workspaceMainView === "todos" ? (
-                        <main className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
+                        <main className="absolute inset-0 z-10 flex h-full min-h-0 flex-col overflow-hidden bg-background">
                           {isDesktop ? (
                             <div className="flex h-12 shrink-0 items-center justify-end px-1 [app-region:drag]">
                               {usesInlineWindowControls ? <DesktopWindowControls /> : null}
@@ -1826,10 +1831,11 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                           ) : null}
                           <TodoListPane onOpenSession={handleSelectTaskInChat} />
                         </main>
-                      ) : workspaceMainView === "automations" ? (
+                      ) : null}
+                      {workspaceMainView === "automations" ? (
                         <main
                           id={AUTOMATIONS_TOAST_ANCHOR_ID}
-                          className="flex h-full min-h-0 flex-1 flex-col bg-background"
+                          className="absolute inset-0 z-10 flex h-full min-h-0 flex-col bg-background"
                         >
                           <AutomationsMainBreadcrumbFrame
                             isDesktop={Boolean(isDesktop)}
@@ -1879,81 +1885,88 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                             </div>
                           </AutomationsMainBreadcrumbFrame>
                         </main>
-                      ) : (
-                        <main className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-                          {renderChatFindDialog()}
-                          <ScopedErrorBoundary
-                            scope="workspace-chat"
-                            resetKeys={workspaceDraftResetKeys}
-                            variant="panel"
-                            className="h-full"
-                          >
-                            {/* pane 绑定必须用原始选择态 activeTaskId，
-                                  不能用 meta 派生的 activeSessionId——v4 createSession 刚建的会话
-                                  不在 taskListCache/optimistic 缓存里，meta 解析为 null 会让 pane
-                                  永远停在 draft。v4 语义下 sessionId ≡ taskId，meta 只服务 Header 显示。
-                                  桌面主区升级为分屏宿主（Layout/Focus 两层）；primary pane
+                      ) : null}
+                      <main
+                        className={cn(
+                          // isolate 必须有：覆盖层是这里的兄弟节点，只给这条 main 加 pointer-events-none
+                          // 拦不住内部带 z-index 的东西（composer dock、回到底部、状态面板都 ≥z-10），
+                          // 不建层叠上下文的话它们会盖到待办/自动化页上面并且仍然可点。
+                          "relative isolate flex h-full min-h-0 flex-1 flex-col overflow-hidden",
+                          workspaceMainView === "chat" ? null : "pointer-events-none",
+                        )}
+                        inert={workspaceMainView === "chat" ? undefined : true}
+                        aria-hidden={workspaceMainView === "chat" ? undefined : true}
+                      >
+                        {renderChatFindDialog()}
+                        <ScopedErrorBoundary
+                          scope="workspace-chat"
+                          resetKeys={workspaceDraftResetKeys}
+                          variant="panel"
+                          className="h-full"
+                        >
+                          {/* pane 绑定必须用原始选择态 activeTaskId，
+                              不能用 meta 派生的 activeSessionId——v4 createSession 刚建的会话
+                              不在 taskListCache/optimistic 缓存里，meta 解析为 null 会让 pane
+                              永远停在 draft。v4 语义下 sessionId ≡ taskId，meta 只服务 Header 显示。
+                              桌面主区升级为分屏宿主（Layout/Focus 两层）；primary pane
                                   绑定语义与 testid 契约（paneId=workspace-main）不变。 */}
-                            <V4WorkspaceChatArea
-                              readOnly={Boolean(workspaceReadOnlyReason)}
-                              foregroundEnabled={isWorkspaceVisible}
-                              workspacePath={workspaceAbsPath}
-                              workspaceIdentity={workspaceIdentity}
-                              isDesktop={isDesktop === true}
-                              remoteSessionId={workspaceRemoteSessionId}
-                              sessionId={activeTaskId}
-                              activeSelectionSideChatSessionId={activeSelectionSideChatSessionId}
-                              provider={activeTaskProvider ?? undefined}
-                              onSessionCreated={handleV4SessionCreated}
-                              onSessionDeleted={handleV4SessionDeleted}
-                              draftComposerHeader={draftComposerHeader}
-                              onPrimaryDraftDropTargetControllerChange={
-                                setDraftHeaderDropTargetController
-                              }
-                              gitSummary={gitState.summary}
-                              gitDirtyFileCount={gitDirtyFileCount}
-                              activeTaskChangeSummary={activeTaskChangeSummary}
-                              gitWorktreeReviewSourceId={gitWorktreeReviewSourceId}
-                              gitWorktreeChangeSummary={gitWorktreeChangeSummary}
-                              summaryPanelVariantOverride={summaryPanelVariantOverride}
-                              onSummaryPanelVariantOverrideChange={
-                                onSummaryPanelVariantOverrideChange
-                              }
-                              onRefreshGit={handleRefreshGit}
-                              onOpenGitReview={handleOpenGitReview}
-                              onPaneActiveSessionChange={handlePaneActiveSessionChange}
-                              onOpenBrowserUrl={handleOpenBrowserUrl}
-                              onOpenAutomationsMain={handleOpenAutomations}
-                              onOpenCodeViewer={handleOpenCodeViewer}
-                              onAutoOpenAssistantPptx={
-                                isDesktop ? handleAutoOpenAssistantPptx : undefined
-                              }
-                              onOpenBackgroundBash={handleOpenBackgroundBash}
-                              onOpenSubagentSession={handleOpenSubagentSession}
-                              onOpenSubagentDirectory={handleOpenSubagentDirectory}
-                              onSyncSubagentSessionTabs={handleSyncSubagentSessionTabs}
-                              onOpenSelectionSideChat={handleOpenSelectionSideChat}
-                              onOpenPlanDetail={handleOpenPlanDetail}
-                              onOpenWorkflowRun={handleOpenWorkflowRun}
-                              onOpenWorkflowArtifact={handleOpenWorkflowArtifact}
-                              onOpenWorkflowRunDirectory={handleOpenWorkflowRunDirectory}
-                              onOpenWorkflowActorSession={handleOpenWorkflowActorSession}
-                              onOpenWorkflowWorkspace={handleOpenWorkflowWorkspace}
-                              onOpenFileLink={handleOpenMarkdownFileLink}
-                              conversationFindQuery={conversationFindQuery}
-                              conversationFindActiveIndex={conversationFindActiveIndex}
-                              conversationFindNavigationRequestId={
-                                conversationFindNavigationRequestId
-                              }
-                              onConversationFindMatchStateChange={
-                                onConversationFindMatchStateChange
-                              }
-                              searchResultHighlightRequest={activeSearchResultHighlightRequest}
-                              onSearchResultHighlightDone={onSearchResultHighlightDone}
-                            />
-                          </ScopedErrorBoundary>
-                        </main>
-                      )}
+                          <V4WorkspaceChatArea
+                            readOnly={Boolean(workspaceReadOnlyReason)}
+                            foregroundEnabled={isWorkspaceVisible && workspaceMainView === "chat"}
+                            workspacePath={workspaceAbsPath}
+                            workspaceIdentity={workspaceIdentity}
+                            isDesktop={isDesktop === true}
+                            remoteSessionId={workspaceRemoteSessionId}
+                            sessionId={activeTaskId}
+                            activeSelectionSideChatSessionId={activeSelectionSideChatSessionId}
+                            provider={activeTaskProvider ?? undefined}
+                            onSessionCreated={handleV4SessionCreated}
+                            onSessionDeleted={handleV4SessionDeleted}
+                            draftComposerHeader={draftComposerHeader}
+                            onPrimaryDraftDropTargetControllerChange={
+                              setDraftHeaderDropTargetController
+                            }
+                            gitSummary={gitState.summary}
+                            gitDirtyFileCount={gitDirtyFileCount}
+                            activeTaskChangeSummary={activeTaskChangeSummary}
+                            gitWorktreeReviewSourceId={gitWorktreeReviewSourceId}
+                            gitWorktreeChangeSummary={gitWorktreeChangeSummary}
+                            summaryPanelVariantOverride={summaryPanelVariantOverride}
+                            onSummaryPanelVariantOverrideChange={
+                              onSummaryPanelVariantOverrideChange
+                            }
+                            onRefreshGit={handleRefreshGit}
+                            onOpenGitReview={handleOpenGitReview}
+                            onPaneActiveSessionChange={handlePaneActiveSessionChange}
+                            onOpenBrowserUrl={handleOpenBrowserUrl}
+                            onOpenAutomationsMain={handleOpenAutomations}
+                            onOpenCodeViewer={handleOpenCodeViewer}
+                            onAutoOpenAssistantPptx={
+                              isDesktop ? handleAutoOpenAssistantPptx : undefined
+                            }
+                            onOpenBackgroundBash={handleOpenBackgroundBash}
+                            onOpenSubagentSession={handleOpenSubagentSession}
+                            onOpenSubagentDirectory={handleOpenSubagentDirectory}
+                            onSyncSubagentSessionTabs={handleSyncSubagentSessionTabs}
+                            onOpenSelectionSideChat={handleOpenSelectionSideChat}
+                            onOpenPlanDetail={handleOpenPlanDetail}
+                            onOpenWorkflowRun={handleOpenWorkflowRun}
+                            onOpenWorkflowArtifact={handleOpenWorkflowArtifact}
+                            onOpenWorkflowRunDirectory={handleOpenWorkflowRunDirectory}
+                            onOpenWorkflowActorSession={handleOpenWorkflowActorSession}
+                            onOpenWorkflowWorkspace={handleOpenWorkflowWorkspace}
+                            onOpenFileLink={handleOpenMarkdownFileLink}
+                            conversationFindQuery={conversationFindQuery}
+                            conversationFindActiveIndex={conversationFindActiveIndex}
+                            conversationFindNavigationRequestId={
+                              conversationFindNavigationRequestId
+                            }
+                            onConversationFindMatchStateChange={onConversationFindMatchStateChange}
+                            searchResultHighlightRequest={activeSearchResultHighlightRequest}
+                            onSearchResultHighlightDone={onSearchResultHighlightDone}
+                          />
+                        </ScopedErrorBoundary>
+                      </main>
                     </div>
                   </section>
                 </ResizablePanel>
