@@ -55,14 +55,48 @@ export function resolveConversationTurnWorkStatus(
   };
 }
 
+export interface WorkChunkStatusFacts {
+  /** 这一块就是整轮当前正在工作的块：只有它走运行态文案和会递进的秒数。 */
+  running: boolean;
+  /** 中断轮的最后一块：显示「已停止」，不再报工时。 */
+  interrupted: boolean;
+  durationMs?: number;
+  toolCount: number;
+}
+
+/**
+ * 折叠标题的时长口径。
+ *
+ * 「工作中 N 分 N 秒」只能挂在当前工作块上：它下面就跟着正在跑的工具，秒数递增才读得通。
+ * 已经结束的块（包括整轮的第一块）只报自己的跨度，否则第一块会顶着整轮累计工时
+ * 一直走秒，看起来像计时器停不下来。
+ */
+export function resolveWorkChunkStatusFacts(options: {
+  segmentState?: ConversationTurnWorkStatus["state"];
+  segmentDurationMs?: number;
+  isWorkingChunk: boolean;
+  isTailChunk: boolean;
+  toolCount: number;
+  chunkDurationMs?: number;
+  plain?: boolean;
+}): WorkChunkStatusFacts {
+  const running = options.isWorkingChunk && options.segmentState === "running";
+  const interrupted = !running && options.isTailChunk && options.segmentState === "interrupted";
+  // 没有可折叠块的状态行只报整轮时长；其余块用自己这一段的跨度。
+  const durationMs = running || options.plain ? options.segmentDurationMs : options.chunkDurationMs;
+  return {
+    running,
+    interrupted,
+    ...(durationMs === undefined ? {} : { durationMs }),
+    toolCount: running || (!interrupted && !options.plain) ? options.toolCount : 0,
+  };
+}
+
 /**
  * 净工时的等待部分：已结束的 `waitedMs` 加上进行中那段。
  * 客户端不判断谁在等，只按 CLI 下发的事实扣：等待期间秒数不走。
  */
-function waitedMsAt(
-  fact: { waitedMs?: number; waitingSince?: number },
-  nowMs: number,
-): number {
+function waitedMsAt(fact: { waitedMs?: number; waitingSince?: number }, nowMs: number): number {
   const running = fact.waitingSince === undefined ? 0 : Math.max(0, nowMs - fact.waitingSince);
   return (fact.waitedMs ?? 0) + running;
 }

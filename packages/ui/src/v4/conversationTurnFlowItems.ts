@@ -28,6 +28,15 @@ export function isSeparatelyFoldedFlowItem(item: ConversationTurnFlowItem): bool
   return item.rows.some((row) => !isCompactStatusRow(row));
 }
 
+/** 最后一个可折叠工具块的位置。中断文案挂在它身上，与后面有没有正文无关。 */
+export function lastFoldIndex(flowItems: readonly ConversationTurnFlowItem[]): number {
+  for (let index = flowItems.length - 1; index >= 0; index -= 1) {
+    const item = flowItems[index];
+    if (item && isSeparatelyFoldedFlowItem(item)) return index;
+  }
+  return -1;
+}
+
 /**
  * 只展开仍在进行的最后一块工具区。
  * 段落不再跑，或这一块后面已经有正文，就全部收起。
@@ -37,11 +46,7 @@ export function activeWorkingFoldIndex(
   segmentMayStayOpen: boolean,
 ): number {
   if (!segmentMayStayOpen) return -1;
-  let lastFolded = -1;
-  for (let index = 0; index < flowItems.length; index += 1) {
-    const item = flowItems[index];
-    if (item && isSeparatelyFoldedFlowItem(item)) lastFolded = index;
-  }
+  const lastFolded = lastFoldIndex(flowItems);
   if (lastFolded < 0) return -1;
   for (let index = lastFolded + 1; index < flowItems.length; index += 1) {
     if (flowItems[index]?.kind === "assistantText") return -1;

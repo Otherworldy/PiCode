@@ -78,8 +78,10 @@ import {
 import {
   activeWorkingFoldIndex,
   isSeparatelyFoldedFlowItem,
+  lastFoldIndex,
   splitCompactStatusRows,
 } from "@/v4/conversationTurnFlowItems.js";
+import { resolveWorkChunkStatusFacts } from "@/v4/conversationTurnWorkSegments.js";
 import type {
   AssistantWorkRow,
   ConversationTurnFlowItem,
@@ -195,7 +197,7 @@ function TurnChatLoadingSlot({
         <ChatApiRetryStatus apiRetry={visibleRetryStatus} intl={intl} locale={locale} />
       ) : (
         // 转圈只能表达「在跑」，看不到已经跑了多久。这里直接写出来：
-        // 时长是本轮净工时（已扣权限审批和提问的等待），与折叠标题同口径。
+        // 时长是本轮净工时（已扣权限审批和提问的等待），与当前工作块的折叠标题同口径。
         <span className="zcode-working-shimmer text-ui-base" data-testid={TID_CHAT_LOADING}>
           {durationLabel === null
             ? intl.formatMessage({ id: "chat.loading.working" })
@@ -708,16 +710,34 @@ function foldedWorkLabel(
     : intl.formatMessage({ id: "chat.history.foldedTools" }, { count: toolCount });
 }
 
-function AssistantHistoryStatus({
+/**
+ * 一个工作块的折叠标题。
+ *
+ * 整轮净工时只挂在当前正在工作的那一块上（它下面就跟着正在跑的工具）；
+ * 已经结束的块只报自己的跨度，否则整轮的第一块会顶着累计工时一直走秒，
+ * 看起来像计时器停不下来。
+ */
+function WorkChunkStatus({
+  chunkKey,
   segment,
   open,
+  isWorkingChunk,
+  isTailChunk,
+  process = false,
   plain = false,
   toggleable = false,
   toolCount = 0,
   chunkDurationMs,
 }: {
+  chunkKey: string;
   segment: ConversationTurnWorkSegment;
   open: boolean;
+  /** 整轮当前正在工作的块：只有它显示「工作中 N」。 */
+  isWorkingChunk: boolean;
+  /** 本段的最后一块：中断文案挂在这里。 */
+  isTailChunk: boolean;
+  /** 首块以外的历史块，带 process 标记。 */
+  process?: boolean;
   /** 没有可折叠的工具块时只显示时长，不挂触发器。 */
   plain?: boolean;
   /** 这一块可以收起时才显示箭头。正在工作的第一块锁开，不给箭头。 */
@@ -726,32 +746,46 @@ function AssistantHistoryStatus({
   chunkDurationMs?: number;
 }) {
   const { intl, locale } = useZCodeIntl();
-  const durationLabel = formatConversationWorkDuration(
-    segment.workStatus?.durationMs,
-    intl,
-    locale,
-  );
-  const folded = foldedWorkLabel(intl, locale, toolCount, chunkDurationMs);
+  const facts = resolveWorkChunkStatusFacts({
+    ...(segment.workStatus?.state === undefined ? {} : { segmentState: segment.workStatus.state }),
+    ...(segment.workStatus?.durationMs === undefined
+      ? {}
+      : { segmentDurationMs: segment.workStatus.durationMs }),
+    isWorkingChunk,
+    isTailChunk,
+    toolCount,
+    ...(chunkDurationMs === undefined ? {} : { chunkDurationMs }),
+    ...(plain ? { plain } : {}),
+  });
+  const durationLabel = formatConversationWorkDuration(facts.durationMs, intl, locale);
+  const folded = foldedWorkLabel(intl, locale, facts.toolCount, facts.durationMs);
   const runningLabel = intl.formatMessage(
     { id: "chat.history.workingFor" },
     { duration: durationLabel ?? "" },
   );
-  const label =
-    segment.workStatus?.state === "interrupted"
-      ? intl.formatMessage({ id: "chat.history.stopped" })
-      : segment.workStatus?.state === "running"
-        ? toolCount > 0
-          ? `${runningLabel} · ${intl.formatMessage({ id: "chat.history.foldedTools" }, { count: toolCount })}`
-          : runningLabel
-        : (folded ??
-          (durationLabel
-            ? intl.formatMessage({ id: "chat.history.workedFor" }, { duration: durationLabel })
-            : intl.formatMessage({ id: "chat.history.worked" })));
+  let label: string;
+  if (facts.interrupted) {
+    label = intl.formatMessage({ id: "chat.history.stopped" });
+  } else if (facts.running) {
+    label =
+      facts.toolCount > 0
+        ? `${runningLabel} · ${intl.formatMessage({ id: "chat.history.foldedTools" }, { count: facts.toolCount })}`
+        : runningLabel;
+  } else if (folded !== null) {
+    label = folded;
+  } else if (durationLabel !== null) {
+    label = intl.formatMessage({ id: "chat.history.workedFor" }, { duration: durationLabel });
+  } else if (process) {
+    label = intl.formatMessage({ id: "chat.history.process" });
+  } else {
+    label = intl.formatMessage({ id: "chat.history.worked" });
+  }
   const button = (
     <button
       type="button"
-      data-testid={testId(TID_CHAT_ASSISTANT_HISTORY_TRIGGER, segment.key)}
+      data-testid={testId(TID_CHAT_ASSISTANT_HISTORY_TRIGGER, chunkKey)}
       data-history-open={String(open)}
+      {...(process ? { "data-history-role": "process" } : {})}
       className="group/history-message inline-flex max-w-full items-center gap-2 text-left text-ui-base text-foreground-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-input-border-focused)]"
     >
       <span className="truncate">{label}</span>
@@ -770,49 +804,6 @@ function AssistantHistoryStatus({
   return (
     <div className="flex w-full border-b border-[var(--color-border)]/50 pb-2">
       {plain ? button : <CollapsibleTrigger asChild>{button}</CollapsibleTrigger>}
-    </div>
-  );
-}
-
-function ProcessHistoryStatus({
-  chunkKey,
-  open,
-  toolCount,
-  chunkDurationMs,
-}: {
-  chunkKey: string;
-  open: boolean;
-  toolCount: number;
-  chunkDurationMs?: number;
-}) {
-  const { intl, locale } = useZCodeIntl();
-  const folded = foldedWorkLabel(intl, locale, toolCount, chunkDurationMs);
-  const duration = formatConversationWorkDuration(chunkDurationMs, intl, locale);
-  const label =
-    folded ??
-    (duration
-      ? intl.formatMessage({ id: "chat.history.workedFor" }, { duration })
-      : intl.formatMessage({ id: "chat.history.process" }));
-  return (
-    <div className="flex w-full border-b border-[var(--color-border)]/50 pb-2">
-      <CollapsibleTrigger asChild>
-        <button
-          type="button"
-          data-testid={testId(TID_CHAT_ASSISTANT_HISTORY_TRIGGER, chunkKey)}
-          data-history-open={String(open)}
-          data-history-role="process"
-          className="group/history-message inline-flex max-w-full items-center gap-2 text-left text-ui-base text-foreground-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-input-border-focused)]"
-        >
-          <span className="truncate">{label}</span>
-          <ChevronRightIcon
-            aria-hidden
-            className={cn(
-              "size-4 shrink-0 text-[var(--color-foreground-subtlest)] opacity-70 transition-transform",
-              open ? "rotate-90" : "rotate-0",
-            )}
-          />
-        </button>
-      </CollapsibleTrigger>
     </div>
   );
 }
@@ -850,16 +841,20 @@ function chunkWorkStats(
 function WorkChunkFold({
   chunkKey,
   defaultOpen,
-  header,
+  process,
   segment,
+  isWorkingChunk,
+  isTailChunk,
   toolCount,
   chunkDurationMs,
   children,
 }: {
   chunkKey: string;
   defaultOpen: boolean;
-  header: "duration" | "process";
+  process: boolean;
   segment: ConversationTurnWorkSegment;
+  isWorkingChunk: boolean;
+  isTailChunk: boolean;
   toolCount: number;
   chunkDurationMs?: number;
   children: (open: boolean) => ReactNode;
@@ -869,26 +864,21 @@ function WorkChunkFold({
     setStoredOpen(defaultOpen);
   }, [defaultOpen, chunkKey]);
   // 只有当前这一块还在干活时，第一块才锁开。结束的块收起，但可以再打开。
-  const lockedOpen = header === "duration" && defaultOpen;
+  const lockedOpen = !process && defaultOpen;
   const open = lockedOpen ? true : storedOpen;
   return (
     <Collapsible open={open} onOpenChange={lockedOpen ? undefined : setStoredOpen}>
-      {header === "duration" ? (
-        <AssistantHistoryStatus
-          segment={segment}
-          open={open}
-          toggleable={!lockedOpen}
-          toolCount={toolCount}
-          chunkDurationMs={chunkDurationMs}
-        />
-      ) : (
-        <ProcessHistoryStatus
-          chunkKey={chunkKey}
-          open={open}
-          toolCount={toolCount}
-          chunkDurationMs={chunkDurationMs}
-        />
-      )}
+      <WorkChunkStatus
+        chunkKey={chunkKey}
+        segment={segment}
+        open={open}
+        isWorkingChunk={isWorkingChunk}
+        isTailChunk={isTailChunk}
+        process={process}
+        toggleable={!lockedOpen}
+        toolCount={toolCount}
+        {...(chunkDurationMs === undefined ? {} : { chunkDurationMs })}
+      />
       {children(open)}
     </Collapsible>
   );
@@ -933,6 +923,8 @@ function ConversationWorkSegmentFlow({
     segment.flowItems,
     segment.assistantHistoryDefaultOpen,
   );
+  // 中断文案挂在本段最后一个工具块上，与这块后面还有没有正文无关。
+  const tailFoldIndex = lastFoldIndex(segment.flowItems);
   const firstAssistantFlowItemIndex = segment.flowItems.findIndex(
     (item) => item.kind !== "userInput",
   );
@@ -1011,17 +1003,20 @@ function ConversationWorkSegmentFlow({
             item.kind === "assistantWork" ||
             item.kind === "cuaGroup")
         ) {
-          // 正文把工具和思考切成独立块：第一块用整轮时长，后面的块用这段的工具次数和时长。
-          const chunkKey = foldIndex === 0 ? segment.key : `${segment.key}:chunk-${foldIndex}`;
-          const header = foldIndex === 0 ? "duration" : "process";
+          // 正文把工具和思考切成独立块：每块报自己的工具次数和跨度，
+          // 整轮工时只挂在当前工作的那一块上。
+          const process = foldIndex > 0;
+          const chunkKey = process ? `${segment.key}:chunk-${foldIndex}` : segment.key;
           foldIndex += 1;
           const stats = chunkWorkStats(item.rows);
           content = (
             <WorkChunkFold
               chunkKey={chunkKey}
               defaultOpen={index === activeFoldIndex}
-              header={header}
+              process={process}
               segment={segment}
+              isWorkingChunk={index === activeFoldIndex}
+              isTailChunk={index === tailFoldIndex}
               toolCount={stats.toolCount}
               {...(stats.durationMs !== undefined ? { chunkDurationMs: stats.durationMs } : {})}
             >
@@ -1051,14 +1046,29 @@ function ConversationWorkSegmentFlow({
         return (
           <Fragment key={itemKey}>
             {showPlainStatus ? (
-              <AssistantHistoryStatus segment={segment} open={false} plain />
+              <WorkChunkStatus
+                chunkKey={segment.key}
+                segment={segment}
+                open={false}
+                // 没有工具块可切时，这一行就是整轮唯一的工作状态：仍在跑就报整轮工时。
+                isWorkingChunk={segment.workStatus?.state === "running"}
+                isTailChunk
+                plain
+              />
             ) : null}
             {content}
           </Fragment>
         );
       })}
       {shouldShowHistoryStatus && !hasFold && firstAssistantFlowItemIndex < 0 ? (
-        <AssistantHistoryStatus segment={segment} open={false} plain />
+        <WorkChunkStatus
+          chunkKey={segment.key}
+          segment={segment}
+          open={false}
+          isWorkingChunk={segment.workStatus?.state === "running"}
+          isTailChunk
+          plain
+        />
       ) : null}
     </div>
   );
