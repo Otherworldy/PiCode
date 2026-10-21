@@ -273,6 +273,98 @@ test("重放把本轮用量带回 turnHeader，重开会话也能看到", () => 
   });
 });
 
+test("会话累计量随重放补齐：token、轮次、步数", () => {
+  const projector = new PiToV4Projector("s2", "e1");
+  projector.replay(readPiJsonl(usageSample).events);
+  // 冷恢复不需要额外种子：回放逐条走 message_end，与实时同一条累加路径。
+  assert.deepEqual(projector.getSnapshot().usage.cumulative, {
+    inputTokens: 1_505,
+    outputTokens: 239,
+    cacheReadTokens: 86_016,
+    cacheWriteTokens: 0,
+    turns: 1,
+    steps: 1,
+    // 模型用时来自 jsonl 里的 durationMs。
+    llmMs: 5_202,
+    // 重放不打首 token 打点，所以解码段与工具耗时都没有事实，保持 0。
+    toolMs: 0,
+    ttftMs: 0,
+    ttftSteps: 0,
+    decodeMs: 0,
+    decodeTokens: 0,
+  });
+});
+
+test("零用量的调用不进步数，也不占 token", () => {
+  // 失败、中断、deferred 回填也会写 message_end，Pi 这时给的是全零 usage。
+  const zeroUsage =
+    '{"type":"message","id":"a2","timestamp":"2026-01-02T03:04:20.000Z","message":{"role":"assistant","provider":"lens","model":"m","content":[{"type":"text","text":"x"}],"usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0}}}';
+  const sample = `${usageSample}\n${zeroUsage}`;
+  const projector = new PiToV4Projector("s5", "e1");
+  projector.replay(readPiJsonl(sample).events);
+  const cumulative = projector.getSnapshot().usage.cumulative;
+  assert.equal(cumulative.steps, 1);
+  assert.equal(cumulative.turns, 1);
+  assert.equal(cumulative.outputTokens, 239);
+});
+
+test("重复重放不重复累计：reload 先把累计归零", () => {
+  // reload 会重置所有行游标再 replay 整份 jsonl，但累计量不在行里。
+  // 切分支、编辑重发、子代理 historyWatch 重画都会走到这条路径。
+  const events = readPiJsonl(usageSample).events;
+  const projector = new PiToV4Projector("s7", "e1");
+  projector.replay(events);
+  const once = projector.getSnapshot().usage.cumulative;
+  projector.reload(events);
+  assert.deepEqual(projector.getSnapshot().usage.cumulative, once);
+  projector.reload(events);
+  assert.deepEqual(projector.getSnapshot().usage.cumulative, once);
+});
+
+test("回退到早期分支后，累计量按新事件流重算", () => {
+  // 两轮各一次模型调用；回退到第一轮之后，第二轮的数字必须消失。
+  const secondUsageLine = usageLine
+    .replace('"id":"a1"', '"id":"a2"')
+    .replace('"input":1505', '"input":700')
+    .replace('"output":239', '"output":100');
+  const sample = [
+    '{"type":"session","version":3,"id":"s10","timestamp":"2026-01-02T03:04:05.000Z"}',
+    '{"type":"message","id":"u1","timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}',
+    usageLine,
+    '{"type":"message","id":"u2","timestamp":"2026-01-02T03:06:06.000Z","message":{"role":"user","content":[{"type":"text","text":"again"}]}}',
+    secondUsageLine,
+  ].join("\n");
+  const events = readPiJsonl(sample).events;
+  const projector = new PiToV4Projector("s10", "e1");
+  projector.reload(events);
+  assert.equal(projector.getSnapshot().usage.cumulative.turns, 2);
+  assert.equal(projector.getSnapshot().usage.cumulative.steps, 2);
+
+  // 回退到第二轮之前：只重放前半段事件。累计量只能从事件流重算，
+  // 从行上反推拆不出步数与工具耗时。
+  const turnStarts = events.flatMap((event, index) =>
+    event.type === "agent_start" ? [index] : [],
+  );
+  const cut = turnStarts[1];
+  assert.ok(cut !== undefined);
+  projector.reload(events.slice(0, cut));
+  const cumulative = projector.getSnapshot().usage.cumulative;
+  assert.equal(cumulative.turns, 1);
+  assert.equal(cumulative.steps, 1);
+  assert.equal(cumulative.inputTokens, 1_505);
+  assert.equal(cumulative.outputTokens, 239);
+  assert.equal(cumulative.llmMs, 5_202);
+});
+
+test("实时开轮累加轮次，重试再发的 agent_start 不重复计", () => {
+  const projector = new PiToV4Projector("s6", "e1");
+  projector.apply({ type: "agent_start" });
+  assert.equal(projector.getSnapshot().usage.cumulative.turns, 1);
+  // Pi 重试会再发 agent_start，而上一轮仍在跑。早退不重复计轮，也不清停止意图。
+  projector.apply({ type: "agent_start" });
+  assert.equal(projector.getSnapshot().usage.cumulative.turns, 1);
+});
+
 test("legacy 消息没有 durationMs 时用落盘时刻与请求开始时刻回退", () => {
   // 落盘时间减请求开始时间：17 秒 - 11 秒 = 6 秒，其中 5.2 秒是真实耗时，
   // 回退值略高估（含持久化开销），只用于历史重放。
@@ -321,6 +413,36 @@ test("实时事件累积本轮用量，首 token 等待有打点", () => {
   assert.equal(header.usage?.llmDurationMs, 900);
   // 首个增量在请求开始约 1 秒后到达，TTFT 应落在合理区间而不是 0。
   assert.ok((header.usage?.ttftMs ?? 0) >= 900, `实际 ${String(header.usage?.ttftMs)}`);
+  const cumulative = projector.getSnapshot().usage.cumulative;
+  assert.equal(cumulative.llmMs, 900);
+  assert.equal(cumulative.steps, 1);
+  assert.equal(cumulative.ttftSteps, 1);
+  assert.equal(cumulative.ttftMs, header.usage?.ttftMs);
+  // 首 token 等得比总时长还久时解码段钳到 0，不出现负数时长。
+  assert.equal(cumulative.decodeMs, 0);
+  // 解码 token 仍计入：它是输出量的事实，与时长是否可信无关。
+  assert.equal(cumulative.decodeTokens, 20);
+});
+
+test("工具耗时按两端时间差进会话累计", () => {
+  const projector = new PiToV4Projector("s9", "e1");
+  projector.apply({ type: "agent_start", at: 500 });
+  projector.apply({ type: "message_start", message: { role: "user", content: "hi" } });
+  projector.apply({
+    type: "tool_execution_start",
+    at: 1_000,
+    toolCallId: "t1",
+    toolName: "bash",
+    args: { command: "ls" },
+  });
+  projector.apply({
+    type: "tool_execution_end",
+    at: 4_000,
+    toolCallId: "t1",
+    toolName: "bash",
+    result: { content: [{ type: "text", text: "ok" }] },
+  });
+  assert.equal(projector.getSnapshot().usage.cumulative.toolMs, 3_000);
 });
 
 test("没有 usage 的消息不产出用量，也不画卡", () => {

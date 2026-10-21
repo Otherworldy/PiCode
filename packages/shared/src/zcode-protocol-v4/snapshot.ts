@@ -12,7 +12,7 @@ import {
   zcodeSessionContextCacheUsageSchema,
 } from "../zcode-protocol-legacy-types.js";
 import { timestampSchema } from "./core.js";
-import { conversationRowSchema } from "./rows.js";
+import { conversationRowSchema, turnUsageSchema } from "./rows.js";
 import { toolCallDisplaySchema } from "./toolDisplay.js";
 
 import { workspaceHookReviewRequestPayloadSchema } from "./workspace-hook-review.js";
@@ -209,6 +209,21 @@ export const sessionUsageStateSchema = z.object({
     outputTokens: z.number(),
     cacheReadTokens: z.number(),
     cacheWriteTokens: z.number(),
+    // 会话累计的开轮数与模型调用步数。与 token 一样只在会话内单调递增，
+    // 冷恢复由投影重放补齐，不靠独立计数源。必须带 default：旧 Host（手机远控、
+    // 远程 workspace）发来的快照没有这两个字段，缺 default 会让客户端整帧校验失败。
+    turns: z.number().default(0),
+    steps: z.number().default(0),
+    // 会话统计弹窗里的时间指标，口径对齐 dsh：
+    // llmMs = 模型耗时总和；toolMs = 工具调用耗时总和；
+    // ttftMs / ttftSteps = 首 token 总时长与其步数（两者相除才是平均值）；
+    // decodeMs / decodeTokens = 首 token 之后的解码时长与输出 token，两者相除是吐字速度。
+    llmMs: z.number().default(0),
+    toolMs: z.number().default(0),
+    ttftMs: z.number().default(0),
+    ttftSteps: z.number().default(0),
+    decodeMs: z.number().default(0),
+    decodeTokens: z.number().default(0),
   }),
 });
 export type SessionUsageState = z.infer<typeof sessionUsageStateSchema>;
@@ -402,6 +417,9 @@ export const runningSubagentSummarySchema = z.object({
   modelProvider: z.string().optional(),
   modelId: z.string().optional(),
   thought: z.string().optional(),
+  // 这次子会话到目前为止的累计用量。Pi 宿主从子会话的 message_end 累加；
+  // 内核投影与冷恢复不产这份数据，缺席时 UI 退回三行。
+  usage: turnUsageSchema.optional(),
 });
 export type RunningSubagentSummary = z.infer<typeof runningSubagentSummarySchema>;
 

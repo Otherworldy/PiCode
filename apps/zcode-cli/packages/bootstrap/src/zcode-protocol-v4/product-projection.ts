@@ -721,6 +721,16 @@ export class ProductProjection {
       outputTokens: seed.cumulative?.outputTokens ?? current.cumulative.outputTokens,
       cacheReadTokens: seed.cumulative?.cacheReadTokens ?? current.cumulative.cacheReadTokens,
       cacheWriteTokens: seed.cumulative?.cacheWriteTokens ?? current.cumulative.cacheWriteTokens,
+      // 计数与时间指标不属于种子：种子只补 token 水位，其余由重放累加，
+      // 这里保持当前值，不能因为 seed 没带就把快照写成缺字段。
+      turns: seed.cumulative?.turns ?? current.cumulative.turns,
+      steps: seed.cumulative?.steps ?? current.cumulative.steps,
+      llmMs: seed.cumulative?.llmMs ?? current.cumulative.llmMs,
+      toolMs: seed.cumulative?.toolMs ?? current.cumulative.toolMs,
+      ttftMs: seed.cumulative?.ttftMs ?? current.cumulative.ttftMs,
+      ttftSteps: seed.cumulative?.ttftSteps ?? current.cumulative.ttftSteps,
+      decodeMs: seed.cumulative?.decodeMs ?? current.cumulative.decodeMs,
+      decodeTokens: seed.cumulative?.decodeTokens ?? current.cumulative.decodeTokens,
     };
     if (this.contextWindowState.touchedByEvent) {
       // 同类守卫：显式 ModelSelected.contextWindow（含 null）是日志权威容量，
@@ -1926,6 +1936,11 @@ export class ProductProjection {
     const targetRow = this.findRow(targetRowId);
     if (!targetRow) return [];
     // 从该行所属 turn 的首行起移除（整段 turn 被 rewind/edit/retry 替换）。
+    // 注意：
+    // `usage.cumulative` 不在这里回退。它是从事件流累加出来的，
+    // 而 turnHeader.usage 只能拆出 token 与总时长，拆不出步数、工具耗时、
+    // 解码时长。只减一半会让统计看起来很准实际上是错的。Pi 主路径的回退走
+    // `PiToV4Projector.reload` 整份重放，不存在这个问题。
     const turnHeaderRowId = this.turnHeaderRowIdByTurnId.get(targetRow.turnId) ?? targetRowId;
     const fromRowId = Math.min(turnHeaderRowId, targetRowId);
     // 清理被移除行的 messageId/tool 索引，避免悬挂映射。
@@ -2054,6 +2069,17 @@ export class ProductProjection {
     // success；子 Agent 的真实终态随后只作为 model-only task-notification 开新轮。
     // V4 过去没有按 tool-use-id 消费这条权威事实，因此 429 后卡片会永久停在 completed。
     const deltas: ConversationDelta[] = this.applyBackgroundTaskNotification(fact);
+    // 开轮计一轮。与 Pi 投影同口径：会话内单调累加，冷恢复时同样由重放补齐。
+    const cumulative = this.snapshot.usage.cumulative;
+    deltas.push({
+      op: "state.updated",
+      patch: {
+        usage: {
+          ...this.snapshot.usage,
+          cumulative: { ...cumulative, turns: cumulative.turns + 1 },
+        },
+      },
+    });
     const sharedContextRef = fact.sharedContextRefs?.[0];
     if (
       sharedContextRef &&
@@ -4261,6 +4287,10 @@ export class ProductProjection {
             ? "blocked"
             : "running",
         ...(row.startedAt !== undefined ? { startedAt: row.startedAt } : {}),
+        // 内核投影不产用量。同一条子会话若由 Pi 宿主在跑，就沿用上一次写进来的累计值：
+        // 否则一条外部事件（例如 MCP 权限）会让这里整份重建一份不带 usage 的 running，
+        // 而 Pi 侧的去重键没变、不会重发，面板上的用量要等下一次 message_end 才回来。
+        ...(previousItem?.usage ? { usage: previousItem.usage } : {}),
       });
     }
     running.sort(
@@ -4819,6 +4849,14 @@ export class ProductProjection {
     this.contextWindowState.usedTokens = usedTokens;
     const maxTokens = payload.contextWindow ?? this.contextWindowState.maxTokens;
     const cumulative = this.snapshot.usage.cumulative;
+    // 零用量的 ModelComplete 是冷恢复合成的占位事件（transcript-hydration 里写明
+    // 「不重复累计 token」），它没有真实调用，不能算一步。口径与 Pi 投影保持一致。
+    const countedCall =
+      (usage.inputTokens ?? 0) +
+        (usage.outputTokens ?? 0) +
+        (usage.cacheReadTokens ?? 0) +
+        (usage.cacheWriteTokens ?? 0) >
+      0;
     deltas.push({
       op: "state.updated",
       patch: {
@@ -4843,6 +4881,17 @@ export class ProductProjection {
             outputTokens: cumulative.outputTokens + (usage.outputTokens ?? 0),
             cacheReadTokens: cumulative.cacheReadTokens + (usage.cacheReadTokens ?? 0),
             cacheWriteTokens: cumulative.cacheWriteTokens + (usage.cacheWriteTokens ?? 0),
+            // 一次真实的 ModelComplete 就是一次模型调用，会话统计里的「步」数。
+            turns: cumulative.turns,
+            steps: cumulative.steps + (countedCall ? 1 : 0),
+            // 时间指标只在 Pi 投影里累加：ModelComplete 载荷不带时长，
+            // 这里保持原值，不能拿事件到达时刻编一个。
+            llmMs: cumulative.llmMs,
+            toolMs: cumulative.toolMs,
+            ttftMs: cumulative.ttftMs,
+            ttftSteps: cumulative.ttftSteps,
+            decodeMs: cumulative.decodeMs,
+            decodeTokens: cumulative.decodeTokens,
           },
         },
       },

@@ -29,6 +29,7 @@ import { UI_DESIGN_STATUS_KEY, UI_DESIGN_STATUS_TEXT } from "./ui-design-mode.js
 import {
   abortLiveSubagent,
   getLiveSubagentModel,
+  getLiveSubagentUsage,
   hasLiveSubagent,
   liveSubagentPanelStatus,
   selectLiveSubagents,
@@ -1119,6 +1120,7 @@ export class HostSessionRegistry {
         childSessionIds: children.map((child) => child.childSessionId),
         running: visibleRunning.map((child) => {
           const model = getLiveSubagentModel(child.childSessionId);
+          const usage = getLiveSubagentUsage(child.childSessionId);
           return {
             childSessionId: child.childSessionId,
             subagentType: child.subagentType,
@@ -1133,6 +1135,8 @@ export class HostSessionRegistry {
                   ...(model.thought ? { thought: model.thought } : {}),
                 }
               : {}),
+            // 用量跟着消息走，没有就叫 UI 别画 pill；这里不补零值。
+            ...(usage ? { usage } : {}),
           };
         }),
         endedTotal: children.length - visibleRunning.length,
@@ -1212,7 +1216,10 @@ export class HostSessionRegistry {
       }, 1000);
     };
     const unsubscribeLiveSubagents = subscribeLiveSubagents(() => {
-      void publishSubagents();
+      // 活表变动既有 spawn / release（低频），也有每次子会话 message_end 的用量累加。
+      // 后者每次都要重扫子会话目录与 jsonl，必须走去抖，否则多个子会话并发会把目录扫描放大成
+      // 「每次模型调用 × 每个会话」，与流式渲染抢同一个事件循环。
+      scheduleSubagents();
     });
     const unsubscribeProcesses =
       pi.subscribeManagedProcesses?.((works) => {
@@ -1595,7 +1602,10 @@ export class HostSessionRegistry {
           );
           if (result?.cancelled) return { cancelled: true };
           // 总结写在新叶子上。只截断旧行会把摘要丢掉。
-          if (summarize && pi.contextEvents) emit(projector.reload(pi.contextEvents()));
+          // 不带总结时同样整份重放：截断只删行，而会话累计量（token、轮次、
+          // 工具耗时）是从事件流累加出来的，不从行上反推——不重放就会留着
+          // 被回退掉的那条分支的数字。
+          if (pi.contextEvents) emit(projector.reload(pi.contextEvents()));
           else emit(projector.truncateFrom(targetId));
           // 先收起「正在总结」，再补正文。反过来会把刚补上的摘要一起裁掉。
           if (summarize) emit(projector.noteBranchSummary(false));

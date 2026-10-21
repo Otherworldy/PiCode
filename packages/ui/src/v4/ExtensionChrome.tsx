@@ -58,14 +58,14 @@ function ExtensionStatusPopup({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-7 gap-1 px-1.5 text-foreground-subtle"
-            aria-label={label}
+            className="inline-flex h-6 min-w-0 shrink items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-ui-caption font-normal text-foreground-subtle tabular-nums"
           >
-            <BlocksIcon className="size-4" />
-            <span className="tabular-nums">{statuses.length}</span>
+            <BlocksIcon className="size-3.5 shrink-0" />
+            <span className="min-w-0 truncate">{label}</span>
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="end" side="top" className="w-72 gap-0 p-1.5">
+        {/* status 图标现在挂在输入卡下方的居中统计行里，弹层跟着改为居中展开。 */}
+        <PopoverContent align="center" side="top" className="w-72 gap-0 p-1.5">
           <ul>
             {statuses.map((status) => (
               <li key={status.key} className="break-words px-2 py-1.5 text-ui-base text-foreground">

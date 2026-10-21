@@ -157,6 +157,7 @@ import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import { useConversationSelectionReferences } from "@/v4/composer/useConversationSelectionReferences.js";
 import { ConversationBackgroundWorkTrigger } from "@/v4/composer/ConversationBackgroundWorkTrigger.js";
 import { ExtensionChrome } from "@/v4/ExtensionChrome.js";
+import { ComposerSessionStats } from "@/v4/ComposerSessionStats.js";
 import { useSlashCommands } from "@/hooks/useSlashCommands.js";
 import {
   plannotatorPlanActive,
@@ -2108,8 +2109,6 @@ function ConversationComposerImpl({
     () => (
       <div className="flex min-w-0 items-center gap-1">
         <span className="flex min-w-0 shrink items-center gap-1 overflow-hidden empty:hidden">
-          {/* 非计划插件 status 跟在上下文圆环左侧，不占输入框上方。 */}
-          <ExtensionChrome snapshot={snapshot} placement="status" />
           <V4ComposerModelControls
             workspacePath={workspacePath}
             workspaceIdentity={workspaceIdentity}
@@ -2200,7 +2199,6 @@ function ConversationComposerImpl({
       sendShortcut,
       sendTooltipTitle,
       sessionId,
-      snapshot?.extensionStatuses,
       showStopControl,
       stopTooltipTitle,
       workspaceIdentity,
@@ -2375,6 +2373,13 @@ function ConversationComposerImpl({
         ) : null}
       </div>
       <ExtensionChrome snapshot={snapshot} placement="belowEditor" />
+      {/* 会话统计挂在输入卡下方，与 dsh 的 composer dock 同一处。插件 status 从前面的
+          控制簇一并搬下来：它们是同一层的只读信息，不该占输入框内的操作位。
+          两个子项都返回 null 时容器为空，靠 empty:hidden 整行隐去。 */}
+      <div className="mt-1 flex min-w-0 items-center justify-center gap-1 empty:hidden">
+        {snapshot ? <ComposerSessionStats cumulative={snapshot.usage.cumulative} /> : null}
+        <ExtensionChrome snapshot={snapshot} placement="status" />
+      </div>
       <ImagePreviewDialog
         initialIndex={attachmentPreviewIndex}
         items={composerMediaPreviewItems}

@@ -23,7 +23,7 @@ import {
   toolInputPath,
   toolResultText,
 } from "./presentation.js";
-import { createEmptySnapshot, emptyAvailability } from "./snapshot.js";
+import { createEmptySnapshot, emptyAvailability, emptyCumulativeUsage } from "./snapshot.js";
 import { isControlCommandTitle, visibleUserText } from "./jsonl-history.js";
 import { isOpenPlanReviewResult } from "./plan-review-signal.js";
 import type { PiAssistantDelta, PiHostEvent, PiMessageUsage } from "./types.js";
@@ -177,6 +177,11 @@ export class PiToV4Projector {
     return deltas;
   }
 
+  /**
+   * 只删尾部行，不碰会话累计量，也不重放事件。
+   * 它只能用在拿不到活跃分支事件流的降级路径上：累计量是从事件流累加出来的，
+   * 被删掉那几轮的 token、步数、工具耗时拆不回来，要重算只能整份 reload。
+   */
   truncateFrom(entityId: string): ConversationDelta[] {
     const row = this.snapshot.rows.window.find((item) => item.entityId === entityId);
     if (!row) return [];
@@ -209,8 +214,16 @@ export class PiToV4Projector {
     this.branchSummaryRowId = null;
     this.openPlanReviewTurnId = null;
     this.openReviewKind = null;
+    // 累计量不属于行，replay 不会清它。先归零再重放，否则同一份 jsonl 会被
+    // 再累加一遍：切分支、编辑重发、子代理 historyWatch 重画都会让统计翻倍。
+    const resetUsage = this.applyState({
+      usage: {
+        ...this.snapshot.usage,
+        cumulative: emptyCumulativeUsage(),
+      },
+    });
     const cleared = this.commit([{ op: "row.removed", fromRowId: 1 }]);
-    return cleared.concat(this.replay(events));
+    return [...resetUsage, ...cleared, ...this.replay(events)];
   }
 
   markTurnFilesReverted(turnId: string): ConversationDelta[] {
@@ -702,6 +715,14 @@ export class PiToV4Projector {
       {
         op: "state.updated",
         patch: {
+          // 开轮就计一轮。重试再发的 agent_start 在上面已早退，不会重复计。
+          usage: {
+            ...this.snapshot.usage,
+            cumulative: {
+              ...this.snapshot.usage.cumulative,
+              turns: this.snapshot.usage.cumulative.turns + 1,
+            },
+          },
           control: {
             phase: "running",
             sessionEnded: false,
@@ -877,7 +898,8 @@ export class PiToV4Projector {
     const row: ToolCallRow = {
       ...(existing != null
         ? (this.snapshot.rows.window.find((item) => item.rowId === existing) as ToolCallRow)
-        : this.base()),
+        : // 工具行要有起点：会话统计的工具耗时靠它与 endedAt 相减。
+          { ...this.base(), startedAt: this.stamp ?? Date.now() }),
       kind: "toolCall",
       toolCallId,
       toolName: mapped,
@@ -1006,7 +1028,18 @@ export class PiToV4Projector {
       progress: undefined,
       endedAt: this.stamp ?? Date.now(),
     };
-    return [...reviewDeltas, { op: "row.upserted", row: next }, ...settled];
+    // 工具耗时只在两端都有可靠时间时累加：重放 jsonl 时 start/end 共用同一个
+    // 落盘时间戳，相减为 0，历史会话的工具用时会偏低。宁可为 0 也不拿墙钟估。
+    const toolMs =
+      row.startedAt === undefined
+        ? 0
+        : Math.max(0, (this.stamp ?? Date.now()) - row.startedAt);
+    return [
+      ...reviewDeltas,
+      { op: "row.upserted", row: next },
+      ...settled,
+      ...(toolMs === 0 ? [] : this.addCumulativeUsage({ toolMs })),
+    ];
   }
 
   /**
@@ -1229,6 +1262,12 @@ export class PiToV4Projector {
     // （仍有 timestamp，但没有 durationMs）。把它们当真实调用会白白拉长分母，
     // 还会让下面「缺一次首 token 就整体丢弃」连带废掉整轮的速度。
     if (inputTokens + cacheReadTokens + cacheWriteTokens + outputTokens === 0) return [];
+    const durationMs = message.durationMs;
+    // 首 token 等待只能在这里取：下面会把两个打点清掉。
+    const ttftMs =
+      this.requestStartedAt === undefined || this.firstTokenAt === undefined
+        ? undefined
+        : Math.max(0, this.firstTokenAt - this.requestStartedAt);
     this.turnUsage = addTurnUsage(this.turnUsage, {
       ...(message.provider === undefined ? {} : { providerId: message.provider }),
       ...(message.model === undefined ? {} : { modelId: message.model }),
@@ -1238,16 +1277,72 @@ export class PiToV4Projector {
       outputTokens,
       // legacy 消息和 deferred 结果没有 durationMs。缺了就不写时长，卡片只隐去
       // 吐字速度那一行，token 数和命中率照常显示。
-      ...(message.durationMs === undefined
-        ? {}
-        : { llmDurationMs: Math.max(0, message.durationMs) }),
-      ...(this.requestStartedAt === undefined || this.firstTokenAt === undefined
-        ? {}
-        : { ttftMs: Math.max(0, this.firstTokenAt - this.requestStartedAt) }),
+      ...(durationMs === undefined ? {} : { llmDurationMs: Math.max(0, durationMs) }),
+      ...(ttftMs === undefined ? {} : { ttftMs }),
     });
     this.requestStartedAt = undefined;
     this.firstTokenAt = undefined;
-    return this.upsertTurnUsage();
+    return [
+      ...this.upsertTurnUsage(),
+      // 会话累计量与单轮用量同源同口径：一次产生用量的模型调用算一步。
+      // 时间指标只累加真实可得的时长，缺数不拿墙钟估。
+      ...this.addCumulativeUsage({
+        inputTokens,
+        outputTokens,
+        cacheReadTokens,
+        cacheWriteTokens,
+        steps: 1,
+        ...(durationMs === undefined ? {} : { llmMs: Math.max(0, durationMs) }),
+        ...(ttftMs === undefined ? {} : { ttftMs, ttftSteps: 1 }),
+        // 解码时长是首 token 之后的净输出时间；两个前提缺一不可。
+        ...(durationMs === undefined || ttftMs === undefined
+          ? {}
+          : {
+              decodeMs: Math.max(0, durationMs - ttftMs),
+              decodeTokens: outputTokens,
+            }),
+      }),
+    ];
+  }
+
+  /**
+   * 会话累计量。与 turnHeader 的单轮用量分开：它是整个会话的单调累加。
+   * 冷恢复不需要额外的种子——回放 jsonl 同样逐条走 message_end，累计自然补齐。
+   */
+  private addCumulativeUsage(delta: {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+    turns?: number;
+    steps?: number;
+    llmMs?: number;
+    toolMs?: number;
+    ttftMs?: number;
+    ttftSteps?: number;
+    decodeMs?: number;
+    decodeTokens?: number;
+  }): ConversationDelta[] {
+    const current = this.snapshot.usage.cumulative;
+    return this.applyState({
+      usage: {
+        ...this.snapshot.usage,
+        cumulative: {
+          inputTokens: current.inputTokens + (delta.inputTokens ?? 0),
+          outputTokens: current.outputTokens + (delta.outputTokens ?? 0),
+          cacheReadTokens: current.cacheReadTokens + (delta.cacheReadTokens ?? 0),
+          cacheWriteTokens: current.cacheWriteTokens + (delta.cacheWriteTokens ?? 0),
+          turns: current.turns + (delta.turns ?? 0),
+          steps: current.steps + (delta.steps ?? 0),
+          llmMs: current.llmMs + (delta.llmMs ?? 0),
+          toolMs: current.toolMs + (delta.toolMs ?? 0),
+          ttftMs: current.ttftMs + (delta.ttftMs ?? 0),
+          ttftSteps: current.ttftSteps + (delta.ttftSteps ?? 0),
+          decodeMs: current.decodeMs + (delta.decodeMs ?? 0),
+          decodeTokens: current.decodeTokens + (delta.decodeTokens ?? 0),
+        },
+      },
+    });
   }
 
   private upsertTurnUsage(): ConversationDelta[] {
