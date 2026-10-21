@@ -222,11 +222,11 @@ export function ChatPromptEditor({
         return;
       }
 
-      // Dialog 通过 React Portal 挂载时，Esc 关闭弹窗的事件仍会沿组件树
-      // 冒泡到行内编辑 form；弹窗已消费这次交互，不能再把消息编辑一并取消。
+      // 浮层（对话框、菜单）通过 React Portal 挂载时，Esc 关闭浮层的事件仍会沿组件树
+      // 冒泡到行内编辑 form；浮层已消费这次交互，不能再把消息编辑一并取消。
       if (
         event.defaultPrevented ||
-        (event.target instanceof Element && event.target.closest('[role="dialog"]'))
+        (event.target instanceof Element && event.target.closest('[role="dialog"],[role="menu"]'))
       ) {
         return;
       }

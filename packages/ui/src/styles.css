@@ -1002,6 +1002,34 @@ body {
   overflow-x: clip;
   overflow-y: auto;
   overscroll-behavior-y: auto;
+  /* 滚动条默认不可见：没滚过、已经到底时右边不该站一根粗条。
+     宽度固定 8px 是为了一直预留位置，否则它出现/消失时内容宽度会跳一下。 */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.zcode-capped-scroll::-webkit-scrollbar {
+  width: 8px;
+  /* 横向永远不出条，配合 overflow-x: clip 双保险 */
+  height: 0;
+}
+
+.zcode-capped-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.zcode-capped-scroll::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+}
+
+/* 读者滚过、而且下面还有没看的内容时才亮出来；滚回底部自动隐去。 */
+.zcode-capped-scroll[data-scrollbar="true"] {
+  scrollbar-color: var(--color-foreground-subtlest) transparent;
+}
+
+.zcode-capped-scroll[data-scrollbar="true"]::-webkit-scrollbar-thumb {
+  background-color: var(--color-foreground-subtlest);
 }
 
 /* 能滚的方向才渐隐，不滚的块边缘保持干净。 */
@@ -1053,6 +1081,8 @@ body {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  /* 秒数一直在变：等宽数字位，免得宽度跟着跳。 */
+  font-variant-numeric: tabular-nums;
   /* steps 让扫光一格一格推进，与 dsh 的 48 步一致，避免连续渐变看着发脏。 */
   animation: zcode-working-shimmer 3s steps(48, end) infinite;
 }
