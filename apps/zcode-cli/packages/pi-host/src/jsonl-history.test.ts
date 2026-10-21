@@ -427,3 +427,16 @@ test("先调工具再补正文时，首 token 从 toolCall 算起", () => {
   assert.ok(header.usage?.ttftMs !== undefined, "toolCall 没被当成首 token");
   assert.ok((header.usage?.ttftMs ?? 0) >= 1_900, `实际 ${String(header.usage?.ttftMs)}`);
 });
+
+test("分叉来源从 session header 读出，供分支图谱建边", () => {
+  const forked = [
+    '{"type":"session","version":3,"id":"01a15cc3","timestamp":"2026-01-02T03:04:05.000Z","cwd":"C:/work","parentSession":"C:/sessions/2026-01-01T00-00-00-000Z_sess_9efac5ef.jsonl"}',
+    '{"type":"message","id":"u1","timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}',
+  ].join("\n");
+  assert.equal(
+    readPiJsonl(forked).summary?.parentSession,
+    "C:/sessions/2026-01-01T00-00-00-000Z_sess_9efac5ef.jsonl",
+  );
+  // 根会话没有该字段，不能凭空造出一条边。
+  assert.equal(readPiJsonl(sample).summary?.parentSession, undefined);
+});

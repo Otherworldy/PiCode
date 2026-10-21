@@ -9,6 +9,8 @@ export type PiJsonlSummary = {
   cwd?: string;
   lastAssistantPreview?: string;
   sessionId?: string;
+  /** 分叉来源。Pi 写入的是父会话 jsonl 的绝对路径，旧数据也可能直接是会话 id。 */
+  parentSession?: string;
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -202,6 +204,7 @@ export function readPiJsonl(
   let cwd: string | undefined;
   let namedTitle: string | undefined;
   let sessionId: string | undefined;
+  let parentSession: string | undefined;
   let firstUser = "";
   let lastAssistant = "";
   const events: PiHostEvent[] = [];
@@ -233,6 +236,10 @@ export function readPiJsonl(
       if (timestamp > 0) headerAt = timestamp;
       if (typeof entry.cwd === "string" && entry.cwd) cwd = entry.cwd;
       if (typeof entry.id === "string" && entry.id) sessionId = entry.id;
+      // 分叉关系只写在 header。丢了它，分支图谱和父会话跳转就都没有边。
+      if (typeof entry.parentSession === "string" && entry.parentSession) {
+        parentSession = entry.parentSession;
+      }
       continue;
     }
     if (type === "session_info" && typeof entry.name === "string" && entry.name.trim()) {
@@ -390,6 +397,7 @@ export function readPiJsonl(
       lastActivityAt: Math.max(headerAt, lastMessageAt) || createdAt,
       ...(cwd ? { cwd } : {}),
       ...(sessionId ? { sessionId } : {}),
+      ...(parentSession ? { parentSession } : {}),
       ...(lastAssistant ? { lastAssistantPreview: clip(lastAssistant, 120) } : {}),
     },
     events,

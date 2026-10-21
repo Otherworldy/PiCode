@@ -2184,3 +2184,45 @@ test("delete removes a cold fork file and a live session file", async () => {
   assert.equal(registry.get("sess_live"), undefined);
   await rm(root, { recursive: true, force: true });
 });
+
+test("list 与冷打开都从 jsonl header 还原分叉来源", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-fork-"));
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async (input) => new FakePiSession(input.sessionId, input.sessionFile),
+  });
+  const dir = join(root, "pi-host-sessions", Buffer.from(root).toString("base64url"));
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    join(dir, "2026-01-02T03-04-05_sess_parent.jsonl"),
+    [
+      '{"type":"session","id":"sess_parent","timestamp":"2026-01-02T03:04:05.000Z","cwd":"/work"}',
+      '{"type":"message","id":"u1","timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"user","content":[{"type":"text","text":"root"}]}}',
+    ].join("\n"),
+  );
+  await writeFile(
+    join(dir, "sess_child.jsonl"),
+    [
+      '{"type":"session","id":"sess_child","timestamp":"2026-01-02T03:05:00.000Z","cwd":"/work","parentSession":"/work/2026-01-02T03-04-05_sess_parent.jsonl"}',
+      '{"type":"message","id":"u1","timestamp":"2026-01-02T03:05:01.000Z","message":{"role":"user","content":[{"type":"text","text":"branch"}]}}',
+    ].join("\n"),
+  );
+
+  const listed = await registry.list(root);
+  assert.equal(
+    listed.find((item) => item.sessionId === "sess_child")?.parentSessionId,
+    "sess_parent",
+  );
+  assert.equal(
+    listed.find((item) => item.sessionId === "sess_parent")?.parentSessionId,
+    undefined,
+  );
+
+  // 冷打开也要带着来源，否则打开会话后的实时摘要会把自己的边冲掉。
+  const found = await registry.find("sess_child");
+  assert.equal(found?.parentSessionId, "sess_parent");
+  const opened = await registry.create({ workspacePath: root, sessionId: "sess_child" });
+  assert.equal(opened.parentSessionId, "sess_parent");
+  await rm(root, { recursive: true, force: true });
+});

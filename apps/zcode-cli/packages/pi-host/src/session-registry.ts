@@ -159,6 +159,8 @@ export type PiStoredSummary = {
   lastActivityAt: number;
   lastAssistantPreview?: string;
   cwd?: string;
+  /** 用户分叉来源（jsonl header 的 parentSession 解成会话 id）。 */
+  parentSessionId?: string;
 };
 
 let abortInflightNetwork = (): void => undefined;
@@ -173,6 +175,8 @@ export type PiStoredSession = {
   sessionFile: string;
   identity: string;
   workspacePath: string;
+  /** 磁盘上的分叉来源；冷打开时用它恢复 parentSessionId。 */
+  parentSessionId?: string;
 };
 
 /** 冷打开一次的三段耗时。已在注册表里的会话不产生这条。 */
@@ -266,6 +270,22 @@ function nativeSessionDir(cwd: string, root: string): string {
 
 function fileStem(file: string): string {
   return file.replace(/\.jsonl$/u, "");
+}
+
+/**
+ * 把 jsonl header 的 `parentSession` 还原成会话 id。
+ *
+ * Pi 写的是父会话文件路径（`<timestamp>_<sessionId>.jsonl`）；时间戳不含下划线，
+ * 所以取文件名里第一个下划线之后即可。已经直接是 id 时原样返回。
+ */
+function sessionIdFromParentReference(reference: string | undefined): string | undefined {
+  const value = reference?.trim();
+  if (!value) return undefined;
+  if (!/[\\/]/u.test(value)) return value;
+  const stem = fileStem(value.split(/[\\/]/u).pop() ?? "");
+  const separator = stem.indexOf("_");
+  const id = (separator >= 0 ? stem.slice(separator + 1) : stem).trim();
+  return id || undefined;
 }
 
 async function collectPicodeSubagentSessionIds(dir: string, ids: Set<string>): Promise<void> {
@@ -364,7 +384,7 @@ export class HostSessionRegistry {
         workspacePath: input.workspacePath,
         cwd: stored.workspacePath,
         sessionFile: stored.sessionFile,
-        parentSessionId: input.parentSessionId,
+        parentSessionId: input.parentSessionId ?? stored.parentSessionId,
         viaRegistry: input.viaRegistry,
         omitHostExtensions: input.omitHostExtensions,
         priorReadMs,
@@ -381,7 +401,7 @@ export class HostSessionRegistry {
           workspacePath: input.workspacePath,
           cwd: stored.workspacePath,
           sessionFile: stored.sessionFile,
-          parentSessionId: input.parentSessionId,
+          parentSessionId: input.parentSessionId ?? stored.parentSessionId,
           viaRegistry: input.viaRegistry,
           omitHostExtensions: input.omitHostExtensions,
           priorReadMs,
@@ -718,6 +738,7 @@ export class HostSessionRegistry {
       // Pi 分叉文件名是 timestamp_id。用整段文件名当会话 id 会和活会话的 header id 不是同一行。
       const sessionId =
         headerId && (idFrom === "header" || stem.endsWith(`_${headerId}`)) ? headerId : stem;
+      const parentSessionId = sessionIdFromParentReference(summary.parentSession);
       summaries.push({
         sessionId,
         sessionFile,
@@ -728,6 +749,8 @@ export class HostSessionRegistry {
           ? { lastAssistantPreview: summary.lastAssistantPreview }
           : {}),
         ...(summary.cwd ? { cwd: summary.cwd } : {}),
+        // 自引用是脏数据（旧版本把 id 写进了路径字段），不能当成一条边。
+        ...(parentSessionId && parentSessionId !== sessionId ? { parentSessionId } : {}),
       });
     }
     return summaries;
@@ -833,6 +856,7 @@ export class HostSessionRegistry {
     const headerId = summary.sessionId;
     const stem = fileStem(sessionFile.split(/[\\/]/u).pop() ?? "");
     if (stem !== sessionId && headerId !== sessionId) return null;
+    const parentSessionId = sessionIdFromParentReference(summary.parentSession);
     let identity = dir;
     if (decodeDir) {
       try {
@@ -848,6 +872,7 @@ export class HostSessionRegistry {
       sessionFile,
       identity,
       workspacePath: summary.cwd ?? identity,
+      ...(parentSessionId && parentSessionId !== sessionId ? { parentSessionId } : {}),
     };
   }
 

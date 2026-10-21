@@ -247,5 +247,8 @@ export async function listPiStoredSummaries(
     createdAt: item.createdAt,
     ...(item.lastAssistantPreview ? { lastAssistantPreview: item.lastAssistantPreview } : {}),
     ...(item.cwd && item.cwd !== workspaceId ? { workingDirectory: item.cwd } : {}),
+    // 磁盘上已经存在的分叉关系必须进 sessions-index，否则 tasks-index 的
+    // forked_from_task_id 永远为空，分支图谱和父会话追溯都拿不到边。
+    ...(item.parentSessionId ? { parentSessionId: item.parentSessionId } : {}),
   }));
 }
