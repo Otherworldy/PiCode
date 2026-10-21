@@ -86,4 +86,75 @@ describe("ConversationStatusPanel subagents", () => {
     expect(html).not.toContain("data-subagent-directory-trigger");
     expect(html).toContain('data-status-section-trigger="agent"');
   });
+
+  it("shows the usage pill, token rate, and makeup bar for a live subagent", () => {
+    const html = renderPanel(
+      <ConversationStatusPanel
+        workspacePath="D:/Study/Code/Github/ZCode"
+        summaryPanelVariantOverride="panel"
+        agentSectionOpen
+        parentSessionId="parent"
+        rootSessionId="root"
+        onCancelBackgroundWork={() => undefined}
+        onOpenSubagentSession={() => undefined}
+        backgroundWorks={[runningWork()]}
+        runningSubagents={[
+          {
+            childSessionId: "child-1",
+            subagentType: "scout",
+            title: TASK_TITLE,
+            status: "running",
+            startedAt: 1_700_000_000_000,
+            usage: {
+              inputTokens: 3_180,
+              cacheReadTokens: 74_180,
+              cacheWriteTokens: 0,
+              outputTokens: 5_600,
+              llmDurationMs: 200_000,
+              ttftMs: 66_667,
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(html).toContain('data-running-subagent-usage-trigger="true"');
+    expect(html).toContain('aria-expanded="false"');
+    // 用量 pill 与「打开子会话」覆盖层是兄弟：pill 自己抬 z-index，点用量只展开明细。
+    expect(html).toContain('data-running-subagent-session-trigger="true"');
+    expect(html).toContain("pointer-events-auto relative z-[2] inline-flex h-6");
+    // 总量走 turnTotalTokens：3.2K + 74.2K + 0 + 5.6K = 83K。
+    expect(html).toContain(">83K<");
+    expect(html).toContain(">42 tok/s<");
+    expect(html).toContain("用量构成");
+    // 明细默认收起，但仍在 DOM 里，靠 grid 的 0fr 行高隐藏。
+    expect(html).toContain("grid-template-rows:0fr");
+  });
+
+  it("falls back to the waiting label when there is no usage yet", () => {
+    const html = renderPanel(
+      <ConversationStatusPanel
+        workspacePath="D:/Study/Code/Github/ZCode"
+        summaryPanelVariantOverride="panel"
+        agentSectionOpen
+        parentSessionId="parent"
+        rootSessionId="root"
+        onCancelBackgroundWork={() => undefined}
+        backgroundWorks={[runningWork()]}
+        runningSubagents={[
+          {
+            childSessionId: "child-1",
+            subagentType: "tester",
+            title: TASK_TITLE,
+            status: "waiting",
+            startedAt: 1_700_000_000_000,
+          },
+        ]}
+      />,
+    );
+
+    expect(html).toContain("tester");
+    expect(html).toContain("等待中");
+    expect(html).not.toContain("data-running-subagent-usage-trigger");
+  });
 });

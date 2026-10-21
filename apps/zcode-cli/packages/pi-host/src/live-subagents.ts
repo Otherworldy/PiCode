@@ -1,4 +1,5 @@
-import type { BackgroundWorkSummary } from "@zcode/shared/zcode-protocol-v4";
+import type { BackgroundWorkSummary, TurnUsage } from "@zcode/shared/zcode-protocol-v4";
+import { addTurnUsage } from "@zcode/shared/zcode-protocol-v4";
 
 export type LiveSubagentModel = {
   provider: string;
@@ -12,6 +13,8 @@ type LiveSubagent = {
   setModel: (next: LiveSubagentModel) => Promise<boolean>;
   /** `picode_subagent` 的 agent 参数。缺席时目录只能从文件里找角色。 */
   agentName?: string;
+  /** 这次子会话到目前为止的累计用量；由 message_end 累加，不落盘。 */
+  usage?: TurnUsage;
 };
 
 // ponytail: 进程内一张表。子会话都活在这个 agent 进程里；拆成多进程再按宿主分表。
@@ -69,6 +72,21 @@ export function getLiveSubagentModel(id: string): LiveSubagentModel | undefined 
   const model = running.get(id)?.getModel();
   if (!model?.provider || !model.model) return undefined;
   return model;
+}
+
+/**
+ * 累加这次子会话的模型用量。父会话结束前只看得到最终文本，
+ * 面板上的 token 数只能靠这里一边跑一边攒；没有活子会话时不记账。
+ */
+export function noteLiveSubagentUsage(id: string, usage: TurnUsage): void {
+  const live = running.get(id);
+  if (!live) return;
+  live.usage = addTurnUsage(live.usage, usage);
+  notify();
+}
+
+export function getLiveSubagentUsage(id: string): TurnUsage | undefined {
+  return running.get(id)?.usage;
 }
 
 /** 只改这一次运行。调用方负责不写设置、不停父会话。 */

@@ -4,6 +4,11 @@ import type { ZCodeProvider } from "@zcode/shared";
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { RunningSubagentModelControl } from "@/v4/RunningSubagentModelControl.js";
 import {
+  RunningSubagentUsageBreakdown,
+  RunningSubagentUsagePill,
+  subagentTokensPerSecond,
+} from "@/v4/RunningSubagentUsage.js";
+import {
   forwardRef,
   memo,
   useCallback,
@@ -48,13 +53,13 @@ import {
 import type {
   GitChangeSourceId,
   GitRepositorySummary,
-  ZCodeSessionRunningSubagent,
   ZCodeTaskChangeSummary,
 } from "@zcode/shared";
 import type {
   BackgroundWorkSummary,
   GoalState,
   PlanState,
+  RunningSubagentSummary,
   ToolCallRow,
   WorkflowRunState,
 } from "@zcode/shared/zcode-protocol-v4";
@@ -120,7 +125,7 @@ interface ConversationStatusPanelProps {
   plan?: PlanState | null;
   extensionWidgets?: ReadonlyArray<{ key: string; lines: readonly string[] }> | null;
   backgroundWorks?: readonly BackgroundWorkSummary[];
-  runningSubagents?: readonly ZCodeSessionRunningSubagent[];
+  runningSubagents?: readonly RunningSubagentSummary[];
   /** 本会话 `snapshot.workflowRuns.runs`；与 backgroundWorks 在模型层按 workId ≡ runId 联接。 */
   workflowRuns?: readonly WorkflowRunState[];
   /**
@@ -166,7 +171,7 @@ interface ConversationStatusPanelProps {
 
 // memo 组件默认 props 不内联创建数组，避免每次渲染生成新引用触发稳定引用边界测试。
 const EMPTY_BACKGROUND_WORKS: readonly BackgroundWorkSummary[] = [];
-const EMPTY_RUNNING_SUBAGENTS: readonly ZCodeSessionRunningSubagent[] = [];
+const EMPTY_RUNNING_SUBAGENTS: readonly RunningSubagentSummary[] = [];
 const EMPTY_WORKFLOW_RUNS: readonly WorkflowRunState[] = [];
 
 function formatDurationUnits(
@@ -1036,7 +1041,7 @@ function buildRunningSubagentOpenRequest({
 }: {
   parentSessionId?: string;
   rootSessionId?: string;
-  subagent: ZCodeSessionRunningSubagent;
+  subagent: RunningSubagentSummary;
 }): OpenSubagentSideTabRequest | null {
   if (!parentSessionId) return null;
   return {
@@ -1430,6 +1435,8 @@ function SubagentStatusSection({
 }) {
   const { intl } = useZCodeIntl();
   const [now, setNow] = useState(() => Date.now());
+  // 展开的用量明细只活在这个面板里；按子会话 id 记，换会话或刷新后自然收起。
+  const [usageOpenChildSessionId, setUsageOpenChildSessionId] = useState<string | null>(null);
   const ordered = useMemo(
     () => [...subagents].sort((left, right) => (left.startedAt ?? 0) - (right.startedAt ?? 0)),
     [subagents],
@@ -1496,6 +1503,10 @@ function SubagentStatusSection({
             subagent,
           });
           const canOpenSubagentSession = Boolean(request && onOpenSubagentSession);
+          const usageExpanded = usageOpenChildSessionId === subagent.childSessionId;
+          const tokensPerSecond = subagent.usage ? subagentTokensPerSecond(subagent.usage) : null;
+          // 等待/阻塞且还没有模型调用时，用量位置换成状态词，避免这一行突然出现又消失。
+          const showUsageStatus = !subagent.usage && subagent.status !== "running";
           return (
             <li
               key={subagent.childSessionId}
@@ -1529,13 +1540,48 @@ function SubagentStatusSection({
               ) : null}
               <BotIcon className="pointer-events-none relative z-[1] mt-0.5 size-4 shrink-0 text-[var(--color-foreground-subtle)]" />
               <div className="pointer-events-none relative z-[1] flex min-w-0 flex-1 flex-col gap-1">
-                <span className="truncate text-ui-base leading-5 text-[var(--color-foreground)]">
-                  {runningSubagentListLabel(subagent)}
-                </span>
-                <span className="text-ui-base tabular-nums text-[var(--color-foreground-subtle)]">
-                  {formatBackgroundTaskElapsedLabel(
-                    Math.max(0, now - (subagent.startedAt ?? now)),
-                    intl.formatMessage,
+                <div className="flex min-w-0 items-center gap-1">
+                  <span className="min-w-0 flex-1 truncate text-ui-base leading-5 text-[var(--color-foreground)]">
+                    {runningSubagentListLabel(subagent)}
+                  </span>
+                  {subagent.usage ? (
+                    <RunningSubagentUsagePill
+                      expanded={usageExpanded}
+                      usage={subagent.usage}
+                      onToggle={() =>
+                        setUsageOpenChildSessionId((current) =>
+                          current === subagent.childSessionId ? null : subagent.childSessionId,
+                        )
+                      }
+                    />
+                  ) : showUsageStatus ? (
+                    <span
+                      data-running-subagent-status="true"
+                      className="pointer-events-none inline-flex h-6 shrink-0 items-center rounded-md border border-dashed border-[var(--color-border)] px-1.5 text-ui-xs text-[var(--color-foreground-subtle)]"
+                    >
+                      {intl.formatMessage({ id: `subagentDirectory.status.${subagent.status}` })}
+                    </span>
+                  ) : null}
+                </div>
+                <span className="flex min-w-0 items-center gap-1.5 text-ui-base tabular-nums text-[var(--color-foreground-subtle)]">
+                  <span className="shrink-0">
+                    {formatBackgroundTaskElapsedLabel(
+                      Math.max(0, now - (subagent.startedAt ?? now)),
+                      intl.formatMessage,
+                    )}
+                  </span>
+                  {tokensPerSecond === null ? null : (
+                    <>
+                      <span aria-hidden className="shrink-0">
+                        ·
+                      </span>
+                      <span className="shrink-0">
+                        {intl.formatMessage(
+                          { id: "chat.turnUsage.tokensPerSecondValue" },
+                          { value: tokensPerSecond },
+                        )}
+                      </span>
+                    </>
                   )}
                 </span>
                 <span className="pointer-events-auto relative z-[2] flex min-w-0 flex-nowrap items-center gap-1">
@@ -1561,6 +1607,9 @@ function SubagentStatusSection({
                     />
                   ) : null}
                 </span>
+                {subagent.usage ? (
+                  <RunningSubagentUsageBreakdown expanded={usageExpanded} usage={subagent.usage} />
+                ) : null}
               </div>
             </li>
           );

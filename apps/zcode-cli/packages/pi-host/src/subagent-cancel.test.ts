@@ -3,8 +3,10 @@ import test from "node:test";
 import {
   abortLiveSubagent,
   getLiveSubagentModel,
+  getLiveSubagentUsage,
   hasLiveSubagent,
   liveSubagentPanelStatus,
+  noteLiveSubagentUsage,
   selectLiveSubagents,
   setLiveSubagentModel,
   subagentControlWorks,
@@ -39,6 +41,48 @@ test("cancel aborts only the tracked subagent", async () => {
   release();
   assert.equal(hasLiveSubagent("child-1"), false);
   assert.equal(abortLiveSubagent("child-1"), false);
+});
+
+test("usage accumulates only while the child is live", () => {
+  const release = trackLiveSubagent("child-usage", {
+    abort: () => undefined,
+    getModel: () => ({ provider: "acme", model: "small", thought: "low" }),
+    setModel: async () => true,
+  });
+  assert.equal(getLiveSubagentUsage("child-usage"), undefined);
+  noteLiveSubagentUsage("child-usage", {
+    inputTokens: 10,
+    cacheReadTokens: 90,
+    cacheWriteTokens: 0,
+    outputTokens: 5,
+    llmDurationMs: 1_000,
+    ttftMs: 200,
+  });
+  noteLiveSubagentUsage("child-usage", {
+    inputTokens: 1,
+    cacheReadTokens: 9,
+    cacheWriteTokens: 0,
+    outputTokens: 2,
+    llmDurationMs: 500,
+    ttftMs: 100,
+  });
+  assert.deepEqual(getLiveSubagentUsage("child-usage"), {
+    inputTokens: 11,
+    cacheReadTokens: 99,
+    cacheWriteTokens: 0,
+    outputTokens: 7,
+    llmDurationMs: 1_500,
+    ttftMs: 300,
+  });
+  // 没有活子会话时不记账，也不报错。
+  noteLiveSubagentUsage("missing", {
+    inputTokens: 1,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    outputTokens: 1,
+  });
+  release();
+  assert.equal(getLiveSubagentUsage("child-usage"), undefined);
 });
 
 test("running rows follow the live table, not the file status", () => {

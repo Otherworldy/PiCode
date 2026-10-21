@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { CreateAgentSessionOptions } from "@earendil-works/pi-coding-agent";
-import { trackLiveSubagent } from "./live-subagents.js";
+import { noteLiveSubagentUsage, trackLiveSubagent } from "./live-subagents.js";
 import { mapThought } from "./model-delegate.js";
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
 import { createPermissionExtension, gateTool, type ToolPermissionCheck } from "./permission-gate.js";
@@ -325,6 +325,60 @@ export async function runZcodeSubagent(input: {
     },
   });
   input.signal?.addEventListener("abort", stopChild);
+  // 子会话的用量只有这里看得到：父会话要等它结束才拿到最终文本，
+  // 所以订阅 message_end 把每次模型调用累加进活表，面板才能边跑边显示。
+  // 首 token 等待的口径与 `PiToV4Projector.recordTurnUsage` 对齐：起点用 Pi 的
+  // 请求时间戳，打点只认真正的输出增量（toolcall 也算），否则同一个子会话
+  // 在面板与侧栏会算出两个吐字速度。
+  let childRequestStartedAt: number | undefined;
+  let childFirstTokenAt: number | undefined;
+  const stopUsage = session.subscribe((event) => {
+    if (event.type === "message_start") {
+      if (event.message.role !== "assistant") return;
+      childRequestStartedAt = event.message.timestamp ?? Date.now();
+      childFirstTokenAt = undefined;
+      return;
+    }
+    if (event.type === "message_update") {
+      if (childFirstTokenAt !== undefined) return;
+      const kind = event.assistantMessageEvent.type;
+      if (
+        kind === "text_delta" ||
+        kind === "thinking_delta" ||
+        kind === "toolcall_start" ||
+        kind === "toolcall_delta"
+      ) {
+        childFirstTokenAt = Date.now();
+      }
+      return;
+    }
+    if (event.type !== "message_end") return;
+    const message = event.message;
+    if (message.role !== "assistant") return;
+    // 与 projector 同样对缺失字段兜底：NaN 会让 usage 校验失败，整帧 state.updated 被拒收。
+    const inputTokens = Math.max(0, message.usage.input ?? 0);
+    const cacheReadTokens = Math.max(0, message.usage.cacheRead ?? 0);
+    const cacheWriteTokens = Math.max(0, message.usage.cacheWrite ?? 0);
+    const outputTokens = Math.max(0, message.usage.output ?? 0);
+    // 失败、中断和 deferred 回填也会走 message_end，Pi 这时给的 usage 是全零。
+    if (inputTokens + cacheReadTokens + cacheWriteTokens + outputTokens === 0) return;
+    noteLiveSubagentUsage(session.sessionId, {
+      providerId: message.provider,
+      modelId: message.model,
+      inputTokens,
+      cacheReadTokens,
+      cacheWriteTokens,
+      outputTokens,
+      ...(message.durationMs === undefined
+        ? {}
+        : { llmDurationMs: Math.max(0, message.durationMs) }),
+      ...(childRequestStartedAt === undefined || childFirstTokenAt === undefined
+        ? {}
+        : { ttftMs: Math.max(0, childFirstTokenAt - childRequestStartedAt) }),
+    });
+    childRequestStartedAt = undefined;
+    childFirstTokenAt = undefined;
+  });
   try {
     await session.prompt(input.task);
     if (cancelled || input.signal?.aborted) return "subagent cancelled";
@@ -334,6 +388,7 @@ export async function runZcodeSubagent(input: {
     return `subagent failed: ${error instanceof Error ? error.message : String(error)}`;
   } finally {
     await writeRole();
+    stopUsage();
     release();
     input.signal?.removeEventListener("abort", stopChild);
     session.dispose();
