@@ -28,10 +28,12 @@ export const PET_PLAYER_CSS = `
   @keyframes squish { 40% { transform: scale(1.06, 0.92); } }
 
   /* 编辑态：把角色和气泡的关系画出来，窗口本身是透明的。 */
-  #guide-stage {
+  #crop-box {
     position: absolute; z-index: 1; display: none;
-    border: 1px dashed rgba(255, 255, 255, 0.55); border-radius: 6px;
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25) inset; pointer-events: none;
+    border: 1px dashed rgba(255, 255, 255, 0.85); border-radius: 6px;
+    /* 框外压暗，方便看清裁掉的是哪一块。 */
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+    cursor: move;
   }
   #guide-window {
     position: absolute; z-index: 1; display: none;
@@ -57,6 +59,9 @@ export const PET_PLAYER_CSS = `
   .pet-handle[data-dir="e"], .pet-handle[data-dir="w"] { cursor: ew-resize; }
   .pet-handle[data-dir="ne"], .pet-handle[data-dir="sw"] { cursor: nesw-resize; }
   .pet-handle[data-dir="nw"], .pet-handle[data-dir="se"] { cursor: nwse-resize; }
+  .pet-handle[data-kind="crop"] {
+    border-color: rgba(15, 23, 42, 0.9); background: rgba(248, 250, 252, 0.95);
+  }
   #edit-bar {
     position: absolute; z-index: 4; display: none; gap: 8px; align-items: center;
     padding: 6px 10px; border-radius: 8px; background: rgba(15, 23, 42, 0.94);

@@ -331,9 +331,14 @@ export {
   normalizeDesktopPetDisplayScale,
   normalizeDesktopPetReaderBubbleRect,
   normalizeDesktopPetReaderHotkey,
+  normalizeDesktopPetStageCrop,
   normalizeDesktopPetReaderHotkeyMode,
 } from "./desktopPetReader.js";
-export type { DesktopPetReaderBubbleRect } from "./desktopPetReader.js";
+export type {
+  DesktopPetBubbleLayout,
+  DesktopPetReaderBubbleRect,
+  DesktopPetStageCrop,
+} from "./desktopPetReader.js";
 export type { DesktopPetPersistedSettings } from "./desktopPetReader.js";
 export {
   deriveDesktopPetMood,

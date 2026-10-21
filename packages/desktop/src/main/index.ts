@@ -1514,6 +1514,7 @@ app.whenReady().then(async () => {
           desktopPetDisplayScale: restoredPetSettings.displayScale,
           desktopPetCropCharacter: restoredPetSettings.cropCharacter,
           desktopPetReaderBubbleRect: restoredPetSettings.readerBubbleRect,
+          desktopPetStageCrop: restoredPetSettings.stageCrop,
           desktopPetReaderPath: restoredPetSettings.readerPath,
           desktopPetReaderHotkey: restoredPetSettings.readerHotkey,
           desktopPetReaderHotkeyMode: restoredPetSettings.readerHotkeyMode,

@@ -5,7 +5,7 @@ import type { ProviderFamilyConnectionSelectionSettings } from "./provider-famil
 import type { ZCodeProvider } from "./zcode-task-types-core.js";
 import type { WorkspacePurpose } from "./workspacePurpose.js";
 import type { EmbeddedBrowserViewportPreference } from "./browser-use/command-metadata.js";
-import type { DesktopPetReaderBubbleRect } from "./desktopPetReader.js";
+import type { DesktopPetReaderBubbleRect, DesktopPetStageCrop } from "./desktopPetReader.js";
 
 // ── Domain types ──
 
@@ -310,6 +310,8 @@ export interface AppSettings {
   desktopPetCropCharacter?: boolean;
   /** 摸鱼文本气泡相对角色的大小与位置。缺省或 null 时按角色头顶自动摆放。Web/手机端忽略。 */
   desktopPetReaderBubbleRect?: DesktopPetReaderBubbleRect | null;
+  /** 手动裁剪的角色舞台，按视频帧比例记。缺省或 null 时自动按不透明像素裁剪。Web/手机端忽略。 */
+  desktopPetStageCrop?: DesktopPetStageCrop | null;
   /** 摸鱼时在宠物气泡里显示的本地文本路径。空表示不启用。 */
   desktopPetReaderPath?: string;
   /** 摸鱼文本快捷键，Electron accelerator。缺省 F9。 */

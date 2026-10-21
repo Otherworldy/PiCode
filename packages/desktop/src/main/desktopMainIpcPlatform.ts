@@ -89,7 +89,7 @@ export function registerPlatformIpcHandlers(options: {
     pack?: import("@zcode/shared").DesktopPetInstalledPack;
   };
   deleteDesktopPetPack?: (id: string, sourceType: "download" | "local") => boolean;
-  editDesktopPetBubble?: () => Promise<import("@zcode/shared").DesktopPetReaderBubbleRect | null>;
+  editDesktopPetBubble?: () => Promise<import("@zcode/shared").DesktopPetBubbleLayout | null>;
   resetDesktopPetBubble?: () => void;
   stopDesktopPetDownload?: () => void;
   findDesktopPetReaderText?: (query: string) => Promise<boolean>;

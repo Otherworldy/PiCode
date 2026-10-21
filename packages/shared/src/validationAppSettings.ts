@@ -440,6 +440,10 @@ const appSettingsObjectSchema = z.object({
     .object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() })
     .nullable()
     .optional(),
+  desktopPetStageCrop: z
+    .object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() })
+    .nullable()
+    .optional(),
   desktopPetReaderPath: z.string().optional(),
   desktopPetReaderHotkey: z.string().default("F9"),
   desktopPetReaderHotkeyMode: z.enum(["toggle", "hold"]).default("toggle"),
@@ -516,6 +520,10 @@ export const appSettingsPatchSchema = z.object({
   desktopPetDisplayScale: z.number().min(0.5).max(1.5).optional(),
   desktopPetCropCharacter: z.boolean().optional(),
   desktopPetReaderBubbleRect: z
+    .object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() })
+    .nullable()
+    .optional(),
+  desktopPetStageCrop: z
     .object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() })
     .nullable()
     .optional(),

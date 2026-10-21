@@ -24,11 +24,14 @@ import {
   normalizeDesktopPetReaderBubbleRect,
   normalizeDesktopPetReaderHotkey,
   normalizeDesktopPetReaderHotkeyMode,
+  normalizeDesktopPetStageCrop,
   type AppSettings,
   type DesktopPetInstalledPack,
   type DesktopPetMood,
   type DesktopPetPersistedSettings,
+  type DesktopPetBubbleLayout,
   type DesktopPetReaderBubbleRect,
+  type DesktopPetStageCrop,
   type TaskNotificationPayload,
 } from "@zcode/shared";
 import { createUpdateFetch, type UpdateNetworkSettings } from "../appUpdate/proxyFetch.js";
@@ -103,6 +106,8 @@ interface PetManifest extends PetMenuSource {
     inset: number;
     margin: number;
     rect: DesktopPetReaderBubbleRect | null;
+    /** 手动裁剪的比例，页面按视频帧换算成像素。 */
+    stageCrop: DesktopPetStageCrop | null;
   };
   size: number;
   fixed: boolean;
@@ -118,6 +123,7 @@ interface PetSettings {
   displayScale: number;
   cropCharacter: boolean;
   readerBubbleRect: DesktopPetReaderBubbleRect | null;
+  stageCrop: DesktopPetStageCrop | null;
   readerPath: string;
   readerHotkey: string;
   readerHotkeyMode: "toggle" | "hold";
@@ -136,6 +142,7 @@ let settings: PetSettings = {
   displayScale: DESKTOP_PET_DISPLAY_SCALE_DEFAULT,
   cropCharacter: true,
   readerBubbleRect: null,
+  stageCrop: null,
   readerPath: "",
   readerHotkey: DESKTOP_PET_READER_HOTKEY_DEFAULT,
   readerHotkeyMode: "toggle",
@@ -172,11 +179,12 @@ let listenersReady = false;
 let currentManifest: PetManifest | null = null;
 let currentPackRoot = "";
 let currentPack: PetPack | null = null;
-let currentLayout: PetWindowLayout | null = null;
+/** 角色舞台左下角在屏幕上的位置。窗口怎么涨缩、怎么被拖，角色都按这个点落位。 */
+let stageOrigin: { x: number; y: number } | null = null;
 let bubbleEdit: {
   /** 编辑开始时窗口的位置和大小，取消时还原。 */
   bounds: ParamRectangle;
-  resolve: (rect: DesktopPetReaderBubbleRect | null) => void;
+  resolve: (layout: DesktopPetBubbleLayout | null) => void;
 } | null = null;
 
 export { resolveDesktopPetRootDir } from "./petRoot.js";
@@ -214,6 +222,7 @@ export function noteDesktopPetSettings(patch: Partial<AppSettings>, full = false
     !("desktopPetDisplayScale" in patch) &&
     !("desktopPetCropCharacter" in patch) &&
     !("desktopPetReaderBubbleRect" in patch) &&
+    !("desktopPetStageCrop" in patch) &&
     !("desktopPetReaderPath" in patch) &&
     !("desktopPetReaderHotkey" in patch) &&
     !("desktopPetReaderHotkeyMode" in patch)
@@ -248,6 +257,11 @@ export function noteDesktopPetSettings(patch: Partial<AppSettings>, full = false
       : full
         ? null
         : settings.readerBubbleRect,
+    stageCrop: hasOwn(patch, "desktopPetStageCrop")
+      ? normalizeDesktopPetStageCrop(patch.desktopPetStageCrop)
+      : full
+        ? null
+        : settings.stageCrop,
     readerPath: readPetString(patch, "desktopPetReaderPath", full, settings.readerPath),
     readerHotkey: hasOwn(patch, "desktopPetReaderHotkey")
       ? normalizeDesktopPetReaderHotkey(patch.desktopPetReaderHotkey)
@@ -276,6 +290,7 @@ export function noteDesktopPetSettings(patch: Partial<AppSettings>, full = false
   const sizeChanged = chosen.displayScale !== settings.displayScale;
   const cropChanged = chosen.cropCharacter !== settings.cropCharacter;
   const bubbleRectChanged = !sameBubbleRect(chosen.readerBubbleRect, settings.readerBubbleRect);
+  const stageCropChanged = !sameStageCrop(chosen.stageCrop, settings.stageCrop);
   const toneChanged = chosen.bubbleTone !== settings.bubbleTone;
   const readerChanged =
     chosen.readerPath !== settings.readerPath ||
@@ -291,6 +306,7 @@ export function noteDesktopPetSettings(patch: Partial<AppSettings>, full = false
     sizeChanged ||
     cropChanged ||
     bubbleRectChanged ||
+    stageCropChanged ||
     !petWindow ||
     petWindow.isDestroyed()
   ) {
@@ -307,7 +323,7 @@ export { getDesktopPetDownloadStatus };
  * 把宠物窗口切到编辑态：窗口临时铺满工作区，让用户直接把气泡拖到想要的位置和大小。
  * 页面负责画手柄和引导线，保存/取消都回到这里。
  */
-export function editDesktopPetBubble(): Promise<DesktopPetReaderBubbleRect | null> {
+export function editDesktopPetBubble(): Promise<DesktopPetBubbleLayout | null> {
   if (bubbleEdit) return Promise.resolve(null);
   const win = petWindow;
   if (!win || win.isDestroyed() || !currentManifest) return Promise.resolve(null);
@@ -319,7 +335,7 @@ export function editDesktopPetBubble(): Promise<DesktopPetReaderBubbleRect | nul
     width: Math.max(320, workArea.width - 24),
     height: Math.max(240, workArea.height - 24),
   };
-  return new Promise<DesktopPetReaderBubbleRect | null>((resolve) => {
+  return new Promise<DesktopPetBubbleLayout | null>((resolve) => {
     bubbleEdit = { bounds, resolve };
     win.setBounds(area);
     win.focus();
@@ -334,29 +350,39 @@ export function editDesktopPetBubble(): Promise<DesktopPetReaderBubbleRect | nul
 }
 
 /** 结束编辑态：保存就落盘并重排窗口，取消就按原样重新铺一次。 */
-function finishBubbleEdit(rect: DesktopPetReaderBubbleRect | null): void {
+function finishBubbleEdit(
+  rect: DesktopPetReaderBubbleRect | null,
+  stageCrop: DesktopPetStageCrop | null = null,
+): void {
   const editing = bubbleEdit;
   if (!editing) return;
   bubbleEdit = null;
-  if (rect) {
-    settings = { ...settings, readerBubbleRect: rect };
+  if (rect || stageCrop) {
+    settings = {
+      ...settings,
+      readerBubbleRect: rect ?? settings.readerBubbleRect,
+      stageCrop: stageCrop ?? settings.stageCrop,
+    };
     writePetSettingsFile(settings);
-    patchSettings({ desktopPetReaderBubbleRect: rect });
+    patchSettings({
+      desktopPetReaderBubbleRect: settings.readerBubbleRect,
+      desktopPetStageCrop: settings.stageCrop,
+    });
   }
   // 先还原编辑前的窗口，再按最新设置重排；重载页面最稳，不会留下编辑态的残留样式。
   const win = petWindow;
   if (win && !win.isDestroyed()) win.setBounds(editing.bounds);
   if (currentPack && settings.enabled) showPet(currentPack);
-  editing.resolve(rect);
+  editing.resolve(rect ? { rect, stageCrop: settings.stageCrop } : null);
   logger.info("[desktop-pet] bubble edit finished", rect ? "saved" : "cancelled");
 }
 
 /** 摸鱼气泡回到默认摆放。 */
 export function resetDesktopPetBubble(): void {
-  if (!settings.readerBubbleRect) return;
-  settings = { ...settings, readerBubbleRect: null };
+  if (!settings.readerBubbleRect && !settings.stageCrop) return;
+  settings = { ...settings, readerBubbleRect: null, stageCrop: null };
   writePetSettingsFile(settings);
-  patchSettings({ desktopPetReaderBubbleRect: null });
+  patchSettings({ desktopPetReaderBubbleRect: null, desktopPetStageCrop: null });
   if (currentPack && settings.enabled && petWindow && !petWindow.isDestroyed()) {
     showPet(currentPack);
   }
@@ -580,8 +606,16 @@ async function applySettings(token: number, signal: AbortSignal): Promise<void> 
   }
 }
 
-/** 角色舞台的尺寸：裁到角色像素时用缓存，否则按整帧比例。 */
+/** 角色舞台的尺寸：手动裁剪优先，其次用量到的角色像素，最后按整帧比例。 */
 function stageSizeFor(pack: PetPack): { width: number; height: number } {
+  const crop = settings.stageCrop;
+  if (crop) {
+    const scale = settings.displayScale;
+    return {
+      width: Math.max(1, Math.round(crop.w * pack.size * scale)),
+      height: Math.max(1, Math.round(crop.h * petStageHeight(pack.aspect, pack.size) * scale)),
+    };
+  }
   const cached = settings.cropCharacter ? readPetBox(pack.rootDir) : null;
   if (cached) return { width: cached.width, height: cached.height };
   const scale = settings.displayScale;
@@ -605,16 +639,15 @@ function layoutFor(pack: PetPack): PetWindowLayout {
   });
 }
 
-/** 角色底边左角在屏幕上的位置。窗口怎么长，角色都不动。 */
-function stageAnchor(layout: PetWindowLayout, bounds: ParamRectangle): { x: number; y: number } {
-  return { x: bounds.x + layout.stageLeft, y: bounds.y + bounds.height - layout.stageBottom };
-}
-
+/**
+ * 按布局重排窗口。角色钉在 stageOrigin 上，所以窗口只往左/往下/往右/往上长，角色不会跟着跑。
+ * 不能在这里用 getBounds() 反推角色位置：setBounds 之后读到的可能还是旧尺寸。
+ */
 function applyLayout(layout: PetWindowLayout): void {
   const win = petWindow;
   if (!win || win.isDestroyed()) return;
   const bounds = win.getBounds();
-  const anchor = currentLayout ? stageAnchor(currentLayout, bounds) : null;
+  const anchor = stageOrigin;
   const next = anchor
     ? {
         x: Math.round(anchor.x - layout.stageLeft),
@@ -623,7 +656,12 @@ function applyLayout(layout: PetWindowLayout): void {
         height: layout.height,
       }
     : { x: bounds.x, y: bounds.y, width: layout.width, height: layout.height };
-  currentLayout = layout;
+  if (!anchor) {
+    stageOrigin = {
+      x: next.x + layout.stageLeft,
+      y: next.y + layout.height - layout.stageBottom,
+    };
+  }
   if (
     next.x === bounds.x &&
     next.y === bounds.y &&
@@ -633,6 +671,15 @@ function applyLayout(layout: PetWindowLayout): void {
     return;
   }
   win.setBounds(next);
+}
+
+function sameStageCrop(
+  left: DesktopPetStageCrop | null,
+  right: DesktopPetStageCrop | null,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return left.x === right.x && left.y === right.y && left.w === right.w && left.h === right.h;
 }
 
 function sameBubbleRect(
@@ -688,14 +735,15 @@ function showPet(pack: PetPack): void {
     petWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     petWindow.webContents.setBackgroundThrottling(false);
     const area = screen.getPrimaryDisplay().workArea;
-    petWindow.setPosition(
-      area.x + area.width - layout.width - 24,
-      area.y + area.height - layout.height - 24,
-    );
-    currentLayout = layout;
+    const originX = area.x + area.width - layout.width - 24;
+    const originY = area.y + area.height - layout.height - 24;
+    petWindow.setPosition(originX, originY);
+    stageOrigin = {
+      x: originX + layout.stageLeft,
+      y: originY + layout.height - layout.stageBottom,
+    };
     petWindow.on("closed", () => {
       petWindow = null;
-      currentLayout = null;
       currentPack = null;
       finishBubbleEdit(null);
     });
@@ -1054,6 +1102,7 @@ function isDefaultPetSettings(value: PetSettings): boolean {
     value.displayScale === DESKTOP_PET_DISPLAY_SCALE_DEFAULT &&
     value.cropCharacter &&
     value.readerBubbleRect === null &&
+    value.stageCrop === null &&
     !value.readerPath &&
     value.readerHotkey === DESKTOP_PET_READER_HOTKEY_DEFAULT &&
     value.readerHotkeyMode === "toggle"
@@ -1071,6 +1120,7 @@ function readPetSettingsFile(): PetSettings | null {
       displayScale?: unknown;
       cropCharacter?: unknown;
       readerBubbleRect?: unknown;
+      stageCrop?: unknown;
       readerPath?: unknown;
       readerHotkey?: unknown;
       readerHotkeyMode?: unknown;
@@ -1085,6 +1135,7 @@ function readPetSettingsFile(): PetSettings | null {
       displayScale: normalizeDesktopPetDisplayScale(parsed.displayScale),
       cropCharacter: normalizeDesktopPetCropCharacter(parsed.cropCharacter),
       readerBubbleRect: normalizeDesktopPetReaderBubbleRect(parsed.readerBubbleRect),
+      stageCrop: normalizeDesktopPetStageCrop(parsed.stageCrop),
       readerPath: typeof parsed.readerPath === "string" ? parsed.readerPath : "",
       readerHotkey: normalizeDesktopPetReaderHotkey(
         legacyDefault ? undefined : parsed.readerHotkey,
@@ -1112,7 +1163,7 @@ function destroyPetWindow(): void {
   onActivate = null;
   currentManifest = null;
   currentPack = null;
-  currentLayout = null;
+  stageOrigin = null;
   // 编辑态挂在设置页的 IPC 调用上，窗口没了必须把它解开，否则设置页会一直转。
   const editing = bubbleEdit;
   bubbleEdit = null;
@@ -1137,6 +1188,7 @@ function handlePetEvent(payload: unknown): void {
     width?: number;
     height?: number;
     rect?: unknown;
+    stageCrop?: unknown;
   };
   if (event.type === "read-hide") {
     rememberReaderTop(event.top);
@@ -1167,7 +1219,10 @@ function handlePetEvent(payload: unknown): void {
     return;
   }
   if (event.type === "bubble-edit-done") {
-    finishBubbleEdit(normalizeDesktopPetReaderBubbleRect(event.rect));
+    finishBubbleEdit(
+      normalizeDesktopPetReaderBubbleRect(event.rect),
+      normalizeDesktopPetStageCrop(event.stageCrop),
+    );
     return;
   }
   if (event.type === "bubble-edit-cancel") {
@@ -1180,7 +1235,10 @@ function handlePetEvent(payload: unknown): void {
   const dx = Math.max(-200, Math.min(200, event.dx));
   const dy = Math.max(-200, Math.min(200, event.dy));
   const [x = 0, y = 0] = petWindow.getPosition();
-  petWindow.setPosition(Math.round(x + dx), Math.round(y + dy));
+  const nextX = Math.round(x + dx);
+  const nextY = Math.round(y + dy);
+  petWindow.setPosition(nextX, nextY);
+  if (stageOrigin) stageOrigin = { x: stageOrigin.x + (nextX - x), y: stageOrigin.y + (nextY - y) };
 }
 
 function hasOwn(patch: Partial<AppSettings>, key: keyof AppSettings): boolean {
@@ -1268,6 +1326,7 @@ function toManifest(pack: PetPack): PetManifest {
       inset: PET_BUBBLE_INSET,
       margin: PET_BUBBLE_MARGIN,
       rect: settings.readerBubbleRect,
+      stageCrop: settings.stageCrop,
     },
     size: pack.size,
     fixed: pack.fixed,

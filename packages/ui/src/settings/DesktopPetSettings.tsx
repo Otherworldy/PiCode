@@ -52,6 +52,7 @@ export function DesktopPetSettings() {
   const displayScale = form.displayScale;
   const cropCharacter = form.cropCharacter;
   const readerBubbleRect = form.readerBubbleRect;
+  const stageCrop = form.stageCrop;
   const readerHotkey = form.readerHotkey;
   const readerHotkeyMode = form.readerHotkeyMode;
 
@@ -103,6 +104,7 @@ export function DesktopPetSettings() {
         displayScale: normalizeDesktopPetDisplayScale(saved.displayScale),
         cropCharacter: normalizeDesktopPetCropCharacter(saved.cropCharacter),
         readerBubbleRect: saved.readerBubbleRect ?? null,
+        stageCrop: saved.stageCrop ?? null,
         readerPath: saved.readerPath?.trim() ?? "",
         readerHotkey: normalizeDesktopPetReaderHotkey(saved.readerHotkey),
         readerHotkeyMode: normalizeDesktopPetReaderHotkeyMode(saved.readerHotkeyMode),
@@ -239,22 +241,26 @@ export function DesktopPetSettings() {
 
       <DesktopPetBubbleRectRow
         rect={readerBubbleRect}
+        stageCrop={stageCrop}
         enabled={enabled}
         editing={bubbleEditing}
         onReset={() => {
-          remember({ readerBubbleRect: null });
-          void update({ desktopPetReaderBubbleRect: null });
+          remember({ readerBubbleRect: null, stageCrop: null });
+          void update({ desktopPetReaderBubbleRect: null, desktopPetStageCrop: null });
           void platform.resetDesktopPetBubble?.();
         }}
         onEdit={() => {
           setBubbleEditing(true);
           void (async () => {
-            const rect = await platform.editDesktopPetBubble?.();
+            const saved = await platform.editDesktopPetBubble?.();
             setBubbleEditing(false);
-            if (!rect) return;
-            remember({ readerBubbleRect: rect });
+            if (!saved) return;
+            remember({ readerBubbleRect: saved.rect, stageCrop: saved.stageCrop });
             // 主进程已经写进 setting.json，再走一次设置服务让其他窗口的快照一起刷新。
-            void update({ desktopPetReaderBubbleRect: rect });
+            void update({
+              desktopPetReaderBubbleRect: saved.rect,
+              desktopPetStageCrop: saved.stageCrop,
+            });
           })();
         }}
       />

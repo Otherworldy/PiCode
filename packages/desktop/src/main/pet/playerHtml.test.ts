@@ -126,6 +126,16 @@ describe("pet bubble", () => {
     expect(html).toContain("function startEditDrag");
   });
 
+  it("can crop the character stage in the same editor", () => {
+    const html = renderPetPlayerHtml("{}");
+    expect(html).toContain('id="crop-box"');
+    expect(html).toContain("function resizeCrop");
+    expect(html).toContain("cropHandles");
+    // 没动过裁剪框就不写裁剪，避免把自动按片段量出来的框写死。
+    expect(html).toContain("cropChanged");
+    expect(html).toContain("stageCrop:");
+  });
+
   it("keeps a session mood without covering the bubble", () => {
     const html = renderPetPlayerHtml("{}");
     expect(html).toContain('type === "mood"');

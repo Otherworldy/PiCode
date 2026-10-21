@@ -27,24 +27,27 @@ export interface PetBubbleEditLabels {
   save: string;
   cancel: string;
   bubble: string;
+  stage: string;
   window: string;
 }
 
 export function petBubbleEditLabels(locale: string): PetBubbleEditLabels {
   if (locale.toLowerCase().startsWith("zh")) {
     return {
-      bar: "拖动气泡移动，拖动方块缩放",
+      bar: "拖气泡移动/缩放，拖白框裁剪舞台",
       save: "保存",
       cancel: "取消",
       bubble: "气泡 {w} × {h}",
+      stage: "舞台 {w} × {h}",
       window: "窗口 {w} × {h}",
     };
   }
   return {
-    bar: "Drag the bubble to move, drag the handles to resize",
+    bar: "Drag the bubble, drag the white frame to crop the stage",
     save: "Save",
     cancel: "Cancel",
     bubble: "Bubble {w} × {h}",
+    stage: "Stage {w} × {h}",
     window: "Window {w} × {h}",
   };
 }

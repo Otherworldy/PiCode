@@ -9,6 +9,8 @@ export interface DesktopPetPersistedSettings {
   cropCharacter: boolean;
   /** 摸鱼气泡的大小与位置。null 表示按角色头顶自动摆放。 */
   readerBubbleRect: DesktopPetReaderBubbleRect | null;
+  /** 手动裁剪的角色舞台，按视频帧的比例记。null 表示自动按不透明像素裁剪。 */
+  stageCrop: DesktopPetStageCrop | null;
   readerPath: string;
   readerHotkey: string;
   readerHotkeyMode: "toggle" | "hold";
@@ -27,6 +29,24 @@ export interface DesktopPetReaderBubbleRect {
   h: number;
 }
 
+/**
+ * 手动裁剪的角色舞台，取值是相对整个视频帧的比例（0–1）。
+ * 所有片段共用一块裁剪，所以换动作时角色不会忽大忽小。
+ */
+export interface DesktopPetStageCrop {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** 一次编辑保存下来的布局：摸鱼气泡矩形 + 角色舞台裁剪。 */
+export interface DesktopPetBubbleLayout {
+  rect: DesktopPetReaderBubbleRect;
+  /** 保存后生效的舞台裁剪；null 表示仍按自动裁剪。 */
+  stageCrop: DesktopPetStageCrop | null;
+}
+
 export const DESKTOP_PET_BUBBLE_MIN_WIDTH = 160;
 export const DESKTOP_PET_BUBBLE_MAX_WIDTH = 1600;
 export const DESKTOP_PET_BUBBLE_MIN_HEIGHT = 44;
@@ -38,6 +58,21 @@ function clampNumber(value: number, min: number, max: number): number {
 }
 
 /** 摸鱼气泡矩形。缺字段、类型不对或明显越界时回到自动摆放。 */
+/** 舞台裁剪。四个值都在 0–1 之间且面积有效，否则回到自动裁剪。 */
+export function normalizeDesktopPetStageCrop(value: unknown): DesktopPetStageCrop | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<Record<keyof DesktopPetStageCrop, unknown>>;
+  const numbers = [raw.x, raw.y, raw.w, raw.h];
+  if (numbers.some((item) => typeof item !== "number" || !Number.isFinite(item))) return null;
+  const x = Math.min(0.99, Math.max(0, raw.x as number));
+  const y = Math.min(0.99, Math.max(0, raw.y as number));
+  const w = Math.min(1 - x, Math.max(0.02, raw.w as number));
+  const h = Math.min(1 - y, Math.max(0.02, raw.h as number));
+  if (w <= 0 || h <= 0) return null;
+  const round = (item: number) => Math.round(item * 10_000) / 10_000;
+  return { x: round(x), y: round(y), w: round(w), h: round(h) };
+}
+
 export function normalizeDesktopPetReaderBubbleRect(
   value: unknown,
 ): DesktopPetReaderBubbleRect | null {

@@ -297,7 +297,7 @@ contextBridge.exposeInMainWorld("zcode", {
     }>,
   editDesktopPetBubble: () =>
     ipcRenderer.invoke(PlatformChannels.DesktopPetState, { action: "bubble-edit" }) as Promise<
-      import("@zcode/shared").DesktopPetReaderBubbleRect | null
+      import("@zcode/shared").DesktopPetBubbleLayout | null
     >,
   resetDesktopPetBubble: () =>
     ipcRenderer.invoke(PlatformChannels.DesktopPetState, {

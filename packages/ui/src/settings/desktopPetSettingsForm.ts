@@ -4,6 +4,7 @@ import {
   normalizeDesktopPetReaderBubbleRect,
   normalizeDesktopPetReaderHotkey,
   normalizeDesktopPetReaderHotkeyMode,
+  normalizeDesktopPetStageCrop,
   type AppSettings,
   type DesktopPetPersistedSettings,
 } from "@zcode/shared";
@@ -20,6 +21,7 @@ export function petFormFromSettings(
     displayScale: normalizeDesktopPetDisplayScale(settings?.desktopPetDisplayScale),
     cropCharacter: normalizeDesktopPetCropCharacter(settings?.desktopPetCropCharacter),
     readerBubbleRect: normalizeDesktopPetReaderBubbleRect(settings?.desktopPetReaderBubbleRect),
+    stageCrop: normalizeDesktopPetStageCrop(settings?.desktopPetStageCrop),
     readerPath: settings?.desktopPetReaderPath?.trim() ?? "",
     readerHotkey: normalizeDesktopPetReaderHotkey(settings?.desktopPetReaderHotkey),
     readerHotkeyMode: normalizeDesktopPetReaderHotkeyMode(settings?.desktopPetReaderHotkeyMode),

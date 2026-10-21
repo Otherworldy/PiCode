@@ -12,6 +12,8 @@ const geometry = manifest.geometry || {};
 // 框要到拿到具体帧才知道，所以每换一段片段重新量一次；量不出来就先铺满整块。
 // 设置里关掉裁剪后不会再量，舞台就是整帧。
 const cropToCharacter = manifest.crop !== false;
+// 手动裁剪：按视频帧比例给出，所有片段共用，换动作时角色不会忽大忽小。
+const stageCrop = geometry.stageCrop || null;
 let charBox = null;
 const scale = manifest.displayScale > 0 ? manifest.displayScale : 1;
 const petWindowLayout = ${petWindowLayout.toString()};
@@ -39,7 +41,14 @@ function layout(box) {
   if (!vw || !vh) return;
   const base = (manifest.stage.width || vw) / vw;
   const s = base * scale;
-  const crop = box || { x: 0, y: 0, w: vw, h: vh };
+  const crop = stageCrop
+    ? {
+        x: Math.round(stageCrop.x * vw),
+        y: Math.round(stageCrop.y * vh),
+        w: Math.max(1, Math.round(stageCrop.w * vw)),
+        h: Math.max(1, Math.round(stageCrop.h * vh)),
+      }
+    : box || { x: 0, y: 0, w: vw, h: vh };
   charBox = crop;
   stageWidth = Math.round(crop.w * s);
   stageHeight = Math.round(crop.h * s);
@@ -177,7 +186,7 @@ video.addEventListener("loadedmetadata", () => layout(null));
 let boxClip = "";
 let boxTimer = 0;
 function syncBox() {
-  if (!cropToCharacter || boxClip === state.current) return;
+  if (!cropToCharacter || stageCrop || boxClip === state.current) return;
   boxClip = state.current;
   window.clearTimeout(boxTimer);
   // 新片段第一帧可能还在淡入，量两次取并集，避免把角色裁掉一块。
