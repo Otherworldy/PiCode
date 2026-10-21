@@ -1,6 +1,15 @@
 /* oxlint-disable eslint(max-lines) -- 模型草稿列表集中处理过滤筛选、快录添加以及单模型规格与模态展开配置。 */
 import { useMemo, useState, type ReactNode } from "react";
-import { ChevronDown, ChevronUp, Download, Eye, Lightbulb, Plus, Search, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Download,
+  Eye,
+  Lightbulb,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { Button } from "@/components/ui/button.js";
 import { Checkbox } from "@/components/ui/checkbox.js";
@@ -201,9 +210,7 @@ export function ModelDraftList({
             <p>{intl.formatMessage({ id: "settings.modelProvider.pi.needModels" })}</p>
           </div>
         ) : filteredModels.length === 0 ? (
-          <div className="p-6 text-center text-ui-sm text-foreground-subtle">
-            未找到匹配的模型
-          </div>
+          <div className="p-6 text-center text-ui-sm text-foreground-subtle">未找到匹配的模型</div>
         ) : (
           <div className="divide-y divide-border">
             {filteredModels.map((model) => (
@@ -294,9 +301,7 @@ function ModelCard({
 
           {/* 别名字体小、辅助视觉 */}
           {model.name && model.name !== model.id ? (
-            <span className="truncate text-ui-xs text-foreground-subtle">
-              {model.name}
-            </span>
+            <span className="truncate text-ui-xs text-foreground-subtle">{model.name}</span>
           ) : null}
 
           {/* 协议徽章 */}
@@ -331,10 +336,14 @@ function ModelCard({
             variant="ghost"
             size="icon-sm"
             aria-label={intl.formatMessage({
-              id: expanded ? "settings.modelProvider.pi.collapse" : "settings.modelProvider.pi.expand",
+              id: expanded
+                ? "settings.modelProvider.pi.collapse"
+                : "settings.modelProvider.pi.expand",
             })}
             title={intl.formatMessage({
-              id: expanded ? "settings.modelProvider.pi.collapse" : "settings.modelProvider.pi.expand",
+              id: expanded
+                ? "settings.modelProvider.pi.collapse"
+                : "settings.modelProvider.pi.expand",
             })}
             onClick={onToggle}
           >
@@ -367,7 +376,9 @@ function ModelCard({
               <Input
                 size="lg"
                 value={model.name === model.id ? "" : model.name}
-                placeholder={intl.formatMessage({ id: "settings.modelProvider.pi.aliasPlaceholder" })}
+                placeholder={intl.formatMessage({
+                  id: "settings.modelProvider.pi.aliasPlaceholder",
+                })}
                 onChange={(event) => onPatch({ name: event.target.value.trim() || model.id })}
               />
             </Field>
@@ -407,7 +418,9 @@ function ModelCard({
             {/* 最大输出 Token + 快捷预设胶囊 */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label>{intl.formatMessage({ id: "settings.modelProvider.maxOutputTokens" })}</Label>
+                <Label>
+                  {intl.formatMessage({ id: "settings.modelProvider.maxOutputTokens" })}
+                </Label>
                 <PresetChips
                   presets={OUTPUT_PRESETS}
                   value={model.maxTokens}
@@ -449,7 +462,9 @@ function ModelCard({
           {/* 思考等级列表配置 (Thinking Levels) */}
           <div className="space-y-1.5 border-t border-border pt-2">
             <div className="flex items-center justify-between">
-              <Label>{intl.formatMessage({ id: "settings.modelProvider.pi.thinkingLevels" })}</Label>
+              <Label>
+                {intl.formatMessage({ id: "settings.modelProvider.pi.thinkingLevels" })}
+              </Label>
               <span className="text-ui-xs text-foreground-subtle">
                 勾选该模型支持的思考强度档位
               </span>

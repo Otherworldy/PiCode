@@ -27,11 +27,7 @@ export function McpDirectToolsField({
           {intl.formatMessage({ id: "settings.mcp.form.directToolsHint" })}
         </div>
       </div>
-      <Switch
-        checked={checked}
-        data-testid="mcp-direct-tools"
-        onCheckedChange={onChange}
-      />
+      <Switch checked={checked} data-testid="mcp-direct-tools" onCheckedChange={onChange} />
     </div>
   );
 }

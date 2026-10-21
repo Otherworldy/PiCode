@@ -182,7 +182,9 @@ export function ProviderSetupDialog({
                         placeholder="例如 DeepSeek"
                       />
                     </Field>
-                    <Field label={intl.formatMessage({ id: "settings.modelProvider.pi.providerId" })}>
+                    <Field
+                      label={intl.formatMessage({ id: "settings.modelProvider.pi.providerId" })}
+                    >
                       <Input
                         size="lg"
                         className="font-mono"
@@ -215,11 +217,7 @@ export function ProviderSetupDialog({
                         onClick={() => void fetchModels(false)}
                         className="shrink-0"
                       >
-                        {testingConnection ? (
-                          <Loader2 className="animate-spin" />
-                        ) : (
-                          <PlugZap />
-                        )}
+                        {testingConnection ? <Loader2 className="animate-spin" /> : <PlugZap />}
                         {intl.formatMessage({ id: "settings.modelProvider.pi.testConnection" })}
                       </Button>
                     </div>
@@ -245,11 +243,7 @@ export function ProviderSetupDialog({
                         className="absolute right-2.5 text-foreground-subtle hover:text-foreground transition-colors"
                         title={showApiKey ? "隐藏密钥" : "显示密钥"}
                       >
-                        {showApiKey ? (
-                          <EyeOff className="size-4" />
-                        ) : (
-                          <Eye className="size-4" />
-                        )}
+                        {showApiKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                       </button>
                     </div>
                   </div>

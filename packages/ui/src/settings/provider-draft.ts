@@ -9,7 +9,12 @@ export const API_OPTIONS = [
 
 export const SERVICE_PRESETS = [
   { value: "custom" },
-  { value: "openai", name: "OpenAI", baseUrl: "https://api.openai.com/v1", api: "openai-completions" },
+  {
+    value: "openai",
+    name: "OpenAI",
+    baseUrl: "https://api.openai.com/v1",
+    api: "openai-completions",
+  },
   {
     value: "anthropic",
     name: "Anthropic",
