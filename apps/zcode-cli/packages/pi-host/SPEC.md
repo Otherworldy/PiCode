@@ -153,6 +153,8 @@ UI 设计模式是输入框模式菜单里的勾选，不是斜杠命令。点�
 
 活着的子会话把当前 `provider` / `model` / `thought` 放进 `subagents.running`。状态面板用这份值和会话已有的模型目录展示下拉框。`setRunningSubagentModel` 只调用这个子会话的 `setModel` / `setThinkingLevel`，不改父会话，也不写设置里的默认。已经发出的请求不打断，下一次模型请求用新的。本进程没有的运行记录只显示目录，不能改。
 
+同一次运行到目前为止的 token 用量也挂在这里（`usage`，口径与 turnHeader 的 `usage` 相同）：父会话只能订阅子会话的 `message_start` / `message_update` / `message_end`，在活表里用 `addTurnUsage` 累加，不读子会话 jsonl。`publishSubagents` 走去抖后把累计值随快照下发。内核投影（`materializeSubagentProjection`）与冷恢复 seed 不产这份数据：前者对同一 `childSessionId` 沿用上一次的 `usage`，后者缺席，状态面板因此退回三行。子会话结束后用量随活表条目一起消失，不写 `EndedSubagent`。
+
 运行列表上的角色名是 `picode_subagent` 的 `agent`，不是工具名 `subagent`。新子会话把这个名字写在 jsonl 旁边的 `.role`，并放进本进程活表。更早的文件没有 `.role` 时，从系统提示第一句 `You are <name>.` 读。两边都没有才留 `subagent`。
 
 设置页拥有代理定义：用户 `~/.PiCode/agents`，项目 `<workspace>/.PiCode/agents`，内置 `scout`、`researcher`、`evidence-auditor`、`worker`、`reviewer`、`oracle`、`delegate`。这些角色对齐 [pi-subagents](https://github.com/nicobailon/pi-subagents) 的内置分工、工具和默认思考档位，不再提供 `general-purpose` / `Explore`。Pi 会话挂一个 `picode_subagent` 工具，按这份定义起子会话。子会话不再挂这个工具，也不挂 MCP。同名的 Pi 插件工具 `subagent` 在主会话上禁用，避免两套定义争用。
