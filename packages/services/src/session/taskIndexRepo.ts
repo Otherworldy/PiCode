@@ -223,6 +223,9 @@ function rowToMeta(row: TaskIndexRow): ZCodeTaskMeta {
         cronAutomationId: parsed.data.cronAutomationId ?? row.cron_automation_id ?? undefined,
         // off-peak 身份同款策略：meta_json 为准、列兜底——存量迁移只写列即可生效。
         offPeakTaskId: parsed.data.offPeakTaskId ?? row.off_peak_task_id ?? undefined,
+        // fork 来源同款策略：早期行的 meta_json 可能早于该字段落地，只写列不写 json。
+        // 分支图谱按该字段连边，缺列兜底会让老会话的分叉关系整支断掉。
+        forkedFromTaskId: parsed.data.forkedFromTaskId ?? row.forked_from_task_id ?? undefined,
         titleOverridden: row.title_overridden === 1,
       };
     }
@@ -1392,6 +1395,9 @@ export class TaskIndexRepo {
           cronAutomationId: params.meta.cronAutomationId ?? existingMeta?.cronAutomationId,
           // off-peak 身份同款兜底：快照不带标记时保全既有归属。
           offPeakTaskId: params.meta.offPeakTaskId ?? existingMeta?.offPeakTaskId,
+          // 分叉来源是历史事实，运行态 snapshot 通常不带 parentSessionId。
+          // 不用已存值兜底的话，打开一个分叉会话就会把自己的来源冲掉，图谱直接断边。
+          forkedFromTaskId: params.meta.forkedFromTaskId ?? existingMeta?.forkedFromTaskId,
           updatedAt,
           unreadAt: params.meta.unreadAt ?? existingMeta?.unreadAt,
         };
@@ -1508,6 +1514,10 @@ export class TaskIndexRepo {
   /**
    * 只在索引行不存在时写入基线元数据；已存在（含已删除）的产品壳状态原样保留。
    *
+   * 唯一例外是分叉来源：早期版本没有把 Pi session 文件头里的 parentSession 落库，
+   * 已有行的 forked_from_task_id 是空的。基线摘要是重启后唯一还知道来源的路径，
+   * 因此已存在的行在缺这一列时补写；有值时不覆盖（分叉来源不可变）。
+   *
    * 远端 workspace 的 V4 会话路径可能晚于会话创建才建立 sessions-index
    * 订阅。首次 snapshot 必须能补齐全新的 tasks-index.sqlite，但不能用摘要默认值
    * 覆盖已有的 pin/archive/unread/手动标题，也不能与随后到达的完整 snapshot 竞态回写。
@@ -1516,16 +1526,26 @@ export class TaskIndexRepo {
     await this.ensureReady();
     return this.enqueueWrite(meta, () => {
       const existing = this.getTaskRow(meta);
-      if (existing) {
-        return rowToMeta(existing);
+      if (!existing) {
+        return this.writeRecord({
+          meta,
+          pinned: false,
+          archived: false,
+          deleted: false,
+          titleOverridden: meta.titleOverridden ?? false,
+        });
       }
-      return this.writeRecord({
-        meta,
-        pinned: false,
-        archived: false,
-        deleted: false,
-        titleOverridden: meta.titleOverridden ?? false,
-      });
+      const current = rowToMeta(existing);
+      if (meta.forkedFromTaskId && !current.forkedFromTaskId) {
+        return this.writeRecord({
+          meta: { ...current, forkedFromTaskId: meta.forkedFromTaskId },
+          pinned: existing.pinned === 1,
+          archived: existing.archived === 1,
+          deleted: existing.deleted === 1,
+          titleOverridden: existing.title_overridden === 1,
+        });
+      }
+      return current;
     });
   }
 
@@ -1720,6 +1740,8 @@ export class TaskIndexRepo {
     pinned?: boolean;
     archived?: boolean;
     includeDeleted?: boolean;
+    /** 只取删除 tombstone（true）或只取未删除行（false）；缺省不过滤。 */
+    deleted?: boolean;
   }): Promise<ZCodeTaskMeta[]> {
     await this.ensureReady();
     // listTaskMetas 支持不传 workspacePath 查询全部任务，但 workspaceKey 只接受必填路径。
@@ -1762,14 +1784,18 @@ export class TaskIndexRepo {
           AND (@provider IS NULL OR provider = @provider)
           AND (@pinned IS NULL OR pinned = @pinned)
           AND (@archived IS NULL OR archived = @archived)
+          AND (@deleted IS NULL OR deleted = @deleted)
         ORDER BY updated_at DESC, created_at DESC, task_id DESC`,
       )
       .all({
         workspace_key: targetWorkspaceKey,
-        include_deleted: params.includeDeleted ? 1 : 0,
+        // deleted 过滤本身就意味着要读 tombstone，否则会和 include_deleted 默认的
+        // `deleted = 0` 组成互斥谓词（deleted=1 AND deleted=0），永远查不出任何行。
+        include_deleted: params.includeDeleted || typeof params.deleted === "boolean" ? 1 : 0,
         provider: params.provider ?? null,
         pinned: typeof params.pinned === "boolean" ? (params.pinned ? 1 : 0) : null,
         archived: typeof params.archived === "boolean" ? (params.archived ? 1 : 0) : null,
+        deleted: typeof params.deleted === "boolean" ? (params.deleted ? 1 : 0) : null,
       }) as unknown as TaskIndexRow[];
     return rows.map(rowToMeta);
   }

@@ -2374,6 +2374,17 @@ export function createZCodeTaskServiceAdapter(
       });
     },
 
+    async listDeletedTasks(params): Promise<ZCodeTaskMeta[]> {
+      // 已删除 task 只作为历史展示存在，不能注册成可恢复的 task target，
+      // 因此这里不调 rememberIndexedTaskMeta，避免删除后的会话被重新路由回来。
+      return taskIndexRepo.listTaskMetas({
+        workspacePath: params.workspacePath,
+        workspaceIdentity: params.workspaceIdentity,
+        provider: GLM_PROVIDER,
+        deleted: true,
+      });
+    },
+
     // listTaskList 的消费面是全文搜索（searchable_text/snippets）与
     // remoteTimelineTaskStore 补充链路；侧栏 5 视图 + remote shard 的无搜索行集合
     // 走上方三个分区读取。workspace 行在客户端用各 endpoint 的 task 行 + session detail 构建。

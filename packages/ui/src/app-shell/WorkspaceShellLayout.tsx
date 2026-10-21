@@ -1212,6 +1212,15 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
     },
     [handleSelectTask, workspaceAbsPath, workspaceIdentity],
   );
+  // 分支图谱里点节点切会话：与侧栏点任务行完全同一条链路
+  // （模型重建期拦截、未读清理、导航历史都归 handleSelectTask），这里只绑定当前 workspace。
+  const handleSelectBranchGraphTask = useCallback(
+    (sessionId: string, unreadAt?: number) => {
+      // 带上行快照 unreadAt，和侧栏点任务行一样能顺手清掉蓝点。
+      handleSelectTask(workspaceAbsPath, sessionId, workspaceIdentity, unreadAt);
+    },
+    [handleSelectTask, workspaceAbsPath, workspaceIdentity],
+  );
   // 草稿态 composer contextHeader：workspace 切换菜单 +
   // Git 分支切换器，与旧 ChatView 空态 contextHeaderContent 同构。壳级能力
   // （workspaceTabs / 远程连接回调）在此闭合，pane 只收 ReactNode。
@@ -1796,6 +1805,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                           onToggleTerminal={handleToggleTerminal}
                           onToggleBrowser={handleToggleBrowser}
                           onToggleSidePane={handleToggleSidePane}
+                          onSelectBranchGraphTask={handleSelectBranchGraphTask}
                           toggleSidePaneShortcutLabel={toggleSidePaneShortcutLabel}
                           onReloadSession={handleReloadSession}
                           reloadSessionDisabled={workspaceSessionActionDisabled}

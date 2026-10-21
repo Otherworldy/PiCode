@@ -712,6 +712,15 @@ export function createZCodeTaskIndexSyncer(
       // 回源 snapshot 的 session.title 可能仍是 /plannotator-plan-mode。
       // 列表摘要已经是真实标题时先写上，不能等点开才换。
       if (title && !commandTitle) applyTitleChange(target, title);
+      // 分叉来源只写在 Pi 会话文件头，运行态快照不带它。新出现的分叉会话第一次进列表时
+      // 用基线摘要补一条，否则要等下次重启的首帧才连得上边（分支图谱会缺整支）。
+      if (next.parentSessionId) {
+        void taskIndexRepo
+          .seedTaskMetaIfMissing(buildBaselineMetaFromSummary(state.target, next))
+          .catch((error) => {
+            logger.warn(undefined, `同步分叉来源失败 taskId=${next.sessionId}`, error);
+          });
+      }
       return;
     }
     if (title && !commandTitle && (previous === undefined || previous.title !== next.title)) {

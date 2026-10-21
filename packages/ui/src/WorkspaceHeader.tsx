@@ -57,6 +57,7 @@ export function WorkspaceHeader({
   onRefreshGit,
   onToggleTerminal,
   onToggleSidePane,
+  onSelectBranchGraphTask,
   toggleSidePaneShortcutLabel,
   onReloadSession,
   reloadSessionDisabled,
@@ -101,6 +102,7 @@ export function WorkspaceHeader({
   onToggleTerminal: () => void;
   onToggleBrowser: () => void;
   onToggleSidePane: () => void;
+  onSelectBranchGraphTask: (taskId: string, unreadAt?: number) => void;
   toggleSidePaneShortcutLabel?: string;
   onReloadSession: (options?: {
     resumeTaskId?: string | null;
@@ -207,6 +209,7 @@ export function WorkspaceHeader({
           isSidePaneOpen={isSidePaneOpen}
           onToggleTerminal={onToggleTerminal}
           onToggleSidePane={onToggleSidePane}
+          onSelectBranchGraphTask={onSelectBranchGraphTask}
           toggleSidePaneShortcutLabel={toggleSidePaneShortcutLabel}
           simplifyForNarrowRemote={simplifyForNarrowRemote}
           hideHelpMenu={false}

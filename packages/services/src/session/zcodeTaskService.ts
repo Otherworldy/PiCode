@@ -306,6 +306,17 @@ export interface IZCodeTaskService {
   }): Promise<string[]>;
 
   /**
+   * 读取 workspace 下已删除 task 的 tombstone meta。
+   *
+   * 删除会物理删除会话本体，sessions-index 此后不再提供该行，只有 tasks-index 的
+   * tombstone 保留标题与 forkedFromTaskId。分支图谱需要这些信息才能画出已删除的分叉节点。
+   */
+  listDeletedTasks(params: {
+    workspacePath: string;
+    workspaceIdentity?: string;
+  }): Promise<ZCodeTaskMeta[]>;
+
+  /**
    * 按当前打开的 workspace scopes 聚合查询任务列表，真相源为 tasks-index.sqlite。
    * 消费面：全文搜索（searchable_text/snippets）与 remoteTimelineTaskStore 补充链路；
    * 无搜索列表行走 listTasks/listPinnedTasks/listArchivedTasks，workspace 行由

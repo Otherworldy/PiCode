@@ -7,6 +7,7 @@ import { AppUpdateReadyButton } from "@/AppUpdateReadyButton.js";
 import { WorkspaceHelpMenuButton } from "@/WorkspaceHelpMenuButton.js";
 import { ConversationShareMenu } from "@/ConversationShareMenu.js";
 import { DesktopWindowControls } from "@/DesktopWindowControls.js";
+import { SessionBranchGraphButton } from "@/session-branch-graph/SessionBranchGraphButton.js";
 
 export type { WorkspaceHeaderActionSectionProps } from "@/WorkspaceHeaderSections/shared.js";
 
@@ -17,12 +18,14 @@ export function WorkspaceHeaderActionSection({
   readOnlyReason,
   workspaceAbsPath,
   workspaceIdentity,
+  remoteSessionId,
   remoteTarget,
   isDesktop,
   isTerminalOpen,
   isSidePaneOpen,
   onToggleTerminal,
   onToggleSidePane,
+  onSelectBranchGraphTask,
   toggleSidePaneShortcutLabel,
   onSelectedEditorChange,
   simplifyForNarrowRemote = false,
@@ -59,6 +62,14 @@ export function WorkspaceHeaderActionSection({
         <>
           <AppUpdateReadyButton />
           {!hideHelpMenu ? <WorkspaceHelpMenuButton isDesktop={Boolean(isDesktop)} /> : null}
+          <SessionBranchGraphButton
+            workspaceAbsPath={workspaceAbsPath}
+            workspaceIdentity={workspaceIdentity}
+            remoteSessionId={remoteSessionId}
+            activeTaskId={activeTaskId ?? null}
+            onSelectTask={onSelectBranchGraphTask}
+            useWindowsCaptionSpacing={useWindowsCaptionSpacing}
+          />
           {/* 远程控制移动端头部空间过窄，终端入口在这里会和核心操作争抢宽度。*/}
           <WorkspaceTerminalToggleButton
             isTerminalOpen={isTerminalOpen}

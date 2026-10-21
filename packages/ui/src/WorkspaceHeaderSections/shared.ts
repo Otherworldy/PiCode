@@ -71,6 +71,8 @@ export interface WorkspaceHeaderActionSectionProps {
   isSidePaneOpen: boolean;
   onToggleTerminal: () => void;
   onToggleSidePane: () => void;
+  /** 分支图谱里点击节点后切到目标会话；由 shell 注入，保持与侧栏选中同一条链路。 */
+  onSelectBranchGraphTask: (taskId: string, unreadAt?: number) => void;
   toggleSidePaneShortcutLabel?: string;
   onSelectedEditorChange?: (editor: EditorInfo | null) => void;
   simplifyForNarrowRemote?: boolean;

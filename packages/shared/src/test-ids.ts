@@ -493,6 +493,12 @@ export const TID_WORKSPACE_TITLE = "workspace-title";
 export const TID_WORKSPACE_PATH = "workspace-path";
 /** 工作区 Header 更多菜单按钮 */
 export const TID_WORKSPACE_MORE_BUTTON = "workspace-more-button";
+/** 会话头部「分支图谱」入口按钮 */
+export const TID_SESSION_BRANCH_GRAPH_TOGGLE = "session-branch-graph-toggle";
+/** 会话分支图谱弹窗 */
+export const TID_SESSION_BRANCH_GRAPH_DIALOG = "session-branch-graph-dialog";
+/** 分支图谱里的会话节点（动态后缀为 taskId） */
+export const TID_SESSION_BRANCH_GRAPH_NODE = "session-branch-graph-node";
 /** 右上角问号帮助菜单触发按钮 */
 export const TID_WORKSPACE_HELP_MENU_TRIGGER = "workspace-help-menu-trigger";
 /** 问号帮助菜单里的「资源管理器」项（仅桌面端） */
