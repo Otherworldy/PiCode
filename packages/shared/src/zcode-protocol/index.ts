@@ -2429,6 +2429,8 @@ export const zcodePiPluginsResultSchema = z
           detail: z.string(),
           scope: z.enum(["user", "project"]),
           enabled: z.boolean(),
+          exclusion: z.enum(["partial", "all"]).optional(),
+          excludedResources: z.number().int().nonnegative().optional(),
         })
         .strict(),
     ),

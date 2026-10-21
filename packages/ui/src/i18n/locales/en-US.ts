@@ -2517,6 +2517,10 @@ const enUS: Record<string, string> = {
   "settings.plugins.pi.removed": "Removed",
   "settings.plugins.pi.kind.package": "package",
   "settings.plugins.pi.kind.extension": "extension",
+  "settings.plugins.pi.excluded.all": "All resources excluded",
+  "settings.plugins.pi.excluded.partial": "{count} resources excluded",
+  "settings.plugins.pi.excluded.hint":
+    "Package filters exclude these resources, but the switch is still on.",
   "settings.plugins.pi.hint":
     "Applies only in PiCode and does not change Pi settings.json. Takes effect on the next new session.",
   "settings.plugins.pi.loading": "Reading Pi plugins…",

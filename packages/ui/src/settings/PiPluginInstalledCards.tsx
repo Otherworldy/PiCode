@@ -10,6 +10,8 @@ type InstalledPlugin = {
   name: string;
   detail: string;
   enabled: boolean;
+  exclusion?: "partial" | "all";
+  excludedResources?: number;
 };
 
 export function PiPluginInstalledCards({
@@ -61,7 +63,7 @@ export function PiPluginInstalledCards({
                   {plugin.detail}
                 </p>
               ) : null}
-              <div className="mt-2">
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <PluginKindBadge
                   kind={plugin.kind}
                   label={intl.formatMessage({
@@ -71,6 +73,19 @@ export function PiPluginInstalledCards({
                         : "settings.plugins.pi.kind.package",
                   })}
                 />
+                {plugin.enabled && plugin.exclusion ? (
+                  <span
+                    title={intl.formatMessage({ id: "settings.plugins.pi.excluded.hint" })}
+                    className="rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-ui-xs font-medium text-amber-600 dark:text-amber-400"
+                  >
+                    {plugin.exclusion === "all"
+                      ? intl.formatMessage({ id: "settings.plugins.pi.excluded.all" })
+                      : intl.formatMessage(
+                          { id: "settings.plugins.pi.excluded.partial" },
+                          { count: plugin.excludedResources ?? 0 },
+                        )}
+                  </span>
+                ) : null}
               </div>
             </div>
           </div>

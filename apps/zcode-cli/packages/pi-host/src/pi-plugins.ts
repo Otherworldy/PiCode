@@ -11,11 +11,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import type {
-  DefaultPackageManager,
-  PackageSource,
-  SettingsManager,
-} from "@earendil-works/pi-coding-agent";
+import type { PackageSource, ResolvedPaths, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { retainCommandFailure, withFreshGitCheckout } from "./pi-plugin-tools.js";
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
 
@@ -29,6 +25,9 @@ export type PiPluginView = {
   detail: string;
   scope: PiPluginScope;
   enabled: boolean;
+  /** 配置里的过滤项把这个包的资源全部或部分排除时的标记；没有排除项时缺省。 */
+  exclusion?: "partial" | "all";
+  excludedResources?: number;
 };
 
 /** 已启用的 `@plannotator/pi-extension`。计划模式只认这个插件。 */
@@ -168,6 +167,36 @@ export async function planZcodePluginSession(
   return (await inspectPiPlugins(cwd, agentDir, switchRoot)).plan;
 }
 
+/**
+ * 配置里的 `-` / `!` 过滤项是否把这个包的资源排掉了。被排除的资源照样出现在
+ * Pi 的解析结果里，只是 `enabled` 为 false，所以直接按包归属数一遍，不另写匹配规则。
+ */
+function resourceExclusion(
+  resolved: ResolvedPaths | null,
+  source: string,
+  scope: PiPluginScope,
+): Pick<PiPluginView, "exclusion" | "excludedResources"> {
+  if (!resolved) return {};
+  const owned = [
+    ...resolved.extensions,
+    ...resolved.skills,
+    ...resolved.prompts,
+    ...resolved.themes,
+  ].filter(
+    (resource) =>
+      resource.metadata.origin === "package" &&
+      resource.metadata.source === source &&
+      resource.metadata.scope === scope,
+  );
+  if (owned.length === 0) return {};
+  const excluded = owned.filter((resource) => !resource.enabled).length;
+  if (excluded === 0) return {};
+  return {
+    exclusion: excluded === owned.length ? "all" : "partial",
+    excludedResources: excluded,
+  };
+}
+
 async function inspectPiPlugins(cwd: string, agentDir?: string, switchRoot?: string) {
   await ensurePiSdk();
   const { DefaultPackageManager: PackageManager, SettingsManager, getAgentDir } = piCoding();
@@ -183,6 +212,13 @@ async function inspectPiPlugins(cwd: string, agentDir?: string, switchRoot?: str
     disabled: new Set<string>(),
   };
   const seen = new Set<string>();
+  // 解析结果要按包归属统计被排除的资源，所以放在包循环前面只算一次。
+  let resolved: ResolvedPaths | null = null;
+  try {
+    resolved = await packages.resolve(async () => "skip");
+  } catch {
+    resolved = null;
+  }
   for (const pkg of packages.listConfiguredPackages()) {
     const listed = packagesOf(settings, pkg.scope).find((item) => sourceOf(item) === pkg.source);
     const id = `pkg:${pkg.scope}:${pkg.source}`;
@@ -202,14 +238,10 @@ async function inspectPiPlugins(cwd: string, agentDir?: string, switchRoot?: str
       detail: pkg.source,
       scope: pkg.scope,
       enabled,
+      ...resourceExclusion(resolved, pkg.source, pkg.scope),
     });
   }
-  let extensions: Awaited<ReturnType<DefaultPackageManager["resolve"]>>["extensions"] = [];
-  try {
-    extensions = (await packages.resolve(async () => "skip")).extensions;
-  } catch {
-    extensions = [];
-  }
+  const extensions = resolved?.extensions ?? [];
   for (const ext of extensions) {
     if (ext.metadata.origin !== "top-level" || ext.metadata.source !== "auto") continue;
     if (ext.metadata.scope !== "user" && ext.metadata.scope !== "project") continue;

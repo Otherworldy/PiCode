@@ -431,3 +431,45 @@ test("disabled package skills stay out when another extension reloads the skill 
   assert.equal(names().includes("hidden-skill"), false);
   assert.equal(names().includes("kept-skill"), true);
 });
+
+test("marks a package whose filters exclude every resource", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-plugins-filters-"));
+  const agentDir = join(root, "agent");
+  const cwd = join(root, "proj");
+  await mkdir(agentDir, { recursive: true });
+  await mkdir(cwd, { recursive: true });
+  const packageDirs = [join(root, "all-excluded"), join(root, "partly-excluded")];
+  for (const dir of packageDirs) {
+    await mkdir(join(dir, "extensions"), { recursive: true });
+    await writeFile(join(dir, "extensions", "one.ts"), "export default function () {}\n");
+    await writeFile(join(dir, "extensions", "two.ts"), "export default function () {}\n");
+    await writeFile(
+      join(dir, "package.json"),
+      JSON.stringify({
+        name: "probe",
+        pi: { extensions: ["./extensions/one.ts", "./extensions/two.ts"] },
+      }),
+    );
+  }
+  await writeFile(
+    join(agentDir, "settings.json"),
+    JSON.stringify({
+      packages: [
+        {
+          source: packageDirs[0],
+          extensions: ["-extensions/one.ts", "-extensions/two.ts"],
+        },
+        { source: packageDirs[1], extensions: ["-extensions/one.ts"] },
+      ],
+    }),
+  );
+
+  const listed = await listPiPlugins(cwd, agentDir, root);
+  const all = listed.find((row) => row.detail === packageDirs[0]);
+  const partly = listed.find((row) => row.detail === packageDirs[1]);
+  assert.equal(all?.enabled, true);
+  assert.equal(all?.exclusion, "all");
+  assert.equal(all?.excludedResources, 2);
+  assert.equal(partly?.exclusion, "partial");
+  assert.equal(partly?.excludedResources, 1);
+});
