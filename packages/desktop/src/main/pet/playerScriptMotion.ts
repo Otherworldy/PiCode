@@ -68,6 +68,7 @@ function applyLayout(rect) {
   stage.style.left = (base ? base.left : layoutCache.stageLeft) + stageWidth / 2 + "px";
   stage.style.bottom = (base ? base.bottom : layoutCache.stageBottom) + "px";
   if (typeof placeBubble === "function") placeBubble();
+  reportShape();
 }
 const probeCanvas = document.createElement("canvas");
 function measureBox() {
@@ -111,6 +112,30 @@ function measureBox() {
 const state = { facing: "left", mode: "chain", current: "", work: [], mood: [], taskId: "" };
 let dismissTimer = 0;
 let drag = null;
+// 窗口比角色宽是给气泡留地方，角色两侧的空白不该吃掉桌面点击。
+// 窗口形状只保留角色和气泡这两块，其余地方不画也不收事件，点击直接落到桌面上。
+let shapeKey = "";
+function reportShape() {
+  if (editBase || !stageWidth || !stageHeight) return;
+  const rects = [];
+  const collect = (el) => {
+    if (!el || el.style.display === "none") return;
+    const box = el.getBoundingClientRect();
+    if (box.width < 1 || box.height < 1) return;
+    rects.push({
+      x: Math.round(box.left),
+      y: Math.round(box.top),
+      w: Math.round(box.width),
+      h: Math.round(box.height),
+    });
+  };
+  collect(stage);
+  collect(bubble);
+  const key = JSON.stringify(rects);
+  if (key === shapeKey) return;
+  shapeKey = key;
+  window.pet?.send({ type: "shape", rects });
+}
 
 function poolPick(pool) {
   if (!pool || !pool.length) return null;

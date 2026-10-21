@@ -14,10 +14,13 @@ import {
 } from "electron";
 import {
   buildLocalMediaPreviewUrl,
+  DESKTOP_PET_AUTO_PAGE_MS_DEFAULT,
   DESKTOP_PET_DISPLAY_SCALE_DEFAULT,
+  desktopPetAutoPageMs,
   DESKTOP_PET_READER_HOTKEY_DEFAULT,
   desktopPetMoodSlot,
   mergeDesktopPetMoods,
+  normalizeDesktopPetAutoPageMs,
   normalizeDesktopPetCropCharacter,
   normalizeDesktopPetDisplayScale,
   normalizeDesktopPetMood,
@@ -108,6 +111,8 @@ interface PetManifest extends PetMenuSource {
     rect: DesktopPetReaderBubbleRect | null;
     /** 手动裁剪的比例，页面按视频帧换算成像素。 */
     stageCrop: DesktopPetStageCrop | null;
+    /** 按住模式下每行停留的毫秒数，0 表示不自动翻页。 */
+    autoPageMs: number;
   };
   size: number;
   fixed: boolean;
@@ -127,6 +132,8 @@ interface PetSettings {
   readerPath: string;
   readerHotkey: string;
   readerHotkeyMode: "toggle" | "hold";
+  readerAutoPage: boolean;
+  readerAutoPageMs: number;
 }
 
 let logger: PetLogger = { info: () => {}, warn: () => {} };
@@ -146,6 +153,8 @@ let settings: PetSettings = {
   readerPath: "",
   readerHotkey: DESKTOP_PET_READER_HOTKEY_DEFAULT,
   readerHotkeyMode: "toggle",
+  readerAutoPage: false,
+  readerAutoPageMs: DESKTOP_PET_AUTO_PAGE_MS_DEFAULT,
 };
 let registeredHotkey = "";
 let holdProbe: KeyHeldProbe | null = null;
@@ -213,22 +222,8 @@ export function bindDesktopPet(options: {
 
 export function noteDesktopPetSettings(patch: Partial<AppSettings>, full = false): void {
   noteNetwork(patch, full);
-  if (
-    !full &&
-    !("desktopPetEnabled" in patch) &&
-    !("desktopPetPackDir" in patch) &&
-    !("desktopPetPackUrl" in patch) &&
-    !("desktopPetBubbleTone" in patch) &&
-    !("desktopPetDisplayScale" in patch) &&
-    !("desktopPetCropCharacter" in patch) &&
-    !("desktopPetReaderBubbleRect" in patch) &&
-    !("desktopPetStageCrop" in patch) &&
-    !("desktopPetReaderPath" in patch) &&
-    !("desktopPetReaderHotkey" in patch) &&
-    !("desktopPetReaderHotkeyMode" in patch)
-  ) {
-    return;
-  }
+  // 按前缀判断，不再逐个列字段：漏一个就等于那次改动被静默丢掉（自动翻页就这样丢过一次）。
+  if (!full && !Object.keys(patch).some((key) => key.startsWith("desktopPet"))) return;
   const next: PetSettings = {
     enabled: hasOwn(patch, "desktopPetEnabled")
       ? patch.desktopPetEnabled === true
@@ -273,6 +268,16 @@ export function noteDesktopPetSettings(patch: Partial<AppSettings>, full = false
       : full
         ? "toggle"
         : settings.readerHotkeyMode,
+    readerAutoPage: hasOwn(patch, "desktopPetReaderAutoPage")
+      ? patch.desktopPetReaderAutoPage === true
+      : full
+        ? false
+        : settings.readerAutoPage,
+    readerAutoPageMs: hasOwn(patch, "desktopPetReaderAutoPageMs")
+      ? normalizeDesktopPetAutoPageMs(patch.desktopPetReaderAutoPageMs)
+      : full
+        ? DESKTOP_PET_AUTO_PAGE_MS_DEFAULT
+        : settings.readerAutoPageMs,
   };
   // 旧进程重写 setting.json 时会丢掉不认识的宠物字段。启动时如果读到的全是默认值，沿用 pets/settings.json。
   let chosen = next;
@@ -296,6 +301,10 @@ export function noteDesktopPetSettings(patch: Partial<AppSettings>, full = false
     chosen.readerPath !== settings.readerPath ||
     chosen.readerHotkey !== settings.readerHotkey ||
     chosen.readerHotkeyMode !== settings.readerHotkeyMode;
+  const autoPageChanged =
+    chosen.readerAutoPage !== settings.readerAutoPage ||
+    chosen.readerAutoPageMs !== settings.readerAutoPageMs ||
+    chosen.readerHotkeyMode !== settings.readerHotkeyMode;
   if (chosen.readerPath !== settings.readerPath) readerFile = null;
   settings = chosen;
   if (pendingRestore !== chosen) writePetSettingsFile(settings);
@@ -314,6 +323,7 @@ export function noteDesktopPetSettings(patch: Partial<AppSettings>, full = false
     return;
   }
   if (toneChanged) sendBubbleTone();
+  if (autoPageChanged) sendAutoPage();
   if (readerChanged) syncReaderHotkey();
 }
 
@@ -337,6 +347,8 @@ export function editDesktopPetBubble(): Promise<DesktopPetBubbleLayout | null> {
   };
   return new Promise<DesktopPetBubbleLayout | null>((resolve) => {
     bubbleEdit = { bounds, resolve };
+    // 编辑态要拖白框和气泡，整窗都点得到。
+    win.setShape([]);
     win.setBounds(area);
     win.focus();
     win.webContents.send(PET_COMMAND, {
@@ -640,6 +652,32 @@ function layoutFor(pack: PetPack): PetWindowLayout {
 }
 
 /**
+ * 窗口形状只留角色和气泡：其余地方不画也不收事件，点击直接落到桌面上。
+ * 播放页按元素矩形上报，改设置、换片段、气泡显隐都会重报。
+ * macOS 不支持窗口形状，只能整窗吃点击。
+ */
+function applyPetShape(rects: unknown): void {
+  const win = petWindow;
+  if (!win || win.isDestroyed() || bubbleEdit || process.platform === "darwin") return;
+  const list: { x: number; y: number; width: number; height: number }[] = [];
+  if (Array.isArray(rects)) {
+    for (const item of rects) {
+      if (!item || typeof item !== "object") continue;
+      const value = item as { x?: unknown; y?: unknown; w?: unknown; h?: unknown };
+      const x = Math.round(Number(value.x));
+      const y = Math.round(Number(value.y));
+      const width = Math.round(Number(value.w));
+      const height = Math.round(Number(value.h));
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      if (!Number.isFinite(width) || !Number.isFinite(height)) continue;
+      if (width < 1 || height < 1) continue;
+      list.push({ x: Math.max(0, x), y: Math.max(0, y), width, height });
+    }
+  }
+  win.setShape(list);
+}
+
+/**
  * 按布局重排窗口。角色钉在 stageOrigin 上，所以窗口只往左/往下/往右/往上长，角色不会跟着跑。
  * 不能在这里用 getBounds() 反推角色位置：setBounds 之后读到的可能还是旧尺寸。
  */
@@ -789,6 +827,16 @@ function sendMood(): void {
 function sendBubbleTone(): void {
   if (!petWindow || petWindow.isDestroyed()) return;
   petWindow.webContents.send(PET_COMMAND, { type: "tone", tone: settings.bubbleTone });
+}
+
+/** 自动翻页只在按住模式下有意义：点击切换是常驻窗口，按住是松手就关。0 表示不翻。 */
+function autoPageMsFor(value: PetSettings): number {
+  return desktopPetAutoPageMs(value);
+}
+
+function sendAutoPage(): void {
+  if (!petWindow || petWindow.isDestroyed()) return;
+  petWindow.webContents.send(PET_COMMAND, { type: "read-auto", ms: autoPageMsFor(settings) });
 }
 
 function stopHoldWatch(): void {
@@ -1105,7 +1153,9 @@ function isDefaultPetSettings(value: PetSettings): boolean {
     value.stageCrop === null &&
     !value.readerPath &&
     value.readerHotkey === DESKTOP_PET_READER_HOTKEY_DEFAULT &&
-    value.readerHotkeyMode === "toggle"
+    value.readerHotkeyMode === "toggle" &&
+    !value.readerAutoPage &&
+    value.readerAutoPageMs === DESKTOP_PET_AUTO_PAGE_MS_DEFAULT
   );
 }
 
@@ -1124,6 +1174,8 @@ function readPetSettingsFile(): PetSettings | null {
       readerPath?: unknown;
       readerHotkey?: unknown;
       readerHotkeyMode?: unknown;
+      readerAutoPage?: unknown;
+      readerAutoPageMs?: unknown;
     };
     // 旧文件把缺省键写成 F1，而且没有方式字段。升级后改成 F9，避免设置页还停在旧缺省。
     const legacyDefault = parsed.readerHotkeyMode == null && parsed.readerHotkey === "F1";
@@ -1141,6 +1193,8 @@ function readPetSettingsFile(): PetSettings | null {
         legacyDefault ? undefined : parsed.readerHotkey,
       ),
       readerHotkeyMode: normalizeDesktopPetReaderHotkeyMode(parsed.readerHotkeyMode),
+      readerAutoPage: parsed.readerAutoPage === true,
+      readerAutoPageMs: normalizeDesktopPetAutoPageMs(parsed.readerAutoPageMs),
     };
     if (legacyDefault) writePetSettingsFile(value);
     return value;
@@ -1189,6 +1243,7 @@ function handlePetEvent(payload: unknown): void {
     height?: number;
     rect?: unknown;
     stageCrop?: unknown;
+    rects?: unknown;
   };
   if (event.type === "read-hide") {
     rememberReaderTop(event.top);
@@ -1212,6 +1267,10 @@ function handlePetEvent(payload: unknown): void {
   }
   if (event.type === "menu") {
     popupPetMenu();
+    return;
+  }
+  if (event.type === "shape") {
+    applyPetShape(event.rects);
     return;
   }
   if (event.type === "box") {
@@ -1327,6 +1386,7 @@ function toManifest(pack: PetPack): PetManifest {
       margin: PET_BUBBLE_MARGIN,
       rect: settings.readerBubbleRect,
       stageCrop: settings.stageCrop,
+      autoPageMs: autoPageMsFor(settings),
     },
     size: pack.size,
     fixed: pack.fixed,

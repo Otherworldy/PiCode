@@ -2055,6 +2055,12 @@ const enUS: Record<string, string> = {
     "Toggle opens on one press and closes on the next. Hold shows the bubble only while the keys are down.",
   "settings.desktopPetReaderHotkeyMode.toggle": "Toggle",
   "settings.desktopPetReaderHotkeyMode.hold": "Hold",
+  "settings.desktopPetReaderAutoPage": "Auto page",
+  "settings.desktopPetReaderAutoPageDescription":
+    "Scrolls the text on its own while you hold the keys, and moves to the next page at the end.",
+  "settings.desktopPetReaderAutoPageMs": "Page speed (ms per line)",
+  "settings.desktopPetReaderAutoPageMsDescription":
+    "How long each line stays put, from 200 to 20000. 1200 means one line every 1.2 seconds.",
   "settings.desktopPetReaderHotkey": "Bubble shortcut",
   "settings.desktopPetReaderHotkeyDescription":
     "F9 by default. You can also use Ctrl+Alt+F2. PiCode reserves this key while it is running.",

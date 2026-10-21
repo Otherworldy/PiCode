@@ -51,6 +51,8 @@ function stepNovel(dir) {
 // 触控板的 deltaY 只有几像素，攒够大半行再走一格，否则一下就翻掉好几行。
 function wheelStep(deltaY) {
   if (!deltaY) return;
+  // 手动滚一下就把「等下一页」的僵局解开，自动翻页接着走。
+  autoPageWait = false;
   wheelAcc = Math.sign(wheelAcc) === Math.sign(deltaY) ? wheelAcc + deltaY : deltaY;
   if (Math.abs(wheelAcc) < LINE * 0.75) return;
   const dir = wheelAcc > 0 ? 1 : -1;
@@ -69,10 +71,37 @@ function placeBubble() {
   bubble.style.bottom = box.bottom + "px";
   bubble.style.width = box.width + "px";
   bubble.style.height = box.height + "px";
+  reportShape();
 }
 let novelOpen = false;
 let novel = null;
 let pageLock = false;
+// 按住模式下正文自动往下走：主进程按设置推 read-auto，0 表示不翻。
+let autoPageMs = Number((manifest.geometry && manifest.geometry.autoPageMs) || 0) || 0;
+let autoPageWait = false;
+let autoPageTimer = 0;
+function autoPageRunning() {
+  return autoPageMs > 0 && novelOpen && bubble.dataset.mode === "read" && !editBase;
+}
+function syncAutoPage() {
+  window.clearTimeout(autoPageTimer);
+  autoPageTimer = 0;
+  if (!autoPageRunning()) return;
+  autoPageTimer = window.setTimeout(autoPageStep, autoPageMs);
+}
+function autoPageStep() {
+  autoPageTimer = 0;
+  if (!autoPageRunning()) return;
+  // 等下一页时先停住，收到新页后 paintNovel 会重新起表。
+  if (!autoPageWait) {
+    if (bubble.scrollTop >= novelMaxScroll() - 0.5) {
+      if (requestReaderPage(1)) autoPageWait = true;
+    } else {
+      stepNovel(1);
+    }
+  }
+  autoPageTimer = window.setTimeout(autoPageStep, autoPageMs);
+}
 function paintNovel() {
   if (!novel) return;
   bubble.dataset.mode = "read";
@@ -83,6 +112,8 @@ function paintNovel() {
   if (novel.edge === "end") bubble.scrollTop = bubble.scrollHeight;
   else bubble.scrollTop = Math.round((novel.top || 0) / LINE) * LINE;
   pageLock = false;
+  autoPageWait = false;
+  syncAutoPage();
 }
 function showNovel(text, edge, top) {
   novelOpen = true;
@@ -94,15 +125,17 @@ function showNovel(text, edge, top) {
 }
 function hideNovel() {
   novelOpen = false;
+  syncAutoPage();
   if (bubble.dataset.mode !== "read") return;
   bubble.dataset.mode = "";
   bubble.style.display = "none";
 }
 function requestReaderPage(dir) {
-  if (pageLock || bubble.dataset.mode !== "read" || editBase) return;
+  if (pageLock || bubble.dataset.mode !== "read" || editBase) return false;
   pageLock = true;
   window.pet?.send({ type: "read-page", dir: dir });
   window.setTimeout(() => { pageLock = false; }, 400);
+  return true;
 }
 function showBubble(text, taskId, clips) {
   state.taskId = taskId || "";
@@ -114,6 +147,7 @@ function showBubble(text, taskId, clips) {
   window.clearTimeout(dismissTimer);
   dismissTimer = window.setTimeout(hideBubble, 10000);
   if (state.work.length) play(poolPick(state.work), "work");
+  syncAutoPage();
 }
 function hideBubble() {
   state.taskId = "";
@@ -126,6 +160,8 @@ function hideBubble() {
   }
   bubble.dataset.mode = "";
   bubble.style.display = "none";
+  syncAutoPage();
+  reportShape();
 }
 
 let scrollTimer = 0;
@@ -169,12 +205,13 @@ window.addEventListener("pointermove", (event) => {
   drag.y = event.screenY;
   window.pet?.send({ type: "move", dx: dx, dy: dy });
 });
-window.addEventListener("contextmenu", (event) => {
+// 右键只认角色；气泡上是正文，不弹动作菜单。
+stage.addEventListener("contextmenu", (event) => {
   event.preventDefault();
   if (editBase) return;
-  if (bubble.contains(event.target)) return;
   window.pet?.send({ type: "menu" });
 });
+bubble.addEventListener("contextmenu", (event) => event.preventDefault());
 window.addEventListener("pointerup", () => {
   if (!drag) return;
   const moved = drag.moved;
@@ -197,6 +234,11 @@ window.pet?.onCommand((command) => {
   if (command && command.type === "notify") showBubble(command.text, command.taskId, command.clips);
   if (command && command.type === "dismiss") hideBubble();
   if (command && command.type === "read") showNovel(command.text, command.edge, command.top);
+  if (command && command.type === "read-auto") {
+    autoPageMs = Number(command.ms) || 0;
+    autoPageWait = false;
+    syncAutoPage();
+  }
   if (command && command.type === "read-hide") {
     if (editBase) return;
     if (novel) window.pet?.send({ type: "read-scroll", top: bubble.scrollTop || novel.top || 0 });

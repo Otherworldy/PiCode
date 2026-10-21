@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  normalizeDesktopPetAutoPageMs,
   normalizeDesktopPetCropCharacter,
   normalizeDesktopPetDisplayScale,
   normalizeDesktopPetReaderHotkey,
@@ -22,6 +23,7 @@ import { usePlatform } from "@/hooks/usePlatform.js";
 import { useSettings } from "@/hooks/useSettingService.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { DesktopPetDownloadDialog } from "./DesktopPetDownloadDialog.js";
+import { DesktopPetAutoPageRows } from "./DesktopPetAutoPageRows.js";
 import { DesktopPetBubbleRectRow } from "./DesktopPetBubbleRectRow.js";
 import { DesktopPetBubbleStyleRows } from "./DesktopPetBubbleStyleRows.js";
 import { DesktopPetPacksCardGrid } from "./DesktopPetPacksCardGrid.js";
@@ -55,6 +57,8 @@ export function DesktopPetSettings() {
   const stageCrop = form.stageCrop;
   const readerHotkey = form.readerHotkey;
   const readerHotkeyMode = form.readerHotkeyMode;
+  const readerAutoPage = form.readerAutoPage;
+  const readerAutoPageMs = form.readerAutoPageMs;
 
   useEffect(() => {
     if (preferLocal.current || !settings) return;
@@ -108,6 +112,8 @@ export function DesktopPetSettings() {
         readerPath: saved.readerPath?.trim() ?? "",
         readerHotkey: normalizeDesktopPetReaderHotkey(saved.readerHotkey),
         readerHotkeyMode: normalizeDesktopPetReaderHotkeyMode(saved.readerHotkeyMode),
+        readerAutoPage: saved.readerAutoPage === true,
+        readerAutoPageMs: normalizeDesktopPetAutoPageMs(saved.readerAutoPageMs),
       };
       setForm(next);
       setHotkeyDraft(next.readerHotkey);
@@ -365,6 +371,20 @@ export function DesktopPetSettings() {
             </SelectContent>
           </Select>
         }
+      />
+      <DesktopPetAutoPageRows
+        hold={readerHotkeyMode === "hold"}
+        enabled={enabled}
+        autoPage={readerAutoPage}
+        autoPageMs={readerAutoPageMs}
+        onAutoPage={(checked) => {
+          remember({ readerAutoPage: checked });
+          void update({ desktopPetReaderAutoPage: checked });
+        }}
+        onAutoPageMs={(ms) => {
+          remember({ readerAutoPageMs: ms });
+          void update({ desktopPetReaderAutoPageMs: ms });
+        }}
       />
       <SettingsRow
         label={intl.formatMessage({ id: "settings.desktopPetReaderHotkey" })}

@@ -123,6 +123,8 @@ function beginBubbleEdit(command) {
     left: layoutCache.stageLeft + origin.x,
     bottom: layoutCache.stageBottom + (area.height - from.height - origin.y),
   };
+  // 编辑态不该让正文自己往下跑。
+  syncAutoPage();
   // 整帧按当前缩放固定铺开，裁剪框在帧里拖。
   const s = videoScale();
   const vw = video.videoWidth || stageWidth;
@@ -177,6 +179,7 @@ function beginBubbleEdit(command) {
 }
 function endBubbleEdit() {
   editBase = null;
+  syncAutoPage();
   editBubble = null;
   editCrop = null;
   editCropStart = null;

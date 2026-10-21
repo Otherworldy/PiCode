@@ -126,6 +126,14 @@ describe("pet bubble", () => {
     expect(html).toContain("function startEditDrag");
   });
 
+  it("reports the stage and bubble rectangles as the window shape", () => {
+    const html = renderPetPlayerHtml("{}");
+    expect(html).toContain("function reportShape");
+    expect(html).toContain('type: "shape"');
+    // 空白区不接管桌面点击，靠的是窗口形状而不是鼠标移动。
+    expect(html).not.toContain("setIgnoreMouseEvents");
+  });
+
   it("can crop the character stage in the same editor", () => {
     const html = renderPetPlayerHtml("{}");
     expect(html).toContain('id="crop-box"');

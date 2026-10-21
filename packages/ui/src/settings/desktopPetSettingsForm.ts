@@ -1,4 +1,5 @@
 import {
+  normalizeDesktopPetAutoPageMs,
   normalizeDesktopPetCropCharacter,
   normalizeDesktopPetDisplayScale,
   normalizeDesktopPetReaderBubbleRect,
@@ -25,5 +26,7 @@ export function petFormFromSettings(
     readerPath: settings?.desktopPetReaderPath?.trim() ?? "",
     readerHotkey: normalizeDesktopPetReaderHotkey(settings?.desktopPetReaderHotkey),
     readerHotkeyMode: normalizeDesktopPetReaderHotkeyMode(settings?.desktopPetReaderHotkeyMode),
+    readerAutoPage: settings?.desktopPetReaderAutoPage === true,
+    readerAutoPageMs: normalizeDesktopPetAutoPageMs(settings?.desktopPetReaderAutoPageMs),
   };
 }

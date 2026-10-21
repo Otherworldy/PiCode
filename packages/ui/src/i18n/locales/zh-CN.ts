@@ -1935,6 +1935,12 @@ const zhCN: Record<string, string> = {
     "点击切换是按一下打开、再按一下关闭。按住是按下后显示，松开立刻关闭。",
   "settings.desktopPetReaderHotkeyMode.toggle": "点击切换",
   "settings.desktopPetReaderHotkeyMode.hold": "按住",
+  "settings.desktopPetReaderAutoPage": "自动翻页",
+  "settings.desktopPetReaderAutoPageDescription":
+    "按住打开正文后自己往下走，读到页尾自动接下一页。",
+  "settings.desktopPetReaderAutoPageMs": "翻页速率（毫秒/行）",
+  "settings.desktopPetReaderAutoPageMsDescription":
+    "每行停留多少毫秒，200 到 20000 之间。填 1200 就是每 1.2 秒往下走一行。",
   "settings.desktopPetReaderHotkey": "摸鱼快捷键",
   "settings.desktopPetReaderHotkeyDescription":
     "默认 F9。也可以写成 Ctrl+Alt+F2。PiCode 运行时会占住这个键。",

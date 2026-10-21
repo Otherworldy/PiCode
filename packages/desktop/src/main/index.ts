@@ -1518,6 +1518,8 @@ app.whenReady().then(async () => {
           desktopPetReaderPath: restoredPetSettings.readerPath,
           desktopPetReaderHotkey: restoredPetSettings.readerHotkey,
           desktopPetReaderHotkeyMode: restoredPetSettings.readerHotkeyMode,
+          desktopPetReaderAutoPage: restoredPetSettings.readerAutoPage,
+          desktopPetReaderAutoPageMs: restoredPetSettings.readerAutoPageMs,
         })
         .catch(() => undefined);
     }

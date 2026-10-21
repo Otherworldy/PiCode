@@ -14,7 +14,16 @@ export interface DesktopPetPersistedSettings {
   readerPath: string;
   readerHotkey: string;
   readerHotkeyMode: "toggle" | "hold";
+  /** 按住模式下打开正文后自动往下走。缺省关闭。 */
+  readerAutoPage: boolean;
+  /** 自动翻页时每行停留的毫秒数。 */
+  readerAutoPageMs: number;
 }
+
+/** 自动翻页速率的上下限与缺省值，单位是每行停留的毫秒数。 */
+export const DESKTOP_PET_AUTO_PAGE_MS_MIN = 200;
+export const DESKTOP_PET_AUTO_PAGE_MS_MAX = 20000;
+export const DESKTOP_PET_AUTO_PAGE_MS_DEFAULT = 1200;
 
 /**
  * 摸鱼文本气泡相对角色的矩形。原点在角色脚底中心，宽度向右、高度向上，单位是页面像素。
@@ -132,6 +141,27 @@ export function normalizeDesktopPetReaderHotkey(value: unknown): string {
   if (mods.some((mod) => !mod)) return DESKTOP_PET_READER_HOTKEY_DEFAULT;
   const accel = [...mods, key.length === 1 ? key.toUpperCase() : key.toUpperCase()].join("+");
   return READER_HOTKEY.test(accel) ? accel : DESKTOP_PET_READER_HOTKEY_DEFAULT;
+}
+
+/** 自动翻页只在按住模式下生效，返回每行停留的毫秒数。0 表示不翻。 */
+export function desktopPetAutoPageMs(value: {
+  readerAutoPage: boolean;
+  readerHotkeyMode: string;
+  readerAutoPageMs: number;
+}): number {
+  if (!value.readerAutoPage || value.readerHotkeyMode !== "hold") return 0;
+  return normalizeDesktopPetAutoPageMs(value.readerAutoPageMs);
+}
+
+/** 每行停留毫秒数。认不出来或越界就夹到上下限，免得设置里填出 0 或一天一行。 */
+export function normalizeDesktopPetAutoPageMs(value: unknown): number {
+  const text = typeof value === "string" ? value.trim() : value;
+  const ms = text === "" || text == null ? Number.NaN : Number(text);
+  if (!Number.isFinite(ms)) return DESKTOP_PET_AUTO_PAGE_MS_DEFAULT;
+  return Math.min(
+    DESKTOP_PET_AUTO_PAGE_MS_MAX,
+    Math.max(DESKTOP_PET_AUTO_PAGE_MS_MIN, Math.round(ms)),
+  );
 }
 
 /** 点击切换是按一下开、再按一下关。按住是松开才关。认不出来就用点击切换。 */
