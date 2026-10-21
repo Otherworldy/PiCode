@@ -1874,6 +1874,13 @@ const zhCN: Record<string, string> = {
   "settings.desktopPetBubbleDescription": "任务提醒气泡用黑底白字，或白底黑字。",
   "settings.desktopPetBubble.dark": "黑底",
   "settings.desktopPetBubble.light": "白底",
+  "settings.desktopPetDisplayScale": "显示大小",
+  "settings.desktopPetDisplayScaleDescription":
+    "宠物在屏幕上看起来的大小。默认 100%，觉得太大就往下调。",
+  "settings.desktopPetDisplayScaleValue": "{percent}%",
+  "settings.desktopPetCrop": "裁剪到角色区域",
+  "settings.desktopPetCropDescription":
+    "只保留角色真正占用的像素，窗口和可拖拽区域贴着角色。关掉后按动画原本的画面，上下会留透明空区。",
   "settings.desktopPetReader": "摸鱼文本",
   "settings.desktopPetReaderDescription":
     "正文显示在宠物原来的气泡里，滚轮翻页。可以按一下切换，也可以按住时才显示。",

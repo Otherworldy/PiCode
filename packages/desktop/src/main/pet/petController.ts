@@ -13,9 +13,12 @@ import {
 } from "electron";
 import {
   buildLocalMediaPreviewUrl,
+  DESKTOP_PET_DISPLAY_SCALE_DEFAULT,
   DESKTOP_PET_READER_HOTKEY_DEFAULT,
   desktopPetMoodSlot,
   mergeDesktopPetMoods,
+  normalizeDesktopPetCropCharacter,
+  normalizeDesktopPetDisplayScale,
   normalizeDesktopPetMood,
   normalizeDesktopPetReaderHotkey,
   normalizeDesktopPetReaderHotkeyMode,
@@ -45,7 +48,7 @@ import {
   type HoldLatch,
   type KeyHeldProbe,
 } from "./keyHeld.js";
-import { loadPetPack, type PetClip, type PetPack } from "./pack.js";
+import { loadPetPack, petStageHeight, type PetClip, type PetPack } from "./pack.js";
 import { petContextMenu, type PetMenuEntry, type PetMenuSource } from "./petMenu.js";
 import { petBubbleTone, renderPetPlayerHtml, type PetBubbleTone } from "./playerHtml.js";
 import {
@@ -75,6 +78,15 @@ interface PetLogger {
 }
 
 interface PetManifest extends PetMenuSource {
+  /** 角色画面的像素区域。窗口下沿对齐，上方留 64px 气泡条。 */
+  stage: { width: number; height: number };
+  /** 用户选的显示缩放，渲染端乘在角色像素上。 */
+  displayScale: number;
+  /** 是否把舞台裁到角色像素框。关掉时按整帧构图。 */
+  crop: boolean;
+  size: number;
+  fixed: boolean;
+  weights: { idle: number; turn: number; move: number };
   workStatus: Array<Array<{ name: string; url: string }>>;
 }
 
@@ -83,6 +95,8 @@ interface PetSettings {
   packDir: string;
   packUrl: string;
   bubbleTone: PetBubbleTone;
+  displayScale: number;
+  cropCharacter: boolean;
   readerPath: string;
   readerHotkey: string;
   readerHotkeyMode: "toggle" | "hold";
@@ -96,6 +110,8 @@ let settings: PetSettings = {
   packDir: "",
   packUrl: "",
   bubbleTone: "dark",
+  displayScale: DESKTOP_PET_DISPLAY_SCALE_DEFAULT,
+  cropCharacter: true,
   readerPath: "",
   readerHotkey: DESKTOP_PET_READER_HOTKEY_DEFAULT,
   readerHotkeyMode: "toggle",
@@ -130,6 +146,7 @@ let onActivate: (() => void) | null = null;
 let dismissTimer: NodeJS.Timeout | null = null;
 let listenersReady = false;
 let currentManifest: PetManifest | null = null;
+let currentPackRoot = "";
 
 export { resolveDesktopPetRootDir } from "./petRoot.js";
 
@@ -157,6 +174,8 @@ export function noteDesktopPetSettings(patch: Partial<AppSettings>, full = false
     !("desktopPetPackDir" in patch) &&
     !("desktopPetPackUrl" in patch) &&
     !("desktopPetBubbleTone" in patch) &&
+    !("desktopPetDisplayScale" in patch) &&
+    !("desktopPetCropCharacter" in patch) &&
     !("desktopPetReaderPath" in patch) &&
     !("desktopPetReaderHotkey" in patch) &&
     !("desktopPetReaderHotkeyMode" in patch)
@@ -176,6 +195,16 @@ export function noteDesktopPetSettings(patch: Partial<AppSettings>, full = false
       : full
         ? "dark"
         : settings.bubbleTone,
+    displayScale: hasOwn(patch, "desktopPetDisplayScale")
+      ? normalizeDesktopPetDisplayScale(patch.desktopPetDisplayScale)
+      : full
+        ? DESKTOP_PET_DISPLAY_SCALE_DEFAULT
+        : settings.displayScale,
+    cropCharacter: hasOwn(patch, "desktopPetCropCharacter")
+      ? normalizeDesktopPetCropCharacter(patch.desktopPetCropCharacter)
+      : full
+        ? true
+        : settings.cropCharacter,
     readerPath: readPetString(patch, "desktopPetReaderPath", full, settings.readerPath),
     readerHotkey: hasOwn(patch, "desktopPetReaderHotkey")
       ? normalizeDesktopPetReaderHotkey(patch.desktopPetReaderHotkey)
@@ -201,6 +230,8 @@ export function noteDesktopPetSettings(patch: Partial<AppSettings>, full = false
     chosen.enabled !== settings.enabled ||
     chosen.packDir !== settings.packDir ||
     chosen.packUrl !== settings.packUrl;
+  const sizeChanged = chosen.displayScale !== settings.displayScale;
+  const cropChanged = chosen.cropCharacter !== settings.cropCharacter;
   const toneChanged = chosen.bubbleTone !== settings.bubbleTone;
   const readerChanged =
     chosen.readerPath !== settings.readerPath ||
@@ -211,7 +242,7 @@ export function noteDesktopPetSettings(patch: Partial<AppSettings>, full = false
   if (pendingRestore !== chosen) writePetSettingsFile(settings);
   if (readerChanged && readerPhase !== "closed") closeReader();
   // 只改气泡或摸鱼设置时不重载窗口，否则位置和正在播的动画会被重置。
-  if (packChanged || !petWindow || petWindow.isDestroyed()) {
+  if (packChanged || sizeChanged || cropChanged || !petWindow || petWindow.isDestroyed()) {
     scheduleApply();
     return;
   }
@@ -445,6 +476,7 @@ function showPet(pack: PetPack): void {
   readerPhase = "closed";
   const manifest = toManifest(pack);
   currentManifest = manifest;
+  currentPackRoot = pack.rootDir;
   mkdirSync(petRootDir, { recursive: true });
   const rawPlayerHtmlPath = join(petRootDir, "player.html");
   writeFileSync(
@@ -453,8 +485,12 @@ function showPet(pack: PetPack): void {
   );
   const playerHtmlPath = canonical(rawPlayerHtmlPath);
   mediaPaths = new Set([playerHtmlPath, ...collectClipPaths(pack)]);
-  const width = pack.size;
-  const height = pack.size + 64;
+  // 窗口宽度留给气泡书写；裁剪时高度按渲然端量到的角色框，不裁剪时按整帧比例。
+  const scale = settings.displayScale;
+  const stageHeight = Math.round(petStageHeight(pack.aspect, pack.size) * scale);
+  const cached = settings.cropCharacter ? readPetBox(pack.rootDir) : null;
+  const width = cached || settings.cropCharacter ? pack.size : Math.round(pack.size * scale);
+  const height = (cached ? cached.height : stageHeight) + 64;
   if (!petWindow || petWindow.isDestroyed()) {
     petWindow = new BrowserWindow({
       width,
@@ -791,12 +827,55 @@ function petSettingsFile(): string {
   return join(petRootDir, "settings.json");
 }
 
+function petBoxFile(): string {
+  return join(petRootDir, "box.json");
+}
+
+/**
+ * 每个包只量一次角色像素框。窗口尺寸必须第一次就对，所以把结果缓存到磁盘，
+ * 下次启动不用等渲染端再报一遍。
+ */
+function readPetBox(rootDir: string): { width: number; height: number } | null {
+  if (!petRootDir) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(petBoxFile(), "utf8")) as Record<
+      string,
+      { width?: unknown; height?: unknown }
+    >;
+    const entry = parsed[canonical(rootDir)];
+    const width = typeof entry?.width === "number" ? entry.width : 0;
+    const height = typeof entry?.height === "number" ? entry.height : 0;
+    return width > 0 && height > 0 ? { width, height } : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePetBox(rootDir: string, box: { width: number; height: number }): void {
+  if (!petRootDir) return;
+  let all: Record<string, { width: number; height: number }> = {};
+  try {
+    all = JSON.parse(readFileSync(petBoxFile(), "utf8")) as typeof all;
+  } catch {
+    all = {};
+  }
+  all[canonical(rootDir)] = box;
+  try {
+    mkdirSync(petRootDir, { recursive: true });
+    writeFileSync(petBoxFile(), JSON.stringify(all));
+  } catch {
+    logger.warn("[desktop-pet] box cache unavailable");
+  }
+}
+
 function isDefaultPetSettings(value: PetSettings): boolean {
   return (
     !value.enabled &&
     !value.packDir &&
     !value.packUrl &&
     value.bubbleTone === "dark" &&
+    value.displayScale === DESKTOP_PET_DISPLAY_SCALE_DEFAULT &&
+    value.cropCharacter &&
     !value.readerPath &&
     value.readerHotkey === DESKTOP_PET_READER_HOTKEY_DEFAULT &&
     value.readerHotkeyMode === "toggle"
@@ -811,6 +890,8 @@ function readPetSettingsFile(): PetSettings | null {
       packDir?: unknown;
       packUrl?: unknown;
       bubbleTone?: unknown;
+      displayScale?: unknown;
+      cropCharacter?: unknown;
       readerPath?: unknown;
       readerHotkey?: unknown;
       readerHotkeyMode?: unknown;
@@ -822,6 +903,8 @@ function readPetSettingsFile(): PetSettings | null {
       packDir: typeof parsed.packDir === "string" ? parsed.packDir : "",
       packUrl: typeof parsed.packUrl === "string" ? parsed.packUrl : "",
       bubbleTone: parsed.bubbleTone === "light" ? "light" : "dark",
+      displayScale: normalizeDesktopPetDisplayScale(parsed.displayScale),
+      cropCharacter: normalizeDesktopPetCropCharacter(parsed.cropCharacter),
       readerPath: typeof parsed.readerPath === "string" ? parsed.readerPath : "",
       readerHotkey: normalizeDesktopPetReaderHotkey(
         legacyDefault ? undefined : parsed.readerHotkey,
@@ -859,7 +942,15 @@ function destroyPetWindow(): void {
 
 function handlePetEvent(payload: unknown): void {
   if (!payload || typeof payload !== "object" || !petWindow) return;
-  const event = payload as { type?: string; dx?: number; dy?: number; dir?: number; top?: number };
+  const event = payload as {
+    type?: string;
+    dx?: number;
+    dy?: number;
+    dir?: number;
+    top?: number;
+    width?: number;
+    height?: number;
+  };
   if (event.type === "read-hide") {
     rememberReaderTop(event.top);
     closeReader();
@@ -884,6 +975,10 @@ function handlePetEvent(payload: unknown): void {
     popupPetMenu();
     return;
   }
+  if (event.type === "box") {
+    rememberPetBox(event.width, event.height);
+    return;
+  }
   if (event.type !== "move") return;
   if (typeof event.dx !== "number" || typeof event.dy !== "number") return;
   if (!Number.isFinite(event.dx) || !Number.isFinite(event.dy)) return;
@@ -895,6 +990,30 @@ function handlePetEvent(payload: unknown): void {
 
 function hasOwn(patch: Partial<AppSettings>, key: keyof AppSettings): boolean {
   return Object.prototype.hasOwnProperty.call(patch, key);
+}
+
+/** 渲染端量到角色像素框后报上来：写缓存，并把窗口高度收到角色区域 + 64。 */
+function rememberPetBox(width: unknown, height: unknown): void {
+  if (!petWindow || petWindow.isDestroyed() || !settings.cropCharacter) return;
+  const boxWidth = typeof width === "number" && Number.isFinite(width) ? Math.round(width) : 0;
+  const boxHeight = typeof height === "number" && Number.isFinite(height) ? Math.round(height) : 0;
+  if (boxWidth <= 0 || boxHeight <= 0 || boxHeight > 4000) return;
+  if (currentPackRoot) {
+    const cached = readPetBox(currentPackRoot);
+    if (!cached || cached.width !== boxWidth || cached.height !== boxHeight) {
+      writePetBox(currentPackRoot, { width: boxWidth, height: boxHeight });
+    }
+  }
+  const bounds = petWindow.getBounds();
+  const nextHeight = boxHeight + 64;
+  if (nextHeight === bounds.height) return;
+  // 下沿固定：只改高度，角色脚下不会跳。宽度留给气泡，不动。
+  petWindow.setBounds({
+    x: bounds.x,
+    y: bounds.y + (bounds.height - nextHeight),
+    width: bounds.width,
+    height: nextHeight,
+  });
 }
 
 function readPetString(
@@ -938,6 +1057,9 @@ function toManifest(pack: PetPack): PetManifest {
     url: buildLocalMediaPreviewUrl(canonical(item.filePath)),
   });
   return {
+    stage: { width: pack.size, height: petStageHeight(pack.aspect, pack.size) },
+    displayScale: settings.displayScale,
+    crop: settings.cropCharacter,
     size: pack.size,
     fixed: pack.fixed,
     weights: pack.weights,

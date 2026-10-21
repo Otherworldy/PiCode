@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  normalizeDesktopPetCropCharacter,
+  normalizeDesktopPetDisplayScale,
   normalizeDesktopPetReaderHotkey,
   normalizeDesktopPetReaderHotkeyMode,
-  type AppSettings,
   type DesktopPetDownloadStatus,
   type DesktopPetInstalledPack,
   type DesktopPetPersistedSettings,
@@ -22,7 +23,10 @@ import { useSettings } from "@/hooks/useSettingService.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { DesktopPetDownloadDialog } from "./DesktopPetDownloadDialog.js";
 import { DesktopPetPacksCardGrid } from "./DesktopPetPacksCardGrid.js";
+import { petFormFromSettings } from "./desktopPetSettingsForm.js";
 import { SettingsGroupCard, SettingsRow } from "./SettingsPageParts.js";
+
+const PET_DISPLAY_SCALE_OPTIONS = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.5];
 
 export function DesktopPetSettings() {
   const { intl } = useZCodeIntl();
@@ -44,6 +48,8 @@ export function DesktopPetSettings() {
   const packUrl = form.packUrl;
   const readerPath = form.readerPath;
   const bubbleTone = form.bubbleTone;
+  const displayScale = form.displayScale;
+  const cropCharacter = form.cropCharacter;
   const readerHotkey = form.readerHotkey;
   const readerHotkeyMode = form.readerHotkeyMode;
 
@@ -92,6 +98,8 @@ export function DesktopPetSettings() {
         packDir: saved.packDir?.trim() ?? "",
         packUrl: saved.packUrl?.trim() ?? "",
         bubbleTone: saved.bubbleTone === "light" ? ("light" as const) : ("dark" as const),
+        displayScale: normalizeDesktopPetDisplayScale(saved.displayScale),
+        cropCharacter: normalizeDesktopPetCropCharacter(saved.cropCharacter),
         readerPath: saved.readerPath?.trim() ?? "",
         readerHotkey: normalizeDesktopPetReaderHotkey(saved.readerHotkey),
         readerHotkeyMode: normalizeDesktopPetReaderHotkeyMode(saved.readerHotkeyMode),
@@ -207,6 +215,54 @@ export function DesktopPetSettings() {
               </SelectItem>
             </SelectContent>
           </Select>
+        }
+      />
+
+      <SettingsRow
+        label={intl.formatMessage({ id: "settings.desktopPetDisplayScale" })}
+        description={intl.formatMessage({ id: "settings.desktopPetDisplayScaleDescription" })}
+        control={
+          <Select
+            value={String(displayScale)}
+            onValueChange={(value) => {
+              const next = normalizeDesktopPetDisplayScale(Number(value));
+              remember({ displayScale: next });
+              void update({ desktopPetDisplayScale: next });
+            }}
+          >
+            <SelectTrigger
+              size="lg"
+              className="w-48"
+              aria-label={intl.formatMessage({ id: "settings.desktopPetDisplayScale" })}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PET_DISPLAY_SCALE_OPTIONS.map((value) => (
+                <SelectItem key={value} value={String(value)}>
+                  {intl.formatMessage(
+                    { id: "settings.desktopPetDisplayScaleValue" },
+                    { percent: Math.round(value * 100) },
+                  )}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
+      />
+
+      <SettingsRow
+        label={intl.formatMessage({ id: "settings.desktopPetCrop" })}
+        description={intl.formatMessage({ id: "settings.desktopPetCropDescription" })}
+        control={
+          <Switch
+            aria-label={intl.formatMessage({ id: "settings.desktopPetCrop" })}
+            checked={cropCharacter}
+            onCheckedChange={(checked) => {
+              remember({ cropCharacter: checked });
+              void update({ desktopPetCropCharacter: checked });
+            }}
+          />
         }
       />
 
@@ -351,18 +407,4 @@ export function DesktopPetSettings() {
       />
     </SettingsGroupCard>
   );
-}
-
-function petFormFromSettings(
-  settings: Partial<AppSettings> | null | undefined,
-): DesktopPetPersistedSettings {
-  return {
-    enabled: settings?.desktopPetEnabled === true,
-    packDir: settings?.desktopPetPackDir?.trim() ?? "",
-    packUrl: settings?.desktopPetPackUrl?.trim() ?? "",
-    bubbleTone: settings?.desktopPetBubbleTone === "light" ? "light" : "dark",
-    readerPath: settings?.desktopPetReaderPath?.trim() ?? "",
-    readerHotkey: normalizeDesktopPetReaderHotkey(settings?.desktopPetReaderHotkey),
-    readerHotkeyMode: normalizeDesktopPetReaderHotkeyMode(settings?.desktopPetReaderHotkeyMode),
-  };
 }

@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+import { readWebmSize } from "./webmSize.js";
 
 // 抽选规则对齐 dsh-pet（Copyright (c) 2026 PC2005-cloud, MIT）。
 // 这里只消费它的 animations 配置，不带走余额、碎碎念或抛掷物理。
@@ -21,6 +22,8 @@ export interface PetPack {
   /** 配置里第一只宠物的名字。没有就空着，调用方自己决定怎么显示。 */
   name: string;
   size: number;
+  /** 待机片段的宽高比（宽 ÷ 高）。读不到视频尺寸时按 1 处理。 */
+  aspect: number;
   fixed: boolean;
   weights: { idle: number; turn: number; move: number };
   idle: PetClip[];
@@ -117,6 +120,7 @@ export function loadPetPack(startDir: string): PetPack | null {
     rootDir,
     name: typeof petRecord.name === "string" ? petRecord.name.trim() : "",
     size: clampSize(petRecord.size),
+    aspect: 1,
     fixed: petRecord.fixedEnabled === true,
     weights: {
       idle: numberOr(weightRecord.idle, 10),
@@ -134,7 +138,26 @@ export function loadPetPack(startDir: string): PetPack | null {
   if (!pack.idle.length && !pack.categories.some((category) => category.actions.length)) {
     return null;
   }
+  pack.aspect = clipAspect(pack.idle);
   return pack;
+}
+
+/**
+ * dsh 的 `size` 只约定宽度，画面本身有自己的宽高比（常见 640×360）。
+ * 窗口按正方形留位会空出一大截透明区域，所以取待机片段的比例定舞台高度。
+ */
+function clipAspect(clips: PetClip[]): number {
+  for (const clip of clips) {
+    const size = readWebmSize(clip.filePath);
+    if (size && size.width > 0 && size.height > 0) return size.width / size.height;
+  }
+  return 1;
+}
+
+/** 舞台高度：宽度按 `size`，高度按片段比例，超出范围时退回正方形。 */
+export function petStageHeight(aspect: number, size: number): number {
+  const ratio = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+  return Math.min(size * 2, Math.max(60, Math.round(size / ratio)));
 }
 
 export type PetRollKind = "idle" | "turn" | "move" | "action";

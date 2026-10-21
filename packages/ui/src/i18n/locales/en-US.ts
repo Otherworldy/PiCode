@@ -1989,6 +1989,13 @@ const enUS: Record<string, string> = {
     "Task reminder bubble uses white text on black, or black text on white.",
   "settings.desktopPetBubble.dark": "Black",
   "settings.desktopPetBubble.light": "White",
+  "settings.desktopPetDisplayScale": "Display size",
+  "settings.desktopPetDisplayScaleDescription":
+    "How big the pet looks on screen. 100% is the default; turn it down if it feels large.",
+  "settings.desktopPetDisplayScaleValue": "{percent}%",
+  "settings.desktopPetCrop": "Crop to character",
+  "settings.desktopPetCropDescription":
+    "Keep only the pixels the character actually uses, so the window and drag area hug the character. Turn off to keep the clip's own framing with transparent bands.",
   "settings.desktopPetReader": "Bubble text",
   "settings.desktopPetReaderDescription":
     "The text stays in the pet bubble. Scroll to move through it. The shortcut can toggle, or show the bubble only while held.",

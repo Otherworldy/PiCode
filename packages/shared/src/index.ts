@@ -318,7 +318,12 @@ export * from "./pluginStoreOrdering.js";
 export * from "./session-debug.js";
 export { redactFeedbackText } from "./feedbackPrivacy.js";
 export {
+  DESKTOP_PET_DISPLAY_SCALE_DEFAULT,
+  DESKTOP_PET_DISPLAY_SCALE_MAX,
+  DESKTOP_PET_DISPLAY_SCALE_MIN,
   DESKTOP_PET_READER_HOTKEY_DEFAULT,
+  normalizeDesktopPetCropCharacter,
+  normalizeDesktopPetDisplayScale,
   normalizeDesktopPetReaderHotkey,
   normalizeDesktopPetReaderHotkeyMode,
 } from "./desktopPetReader.js";

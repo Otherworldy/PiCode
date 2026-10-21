@@ -303,6 +303,10 @@ export interface AppSettings {
   desktopPetPackUrl?: string;
   /** 桌面宠物提醒气泡底色。缺省黑底。Web/手机端忽略。 */
   desktopPetBubbleTone?: "dark" | "light";
+  /** 角色显示缩放，0.5–1.5。缺省 1。Web/手机端忽略。 */
+  desktopPetDisplayScale?: number;
+  /** 只保留角色占用的像素，窗口和点击区贴着角色。缺省开启。Web/手机端忽略。 */
+  desktopPetCropCharacter?: boolean;
   /** 摸鱼时在宠物气泡里显示的本地文本路径。空表示不启用。 */
   desktopPetReaderPath?: string;
   /** 摸鱼文本快捷键，Electron accelerator。缺省 F9。 */

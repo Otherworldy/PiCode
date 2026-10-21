@@ -1505,6 +1505,8 @@ app.whenReady().then(async () => {
           desktopPetPackDir: restoredPetSettings.packDir,
           desktopPetPackUrl: restoredPetSettings.packUrl,
           desktopPetBubbleTone: restoredPetSettings.bubbleTone,
+          desktopPetDisplayScale: restoredPetSettings.displayScale,
+          desktopPetCropCharacter: restoredPetSettings.cropCharacter,
           desktopPetReaderPath: restoredPetSettings.readerPath,
           desktopPetReaderHotkey: restoredPetSettings.readerHotkey,
           desktopPetReaderHotkeyMode: restoredPetSettings.readerHotkeyMode,
