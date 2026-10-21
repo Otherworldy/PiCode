@@ -108,7 +108,7 @@ function isHookInvocationRow(row: ConversationRow): row is HookInvocationRow {
   return row.kind === "hookInvocation";
 }
 
-function isVisibleAssistantWorkRow(row: AssistantWorkRow): boolean {
+export function isVisibleAssistantWorkRow(row: AssistantWorkRow): boolean {
   if (row.kind === "reasoning" && row.text.trim().length === 0) {
     // reasoning_start/reasoning_end 可能形成空的终态 block；只在共享
     // render-unit 边界裁掉它，避免 completed 状态绕过 streaming renderer 的空行过滤。

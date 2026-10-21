@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { FileTextIcon, GitBranchIcon, PencilIcon, TrendingUpDownIcon } from "lucide-react";
 import { TID_V4_RESUME_MENU, testId } from "@zcode/shared";
 import { Button } from "@/components/ui/button.js";
@@ -16,6 +16,108 @@ export type ResumeHereChoice = {
   summarize: boolean;
   customInstructions?: string;
 };
+
+/**
+ * 总结方式三选项。分叉菜单、回退菜单、编辑重发菜单共用同一份动作列表，
+ * 避免三处各自维护文案与顺序（DESIGN：同一动作集复用同一动作列表内容）。
+ */
+export function ResumeHereChoiceItems({
+  onPick,
+  onCustom,
+  disabled = false,
+}: {
+  onPick: (choice: ResumeHereChoice) => void;
+  onCustom: () => void;
+  /** 提交中保持行高与层级，只弱化文字色，不把菜单项抽掉。 */
+  disabled?: boolean;
+}) {
+  const { intl } = useZCodeIntl();
+  return (
+    <>
+      <DropdownMenuItem disabled={disabled} onSelect={() => onPick({ summarize: false })}>
+        <GitBranchIcon />
+        {intl.formatMessage({ id: "chat.tree.skipSummary" })}
+      </DropdownMenuItem>
+      <DropdownMenuItem disabled={disabled} onSelect={() => onPick({ summarize: true })}>
+        <FileTextIcon />
+        {intl.formatMessage({ id: "chat.tree.summarize" })}
+      </DropdownMenuItem>
+      <DropdownMenuItem disabled={disabled} onSelect={onCustom}>
+        <PencilIcon />
+        {intl.formatMessage({ id: "chat.tree.custom" })}
+      </DropdownMenuItem>
+    </>
+  );
+}
+
+/** 回退 / 编辑重发共用：同一组动作、同一种浮层，锚点由调用方给。 */
+export function SummaryChoiceMenu({
+  open,
+  onOpenChange,
+  onPick,
+  onCustom,
+  trigger,
+  disabled = false,
+  onCloseAutoFocus,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onPick: (choice: ResumeHereChoice) => void;
+  onCustom: () => void;
+  /** 必须是能承接 trigger props 的单个元素（按钮，或包住按钮并承接悬停提示的 span）。 */
+  trigger: ReactNode;
+  disabled?: boolean;
+  onCloseAutoFocus?: ComponentProps<typeof DropdownMenuContent>["onCloseAutoFocus"];
+}) {
+  return (
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
+      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44" onCloseAutoFocus={onCloseAutoFocus}>
+        <ResumeHereChoiceItems disabled={disabled} onPick={onPick} onCustom={onCustom} />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** 自定义总结要求仍是独立对话框：菜单只负责选动作，输入不挤进菜单里。 */
+export function SummaryInstructionsDialog({
+  open,
+  onOpenChange,
+  value,
+  onChange,
+  onConfirm,
+  disabled = false,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  value: string;
+  onChange: (value: string) => void;
+  onConfirm: () => void;
+  disabled?: boolean;
+}) {
+  const { intl } = useZCodeIntl();
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm" aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle>{intl.formatMessage({ id: "chat.tree.custom" })}</DialogTitle>
+        </DialogHeader>
+        <textarea
+          className="h-24 w-full rounded-md border border-border bg-surface px-2 py-1 text-ui-sm"
+          value={value}
+          aria-label={intl.formatMessage({ id: "chat.tree.custom" })}
+          placeholder={intl.formatMessage({ id: "chat.tree.customPlaceholder" })}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <div className="flex justify-end">
+          <Button type="button" size="sm" disabled={disabled || !value.trim()} onClick={onConfirm}>
+            {intl.formatMessage({ id: "chat.tree.confirm" })}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export function ResumeHereButton({
   onPick,
@@ -67,52 +169,25 @@ export function ResumeHereButton({
               {intl.formatMessage({ id: "chat.tree.forkHere" })}
             </DropdownMenuItem>
           ) : null}
-          <DropdownMenuItem onSelect={() => onPick({ summarize: false })}>
-            <GitBranchIcon />
-            {intl.formatMessage({ id: "chat.tree.skipSummary" })}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => onPick({ summarize: true })}>
-            <FileTextIcon />
-            {intl.formatMessage({ id: "chat.tree.summarize" })}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={() => {
+          <ResumeHereChoiceItems
+            onPick={onPick}
+            onCustom={() => {
               setInstructions("");
               setCustomOpen(true);
             }}
-          >
-            <PencilIcon />
-            {intl.formatMessage({ id: "chat.tree.custom" })}
-          </DropdownMenuItem>
+          />
         </DropdownMenuContent>
       </DropdownMenu>
-      <Dialog open={customOpen} onOpenChange={setCustomOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{intl.formatMessage({ id: "chat.tree.custom" })}</DialogTitle>
-          </DialogHeader>
-          <textarea
-            className="h-24 w-full rounded-md border border-border bg-surface px-2 py-1 text-ui-sm"
-            value={instructions}
-            placeholder={intl.formatMessage({ id: "chat.tree.customPlaceholder" })}
-            onChange={(event) => setInstructions(event.target.value)}
-          />
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              size="sm"
-              disabled={!instructions.trim()}
-              onClick={() => {
-                onPick({ summarize: true, customInstructions: instructions.trim() });
-                setCustomOpen(false);
-              }}
-            >
-              <FileTextIcon className="size-3.5" />
-              {intl.formatMessage({ id: "chat.tree.confirm" })}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <SummaryInstructionsDialog
+        open={customOpen}
+        onOpenChange={setCustomOpen}
+        value={instructions}
+        onChange={setInstructions}
+        onConfirm={() => {
+          onPick({ summarize: true, customInstructions: instructions.trim() });
+          setCustomOpen(false);
+        }}
+      />
     </>
   );
 }
