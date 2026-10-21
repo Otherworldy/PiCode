@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- turn group 需要在同一处维护普通 assistant 与后台结果的严格行序，拆分会重复 actions/preview/tail 协议。 */
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { Fragment, memo, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ChevronRightIcon } from "lucide-react";
+import { ChevronRightIcon, Loader2Icon } from "lucide-react";
 import {
   TID_CHAT_ASSISTANT_HISTORY_CONTENT,
   TID_CHAT_ASSISTANT_HISTORY_TRIGGER,
@@ -89,6 +89,7 @@ import type {
   ConversationTurnRenderUnit,
   ConversationTurnWorkSegment,
 } from "@/v4/conversationTurnRenderUnits.js";
+import { resolveWorkActivity, type WorkActivityState } from "@/v4/workChunkActivity.js";
 import { formatConversationWorkDuration } from "@/v4/conversationWorkDuration.js";
 import { inferReasoningDurations } from "@/v4/reasoningDuration.js";
 import { ConversationTurnRow, resolveAssistantCopyText } from "@/v4/ConversationTurnRow.js";
@@ -150,11 +151,14 @@ function TurnChatLoadingSlot({
   apiRetry,
   eligible,
   durationMs,
+  toolCount = 0,
 }: {
   apiRetry: ApiRetryState | null;
   eligible: boolean;
   /** 本轮净工时；运行中由 projection 的 ticker 每秒刷新。 */
   durationMs?: number;
+  /** 整轮累计的工具调用数，与工时同口径。 */
+  toolCount?: number;
 }) {
   const { intl, locale } = useZCodeIntl();
   const [failuresOpen, setFailuresOpen] = useState(false);
@@ -192,17 +196,33 @@ function TurnChatLoadingSlot({
     );
   }
   const durationLabel = formatConversationWorkDuration(durationMs, intl, locale);
+  // 运行中的工时和次数只在这一行报：时长是本轮净工时（已扣权限审批和提问的等待），
+  // 次数按整轮累计；工作块自己的标题跑着时只报当前动作。
+  // 「工作中」不再写成文字：转圈图标本身就够表达在跑，前面再顶一个词只是冗余。
+  const statsLabel =
+    toolCount > 0
+      ? durationLabel === null
+        ? intl.formatMessage({ id: "chat.history.foldedTools" }, { count: toolCount })
+        : intl.formatMessage(
+            { id: "chat.loading.workStats" },
+            { duration: durationLabel, count: toolCount },
+          )
+      : durationLabel === null
+        ? intl.formatMessage({ id: "chat.loading.working" })
+        : intl.formatMessage({ id: "chat.loading.workingFor" }, { duration: durationLabel });
   return (
     <div data-zcode-chat-loading-slot="true" className="min-h-5">
       {visibleRetryStatus ? (
         <ChatApiRetryStatus apiRetry={visibleRetryStatus} intl={intl} locale={locale} />
       ) : (
-        // 转圈只能表达「在跑」，看不到已经跑了多久。这里直接写出来：
-        // 时长是本轮净工时（已扣权限审批和提问的等待），与当前工作块的折叠标题同口径。
-        <span className="zcode-working-shimmer text-ui-base" data-testid={TID_CHAT_LOADING}>
-          {durationLabel === null
-            ? intl.formatMessage({ id: "chat.loading.working" })
-            : intl.formatMessage({ id: "chat.loading.workingFor" }, { duration: durationLabel })}
+        // 文字走中性的扫光（与工作块标题同一套色阶），图标跟它同色系、只是实色转圈。
+        // 扫光是 background-clip: text，不能包住图标，否则图标也跟着变透明。
+        <span
+          className="inline-flex items-center gap-1.5 text-ui-base text-foreground-subtle"
+          data-testid={TID_CHAT_LOADING}
+        >
+          <Loader2Icon aria-hidden className="size-3.5 shrink-0 animate-spin motion-reduce:animate-none" />
+          <span className="zcode-working-shimmer">{statsLabel}</span>
         </span>
       )}
     </div>
@@ -739,9 +759,9 @@ function foldedWorkLabel(
 /**
  * 一个工作块的折叠标题。
  *
- * 整轮净工时只挂在当前正在工作的那一块上（它下面就跟着正在跑的工具）；
- * 已经结束的块只报自己的跨度，否则整轮的第一块会顶着累计工时一直走秒，
- * 看起来像计时器停不下来。
+ * 还在工作的那一块报当前动作（「正在思考」「正在运行命令」），统计数字（工时、次数）
+ * 只由轮尾那行报。已经结束的块只报自己的跨度，否则整轮的第一块会顶着累计工时
+ * 一直走秒，看起来像计时器停不下来。
  */
 function WorkChunkStatus({
   chunkKey,
@@ -751,14 +771,14 @@ function WorkChunkStatus({
   isTailChunk,
   process = false,
   plain = false,
-  toggleable = false,
+  activity,
   toolCount = 0,
   chunkDurationMs,
 }: {
   chunkKey: string;
   segment: ConversationTurnWorkSegment;
   open: boolean;
-  /** 整轮当前正在工作的块：只有它显示「工作中 N」。 */
+  /** 整轮当前正在工作的块：运行中它报当前动作，不报统计。 */
   isWorkingChunk: boolean;
   /** 本段的最后一块：中断文案挂在这里。 */
   isTailChunk: boolean;
@@ -766,8 +786,8 @@ function WorkChunkStatus({
   process?: boolean;
   /** 没有可折叠的工具块时只显示时长，不挂触发器。 */
   plain?: boolean;
-  /** 这一块可以收起时才显示箭头。正在工作的第一块锁开，不给箭头。 */
-  toggleable?: boolean;
+  /** 运行中报的动作；缺省时只说「工作中」。 */
+  activity?: WorkActivityState | null;
   toolCount?: number;
   chunkDurationMs?: number;
 }) {
@@ -785,18 +805,18 @@ function WorkChunkStatus({
   });
   const durationLabel = formatConversationWorkDuration(facts.durationMs, intl, locale);
   const folded = foldedWorkLabel(intl, locale, facts.toolCount, facts.durationMs);
-  const runningLabel = intl.formatMessage(
-    { id: "chat.history.workingFor" },
-    { duration: durationLabel ?? "" },
-  );
   let label: string;
-  if (facts.interrupted) {
-    label = intl.formatMessage({ id: "chat.history.stopped" });
-  } else if (facts.running) {
+  if (facts.running) {
     label =
-      facts.toolCount > 0
-        ? `${runningLabel} · ${intl.formatMessage({ id: "chat.history.foldedTools" }, { count: facts.toolCount })}`
-        : runningLabel;
+      activity == null
+        ? intl.formatMessage({ id: "chat.loading.working" })
+        : intl.formatMessage({
+            id: activity.preparing
+              ? `chat.workChunk.preparing.${activity.activity}`
+              : `chat.workChunk.activity.${activity.activity}`,
+          });
+  } else if (facts.interrupted) {
+    label = intl.formatMessage({ id: "chat.history.stopped" });
   } else if (folded !== null) {
     label = folded;
   } else if (durationLabel !== null) {
@@ -814,8 +834,8 @@ function WorkChunkStatus({
       {...(process ? { "data-history-role": "process" } : {})}
       className="group/history-message inline-flex max-w-full items-center gap-2 text-left text-ui-base text-foreground-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-input-border-focused)]"
     >
-      <span className="truncate">{label}</span>
-      {!plain && toggleable ? (
+      <span className={cn("truncate", facts.running && "zcode-working-shimmer")}>{label}</span>
+      {plain ? null : (
         <ChevronRightIcon
           aria-hidden
           className={cn(
@@ -823,7 +843,7 @@ function WorkChunkStatus({
             open ? "rotate-90" : "rotate-0",
           )}
         />
-      ) : null}
+      )}
     </button>
   );
 
@@ -832,6 +852,14 @@ function WorkChunkStatus({
       {plain ? button : <CollapsibleTrigger asChild>{button}</CollapsibleTrigger>}
     </div>
   );
+}
+
+function countToolCallRows(rows: readonly { kind: string }[]): number {
+  let count = 0;
+  for (const row of rows) {
+    if (row.kind === "toolCall") count += 1;
+  }
+  return count;
 }
 
 function chunkWorkStats(
@@ -846,11 +874,10 @@ function chunkWorkStats(
   toolCount: number;
   durationMs?: number;
 } {
-  let toolCount = 0;
+  const toolCount = countToolCallRows(rows);
   let min = Number.POSITIVE_INFINITY;
   let max = Number.NEGATIVE_INFINITY;
   for (const row of rows) {
-    if (row.kind === "toolCall") toolCount += 1;
     const start = row.startedAt ?? row.createdAt;
     let end = row.endedAt ?? start;
     if (row.kind === "reasoning" && start !== undefined && row.durationMs !== undefined) {
@@ -871,6 +898,7 @@ function WorkChunkFold({
   segment,
   isWorkingChunk,
   isTailChunk,
+  activity,
   toolCount,
   chunkDurationMs,
   children,
@@ -882,6 +910,7 @@ function WorkChunkFold({
   isWorkingChunk: boolean;
   isTailChunk: boolean;
   toolCount: number;
+  activity?: WorkActivityState | null;
   chunkDurationMs?: number;
   children: (open: boolean) => ReactNode;
 }) {
@@ -889,23 +918,21 @@ function WorkChunkFold({
   useEffect(() => {
     setStoredOpen(defaultOpen);
   }, [defaultOpen, chunkKey]);
-  // 只有当前这一块还在干活时，第一块才锁开。结束的块收起，但可以再打开。
-  const lockedOpen = !process && defaultOpen;
-  const open = lockedOpen ? true : storedOpen;
+  // 运行中的块也能收起：默认展开，箭头随时可点（口径照 dsh 的组标题）。
   return (
-    <Collapsible open={open} onOpenChange={lockedOpen ? undefined : setStoredOpen}>
+    <Collapsible open={storedOpen} onOpenChange={setStoredOpen}>
       <WorkChunkStatus
         chunkKey={chunkKey}
         segment={segment}
-        open={open}
+        open={storedOpen}
         isWorkingChunk={isWorkingChunk}
         isTailChunk={isTailChunk}
         process={process}
-        toggleable={!lockedOpen}
+        activity={activity}
         toolCount={toolCount}
         {...(chunkDurationMs === undefined ? {} : { chunkDurationMs })}
       />
-      {children(open)}
+      {children(storedOpen)}
     </Collapsible>
   );
 }
@@ -1043,6 +1070,9 @@ function ConversationWorkSegmentFlow({
               segment={segment}
               isWorkingChunk={index === activeFoldIndex}
               isTailChunk={index === tailFoldIndex}
+              activity={resolveWorkActivity(item.rows, {
+                stageRunning: index === activeFoldIndex,
+              })}
               toolCount={stats.toolCount}
               {...(stats.durationMs !== undefined ? { chunkDurationMs: stats.durationMs } : {})}
             >
@@ -1076,9 +1106,12 @@ function ConversationWorkSegmentFlow({
                 chunkKey={segment.key}
                 segment={segment}
                 open={false}
-                // 没有工具块可切时，这一行就是整轮唯一的工作状态：仍在跑就报整轮工时。
+                // 没有工具块可切时，这一行就是整轮唯一的工作状态：跑着就报当前动作。
                 isWorkingChunk={segment.workStatus?.state === "running"}
                 isTailChunk
+                activity={resolveWorkActivity(segment.assistantWorkRows, {
+                  stageRunning: segment.workStatus?.state === "running",
+                })}
                 plain
               />
             ) : null}
@@ -1093,6 +1126,9 @@ function ConversationWorkSegmentFlow({
           open={false}
           isWorkingChunk={segment.workStatus?.state === "running"}
           isTailChunk
+          activity={resolveWorkActivity(segment.assistantWorkRows, {
+            stageRunning: segment.workStatus?.state === "running",
+          })}
           plain
         />
       ) : null}
@@ -1164,6 +1200,7 @@ function ConversationTurnFlow({
           apiRetry={apiRetry}
           eligible={showLoading}
           durationMs={unit.workStatus?.durationMs}
+          toolCount={countToolCallRows(unit.assistantWorkRows)}
         />
       </div>
     );
@@ -1233,6 +1270,7 @@ function ConversationTurnFlow({
         apiRetry={apiRetry}
         eligible={showLoading}
         durationMs={unit.workStatus?.durationMs}
+        toolCount={countToolCallRows(unit.assistantWorkRows)}
       />
     </div>
   );
@@ -1437,6 +1475,7 @@ function ConversationBackgroundResultWork({
         apiRetry={apiRetry}
         eligible={showLoading}
         durationMs={unit.workStatus?.durationMs}
+        toolCount={countToolCallRows(unit.assistantWorkRows)}
       />
     </div>
   );

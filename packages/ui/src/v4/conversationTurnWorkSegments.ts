@@ -67,9 +67,9 @@ export interface WorkChunkStatusFacts {
 /**
  * 折叠标题的时长口径。
  *
- * 「工作中 N 分 N 秒」只能挂在当前工作块上：它下面就跟着正在跑的工具，秒数递增才读得通。
- * 已经结束的块（包括整轮的第一块）只报自己的跨度，否则第一块会顶着整轮累计工时
- * 一直走秒，看起来像计时器停不下来。
+ * 还在工作的那一块标题只报当前动作，工时和次数不渲染；`running` 供调用方切成
+ * 动作文案，`durationMs` 仍取整段，方便其他地方复用工时。已经结束的块只报自己的
+ * 跨度，否则第一块会顶着整轮累计工时一直走秒，看起来像计时器停不下来。
  */
 export function resolveWorkChunkStatusFacts(options: {
   segmentState?: ConversationTurnWorkStatus["state"];

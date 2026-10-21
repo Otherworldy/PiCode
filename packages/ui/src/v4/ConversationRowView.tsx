@@ -8,12 +8,15 @@ import {
   ResumeHereAfterText,
   ResumeHereButton,
   ResumeHereMenu,
+  SummaryChoiceMenu,
+  SummaryInstructionsDialog,
   type ResumeHereChoice,
 } from "@/v4/ResumeHereMenu.js";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArchiveIcon,
   ArrowRightLeftIcon,
+  ArrowUpIcon,
   CheckIcon,
   CopyIcon,
   FileClockIcon,
@@ -82,7 +85,7 @@ import {
 } from "@/components/ai-elements/reasoning.js";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
+import { Spinner } from "@/components/ui/spinner.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { WorkflowToolSummary } from "@/v4/WorkflowToolSummary.js";
 import {
@@ -935,6 +938,8 @@ const UserInputRowView = memo(function UserInputRowView({
   const [rewindInstructions, setRewindInstructions] = useState("");
   const [rewindSubmitting, setRewindSubmitting] = useState(false);
   const inputApiRef = useRef<LexicalChatInputHandle | null>(null);
+  // 从菜单点「自定义提示词」时菜单会先关；这一刻 pendingSend 还要留给对话框确认，不能一并清掉。
+  const pendingCustomRef = useRef(false);
   const editContextCount = countComposerPromptContexts(editPromptContexts);
   const canSubmit = draft.trim().length > 0 || editAttachments.length > 0 || editContextCount > 0;
   const submitLabel = intl.formatMessage({ id: "chat.send" });
@@ -1003,6 +1008,11 @@ const UserInputRowView = memo(function UserInputRowView({
 
   useEffect(() => {
     if (!onEdit) {
+      // 编辑入口被收回时菜单会随整棵编辑子树卸载，Radix 不会补发 onOpenChange(false)；
+      // 这里必须自己清，否则下次进入编辑会带着旧文本自动弹菜单。
+      pendingCustomRef.current = false;
+      setPendingSend(null);
+      setSummaryCustom(false);
       setEditing(false);
       setSubmitting(false);
       setRewindOpen(false);
@@ -1013,6 +1023,10 @@ const UserInputRowView = memo(function UserInputRowView({
   const handleOpenEdit = useCallback(() => {
     // v4 迁移时把 user query 编辑误接成“直接读取主 composer 提交”，
     // 主 composer 为空时点击只会 warn。这里恢复旧行内编辑态。
+    // 残留的待提交选择不能带进新的编辑会话（会提交错文本）。
+    pendingCustomRef.current = false;
+    setPendingSend(null);
+    setSummaryCustom(false);
     setDraft(parsedShareContext.visibleContent);
     setEditAttachments([...(row.attachments ?? [])]);
     setEditAttachmentIndices((row.attachments ?? []).map((_, index) => index));
@@ -1021,6 +1035,8 @@ const UserInputRowView = memo(function UserInputRowView({
   }, [parsedPrompt, parsedShareContext, row.attachments]);
 
   const handleCancelEdit = useCallback(() => {
+    // 取消编辑会卸载菜单，这里复位「菜单转发到自定义对话框」的一次性标记。
+    pendingCustomRef.current = false;
     setPendingSend(null);
     setDraft(parsedShareContext.visibleContent);
     setEditAttachments([...(row.attachments ?? [])]);
@@ -1085,17 +1101,64 @@ const UserInputRowView = memo(function UserInputRowView({
     },
     [handleSubmitEdit, pendingSend],
   );
+  const submitTriggerRef = useRef<HTMLSpanElement>(null);
+  const rewindWorkspaceTriggerRef = useRef<HTMLSpanElement>(null);
+  const closePendingSendMenu = useCallback(() => {
+    if (pendingCustomRef.current) {
+      pendingCustomRef.current = false;
+      return;
+    }
+    setPendingSend(null);
+    setSummaryCustom(false);
+  }, []);
+  const openPendingSendMenu = useCallback(
+    (workspaceMode: "preserve" | "rewind") => {
+      pendingCustomRef.current = false;
+      setSummaryCustom(false);
+      setSummaryInstructions("");
+      // 编辑器的序列化结果才是权威文本，draft 只是 onChange 的镜像。
+      setPendingSend({
+        text: inputApiRef.current?.getMarkdown() ?? draft,
+        workspaceMode,
+      });
+    },
+    [draft],
+  );
+  const handlePendingMenuOpenChange = useCallback(
+    (workspaceMode: "preserve" | "rewind", open: boolean) => {
+      // 菜单的 open 由 pendingSend 派生，打开请求就是「建立待选状态」。
+      if (open) {
+        openPendingSendMenu(workspaceMode);
+        return;
+      }
+      closePendingSendMenu();
+    },
+    [closePendingSendMenu, openPendingSendMenu],
+  );
+  const openSummaryInstructions = useCallback(() => {
+    pendingCustomRef.current = true;
+    setSummaryInstructions("");
+    setSummaryCustom(true);
+  }, []);
   const rewindLabel = intl.formatMessage({ id: "chat.message.rewindHere" });
-  const handleOpenRewind = useCallback(() => {
-    if (context.prepareRewindHere && !context.prepareRewindHere()) return;
-    setRewindCustom(false);
-    setRewindInstructions("");
-    setRewindOpen(true);
-  }, [context.prepareRewindHere]);
+  // 回退选择改成贴在按钮旁的菜单：与分叉按钮同一套浮层，不再用遮罩对话框。
+  const handleRewindOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        setRewindOpen(false);
+        return;
+      }
+      if (context.prepareRewindHere && !context.prepareRewindHere()) return;
+      setRewindCustom(false);
+      setRewindInstructions("");
+      setRewindOpen(true);
+    },
+    [context.prepareRewindHere],
+  );
   const confirmRewind = useCallback(
     async (choice: ResumeHereChoice) => {
       if (!context.onRewindHere || !row.entityId) return;
-      // 总结要等模型写完才返回。对话框留着的话，生成过程就像发生在弹窗里。
+      // 总结要等模型写完才返回。选择浮层留着的话，生成过程就像发生在浮层里。
       setRewindOpen(false);
       setRewindCustom(false);
       setRewindSubmitting(true);
@@ -1120,22 +1183,60 @@ const UserInputRowView = memo(function UserInputRowView({
     ],
   );
   const rewindWorkspaceDisabled = submitting || editWorkspaceRewindAvailability?.enabled !== true;
+  const rewindWorkspaceMenuOpen = pendingSend?.workspaceMode === "rewind";
   const rewindWorkspaceButton = (
     <Button
       type="button"
       variant="outline"
       size="icon-md"
       disabled={rewindWorkspaceDisabled}
+      aria-haspopup="menu"
+      aria-expanded={rewindWorkspaceMenuOpen}
       data-testid={testId(TID_V4_EDIT_REWIND_WORKSPACE, String(row.rowId))}
       aria-label={rewindWorkspaceLabel}
-      onClick={() => {
-        setSummaryCustom(false);
-        setSummaryInstructions("");
-        setPendingSend({ text: draft, workspaceMode: "rewind" });
+      onClick={(event) => {
+        // 键盘和指针的展开由 Radix trigger 处理（keydown 冒泡到 trigger span）；
+        // 这里只补辅助技术合成的 click（没有 pointerdown，detail 为 0）。
+        if (event.detail !== 0) return;
+        openPendingSendMenu("rewind");
       }}
     >
       <FileClockIcon className="size-4" />
     </Button>
+  );
+  // 重置会话和文件同样要选总结方式：菜单锚在这枚按钮上，和侧边发送按钮各用一个实例。
+  const rewindWorkspaceMenu = (
+    <SummaryChoiceMenu
+      open={rewindWorkspaceMenuOpen}
+      onOpenChange={(open) => handlePendingMenuOpenChange("rewind", open)}
+      disabled={submitting}
+      onPick={confirmPendingSend}
+      onCustom={openSummaryInstructions}
+      onCloseAutoFocus={(event) => {
+        // 菜单一收就进提交态，真实按钮此时是 disabled；焦点回到带 aria 状态的 trigger span，
+        // 接力给自定义对话框时连 span 也不抢。
+        event.preventDefault();
+        if (!summaryCustom) rewindWorkspaceTriggerRef.current?.focus();
+      }}
+      trigger={
+        <span ref={rewindWorkspaceTriggerRef} className="inline-flex" tabIndex={-1}>
+          <ControlHintTooltip
+            title={rewindWorkspaceTooltipTitle}
+            description={rewindWorkspaceTooltipDescription}
+          >
+            {rewindWorkspaceDisabled ? (
+              // Button disabled 会应用 pointer-events-none，TooltipTrigger 直接落在
+              // 按钮上时收不到 hover。禁用态用外层 span 承接 hover，实际按钮仍保持 disabled。
+              <span className="inline-flex" data-disabled-tooltip-trigger="true">
+                {rewindWorkspaceButton}
+              </span>
+            ) : (
+              rewindWorkspaceButton
+            )}
+          </ControlHintTooltip>
+        </span>
+      }
+    />
   );
 
   if (editing) {
@@ -1243,23 +1344,52 @@ const UserInputRowView = memo(function UserInputRowView({
           }
           inputApiRef={inputApiRef}
           inputTestId={testId(TID_V4_EDIT_INPUT, String(row.rowId))}
-          submitTestId={testId(TID_V4_EDIT_SUBMIT, String(row.rowId))}
           cancelTestId={testId(TID_V4_EDIT_CANCEL, String(row.rowId))}
-          betweenCancelAndSubmitAction={
-            <ControlHintTooltip
-              title={rewindWorkspaceTooltipTitle}
-              description={rewindWorkspaceTooltipDescription}
-            >
-              {rewindWorkspaceDisabled ? (
-                // Button disabled 会应用 pointer-events-none，TooltipTrigger 直接落在
-                // 按钮上时收不到 hover。禁用态用外层 span 承接 hover，实际按钮仍保持 disabled。
-                <span className="inline-flex" data-disabled-tooltip-trigger="true">
-                  {rewindWorkspaceButton}
+          betweenCancelAndSubmitAction={rewindWorkspaceMenu}
+          submitControl={
+            // 发送按钮本身就是菜单锚点：点一下先选总结方式，再真正提交。
+            <SummaryChoiceMenu
+              open={pendingSend?.workspaceMode === "preserve"}
+              onOpenChange={(open) => handlePendingMenuOpenChange("preserve", open)}
+              disabled={submitting}
+              onPick={confirmPendingSend}
+              onCustom={openSummaryInstructions}
+              onCloseAutoFocus={(event) => {
+                // 菜单一收就进提交态，真实按钮此时是 disabled；焦点回到带 aria 状态的 trigger span，
+                // 接力给自定义对话框时连 span 也不抢。
+                event.preventDefault();
+                if (!summaryCustom) submitTriggerRef.current?.focus();
+              }}
+              trigger={
+                <span ref={submitTriggerRef} className="inline-flex" tabIndex={-1}>
+                  <ControlHintTooltip title={submitLabel} shortcut="Enter">
+                    <Button
+                      type="button"
+                      size="icon-md"
+                      disabled={!canSubmit || submitting}
+                      aria-haspopup="menu"
+                      aria-expanded={pendingSend?.workspaceMode === "preserve"}
+                      data-testid={testId(TID_V4_EDIT_SUBMIT, String(row.rowId))}
+                      aria-label={submitLabel}
+                      className="gap-1 rounded-lg bg-brand text-ui-base text-foreground-inverse hover:bg-brand/80"
+                      onClick={(event) => {
+                        // 键盘和指针的展开由 Radix trigger 处理（keydown 冒泡到 trigger span）；
+                        // 这里只补辅助技术合成的 click（没有 pointerdown，detail 为 0）。
+                        if (event.detail !== 0) return;
+                        openPendingSendMenu("preserve");
+                      }}
+                    >
+                      {submitting ? (
+                        <Spinner className="size-4" />
+                      ) : (
+                        <ArrowUpIcon className="size-4" />
+                      )}
+                      <span className="sr-only">{submitLabel}</span>
+                    </Button>
+                  </ControlHintTooltip>
                 </span>
-              ) : (
-                rewindWorkspaceButton
-              )}
-            </ControlHintTooltip>
+              }
+            />
           }
           className="w-full max-w-xl"
           shellClassName="min-h-32"
@@ -1268,6 +1398,7 @@ const UserInputRowView = memo(function UserInputRowView({
             if (!nextText.trim() && editAttachments.length === 0 && editContextCount === 0) {
               return false;
             }
+            pendingCustomRef.current = false;
             setSummaryCustom(false);
             setSummaryInstructions("");
             setPendingSend({ text: nextText, workspaceMode: "preserve" });
@@ -1275,76 +1406,23 @@ const UserInputRowView = memo(function UserInputRowView({
           }}
           onCancel={handleCancelEdit}
         />
-        <Dialog
-          open={pendingSend !== null}
+        <SummaryInstructionsDialog
+          open={summaryCustom}
           onOpenChange={(open) => {
-            if (!open) {
-              setPendingSend(null);
-              setSummaryCustom(false);
-            }
+            if (open) return;
+            setSummaryCustom(false);
+            setPendingSend(null);
           }}
-        >
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle>{submitLabel}</DialogTitle>
-            </DialogHeader>
-            {summaryCustom ? (
-              <>
-                <textarea
-                  className="h-24 w-full rounded-md border border-border bg-surface px-2 py-1 text-ui-sm"
-                  value={summaryInstructions}
-                  placeholder={intl.formatMessage({ id: "chat.tree.customPlaceholder" })}
-                  onChange={(event) => setSummaryInstructions(event.target.value)}
-                />
-                <div className="flex justify-end">
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={!summaryInstructions.trim() || submitting}
-                    onClick={() =>
-                      confirmPendingSend({
-                        summarize: true,
-                        customInstructions: summaryInstructions.trim(),
-                      })
-                    }
-                  >
-                    {intl.formatMessage({ id: "chat.tree.confirm" })}
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <div className="flex flex-col gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={submitting}
-                  onClick={() => confirmPendingSend({ summarize: false })}
-                >
-                  {intl.formatMessage({ id: "chat.tree.skipSummary" })}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={submitting}
-                  onClick={() => confirmPendingSend({ summarize: true })}
-                >
-                  {intl.formatMessage({ id: "chat.tree.summarize" })}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={submitting}
-                  onClick={() => {
-                    setSummaryInstructions("");
-                    setSummaryCustom(true);
-                  }}
-                >
-                  {intl.formatMessage({ id: "chat.tree.custom" })}
-                </Button>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
+          value={summaryInstructions}
+          onChange={setSummaryInstructions}
+          disabled={submitting}
+          onConfirm={() =>
+            confirmPendingSend({
+              summarize: true,
+              customInstructions: summaryInstructions.trim(),
+            })
+          }
+        />
         <ConversationFileRewindDialog
           variant="editConflict"
           open={conflictOpen}
@@ -1355,9 +1433,8 @@ const UserInputRowView = memo(function UserInputRowView({
           error={null}
           onApply={() => {}}
           onConversationOnly={() => {
-            setSummaryCustom(false);
-            setSummaryInstructions("");
-            setPendingSend({ text: draft, workspaceMode: "preserve" });
+            pendingCustomRef.current = false;
+            openPendingSendMenu("preserve");
           }}
         />
       </RowShell>
@@ -1480,6 +1557,8 @@ const UserInputRowView = memo(function UserInputRowView({
         className={cn(
           "pointer-events-none absolute top-full right-0 z-10",
           "opacity-0 transition-opacity group-hover/user-row:pointer-events-auto group-hover/user-row:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100",
+          // 菜单打开后鼠标已经离开行体，触发按钮不能跟着 hover 一起藏掉。
+          "has-[[data-rewind-menu=open]]:pointer-events-auto has-[[data-rewind-menu=open]]:opacity-100",
         )}
       >
         <CopyRowAction
@@ -1498,14 +1577,44 @@ const UserInputRowView = memo(function UserInputRowView({
           </MessageAction>
         ) : null}
         {onEdit && row.entityId && context.onRewindHere ? (
-          <MessageAction
-            label={rewindLabel}
-            tooltip={rewindLabel}
-            data-testid={testId(TID_V4_REWIND, String(row.rowId))}
-            onClick={handleOpenRewind}
-          >
-            <Undo2Icon className="size-3.5" />
-          </MessageAction>
+          <SummaryChoiceMenu
+            open={rewindOpen}
+            onOpenChange={handleRewindOpenChange}
+            disabled={rewindSubmitting}
+            onPick={(choice) => void confirmRewind(choice)}
+            onCustom={() => {
+              setRewindInstructions("");
+              setRewindCustom(true);
+            }}
+            onCloseAutoFocus={(event) => {
+              // 接力给自定义对话框时不要抢焦点；其余情况走 Radix 默认，
+              // 把焦点放回 tabIndex=-1 的 trigger span，不落到 body。
+              if (rewindCustom) event.preventDefault();
+            }}
+            trigger={
+              <span
+                className="inline-flex"
+                tabIndex={-1}
+                data-rewind-menu={rewindOpen ? "open" : "closed"}
+              >
+                <MessageAction
+                  label={rewindLabel}
+                  tooltip={rewindLabel}
+                  aria-haspopup="menu"
+                  aria-expanded={rewindOpen}
+                  data-testid={testId(TID_V4_REWIND, String(row.rowId))}
+                  onClick={(event) => {
+                    // 键盘和指针的展开由 Radix trigger 处理（keydown 冒泡到 trigger span）；
+                    // 这里只补辅助技术合成的 click（没有 pointerdown，detail 为 0）。
+                    if (event.detail !== 0) return;
+                    handleRewindOpenChange(true);
+                  }}
+                >
+                  <Undo2Icon className="size-3.5" />
+                </MessageAction>
+              </span>
+            }
+          />
         ) : null}
         {context.onResumeHere && (row.entityId || row.text.trim()) ? (
           <ResumeHereButton
@@ -1522,75 +1631,22 @@ const UserInputRowView = memo(function UserInputRowView({
           />
         ) : null}
       </MessageActions>
-      <Dialog
-        open={rewindOpen}
+      <SummaryInstructionsDialog
+        open={rewindCustom}
         onOpenChange={(open) => {
-          if (rewindSubmitting) return;
-          setRewindOpen(open);
-          if (!open) setRewindCustom(false);
+          if (!open && rewindSubmitting) return;
+          setRewindCustom(open);
         }}
-      >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{rewindLabel}</DialogTitle>
-          </DialogHeader>
-          {rewindCustom ? (
-            <>
-              <textarea
-                className="h-24 w-full rounded-md border border-border bg-surface px-2 py-1 text-ui-sm"
-                value={rewindInstructions}
-                placeholder={intl.formatMessage({ id: "chat.tree.customPlaceholder" })}
-                onChange={(event) => setRewindInstructions(event.target.value)}
-              />
-              <div className="flex justify-end">
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={!rewindInstructions.trim() || rewindSubmitting}
-                  onClick={() =>
-                    void confirmRewind({
-                      summarize: true,
-                      customInstructions: rewindInstructions.trim(),
-                    })
-                  }
-                >
-                  {intl.formatMessage({ id: "chat.tree.confirm" })}
-                </Button>
-              </div>
-            </>
-          ) : (
-            <div className="flex flex-col gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={rewindSubmitting}
-                onClick={() => void confirmRewind({ summarize: false })}
-              >
-                {intl.formatMessage({ id: "chat.tree.skipSummary" })}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={rewindSubmitting}
-                onClick={() => void confirmRewind({ summarize: true })}
-              >
-                {intl.formatMessage({ id: "chat.tree.summarize" })}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={rewindSubmitting}
-                onClick={() => {
-                  setRewindInstructions("");
-                  setRewindCustom(true);
-                }}
-              >
-                {intl.formatMessage({ id: "chat.tree.custom" })}
-              </Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+        value={rewindInstructions}
+        onChange={setRewindInstructions}
+        disabled={rewindSubmitting}
+        onConfirm={() =>
+          void confirmRewind({
+            summarize: true,
+            customInstructions: rewindInstructions.trim(),
+          })
+        }
+      />
     </RowShell>
   );
 });
