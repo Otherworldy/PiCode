@@ -6,10 +6,16 @@ interface InstallCommand {
   unref(): void;
 }
 
+/** 安装器接管后应用必须退出；先让界面上的等待态留够可读时间。 */
+const INSTALL_NOTICE_DWELL_MS = 2500;
+
 export async function installDownloadedUpdate(options: {
   filePath: string;
   platform: string;
   appImagePath?: string;
+  /** 静默安装期间独立于安装目录的进度小窗；拉起失败不影响安装。 */
+  splash?: () => Promise<void>;
+  sleepImpl?: (ms: number) => Promise<void>;
   spawnImpl?: (
     command: string,
     args: string[],
@@ -42,8 +48,19 @@ export async function installDownloadedUpdate(options: {
     return "opened-installer";
   }
 
+  // 安装器一旦接管，窗口马上就会消失：先停留，让用户读到「会关闭、约多久、会自动重开」。
+  await (options.sleepImpl ?? sleep)(INSTALL_NOTICE_DWELL_MS);
+  try {
+    await options.splash?.();
+  } catch {
+    // 小窗只是提示层，拉起失败（例如策略禁用 PowerShell）不能阻断安装。
+  }
   // assisted NSIS 只有同时静默且 --force-run 才会跳过向导，并在结束后重新打开应用。
   launch(options.filePath, ["/S", "--updated", "--force-run"]);
   options.quit();
   return "quit-for-installer";
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

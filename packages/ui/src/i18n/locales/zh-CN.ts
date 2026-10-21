@@ -1704,9 +1704,13 @@ const zhCN: Record<string, string> = {
   "appUpdate.openDescription":
     "新版本 {version} 已下载。确认后会打开安装盘，把 PiCode 拖入应用程序文件夹。",
   "appUpdate.restartDescription":
-    "新版本 {version} 已下载。确认后会关闭应用并完成安装，然后自动重新打开。",
+    "新版本 {version} 已下载。确认后 PiCode 会关闭并在后台完成安装（约 1–3 分钟），结束后自动重新打开。",
   "appUpdate.confirm": "立即更新",
   "appUpdate.cancel": "取消",
+  "appUpdate.installing.title": "正在安装更新",
+  "appUpdate.installing.description":
+    "PiCode 将关闭并完成安装，结束后会自动重新打开，通常需要 1–3 分钟。",
+  "appUpdate.installing.hint": "安装期间会另开一个进度窗口，请不要手动结束它。",
   "settings.about.title": "关于",
   "settings.about.version": "当前版本",
   "settings.about.check": "检查更新",

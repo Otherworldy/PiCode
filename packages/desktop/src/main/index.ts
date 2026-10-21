@@ -1615,6 +1615,8 @@ app.whenReady().then(async () => {
         app.quit();
       });
     },
+    // 小窗文案跟随应用内语言，不用系统语言。
+    getLocale: () => currentApplicationLocale,
     readNetworkSettings: async () => {
       const settings = await mainSettingService.get();
       return {

@@ -4,7 +4,7 @@
 
 ## 所有者
 
-桌面主进程的 `AppUpdateController` 是唯一状态所有者。渲染进程只保存它广播的快照，不另记一份下载进度或已选安装包。
+桌面主进程的 `AppUpdateController` 是唯一状态所有者。渲染进程只保存它广播的快照，不另记一份下载进度或已选安装包。安装期间的可见小窗是脱离应用的独立进程，应用退出后它只依赖系统进程列表判断安装是否结束，不再读主进程任何状态。
 
 ## 规则
 
@@ -20,6 +20,18 @@
   - macOS：打开 dmg，应用保持运行，由用户拖入「应用程序」。
   - Linux：若当前是 AppImage，则替换 `APPIMAGE` 指向的文件并重启；否则启动下载到的 AppImage。
 
+## 安装期反馈
+
+静默安装会让应用完全退出且安装包不画界面，因此安装期必须同时给出「退出前等待态」和「安装中小窗」两段可见反馈。
+
+- 主进程广播 `installing` 后停留 2500ms 再拉起安装器退出；根节点遮罩（`AppUpdateInstallOverlay`）在这段时间说明会关闭、约 1–3 分钟、结束后自动重开，并阻断输入。安装器接管后快照会回到 `downloaded` + `installKind: quit-for-installer`，遮罩在此期间不能消失：主进程还要跑完退出准备才真正关窗，这几秒不能放回可交互界面。
+- Windows 在停留结束后、拉起安装器之前启动进度小窗：脚本写入 `%TEMP%\PiCode-update-splash.ps1`，再用 `cmd.exe /c start "" powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File <脚本>` 拉起并 `unref()`，工作目录设在临时目录。必须经 `cmd /c start`：`powershell.exe` 需要 console，而 Electron 主进程没有，直接 spawn（无论 `detached` 还是 `windowsHide`）它会在窗口出现前就退出；`start` 给它新建 console，cmd 自己立即退出，powershell 成为孤儿进程，应用 quit 带不走它。脚本不加载安装目录内的任何文件，也不以安装目录为 cwd：Windows 上 cwd 会持有目录句柄，拦住安装器删目录。
+- 小窗显示目标版本、已等待秒数与品牌色（`#E6A23C`）流动进度条。整窗是自绘的圆角 card，不用 WinForms 默认外观，并按系统 `AppsUseLightTheme` 切换深/浅一套配色；中英文分别用雅黑与 Segoe UI。窗口和任务栏图标取自当前应用的 exe（`ExtractAssociatedIcon`），否则会显示 powershell.exe 的 logo；文案语言跟随应用内界面语言（`currentApplicationLocale`），不用系统语言，否则调过语言的应用会出现界面中文、小窗英文。小窗不常驻置顶：显示时临时 topmost 抬一次拿到前台后立即降回普通窗口，之后用户切到其他窗口就不再遮挡，靠任务栏找回。判定安装结束的规则是「旧实例全部退出后出现带主窗口的新 PiCode 进程」；新进程出现后最多再等 60 秒。只按进程启动时间判断会把退出瞬间冒出的同名子进程当成新版，导致小窗早关。
+- 小窗拉起失败（例如安全策略禁用 PowerShell）只丢提示，不阻断安装。
+- 遮罩只在 Windows 展现：只有 Windows 会静默安装并长时间消失；macOS 只打开安装盘，Linux 替换后立即重启。
+
 ## 失败
 
 网络、没有发布、没有匹配安装包、下载失败、安装失败都回到 `error`，并带稳定错误码。失败不修改当前已安装的应用。
+
+安装器在应用退出后失败时，任何应用内兜底状态都无法展示；由进度小窗在 8 分钟未检测到新应用时切到「更新未完成」提示，保留 2 分钟后自行关闭，用户可随时手动关掉。

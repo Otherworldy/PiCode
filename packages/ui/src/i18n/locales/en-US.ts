@@ -1811,9 +1811,14 @@ const enUS: Record<string, string> = {
   "appUpdate.openDescription":
     "Version {version} has been downloaded. Confirm to open the disk image, then drag PiCode into Applications.",
   "appUpdate.restartDescription":
-    "Version {version} has been downloaded. PiCode will close, finish installing, and reopen.",
+    "Version {version} has been downloaded. PiCode will close and install in the background (about 1–3 minutes), then reopen automatically.",
   "appUpdate.confirm": "Update now",
   "appUpdate.cancel": "Cancel",
+  "appUpdate.installing.title": "Installing update",
+  "appUpdate.installing.description":
+    "PiCode will close while the update installs and reopen automatically. This usually takes 1–3 minutes.",
+  "appUpdate.installing.hint":
+    "A separate progress window opens during the install. Do not close it.",
   "settings.about.title": "About",
   "settings.about.version": "Current version",
   "settings.about.check": "Check for updates",
