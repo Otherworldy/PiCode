@@ -1,6 +1,6 @@
 // SessionDataLayer（纯数据层）。
 // Map<topic, SessionStore>，不知道「显示」这回事；生命周期 = 引用计数：
-// 有 pane 引用 → 订阅；归零 → 延迟退订（keep-warm，防拖拽/切 pane 抖动）。
+// 有 pane 引用 → 订阅；归零 → 进入空闲队列延迟退订（keep-warm，防拖拽/切 pane 抖动）。
 // 一个实例对应一条 host 连接；跨 workspace 分屏在 shell 层做
 // Map<workspaceKey, SessionDataLayer>，本层不感知 workspace。
 import { ConversationProjectionStore } from "@/v4/conversationProjectionStore.js";
@@ -23,11 +23,17 @@ export interface SessionLease {
 
 interface SessionDataLayerOptions {
   transport: ConversationTransport;
-  /** 引用归零后延迟退订窗口（ms），默认 30s。 */
+  /** 引用归零后的空闲上限（ms），默认 30 分钟。 */
   keepWarmMs?: number;
 }
 
-const SESSION_DATA_LAYER_KEEP_WARM_MS = 30_000;
+// 常驻策略与 CLI session 常驻池同标度（session-resident-pool.ts：target 16 / high water 32 /
+// idle 30min）。之前是「引用归零 30 秒就退订」，用户切到别的会话或别的视图超过 30 秒再回来
+// 就被判成冷订阅、重新走一次「加载会话」；最近看过的会话应该按使用而不是按秒数保活。
+const SESSION_DATA_LAYER_IDLE_TARGET_COUNT = 16;
+const SESSION_DATA_LAYER_IDLE_HIGH_WATER_COUNT = 32;
+const SESSION_DATA_LAYER_KEEP_WARM_MS = 30 * 60_000;
+// E2E 需要一个确定的冷路径：把空闲上限压到 1 秒，时间一到就退订。
 const E2E_SESSION_DATA_LAYER_KEEP_WARM_MS = 1_000;
 
 function resolveSessionDataLayerKeepWarmMs(
@@ -52,6 +58,8 @@ export class SessionDataLayer {
   private readonly transport: ConversationTransport;
   private readonly keepWarmMs: number;
   private readonly entries = new Map<string, SessionEntry>();
+  /** 引用归零的 topic，最久未用在队首。长度即空闲投影数，不参与 entries 之外的另存。 */
+  private readonly idleTopics: string[] = [];
   private readonly offFrame: () => void;
   private disposed = false;
 
@@ -84,6 +92,7 @@ export class SessionDataLayer {
         clearTimeout(entry.keepWarmTimer);
         entry.keepWarmTimer = null;
       }
+      this.removeIdle(topic);
     } else {
       const store = new ConversationProjectionStore(topic, this.transport);
       entry = { store, refCount: 1, keepWarmTimer: null };
@@ -94,7 +103,8 @@ export class SessionDataLayer {
     }
     logger.lifecycle.info("v4 session data lease acquired", {
       event: "v4.session_data.acquire",
-      keepWarm: entry.keepWarmTimer !== null,
+      // 不能现读 entry.keepWarmTimer：命中分支在上面已经把它清成 null 了。
+      keepWarm: openKind === "keep_warm",
       module: "ui.v4.session_data_layer",
       openKind,
       refCount: entry.refCount,
@@ -143,24 +153,55 @@ export class SessionDataLayer {
     }
     // 关 pane ≠ 停 session：这里只是退订视图，session 在 CLI 里照跑。
     entry.keepWarmTimer = setTimeout(() => {
-      this.entries.delete(topic);
-      logger.lifecycle.info("v4 session data keep-warm expired", {
-        event: "v4.session_data.keep_warm_expired",
-        module: "ui.v4.session_data_layer",
-        refCount: 0,
-        status: "completed",
-        topic,
-      });
-      void entry.store.close();
+      this.evictIdle(topic, "idle_timeout");
     }, this.keepWarmMs);
+    this.idleTopics.push(topic);
+    this.reclaimIdleOverflow();
     logger.lifecycle.info("v4 session data lease released", {
       event: "v4.session_data.release",
+      idleCount: this.idleTopics.length,
       keepWarmMs: this.keepWarmMs,
       module: "ui.v4.session_data_layer",
       refCount: 0,
       status: "keep_warm",
       topic,
     });
+  }
+
+  private removeIdle(topic: string): void {
+    const index = this.idleTopics.indexOf(topic);
+    if (index !== -1) this.idleTopics.splice(index, 1);
+  }
+
+  /** 空闲队列超过 high water 时按最久未用收到目标容量，留出回摆空间，避免来回点就反复冷恢复。 */
+  private reclaimIdleOverflow(): void {
+    if (this.idleTopics.length <= SESSION_DATA_LAYER_IDLE_HIGH_WATER_COUNT) return;
+    while (this.idleTopics.length > SESSION_DATA_LAYER_IDLE_TARGET_COUNT) {
+      const oldest = this.idleTopics.shift();
+      if (oldest === undefined) break;
+      this.evictIdle(oldest, "idle_overflow");
+    }
+  }
+
+  private evictIdle(topic: string, reason: "idle_timeout" | "idle_overflow"): void {
+    const entry = this.entries.get(topic);
+    if (!entry || entry.refCount > 0) return;
+    this.removeIdle(topic);
+    this.entries.delete(topic);
+    if (entry.keepWarmTimer !== null) {
+      clearTimeout(entry.keepWarmTimer);
+      entry.keepWarmTimer = null;
+    }
+    logger.lifecycle.info("v4 session data keep-warm expired", {
+      event: "v4.session_data.keep_warm_expired",
+      idleCount: this.idleTopics.length,
+      module: "ui.v4.session_data_layer",
+      reason,
+      refCount: 0,
+      status: "completed",
+      topic,
+    });
+    void entry.store.close();
   }
 
   /** 连接销毁时清场（window/workspace 卸载）。 */
@@ -181,6 +222,7 @@ export class SessionDataLayer {
       void entry.store.close();
     }
     this.entries.clear();
+    this.idleTopics.length = 0;
     logger.lifecycle.info("v4 session data layer dispose completed", {
       event: "v4.session_data.dispose.completed",
       module: "ui.v4.session_data_layer",

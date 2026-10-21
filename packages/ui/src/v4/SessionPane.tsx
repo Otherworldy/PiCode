@@ -2580,7 +2580,10 @@ export function SessionPane({
     workspaceIdentity,
   });
 
-  useEffect(() => {
+  // 取租约必须早于浏览器绘制：命中常驻投影时 acquire 是同步的（只加引用），放在 passive effect
+  // 里会让「加载会话」占位被真画一帧，切会话/切视图回来就能看见闪一下。改到布局阶段后，
+  // warm 情况下的内容在首次 paint 前已就位；冷订阅仍然按原有路径显示占位。
+  useLayoutEffect(() => {
     if (!effectiveSessionId) {
       setLease(null);
       return;

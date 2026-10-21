@@ -22,7 +22,10 @@ export function ConversationCappedScroll({
   // 只有读者自己离开底部才停止吸底。内容增长、工具卡展开都不算。
   const stickToBottom = useRef(true);
   const lastScrollTop = useRef(0);
+  // 滚动条按需出现：没滚过、或者已经到底了，不留一根粗条占着右边。
+  const scrolledOnce = useRef(false);
   const [edges, setEdges] = useState({ up: false, down: false });
+  const [scrollbarVisible, setScrollbarVisible] = useState(false);
 
   const sync = useCallback(() => {
     const element = scrollRef.current;
@@ -41,6 +44,13 @@ export function ConversationCappedScroll({
       const next = { up: top > 1, down: max - top > 1 };
       return previous.up === next.up && previous.down === next.down ? previous : next;
     });
+    // 下面还有没看的内容时才亮出滚动条；回到最底部就收起来。
+    setScrollbarVisible(scrolledOnce.current && max - top > 1);
+  }, []);
+
+  /** 滚轮、按键、拖滚动条都算读者自己滚过。自动吸底不算。 */
+  const markScrolled = useCallback(() => {
+    if (!scrolledOnce.current) scrolledOnce.current = true;
   }, []);
 
   useEffect(() => {
@@ -68,18 +78,28 @@ export function ConversationCappedScroll({
     // 滚到顶了还继续上滚时 scrollTop 不变，只靠 scroll 事件判断不出来，
     // 这里提前接住意图，免得下一次内容增长又把人拽回底部。
     const onWheel = (event: WheelEvent) => {
+      markScrolled();
       if (event.deltaY < 0) stickToBottom.current = false;
+      sync();
     };
     const onKeyDown = (event: KeyboardEvent) => {
+      markScrolled();
       if (event.key === "ArrowUp" || event.key === "PageUp") stickToBottom.current = false;
+      sync();
     };
+    const onPointerDown = () => markScrolled();
+    const onTouchStart = () => markScrolled();
     element.addEventListener("wheel", onWheel, { passive: true });
     element.addEventListener("keydown", onKeyDown);
+    element.addEventListener("pointerdown", onPointerDown);
+    element.addEventListener("touchstart", onTouchStart, { passive: true });
     return () => {
       element.removeEventListener("wheel", onWheel);
       element.removeEventListener("keydown", onKeyDown);
+      element.removeEventListener("pointerdown", onPointerDown);
+      element.removeEventListener("touchstart", onTouchStart);
     };
-  }, []);
+  }, [markScrolled, sync]);
 
   return (
     <div
@@ -87,6 +107,7 @@ export function ConversationCappedScroll({
       className="zcode-capped-scroll"
       data-scroll-up={edges.up ? "true" : undefined}
       data-scroll-down={edges.down ? "true" : undefined}
+      data-scrollbar={scrollbarVisible ? "true" : undefined}
       onScroll={sync}
     >
       <div ref={contentRef} className="flex flex-col gap-4">

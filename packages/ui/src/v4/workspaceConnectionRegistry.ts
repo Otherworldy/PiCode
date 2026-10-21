@@ -85,7 +85,11 @@ const registry = new Map<string, RegistryEntry>();
 /** 本机 endpoint 的保留键（与 sessionsIndexRegistry / task list shardKey 口径一致）。 */
 const LOCAL_WORKSPACE_CONNECTION_ENDPOINT = "__base__";
 
-/** 引用归零后延迟释放窗口（ms）；与 SessionDataLayer keep-warm 同标度。 */
+/**
+ * 引用归零后延迟释放窗口（ms）。这是连接层（transport + 整层投影）的上界，比 SessionDataLayer
+ * 的单会话常驻（30 分钟，见 sessionDataLayer.ts）短得多：连接一丢掉，层里的常驻投影全部跟着清。
+ * 应用内主视图切换已经不卸载聊天区，这里只是拖拽/重挂的抖动缓冲，以及跨 workspace 卸载后的回收。
+ */
 const WORKSPACE_CONNECTION_KEEP_WARM_MS = 30_000;
 
 /** 注册表条目键 = endpoint + workspaceKey（同 workspaceKey 不同 endpoint 不共用）。 */
