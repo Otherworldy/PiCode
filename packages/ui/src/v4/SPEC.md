@@ -106,12 +106,12 @@ widget 文本的所有者是 Pi extension UI（`setWidget` → 快照 `extension
 ## 行为
 
 - `picode_subagent`（派发子智能体）没有专用卡面：详情、结果和展开交互沿用未知工具的兜底卡。
-- 摘要行不显示 wire 名 `Picode_subagent`，也不显示兜底卡的扳手图标和「工具调用」主文本：只留「子智能体」、子智能体图标（与 Agent 卡同一枚 Bot）和状态文字。运行态的扫光仍走兜底卡。
+- 摘要行不显示 wire 名 `Picode_subagent`，也不显示兜底卡的扳手图标和「工具调用」主文本：显示「子智能体」、子智能体图标（与 Agent 卡同一枚 Bot）、派发的角色名和状态文字。角色名按名字着色，读不到时不显示，摘要行只留「子智能体」。运行态的扫光仍走兜底卡。
 - 分享页与只读时间线同样按这个名字认领，不把 wire 名印给匿名分享读者。
 
 ## 所有者
 
-- 工具名认领：`packages/ui/src/lib/subagentToolNames.ts`，比对 `toolName` / `kind` / `title` / raw 里的 wire 名（抹掉大小写与分隔符）。
+- 工具名认领与角色名读取：`packages/ui/src/lib/subagentToolNames.ts`。工具名比对 `toolName` / `kind` / `title` / raw 里的 wire 名（抹掉大小写与分隔符）；角色名是工具输入里的 `agent`（流式半截 JSON 解析不出来就当没有）。
 - 卡面：`packages/ui/src/ToolCallBlocks/renderers/subagent.tsx`，由 `resolveRenderer.ts` 在 family 分流之前认领。
 - 文案：`chat.toolCall.kind.subagent`（中文「子智能体」/ 英文 `SubAgent`）。
 

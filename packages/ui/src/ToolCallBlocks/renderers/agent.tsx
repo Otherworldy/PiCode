@@ -126,7 +126,7 @@ function BackgroundAgentProcessRow({ label, children }: { label: string; childre
   );
 }
 
-function AgentNameText({ color, name }: { color: AgentColor; name: string }) {
+export function AgentNameText({ color, name }: { color: AgentColor; name: string }) {
   return (
     <span
       className={cn(

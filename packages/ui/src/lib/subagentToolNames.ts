@@ -1,5 +1,5 @@
 /**
- * 子智能体派发工具（`picode_subagent`）的按名识别。
+ * 子智能体派发工具（`picode_subagent`）的按名识别与参数读取。
  *
  * 它不在 `packages/shared` 的 `ZCODE_KNOWN_TOOL_NAMES` 里：`resolveToolCallIdentity` 只会回
  * unknown，工具卡因此落到 raw fallback renderer。这里单独认领工具名，让兜底卡的摘要行把
@@ -33,4 +33,24 @@ export function isSubagentDispatchToolCall(source: SubagentToolNameSource): bool
   return [source.toolName, source.kind, source.title, ...rawNames].some(
     (value) => normalizeToolToken(value) === SUBAGENT_DISPATCH_TOOL_TOKEN,
   );
+}
+
+export function readSubagentDispatchRole(source: { input?: unknown }): string | undefined {
+  // 流式阶段 input 可能还是半截 JSON 文本，读不到就当作没有角色名，不回退到任何猜测值。
+  const input = source.input;
+  const record = isPlainRecord(input) ? input : parseInputRecord(input);
+  const role = record?.agent;
+  return typeof role === "string" && role.trim().length > 0 ? role.trim() : undefined;
+}
+
+function parseInputRecord(input: unknown): Record<string, unknown> | undefined {
+  if (typeof input !== "string" || !input.trim().startsWith("{")) {
+    return undefined;
+  }
+  try {
+    const parsed: unknown = JSON.parse(input);
+    return isPlainRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
 }
