@@ -30,6 +30,7 @@ export class FakePiSession implements PiSessionPort {
   contextEventsList: PiHostEvent[] = [];
   isCompacting = false;
   tree: PiSessionTreeNode[] = [];
+  sessionName?: string;
   branchFrom?: (entryId: string) => { sessionId: string; sessionFile: string };
 
   constructor(sessionId: string, sessionFile?: string) {
@@ -40,6 +41,10 @@ export class FakePiSession implements PiSessionPort {
   emit(event: PiHostEvent): void {
     this.events.push(event);
     for (const listener of this.listeners) listener(event);
+  }
+
+  setSessionName(name: string): void {
+    this.sessionName = name;
   }
 
   listSlashCommands() {

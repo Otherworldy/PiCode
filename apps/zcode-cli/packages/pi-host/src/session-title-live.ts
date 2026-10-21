@@ -8,7 +8,9 @@ import {
   titleExcerptFromJsonl,
   titleExcerptFromRows,
   titleSummaryRequest,
+  type ForkTitlePlaceholder,
   type TitleSummaryRow,
+  type TitleSummarySettings,
 } from "./session-title-summary.js";
 
 export function scheduleLiveSessionTitleSummary(input: {
@@ -16,6 +18,8 @@ export function scheduleLiveSessionTitleSummary(input: {
   parentSessionId?: string;
   titleSource?: string;
   sessionName?: string;
+  /** 用户手动 fork 出来的分支。传了就只总结分叉点之后的第一轮。 */
+  forkTitle?: ForkTitlePlaceholder;
   rows: readonly TitleSummaryRow[];
   fallbackProvider?: string;
   fallbackModel?: string;
@@ -23,14 +27,24 @@ export function scheduleLiveSessionTitleSummary(input: {
   commit: (title: string) => void;
   /** 会话自己的模型请求已经发出后再开始。之后与这一轮并行，不取消。 */
   ready?: () => Promise<void>;
+  /** 测试注入。缺省走 Pi 目录里的模型。 */
+  complete?: (request: {
+    providerId: string;
+    modelId: string;
+    system: string;
+    prompt: string;
+  }) => Promise<string | null>;
+  /** 测试注入。缺省读 `~/.pi/agent/zcode-title-summary.json`。 */
+  readSettings?: () => Promise<TitleSummarySettings>;
 }): void {
   scheduleSessionTitleSummary({
     ...input,
-    readSettings: () => readTitleSummarySettings(piCoding().getAgentDir()),
+    readSettings:
+      input.readSettings ?? (() => readTitleSummarySettings(piCoding().getAgentDir())),
     complete: async (request) => {
       await input.ready?.();
       if (!input.stillEligible()) return null;
-      return completePiPrompt({
+      return (input.complete ?? completePiPrompt)({
         providerId: request.providerId,
         modelId: request.modelId,
         prompt: request.prompt,

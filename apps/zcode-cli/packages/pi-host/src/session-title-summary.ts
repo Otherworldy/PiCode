@@ -33,6 +33,12 @@ export type TitleSummarySeed = {
   realUserCount: number;
 };
 
+/** 用户手动 fork 出来的分支占位标题。分叉点之前已经有 `userCountBeforeFork` 条真实用户消息。 */
+export type ForkTitlePlaceholder = {
+  placeholder: string;
+  userCountBeforeFork: number;
+};
+
 const attempted = new Set<string>();
 const inflight = new Set<string>();
 
@@ -191,17 +197,29 @@ export function cleanSummarizedTitle(raw: string): string {
   return text.slice(0, TITLE_SUMMARY_MAX_CHARS);
 }
 
-export function titleSummarySeed(rows: readonly TitleSummaryRow[]): TitleSummarySeed | null {
+export function titleSummarySeed(
+  rows: readonly TitleSummaryRow[],
+  skipRealUsers = 0,
+): TitleSummarySeed | null {
   let userPrompt = "";
   let realUserCount = 0;
   let assistantReply = "";
+  // 分叉出来的分支要把父会话的历史跳过，只总结分叉点之后的第一个任务。
+  let skipped = 0;
+  let started = skipRealUsers <= 0;
   for (const row of rows) {
     const text = row.text?.trim() ?? "";
     if (!text) continue;
     if (row.kind === "userInput" && row.origin === "realUser" && !isControlCommandTitle(text)) {
+      if (!started) {
+        skipped += 1;
+        if (skipped >= skipRealUsers) started = true;
+        continue;
+      }
       realUserCount += 1;
       if (!userPrompt) userPrompt = text;
-    } else if (row.kind === "assistantText" && !assistantReply) {
+    } else if (row.kind === "assistantText" && userPrompt && !assistantReply) {
+      // userPrompt 之前的助手回复属于分叉点之前，不能进种子。
       assistantReply = text;
     }
   }
@@ -211,6 +229,19 @@ export function titleSummarySeed(rows: readonly TitleSummaryRow[]): TitleSummary
     realUserCount,
     ...(assistantReply ? { assistantReply } : {}),
   };
+}
+
+/** 分叉时用来记下分叉点之前已有哪些真实用户消息。 */
+export function countRealUserMessages(rows: readonly TitleSummaryRow[]): number {
+  let count = 0;
+  for (const row of rows) {
+    const text = row.text?.trim() ?? "";
+    if (!text) continue;
+    if (row.kind === "userInput" && row.origin === "realUser" && !isControlCommandTitle(text)) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 export function applyTitleSummaryPatch(
@@ -273,6 +304,8 @@ export function scheduleSessionTitleSummary(input: {
   parentSessionId?: string;
   titleSource?: string;
   sessionName?: string;
+  /** 用户手动 fork 出来的分支占位标题。传了就只看分叉点之后的消息。 */
+  forkTitle?: ForkTitlePlaceholder;
   rows: readonly TitleSummaryRow[];
   fallbackProvider?: string;
   fallbackModel?: string;
@@ -289,10 +322,11 @@ export function scheduleSessionTitleSummary(input: {
 }): void {
   const sessionId = input.sessionId.trim();
   if (!sessionId || attempted.has(sessionId) || inflight.has(sessionId)) return;
-  if (input.parentSessionId) return;
-  if (input.titleSource === "custom" || input.sessionName?.trim()) return;
-  const seed = titleSummarySeed(input.rows);
-  // 只总结第一轮。之后再开口关，也不回头改已经聊过的会话。
+  // 子会话不总结。用户手动分叉出来的分支是例外：占位标题要被新任务换掉一次。
+  if (input.parentSessionId && !input.forkTitle) return;
+  if (!input.forkTitle && (input.titleSource === "custom" || input.sessionName?.trim())) return;
+  const seed = titleSummarySeed(input.rows, input.forkTitle?.userCountBeforeFork ?? 0);
+  // 只总结分叉点之后的第一轮（普通会话就是首轮）。之后再开口关，也不回头改已经聊过的会话。
   if (!seed || seed.realUserCount !== 1) return;
   inflight.add(sessionId);
   void run(sessionId, seed, input)

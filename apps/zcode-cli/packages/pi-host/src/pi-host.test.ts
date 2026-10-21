@@ -1349,6 +1349,212 @@ test("a running branch summary blocks another branch on the same session", async
   await rm(root, { recursive: true, force: true });
 });
 
+test("the first new task on a forked branch replaces the placeholder title", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const fakes = new Map<string, FakePiSession>();
+  const branchId = "branched-title";
+  const branchFile = join(root, "branch.jsonl");
+  // 分支文件的 jsonl 带着父会话到分叉点之前的那一条，分叉后只多一条新任务。
+  await writeFile(
+    branchFile,
+    [
+      `{"type":"session","id":"${branchId}","timestamp":"2026-01-02T03:04:05.000Z","cwd":"/work"}`,
+      '{"type":"message","id":"u0","timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"user","content":[{"type":"text","text":"父会话任务"}]}}',
+      '{"type":"message","id":"a0","timestamp":"2026-01-02T03:04:07.000Z","message":{"role":"assistant","content":[{"type":"text","text":"父会话回答"}]}}',
+    ].join("\n"),
+  );
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async (input) => {
+      const fake = new FakePiSession(input.sessionId, input.sessionFile);
+      fake.branchFrom = () => ({ sessionId: branchId, sessionFile: branchFile });
+      fakes.set(input.sessionId, fake);
+      return fake;
+    },
+    completeTitlePrompt: async () => "移动端适配改造",
+    readTitleSummarySettings: async () => ({ enabled: true }),
+  });
+  const parent = await registry.create({ workspacePath: root });
+  parent.publishCustomTitle("原题");
+  parent.projector.apply({ type: "message_start", message: { role: "user", content: "父会话任务" } });
+  const child = await registry.fork(parent.sessionId, "a1");
+  assert.equal(child.projector.getSnapshot().meta.title, "分支-原题");
+  assert.deepEqual(child.forkTitlePlaceholder(), {
+    placeholder: "分支-原题",
+    userCountBeforeFork: 1,
+  });
+  child.projector.setConfig({ provider: "lens", model: "glm" });
+  const branch = fakes.get(branchId);
+  assert.ok(branch);
+  branch.emit({ type: "message_start", message: { role: "user", content: "改成做移动端适配" } });
+  branch.emit({ type: "message_start", message: { role: "assistant" } });
+  branch.emit({
+    type: "message_end",
+    message: { role: "assistant", content: [{ type: "text", text: "先看断点" }] },
+  });
+  branch.emit({ type: "agent_end" });
+  await waitFor(() => child.projector.getSnapshot().meta.title === "分支-移动端适配改造");
+  assert.equal(child.projector.getSnapshot().meta.titleSource, "custom");
+  assert.equal(child.forkTitlePlaceholder(), undefined);
+  assert.equal(branch.sessionName, "分支-移动端适配改造");
+  // 父会话的标题不能被分支的总结改掉。
+  assert.equal(parent.projector.getSnapshot().meta.title, "原题");
+  await rm(root, { recursive: true, force: true });
+});
+
+test("renaming a forked branch keeps the auto title away", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const fakes = new Map<string, FakePiSession>();
+  const branchId = "branched-renamed";
+  let completed = false;
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async (input) => {
+      const fake = new FakePiSession(input.sessionId, input.sessionFile);
+      fake.branchFrom = () => ({ sessionId: branchId, sessionFile: join(root, "branch.jsonl") });
+      fakes.set(input.sessionId, fake);
+      return fake;
+    },
+    completeTitlePrompt: async () => {
+      completed = true;
+      return "不该用这个";
+    },
+    readTitleSummarySettings: async () => ({ enabled: true }),
+  });
+  const parent = await registry.create({ workspacePath: root });
+  parent.publishCustomTitle("原题");
+  const child = await registry.fork(parent.sessionId, "a1");
+  child.publishCustomTitle("我自己起的名字");
+  assert.equal(child.forkTitlePlaceholder(), undefined);
+  child.projector.setConfig({ provider: "lens", model: "glm" });
+  const branch = fakes.get(branchId);
+  assert.ok(branch);
+  branch.emit({ type: "message_start", message: { role: "user", content: "改成做移动端适配" } });
+  branch.emit({ type: "agent_end" });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(completed, false);
+  assert.equal(child.projector.getSnapshot().meta.title, "我自己起的名字");
+  await rm(root, { recursive: true, force: true });
+});
+
+async function waitFor(ready: () => boolean): Promise<void> {
+  for (let i = 0; i < 40; i += 1) {
+    if (ready()) return;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.fail("timed out");
+}
+
+test("a rename wins over a branch title summary that is still in flight", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const fakes = new Map<string, FakePiSession>();
+  const branchId = "branched-race";
+  let started = false;
+  let release: () => void = () => undefined;
+  const inFlight = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async (input) => {
+      const fake = new FakePiSession(input.sessionId, input.sessionFile);
+      fake.branchFrom = () => ({ sessionId: branchId, sessionFile: join(root, "race.jsonl") });
+      fakes.set(input.sessionId, fake);
+      return fake;
+    },
+    completeTitlePrompt: async () => {
+      started = true;
+      await inFlight;
+      return "移动端适配改造";
+    },
+    readTitleSummarySettings: async () => ({ enabled: true }),
+  });
+  const parent = await registry.create({ workspacePath: root });
+  parent.publishCustomTitle("原题");
+  const child = await registry.fork(parent.sessionId, "a1");
+  child.projector.setConfig({ provider: "lens", model: "glm" });
+  const branch = fakes.get(branchId);
+  assert.ok(branch);
+  branch.emit({ type: "message_start", message: { role: "user", content: "改成做移动端适配" } });
+  branch.emit({ type: "agent_end" });
+  await waitFor(() => started);
+  child.publishCustomTitle("我自己起的名字");
+  release();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(child.projector.getSnapshot().meta.title, "我自己起的名字");
+  assert.equal(branch.sessionName, "我自己起的名字");
+  await rm(root, { recursive: true, force: true });
+});
+
+test("continue-from-here measures the branch baseline after the navigation", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const fakes = new Map<string, FakePiSession>();
+  const childFile = join(root, "child-1.jsonl");
+  // 分支 jsonl 带着父会话到当前叶子的两条用户消息，但用户点的是第一条。
+  await writeFile(
+    childFile,
+    [
+      '{"type":"session","id":"child-1","timestamp":"2026-01-02T03:04:05.000Z","cwd":"/work"}',
+      '{"type":"message","id":"u1","timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"user","content":[{"type":"text","text":"第一件任务"}]}}',
+      '{"type":"message","id":"a1","timestamp":"2026-01-02T03:04:07.000Z","message":{"role":"assistant","content":[{"type":"text","text":"好"}]}}',
+      '{"type":"message","id":"u2","timestamp":"2026-01-02T03:04:08.000Z","message":{"role":"user","content":[{"type":"text","text":"第二件任务"}]}}',
+    ].join("\n"),
+  );
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async (input) => {
+      const fake = new FakePiSession(input.sessionId, input.sessionFile);
+      if (fakes.size === 0) {
+        fake.tree = [
+          {
+            id: "leaf",
+            parentId: null,
+            role: "assistant",
+            preview: "好",
+            depth: 0,
+            active: true,
+            leaf: true,
+          },
+        ];
+        fake.branchFrom = () => ({ sessionId: "child-1", sessionFile: childFile });
+      } else {
+        fake.contextEventsList = [
+          { type: "message_start", message: { role: "user", id: "u1", content: "第一件任务" } },
+        ];
+      }
+      fakes.set(input.sessionId, fake);
+      return fake;
+    },
+    completeTitlePrompt: async () => "新任务标题",
+    readTitleSummarySettings: async () => ({ enabled: true }),
+  });
+  const parent = await registry.create({ workspacePath: root });
+  parent.publishCustomTitle("原题");
+  const created = await registry.resumeIntoNewSession(parent.sessionId, {
+    entryId: "u1",
+    role: "user",
+    summarize: false,
+  });
+  assert.equal(created.cancelled, false);
+  if (created.cancelled) throw new Error("expected a new session");
+  // 导航到第一条之后只剩一条历史，基线要跟着裁完的历史走。
+  assert.deepEqual(created.hosted.forkTitlePlaceholder(), {
+    placeholder: "分支-原题",
+    userCountBeforeFork: 1,
+  });
+  created.hosted.projector.setConfig({ provider: "lens", model: "glm" });
+  const branch = fakes.get("child-1");
+  assert.ok(branch);
+  branch.emit({ type: "message_start", message: { role: "user", content: "分叉后的新任务" } });
+  branch.emit({ type: "agent_end" });
+  await waitFor(() => created.hosted.projector.getSnapshot().meta.title === "分支-新任务标题");
+  await rm(root, { recursive: true, force: true });
+});
+
 test("live assistant row adopts the persisted tree entry id", () => {
   const projector = new PiToV4Projector("s", "e");
   projector.apply({ type: "agent_start" });

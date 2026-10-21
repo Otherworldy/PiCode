@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   applyTitleSummaryPatch,
   cleanSummarizedTitle,
+  countRealUserMessages,
   createSessionFirstGate,
   readTitleSummarySettings,
   scheduleSessionTitleSummary,
@@ -247,6 +248,80 @@ test("closing a session unblocks a title summary that was waiting for the sessio
   await pending;
   assert.equal(released, true);
   assert.equal(gate.closed, true);
+});
+
+test("a forked branch seeds its title from the first message after the fork", () => {
+  const rows = [
+    { kind: "userInput", origin: "realUser", text: "改登录页样式" },
+    { kind: "assistantText", text: "改好了" },
+    { kind: "userInput", origin: "realUser", text: "加个深色模式" },
+    { kind: "assistantText", text: "加上了" },
+    { kind: "userInput", origin: "realUser", text: "改成做移动端适配" },
+    { kind: "assistantText", text: "先看断点" },
+  ];
+  assert.equal(countRealUserMessages(rows), 3);
+  const seed = titleSummarySeed(rows, 2);
+  assert.equal(seed?.userPrompt, "改成做移动端适配");
+  assert.equal(seed?.realUserCount, 1);
+  // 分叉点之前的助手回复也不能进种子，否则总结会跑回父会话的任务。
+  assert.equal(seed?.assistantReply, "先看断点");
+  assert.equal(titleSummarySeed(rows.slice(0, 4), 2), null);
+});
+
+test("a forked branch summarizes with the messages after the fork only", async () => {
+  const prompts: string[] = [];
+  let committed = "";
+  scheduleSessionTitleSummary({
+    sessionId: "summary-branch",
+    parentSessionId: "parent",
+    titleSource: "custom",
+    sessionName: "分支-原题",
+    forkTitle: { placeholder: "分支-原题", userCountBeforeFork: 1 },
+    rows: [
+      { kind: "userInput", origin: "realUser", text: "父会话的任务" },
+      { kind: "assistantText", text: "父会话的回答" },
+      { kind: "userInput", origin: "realUser", text: "分支后的新任务" },
+    ],
+    fallbackProvider: "lens",
+    fallbackModel: "glm",
+    readSettings: async () => ({ enabled: true }),
+    complete: async (request) => {
+      prompts.push(request.prompt);
+      return "移动端适配改造";
+    },
+    stillEligible: () => true,
+    commit: (title) => {
+      committed = title;
+    },
+  });
+  await waitFor(() => committed === "移动端适配改造");
+  assert.equal(prompts.length, 1);
+  assert.match(prompts[0] ?? "", /分支后的新任务/);
+  assert.doesNotMatch(prompts[0] ?? "", /父会话的任务/);
+  assert.doesNotMatch(prompts[0] ?? "", /父会话的回答/);
+});
+
+test("subagent child sessions still never summarize a title", async () => {
+  let called = false;
+  scheduleSessionTitleSummary({
+    sessionId: "summary-child",
+    parentSessionId: "parent",
+    titleSource: "generated",
+    rows: [{ kind: "userInput", origin: "realUser", text: "子代理的任务" }],
+    fallbackProvider: "lens",
+    fallbackModel: "glm",
+    readSettings: async () => ({ enabled: true }),
+    complete: async () => {
+      called = true;
+      return "不该生成";
+    },
+    stillEligible: () => true,
+    commit: () => {
+      called = true;
+    },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(called, false);
 });
 
 async function waitFor(ready: () => boolean): Promise<void> {

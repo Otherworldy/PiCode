@@ -47,8 +47,11 @@ import { PiToV4Projector } from "./projector.js";
 import type { ToolPermissionCheck } from "./permission-gate.js";
 import { scheduleLiveSessionTitleSummary } from "./session-title-live.js";
 import {
+  countRealUserMessages,
   createSessionFirstGate,
   shouldAutoSummarizeTitle,
+  type ForkTitlePlaceholder,
+  type TitleSummarySettings,
 } from "./session-title-summary.js";
 import { runSessionResume } from "./session-tree.js";
 import {
@@ -124,6 +127,10 @@ export interface HostedSession {
   setSessionName(name: string): void;
   /** 把手改标题写进投影并通知侧栏。只改 session 文件的话，当前列表仍显示旧标题。 */
   publishCustomTitle(title: string): void;
+  /** 用户手动 fork 出来的分支：占位标题等下一轮真实用户消息后由自动总结替换一次。 */
+  markForkTitlePlaceholder(placeholder: string, userCountBeforeFork: number): void;
+  /** 仍是 fork 占位标题时返回它。手改或已换成总结标题后是 undefined。 */
+  readonly forkTitlePlaceholder: () => ForkTitlePlaceholder | undefined;
   setFeedback(entityId: string, feedback: "like" | "dislike" | null): void;
   markTurnFilesReverted(turnId: string): void;
   requestConfirm(toolName: string, reason: string, args?: unknown): Promise<boolean>;
@@ -202,6 +209,15 @@ export interface RegistryOptions {
    * 纯 CLI 不打开，插件继续用本机浏览器。
    */
   redirectPlannotatorToEmbeddedBrowser?: boolean;
+  /** 自动标题总结的模型调用。测试注入，缺省走 Pi 模型目录。 */
+  completeTitlePrompt?: (request: {
+    providerId: string;
+    modelId: string;
+    system: string;
+    prompt: string;
+  }) => Promise<string | null>;
+  /** 自动标题开关。测试注入，缺省读 `~/.pi/agent/zcode-title-summary.json`。 */
+  readTitleSummarySettings?: () => Promise<TitleSummarySettings>;
 }
 
 const execFileAsync = promisify(execFile);
@@ -417,6 +433,11 @@ export class HostSessionRegistry {
         parentSessionId: parentId,
         viaRegistry: true,
       });
+      // 分叉文件的 jsonl 只留到分叉点。此刻数出的真实用户消息就是分叉前的历史。
+      child.markForkTitlePlaceholder(
+        title,
+        countRealUserMessages(child.projector.getSnapshot().rows.window),
+      );
       child.publishCustomTitle(title);
       return child;
     }
@@ -436,6 +457,11 @@ export class HostSessionRegistry {
       viaRegistry: true,
     });
     await hosted.navigateTree(entryId);
+    // 裁到分叉点之后才开始数，否则会把父会话后面的消息算进来。
+    hosted.markForkTitlePlaceholder(
+      title,
+      countRealUserMessages(hosted.projector.getSnapshot().rows.window),
+    );
     hosted.publishCustomTitle(title);
     return hosted;
   }
@@ -478,6 +504,15 @@ export class HostSessionRegistry {
         restoreAbort();
         await this.delete(child.sessionId);
         return { cancelled: true };
+      }
+      // resumeAt 把行集重建到用户点选的节点。分叉基线要按裁完后的历史重算，
+      // 否则会按当前叶子的条数跳过，总结种子永远为空。
+      const placeholder = child.forkTitlePlaceholder();
+      if (placeholder) {
+        child.markForkTitlePlaceholder(
+          placeholder.placeholder,
+          countRealUserMessages(child.projector.getSnapshot().rows.window),
+        );
       }
       if (captured) {
         // 回执先返回，界面才能先进入新会话。摘要接着写在新会话里。
@@ -1165,13 +1200,24 @@ export class HostSessionRegistry {
       }) ?? (() => undefined);
     const titleGate = createSessionFirstGate();
     let pendingTitleName: string | undefined;
-    const titleNameWritable = () =>
-      !titleGate.closed &&
-      projector.getSnapshot().meta.titleSource !== "custom" &&
-      !pi.sessionName?.trim() &&
-      !pi.isStreaming &&
-      !pi.isCompacting &&
-      pi.isIdle !== false;
+    let forkTitle: ForkTitlePlaceholder | undefined;
+    // 手改标题、或者已经换成总结标题后，占位就失效，不再自动覆盖。
+    const currentForkTitlePlaceholder = () =>
+      forkTitle && projector.getSnapshot().meta.title === forkTitle.placeholder
+        ? forkTitle
+        : undefined;
+    const titleNameWritable = () => {
+      if (titleGate.closed || pi.isStreaming || pi.isCompacting || pi.isIdle === false) {
+        return false;
+      }
+      const title = projector.getSnapshot().meta.title;
+      const name = pi.sessionName?.trim() ?? "";
+      // 分支占位标题本来就写成 custom，它就是要被替掉的那个名字。
+      if (currentForkTitlePlaceholder() || (pendingTitleName && title === pendingTitleName)) {
+        return name !== title;
+      }
+      return projector.getSnapshot().meta.titleSource !== "custom" && !name;
+    };
     const flushPendingTitleName = () => {
       const title = pendingTitleName;
       if (!title || !titleNameWritable()) return;
@@ -1232,8 +1278,11 @@ export class HostSessionRegistry {
         // 用户消息落地就排上总结。请求等会话自己的模型请求发出后再并行，不能抢先把页面停在标题上。
         if (shouldAutoSummarizeTitle(event)) {
           const snapshot = projector.getSnapshot();
+          const pendingForkTitle = currentForkTitlePlaceholder();
           const titleStillEligible = () => {
             if (titleGate.closed) return false;
+            // 分支占位标题。手改或替换后占位失效，别再把标题改回去。
+            if (currentForkTitlePlaceholder()) return true;
             const latest = projector.getSnapshot();
             return latest.meta.titleSource !== "custom" && !pi.sessionName?.trim();
           };
@@ -1242,16 +1291,26 @@ export class HostSessionRegistry {
             parentSessionId: meta.parentSessionId,
             titleSource: snapshot.meta.titleSource,
             sessionName: pi.sessionName,
+            ...(pendingForkTitle ? { forkTitle: pendingForkTitle } : {}),
             rows: snapshot.rows.window,
             fallbackProvider: snapshot.config.provider,
             fallbackModel: snapshot.config.model,
             ready: () => titleGate.ready(),
+            ...(this.options.completeTitlePrompt
+              ? { complete: this.options.completeTitlePrompt }
+              : {}),
+            ...(this.options.readTitleSummarySettings
+              ? { readSettings: this.options.readTitleSummarySettings }
+              : {}),
             stillEligible: titleStillEligible,
             commit: (title) => {
               if (!titleStillEligible()) return;
-              emit(projector.setTitle(title, "generated"));
+              // 分支占位标题已经是 custom，只能再用 custom 写一次；结果仍带分支标记。
+              const branched = currentForkTitlePlaceholder() !== undefined;
+              const next = branched ? branchedSessionTitle(title) : title;
+              emit(projector.setTitle(next, branched ? "custom" : "generated"));
               // session_info 会把 jsonl 叶子换掉。流式中途写会把正在生成的分支截断，页面停在标题上。
-              pendingTitleName = title;
+              pendingTitleName = next;
               flushPendingTitleName();
             },
           });
@@ -1380,9 +1439,15 @@ export class HostSessionRegistry {
         pi.setSessionName?.(name);
       },
       publishCustomTitle: (title) => {
+        // 用户已经改了名字，等落盘的自动标题就不用再写了。
+        pendingTitleName = undefined;
         emit(projector.setTitle(title, "custom"));
         pi.setSessionName?.(title);
       },
+      markForkTitlePlaceholder: (placeholder, userCountBeforeFork) => {
+        forkTitle = { placeholder, userCountBeforeFork };
+      },
+      forkTitlePlaceholder: () => currentForkTitlePlaceholder(),
       branchFrom: pi.branchFrom,
       noteBranchSummary: (active) => {
         emit(projector.noteBranchSummary(active));
