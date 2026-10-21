@@ -16,6 +16,8 @@ interface FallbackToolCallBlockProps extends ToolCallBlockRenderContext {
   hideRawFallback?: boolean;
   summaryOnly?: boolean;
   summaryTextOverride?: ReactNode;
+  /** 传 `null` 表示这张卡不要主文本（摘要行只留 kind 文案与状态），缺省沿用兜底文案。 */
+  primaryTextOverride?: ReactNode;
 }
 
 export function FallbackToolCallBlock(context: FallbackToolCallBlockProps) {
@@ -123,6 +125,7 @@ export function FallbackToolCallBlock(context: FallbackToolCallBlockProps) {
   const primary =
     summary ??
     (titled || intl.formatMessage({ id: "chat.toolCall.toolCall" }));
+  const primaryTextOverride = context.primaryTextOverride;
 
   return (
     <ToolLayout
@@ -136,6 +139,8 @@ export function FallbackToolCallBlock(context: FallbackToolCallBlockProps) {
       primaryText={
         context.summaryOnly ? (
           (context.summaryTextOverride ?? null)
+        ) : primaryTextOverride !== undefined ? (
+          primaryTextOverride
         ) : (
           <span className="truncate">{primary}</span>
         )
@@ -146,9 +151,13 @@ export function FallbackToolCallBlock(context: FallbackToolCallBlockProps) {
       showFailureStatus={toolCall.status === "failed"}
       isRunning={isRunning}
       title={
-        context.summaryOnly && typeof context.summaryTextOverride === "string"
-          ? context.summaryTextOverride
-          : primary
+        primaryTextOverride !== undefined
+          ? typeof primaryTextOverride === "string"
+            ? primaryTextOverride
+            : undefined
+          : context.summaryOnly && typeof context.summaryTextOverride === "string"
+            ? context.summaryTextOverride
+            : primary
       }
       renderContent={renderContent}
     />

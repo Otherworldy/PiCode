@@ -15,6 +15,7 @@ import {
   useState,
 } from "react";
 import {
+  BotIcon,
   ChevronRightIcon,
   FilePenLineIcon,
   FileTextIcon,
@@ -65,6 +66,7 @@ import type { ConversationTurnWorkSegment } from "@/v4/conversationTurnWorkSegme
 import { formatConversationWorkDuration } from "@/v4/conversationWorkDuration.js";
 import { normalizeConversationShareMarkdown } from "@/v4/conversationShareMarkdown.js";
 import { resolveToolCallIdentity } from "@/lib/toolIdentity.js";
+import { isSubagentDispatchToolCall } from "@/lib/subagentToolNames.js";
 import {
   DEFAULT_CODE_PREVIEW_SETTINGS,
   type CodePreviewSettings,
@@ -382,11 +384,17 @@ const ToolCallPresentation = memo(function ToolCallPresentation({
                 kindLabel: intl.formatMessage({ id: "chat.toolCall.kind.edit" }),
                 primaryText: statusLabel,
               }
-            : {
-                icon: <WrenchIcon className="size-4 shrink-0" aria-hidden="true" />,
-                kindLabel: row.toolName,
-                primaryText: statusLabel,
-              };
+            : isSubagentDispatchToolCall({ toolName: row.toolName })
+              ? {
+                  icon: <BotIcon className="size-4 shrink-0" aria-hidden="true" />,
+                  kindLabel: intl.formatMessage({ id: "chat.toolCall.kind.subagent" }),
+                  primaryText: statusLabel,
+                }
+              : {
+                  icon: <WrenchIcon className="size-4 shrink-0" aria-hidden="true" />,
+                  kindLabel: row.toolName,
+                  primaryText: statusLabel,
+                };
   const content: ReactNode = markdown ? (
     <MessageResponse
       theme={theme}

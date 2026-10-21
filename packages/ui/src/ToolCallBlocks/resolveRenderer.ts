@@ -46,6 +46,7 @@ import { RespondToCoordinatorToolCallBlock } from "@/ToolCallBlocks/renderers/re
 import { SearchToolCallBlock } from "@/ToolCallBlocks/renderers/search.js";
 import { SendMessageToolCallBlock } from "@/ToolCallBlocks/renderers/send-message.js";
 import { SkillToolCallBlock } from "@/ToolCallBlocks/renderers/skill.js";
+import { SubagentToolCallBlock } from "@/ToolCallBlocks/renderers/subagent.js";
 import { SubmitResultToolCallBlock } from "@/ToolCallBlocks/renderers/submit-result.js";
 import { SwitchModeToolCallBlock } from "@/ToolCallBlocks/renderers/switch-mode.js";
 import { TaskOutputToolCallBlock } from "@/ToolCallBlocks/renderers/task-output.js";
@@ -53,6 +54,7 @@ import { TaskStopToolCallBlock } from "@/ToolCallBlocks/renderers/task-stop.js";
 import { TodoToolCallBlock } from "@/ToolCallBlocks/renderers/todo.js";
 import { AskQuestionToolCallBlock } from "@/ToolCallBlocks/renderers/ask-question.js";
 import { resolveToolCallIdentity } from "@/lib/toolIdentity.js";
+import { isSubagentDispatchToolCall } from "@/lib/subagentToolNames.js";
 import type { ToolCallBlockRenderContext } from "@/ToolCallBlocks/shared.js";
 
 export function resolveToolCallRenderer(context: ToolCallBlockRenderContext) {
@@ -103,6 +105,12 @@ export function resolveToolCallRenderer(context: ToolCallBlockRenderContext) {
   // 兜底卡会把模型面那段以 providerId 开头的 `<models>` 文本原样摊进聊天区。
   if (isListModelsToolCall(context.toolCallNode.toolCall)) {
     return ListModelsToolCallBlock;
+  }
+
+  // 子智能体派发工具同样不在已知工具表里（identity 回 unknown → raw fallback 卡），
+  // 但 wire 名和扳手图标不能直接给用户看；按名认领后仍是兜底卡面，只换摘要行文案与图标。
+  if (isSubagentDispatchToolCall(context.toolCallNode.toolCall)) {
+    return SubagentToolCallBlock;
   }
 
   // 升级问答两工具同款按名分流、同样排在 family 之前：它们不在已知工具表里（identity 回

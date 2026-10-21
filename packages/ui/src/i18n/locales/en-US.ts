@@ -4905,6 +4905,7 @@ const enUS: Record<string, string> = {
   "chat.toolCall.kind.taskOutput": "Task output",
   "chat.toolCall.kind.taskStop": "Stop task",
   "chat.toolCall.kind.todo": "Todos",
+  "chat.toolCall.kind.subagent": "SubAgent",
   "chat.toolCall.goal.label": "Goal",
   "chat.toolCall.edit.writing": "Writing",
   "chat.toolCall.edit.wrote": "Wrote",
