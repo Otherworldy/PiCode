@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.18.1](https://github.com/Otherworldy/PiCode/compare/v3.18.0...v3.18.1) (2026-10-21)
+
+### Features
+
+* **desktop:** 按住摸鱼自动翻页，宠物窗口按角色形状裁剪命中区 ([1e6dbe1](https://github.com/Otherworldy/PiCode/commit/1e6dbe1e25d88429766002c60e032508ea3e1e19))
+  * 自动翻页：按住模式可开关，速率按每行毫秒数自由填（200–20000，缺省 1200）。
+  * 窗口形状：用 setShape 把窗口裁到角色和气泡两块矩形，形状外不绘制也不收事件。
+  * 修设置白名单漏字段：只改自动翻页时整条 patch 被丢弃，开关看起来打开却不生效。
+
+
+### Bug Fixes
+
+* **desktop:** 更新安装期间保留可见进度窗口 ([d1999ae](https://github.com/Otherworldy/PiCode/commit/d1999ae03e781944d1620efc2eede40be2af2df8))
+
 ## [3.18.0](https://github.com/Otherworldy/PiCode/compare/v3.17.0...v3.18.0) (2026-10-21)
 
 ### Features
