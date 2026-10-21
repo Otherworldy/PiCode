@@ -1018,7 +1018,7 @@ body {
   background-clip: text;
   color: transparent;
   /* steps 让扫光一格一格推进，与 dsh 的 48 步一致，避免连续渐变看着发脏。 */
-  animation: zcode-working-shimmer 1.5s steps(48, end) infinite;
+  animation: zcode-working-shimmer 3s steps(48, end) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
