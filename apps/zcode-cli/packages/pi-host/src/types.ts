@@ -25,6 +25,19 @@ export type PiToolResult = {
   details?: Record<string, unknown>;
 };
 
+/**
+ * Pi `Usage` 的字段子集。`input` 是未缓存输入，与 `cacheRead` / `cacheWrite`
+ * 互不相交，三类相加才是 prompt 总量。
+ */
+export type PiMessageUsage = {
+  input?: number;
+  output?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  reasoning?: number;
+  totalTokens?: number;
+};
+
 export type PiHostEvent =
   | { type: "agent_start"; at?: number }
   | { type: "agent_end"; willRetry?: boolean }
@@ -40,7 +53,13 @@ export type PiHostEvent =
   | {
       type: "message_start";
       at?: number;
-      message: { role: string; content?: unknown; id?: string };
+      message: {
+        role: string;
+        content?: unknown;
+        id?: string;
+        /** 请求开始时刻，Pi 的 `AssistantMessage.timestamp`（ms）。 */
+        timestamp?: number;
+      };
     }
   | {
       type: "message_end";
@@ -51,6 +70,14 @@ export type PiHostEvent =
         id?: string;
         stopReason?: string;
         errorMessage?: string;
+        /** 这一跳的 token 用量。legacy 消息可能缺。 */
+        usage?: PiMessageUsage;
+        /** 请求开始时刻，Pi 的 `AssistantMessage.timestamp`（ms）。 */
+        timestamp?: number;
+        /** 请求到响应的单调钟耗时。legacy 消息和 deferred 结果缺。 */
+        durationMs?: number;
+        provider?: string;
+        model?: string;
       };
     }
   | { type: "message_update"; assistantMessageEvent: PiAssistantDelta }

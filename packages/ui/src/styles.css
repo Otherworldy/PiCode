@@ -987,6 +987,50 @@ body {
   }
 }
 
+/* 「工作中」这行要表明仍在推进。dsh 用一层扫光遮罩叠在真实文字上，
+   这里用文字渐变 + 背景位移达到同样的扫过效果：不额外插一层 DOM，
+   也不靠 JS 计时。
+
+   色阶取 foreground 到 subtle：扫过时文字变深，停下来看不出动画痕迹。
+   未分层样式优先于 @layer utilities，所以下面的 color: transparent 能压住
+   工具类的文字色；reduced-motion 时再把颜色还回去。 */
+@keyframes zcode-working-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.zcode-working-shimmer {
+  background-image: linear-gradient(
+    100deg,
+    var(--color-foreground-subtle) 0%,
+    var(--color-foreground-subtle) 35%,
+    var(--color-foreground) 50%,
+    var(--color-foreground-subtle) 65%,
+    var(--color-foreground-subtle) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  /* steps 让扫光一格一格推进，与 dsh 的 48 步一致，避免连续渐变看着发脏。 */
+  animation: zcode-working-shimmer 1.5s steps(48, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zcode-working-shimmer {
+    background: none;
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
+    color: var(--color-foreground-subtle);
+    animation: none;
+  }
+}
+
 @keyframes zcode-stream-marker-in {
   0% {
     color: transparent;

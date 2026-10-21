@@ -153,10 +153,19 @@ export const MessageAction = ({
   label,
   variant = "ghost",
   size = "icon-sm",
+  className,
   ...props
 }: MessageActionProps) => {
   const button = (
-    <Button size={size} type="button" variant={variant} {...props}>
+    <Button
+      size={size}
+      type="button"
+      variant={variant}
+      // 操作栏静止用三级文字色（对标 dsh 的 label-tertiary）。ghost 自带的
+      // text-foreground 是纯黑，挂在正文下面太抢眼；悬停才收深一档。
+      className={cn("text-foreground-subtle hover:text-foreground", className)}
+      {...props}
+    >
       {children}
       <span className="sr-only">{label || tooltip}</span>
     </Button>

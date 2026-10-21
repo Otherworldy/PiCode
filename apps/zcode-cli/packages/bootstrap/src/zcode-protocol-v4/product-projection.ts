@@ -1,4 +1,16 @@
 import { PERMISSION_FULL_ACCESS_OPTION_ID } from "@zcode/shared/zcode-protocol-v4";
+import {
+  beginWait,
+  closedWaitedMsIn,
+  cloneTurnWaitClock,
+  createTurnWaitClock,
+  endWait,
+  resetWaitClock,
+  waitedMsForTurn,
+  waitedMsIn,
+  waitingSinceField,
+  type TurnWaitClock,
+} from "./turn-wait-clock.js";
 // ProductProjection —— CLI 权威投影第二 reducer。
 // 输入：CLI 事件日志（SessionEvent，权威事实源）；输出：ConversationDelta[]。
 // 快照推进复用协议规范 apply（applyConversationDeltas）——投影演进与 delta 流
@@ -471,6 +483,8 @@ export class ProductProjection {
   private runtimeTurnIdByProductTurnId = new Map<string, string>();
   private productTurnSplitOrdinalByRuntimeTurnId = new Map<string, number>();
   private currentProductTurnStartedAtMs: number | null = null;
+  /** 本轮阻塞等待（审批/提问/hook 审核）；activeMs 报净工时，不报用户等了多久。 */
+  private waitClock: TurnWaitClock = createTurnWaitClock();
   // 投递语义侧表：TurnSteerQueued 时按事件 payload（或 followupMode 兜底）记录，
   // drain 时决定切轮 vs 内联；账本落地后以账本为准。
   private deliveryByPendingInputId = new Map<string, "guide" | "queue">();
@@ -1172,6 +1186,7 @@ export class ProductProjection {
       this.productTurnSplitOrdinalByRuntimeTurnId,
     );
     clone.currentProductTurnStartedAtMs = this.currentProductTurnStartedAtMs;
+    clone.waitClock = cloneTurnWaitClock(this.waitClock);
     clone.deliveryByPendingInputId = new Map(this.deliveryByPendingInputId);
     clone.currentTurnId = this.currentTurnId;
     clone.currentTurnStartedModelOnly = this.currentTurnStartedModelOnly;
@@ -1215,6 +1230,7 @@ export class ProductProjection {
     this.runtimeTurnIdByProductTurnId = candidate.runtimeTurnIdByProductTurnId;
     this.productTurnSplitOrdinalByRuntimeTurnId = candidate.productTurnSplitOrdinalByRuntimeTurnId;
     this.currentProductTurnStartedAtMs = candidate.currentProductTurnStartedAtMs;
+    this.waitClock = candidate.waitClock;
     this.deliveryByPendingInputId = candidate.deliveryByPendingInputId;
     this.currentTurnId = candidate.currentTurnId;
     this.currentTurnStartedModelOnly = candidate.currentTurnStartedModelOnly;
@@ -1554,6 +1570,8 @@ export class ProductProjection {
     // Runtime epoch 切换前尚未归位的 session Hook 不得附着到新 epoch 的下一轮；
     // 新 Runtime 会重新产生自己的 resume SessionStart lifecycle。
     this.pendingSessionHookInvocations.clear();
+    // 旧 Runtime 的等待不属于新 epoch：replay 回来的 Requested 不该让这轮白等。
+    resetWaitClock(this.waitClock);
     for (const row of this.snapshot.rows.window) {
       if (row.kind !== "hookInvocation" || row.state !== "running") continue;
       const executions = row.executions.map(
@@ -2026,6 +2044,8 @@ export class ProductProjection {
     this.runtimeTurnIdByProductTurnId.set(turnId, runtimeTurnId);
     this.productTurnSplitOrdinalByRuntimeTurnId.delete(runtimeTurnId);
     this.currentProductTurnStartedAtMs = this.ms(event);
+    // 跨轮的等待不属于这一轮的工作时间：新轮从零起算。
+    resetWaitClock(this.waitClock);
     this.streamingTextRowId = null;
     this.streamingReasoningRowId = null;
     this.outputContinuationTextRowId = null;
@@ -3133,7 +3153,8 @@ export class ProductProjection {
     return [
       { op: "row.upserted", row: next },
       ...planDeltas,
-      ...this.dropPendingForFinishedTool(toolCallId, row.toolName),
+      ...this.dropPendingForFinishedTool(toolCallId, row.toolName, this.ms(event)),
+      ...this.syncWaitState(event),
     ];
   }
 
@@ -3204,7 +3225,8 @@ export class ProductProjection {
           endedAt: this.ms(event),
         },
       },
-      ...this.dropPendingForFinishedTool(String(payload.toolCallId), row.toolName),
+      ...this.dropPendingForFinishedTool(String(payload.toolCallId), row.toolName, this.ms(event)),
+      ...this.syncWaitState(event),
     ];
   }
 
@@ -3220,6 +3242,13 @@ export class ProductProjection {
       toolCallId,
       interactionId,
     );
+    // 审批/提问一出现就停表：等待从请求事件的时间戳起算，不用响应到达时的本机时钟。
+    //
+    // 这里不加 `isMirroredSubagentToolEvent` 守卫：子代理的审批会镜像到父事件流，
+    // 而父会话原本就把它们放进 pendingInteractions 等用户点。工时口径跟这个一致——
+    // 父轮确实被这个审批阻塞，就该计为等待。若以后父会话不再展示子代理审批，
+    // 这里要同步加守卫，否则会静默地把父轮工时压成 0。
+    beginWait(this.waitClock, this.ms(event), `perm:${toolCallId}`);
     const deltas: ConversationDelta[] = [];
     const row = this.findToolRow(toolCallId);
     if (row) {
@@ -3238,6 +3267,7 @@ export class ProductProjection {
         pendingInteractions: [...this.snapshot.pendingInteractions, interaction],
       },
     });
+    deltas.push(...this.syncWaitState(event));
     return deltas;
   }
 
@@ -3390,15 +3420,23 @@ export class ProductProjection {
 
   private onPermissionResolved(event: SessionEvent): ConversationDelta[] {
     const payload = event.payload as PermissionResolvedPayload;
-    return this.settlePermission(
-      String(payload.toolCallId),
-      payload.decision === "deny" ? "cancelled" : "running",
-    );
+    endWait(this.waitClock, this.ms(event), `perm:${String(payload.toolCallId)}`);
+    return [
+      ...this.settlePermission(
+        String(payload.toolCallId),
+        payload.decision === "deny" ? "cancelled" : "running",
+      ),
+      ...this.syncWaitState(event),
+    ];
   }
 
   private onPermissionDenied(event: SessionEvent): ConversationDelta[] {
     const payload = event.payload as PermissionDeniedPayload;
-    return this.settlePermission(String(payload.toolCallId), "cancelled");
+    endWait(this.waitClock, this.ms(event), `perm:${String(payload.toolCallId)}`);
+    return [
+      ...this.settlePermission(String(payload.toolCallId), "cancelled"),
+      ...this.syncWaitState(event),
+    ];
   }
 
   private onWorkspaceHookReviewRequested(event: SessionEvent): ConversationDelta[] {
@@ -3414,6 +3452,8 @@ export class ProductProjection {
       if (verdict !== "same_flow_advance") {
         return [];
       }
+      // 同 flow 推进：旧 review 的等待交给新 review 接手，中间不留空档。
+      endWait(this.waitClock, this.ms(event), `hook:${current.interactionId}`);
     }
     const interaction: PendingInteraction = {
       interactionId: request.interactionId,
@@ -3424,21 +3464,34 @@ export class ProductProjection {
     };
     // 同 flow 的更高 generation 是唯一合法替换；Runtime 重启的跨 flow 接管必须先经过
     // SessionResumed 清旧 authority。这里仍原子替换，避免历史异常状态残留多个 review。
+    // 审核卡片一出就要停表，不能等用户点了才算。
+    beginWait(this.waitClock, this.ms(event), `hook:${request.interactionId}`);
     const pendingInteractions = this.snapshot.pendingInteractions.filter(
       (item) => item.payload.kind !== "workspaceHookReview",
     );
     pendingInteractions.push(interaction);
-    return [{ op: "state.updated", patch: { pendingInteractions } }];
+    return [
+      { op: "state.updated", patch: { pendingInteractions } },
+      ...this.syncWaitState(event),
+    ];
   }
 
   private onWorkspaceHookReviewSettled(event: SessionEvent): ConversationDelta[] {
     const payload = event.payload as WorkspaceHookReviewSettledPayload;
-    return this.removeWorkspaceHookReview(payload.interactionId);
+    endWait(this.waitClock, this.ms(event), `hook:${payload.interactionId}`);
+    return [
+      ...this.removeWorkspaceHookReview(payload.interactionId),
+      ...this.syncWaitState(event),
+    ];
   }
 
   private onWorkspaceHookReviewSuperseded(event: SessionEvent): ConversationDelta[] {
     const payload = event.payload as WorkspaceHookReviewSupersededPayload;
-    return this.removeWorkspaceHookReview(payload.interactionId);
+    endWait(this.waitClock, this.ms(event), `hook:${payload.interactionId}`);
+    return [
+      ...this.removeWorkspaceHookReview(payload.interactionId),
+      ...this.syncWaitState(event),
+    ];
   }
 
   private removeWorkspaceHookReview(interactionId: string): ConversationDelta[] {
@@ -3490,7 +3543,14 @@ export class ProductProjection {
   }
 
   /** 工具已经终态，不能再占着侧栏「等待确认」。permission_resolved 丢失时也要收口。 */
-  private dropPendingForFinishedTool(toolCallId: string, toolName: string): ConversationDelta[] {
+  private dropPendingForFinishedTool(
+    toolCallId: string,
+    toolName: string,
+    atMs: number,
+  ): ConversationDelta[] {
+    // 工具到终态就不再有人等审批了。resolved 事件丢掉时必须在这里停表，
+    // 否则这段等待会一直开到本轮结束，把整轮工时吃掉。
+    endWait(this.waitClock, atMs, `perm:${toolCallId}`);
     const ask = isAskUserQuestionToolName(toolName);
     const remaining = this.snapshot.pendingInteractions.filter((item) => {
       const payload = item.payload;
@@ -3841,16 +3901,17 @@ export class ProductProjection {
     const headerRow = headerRowId !== undefined ? this.findRow(headerRowId) : undefined;
     if (headerRow?.kind === "turnHeader") {
       const endedAt = this.ms(event);
+      // 切段前的这一段：工时只算到本次边界，等待按同一区间裁剪。
+      const segmentStartMs = this.currentProductTurnStartedAtMs ?? headerRow.startedAt;
+      const waitedMs = waitedMsIn(this.waitClock, segmentStartMs, endedAt);
       deltas.push({
         op: "row.upserted",
         row: {
           ...headerRow,
           state: "completedSuccess",
           endedAt,
-          activeMs: Math.max(
-            0,
-            endedAt - (this.currentProductTurnStartedAtMs ?? headerRow.startedAt),
-          ),
+          activeMs: Math.max(0, endedAt - segmentStartMs - waitedMs),
+          waitedMs,
           ...(headerRow.workSegments
             ? {
                 workSegments: this.completeWorkSegments(headerRow.workSegments, endedAt),
@@ -3869,10 +3930,17 @@ export class ProductProjection {
     this.productTurnIdByRuntimeTurnId.set(runtimeTurnId, productTurnId);
     this.runtimeTurnIdByProductTurnId.set(productTurnId, runtimeTurnId);
     this.currentProductTurnStartedAtMs = this.ms(event);
-    const header = buildTurnHeaderRow(this.rowBase(event, productTurnId, productTurnId), {
+    const segmentHeader = buildTurnHeaderRow(this.rowBase(event, productTurnId, productTurnId), {
       turnNumber: 0,
       input: "",
     });
+    // 新段从这条事件起算：已结束的等待为 0；还在等的话把起点带过去，
+    // 否则客户端会把切换之后的等待当成干活。
+    const header = {
+      ...segmentHeader,
+      waitedMs: 0,
+      ...waitingSinceField(this.waitClock),
+    };
     this.turnHeaderRowIdByTurnId.set(productTurnId, header.rowId);
     deltas.push({ op: "row.appended", row: header });
     return deltas;
@@ -3885,9 +3953,18 @@ export class ProductProjection {
     // 稳定 user messageId 映射并不代表发生过 queue drain 切段；只有 split ordinal
     // 存在时才按边界时间计算最后一段工时。否则 cold 合成事件的展示时间戳跨度很小，
     // 会错误覆盖 transcript 已计算好的整轮 duration。
-    if (!this.productTurnSplitOrdinalByRuntimeTurnId.has(runtimeTurnId)) return runtimeDuration;
+    if (!this.productTurnSplitOrdinalByRuntimeTurnId.has(runtimeTurnId)) {
+      // runtimeDuration 是墙钟跨度，同样要扣本轮等待；否则授权等待会被算成干活。
+      return runtimeDuration === undefined
+        ? runtimeDuration
+        : Math.max(0, runtimeDuration - waitedMsForTurn(this.waitClock, this.ms(event)));
+    }
     if (this.currentProductTurnStartedAtMs === null) return runtimeDuration;
-    return Math.max(0, this.ms(event) - this.currentProductTurnStartedAtMs);
+    const endedAt = this.ms(event);
+    return Math.max(
+      0,
+      endedAt - this.currentProductTurnStartedAtMs - waitedMsIn(this.waitClock, this.currentProductTurnStartedAtMs, endedAt),
+    );
   }
 
   private onTurnSteerDiscarded(event: SessionEvent): ConversationDelta[] {
@@ -5335,6 +5412,10 @@ export class ProductProjection {
           ...row,
           state,
           endedAt,
+          // 轮结束这行就不能再有「正在等」了。waitedMs 落最终值，让缺 activeMs
+          // 的旧快照 / 中断轮走 endedAt-startedAt 回退时也能扣掉等待。
+          waitedMs: waitedMsForTurn(this.waitClock, endedAt),
+          waitingSince: undefined,
           ...(activeMs !== undefined ? { activeMs } : {}),
           ...(historyRoundCount !== undefined ? { historyRoundCount } : {}),
           ...(row.workSegments
@@ -5365,9 +5446,66 @@ export class ProductProjection {
         segmentId: triggerEntityId,
         triggerEntityId,
         startedAt,
+        // 切段那一刻正在等审批的话，新段把起点带过去；否则要等下一次
+        // sync 才纠正，中间这段会被段级计时器算成干活。
+        ...waitingSinceField(this.waitClock),
       },
     ];
     return [{ op: "row.upserted", row: { ...row, workSegments } }];
+  }
+
+  /**
+   * 把等待状态同步到本轮 turnHeader。客户端运行中靠 waitedMs + waitingSince
+   * 自己扣秒数，所以两端都得随等待开始/结束重新下发，否则要等轮结束才收敛。
+   */
+  private syncWaitState(event: SessionEvent): ConversationDelta[] {
+    const header = this.turnHeaderForEvent(event);
+    if (!header || header.state !== "running") return [];
+    const atMs = this.ms(event);
+    const startMs = this.currentProductTurnStartedAtMs ?? header.startedAt;
+    // waitedMs 只报已结束的等待；进行中的那段由 waitingSince 表达，客户端自己加。
+    // 两边都含 open 段的话，同一段等待会被扣两次，计时器会直接掉到 0。
+    const waitedMs = closedWaitedMsIn(this.waitClock, startMs, atMs);
+    const waitingSince = this.waitClock.openStartedAtMs ?? undefined;
+    const workSegments = this.syncRunningSegmentWait(header.workSegments, atMs, waitingSince);
+    if (
+      header.waitedMs === waitedMs &&
+      header.waitingSince === waitingSince &&
+      workSegments === undefined
+    ) {
+      return [];
+    }
+    return [
+      {
+        op: "row.upserted",
+        row: {
+          ...header,
+          waitedMs,
+          waitingSince,
+          ...(workSegments === undefined ? {} : { workSegments }),
+        },
+      },
+    ];
+  }
+
+  /**
+   * 运行中的最后一段同样要带等待事实：段级计时器在审批期间也不能走。
+   * 已收口的段不动。
+   */
+  private syncRunningSegmentWait(
+    segments: readonly TurnWorkSegment[] | undefined,
+    atMs: number,
+    waitingSince: number | undefined,
+  ): TurnWorkSegment[] | undefined {
+    if (segments === undefined) return undefined;
+    const lastIndex = segments.length - 1;
+    const last = segments[lastIndex];
+    if (last === undefined || last.endedAt !== undefined) return undefined;
+    const waitedMs = closedWaitedMsIn(this.waitClock, last.startedAt, atMs);
+    if (last.waitedMs === waitedMs && last.waitingSince === waitingSince) return undefined;
+    return segments.map((segment, index) =>
+      index === lastIndex ? { ...segment, waitedMs, waitingSince } : segment,
+    );
   }
 
   private completeWorkSegments(
@@ -5379,7 +5517,13 @@ export class ProductProjection {
         ? {
             ...segment,
             endedAt,
-            activeMs: Math.max(0, endedAt - segment.startedAt),
+            activeMs: Math.max(
+              0,
+              endedAt - segment.startedAt - waitedMsIn(this.waitClock, segment.startedAt, endedAt),
+            ),
+            waitedMs: closedWaitedMsIn(this.waitClock, segment.startedAt, endedAt),
+            // 段已收口，就不能再挂着「正在等」：否则客户端会继续往下扣。
+            waitingSince: undefined,
           }
         : segment,
     );

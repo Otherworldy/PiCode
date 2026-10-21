@@ -18,7 +18,6 @@ import type {
   ConversationRowTarget,
   WorkflowNotificationMeta,
 } from "@zcode/shared/zcode-protocol-v4";
-import { ChatLoading } from "@/components/ai-elements/chat-loading.js";
 import { ChatApiRetryStatus } from "@/chat-input-toolbar/display.js";
 import { cn } from "@/components/lib/utils.js";
 import { Checkbox } from "@/components/ui/checkbox.js";
@@ -68,8 +67,6 @@ import { ConversationWorkflowDigests } from "@/v4/ConversationWorkflowDigests.js
 import { ConversationWorkflowCompletion } from "@/v4/ConversationWorkflowCompletion.js";
 import { resolveWorkflowTurnDigests } from "@/v4/workflowTurnDigests.js";
 import { resolveWorkflowTurnCompletion } from "@/v4/workflowTurnCompletion.js";
-import { ConversationAssistantTextActions } from "@/v4/ConversationRowView.js";
-import { readAssistantFeedback } from "@/v4/ConversationRowView.js";
 import type {
   AssistantFeedbackHandler,
   EditWorkspaceRewindAvailability,
@@ -149,9 +146,12 @@ function toRetryStatus(apiRetry: ApiRetryState): ZCodeApiRetryStatus {
 function TurnChatLoadingSlot({
   apiRetry,
   eligible,
+  durationMs,
 }: {
   apiRetry: ApiRetryState | null;
   eligible: boolean;
+  /** 本轮净工时；运行中由 projection 的 ticker 每秒刷新。 */
+  durationMs?: number;
 }) {
   const { intl, locale } = useZCodeIntl();
   const [failuresOpen, setFailuresOpen] = useState(false);
@@ -188,14 +188,19 @@ function TurnChatLoadingSlot({
       </div>
     );
   }
+  const durationLabel = formatConversationWorkDuration(durationMs, intl, locale);
   return (
     <div data-zcode-chat-loading-slot="true" className="min-h-5">
       {visibleRetryStatus ? (
         <ChatApiRetryStatus apiRetry={visibleRetryStatus} intl={intl} locale={locale} />
       ) : (
-        // running 是 ChatLoading 的权威事实；额外静默计时会让 projection
-        // 更新反复重启可见性，并使 UI 晚于真实状态。
-        <ChatLoading loading data-testid={TID_CHAT_LOADING} size="sm" />
+        // 转圈只能表达「在跑」，看不到已经跑了多久。这里直接写出来：
+        // 时长是本轮净工时（已扣权限审批和提问的等待），与折叠标题同口径。
+        <span className="zcode-working-shimmer text-ui-base" data-testid={TID_CHAT_LOADING}>
+          {durationLabel === null
+            ? intl.formatMessage({ id: "chat.loading.working" })
+            : intl.formatMessage({ id: "chat.loading.workingFor" }, { duration: durationLabel })}
+        </span>
       )}
     </div>
   );
@@ -989,7 +994,8 @@ function ConversationWorkSegmentFlow({
               onFork={item.latest && canForkLatestAssistant ? onFork : undefined}
               onRetry={item.latest && canRetryLatestAssistant ? onRetry : undefined}
               hideAssistantActions={!item.latest}
-              deferAssistantActions={item.latest}
+              // 操作栏就在正文下方渲染，不再 defer 到轮尾：两处都画会出现两颗分叉。
+              deferAssistantActions={false}
               assistantCopyText={item.latest ? assistantCopyText : undefined}
               assistantPreviewCards={item.latest ? assistantPreviewCards : undefined}
               assistantPreviewCardsAutoOpenKey={
@@ -1118,7 +1124,11 @@ function ConversationTurnFlow({
           stageTailIsRunning={unit.isRunning}
           assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
         />
-        <TurnChatLoadingSlot apiRetry={apiRetry} eligible={showLoading} />
+        <TurnChatLoadingSlot
+          apiRetry={apiRetry}
+          eligible={showLoading}
+          durationMs={unit.workStatus?.durationMs}
+        />
       </div>
     );
   }
@@ -1183,7 +1193,11 @@ function ConversationTurnFlow({
           shareSelectionRowId={shareSelectionRowId}
         />
       ))}
-      <TurnChatLoadingSlot apiRetry={apiRetry} eligible={showLoading} />
+      <TurnChatLoadingSlot
+        apiRetry={apiRetry}
+        eligible={showLoading}
+        durationMs={unit.workStatus?.durationMs}
+      />
     </div>
   );
 }
@@ -1383,7 +1397,11 @@ function ConversationBackgroundResultWork({
           assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
         />
       ) : null}
-      <TurnChatLoadingSlot apiRetry={apiRetry} eligible={showLoading} />
+      <TurnChatLoadingSlot
+        apiRetry={apiRetry}
+        eligible={showLoading}
+        durationMs={unit.workStatus?.durationMs}
+      />
     </div>
   );
 }
@@ -1416,8 +1434,21 @@ function ConversationTurnGroupImpl({
       ...(firstReasoningRowId !== undefined
         ? { messageStreamFirstReasoningRowId: firstReasoningRowId }
         : {}),
+      // 操作栏挂在正文行内部，拿不到轮级事实；用量、hook 行和轮 id 只能由这里注入。
+      ...(unit.header?.usage === undefined ? {} : { turnUsage: unit.header.usage }),
+      ...(unit.hookInvocations.length === 0 ? {} : { turnHookInvocations: unit.hookInvocations }),
+      turnId: unit.turnId,
+      ...(onFeedbackChange === undefined ? {} : { onFeedbackChange }),
     }),
-    [context, firstReasoningRowId, reasoningDurationMsByRowId],
+    [
+      context,
+      firstReasoningRowId,
+      reasoningDurationMsByRowId,
+      unit.header?.usage,
+      unit.hookInvocations,
+      unit.turnId,
+      onFeedbackChange,
+    ],
   );
   const latestAssistantTextRow = unit.latestAssistantTextRow;
   const assistantPreviewPptxAutoOpenTarget = context.assistantPreviewPptxAutoOpenTarget;
@@ -1504,7 +1535,6 @@ function ConversationTurnGroupImpl({
     !unit.timelineOnly &&
     !unit.isRunning &&
     unit.hookInvocations.some((row) => row.executions.some((execution) => execution.didExecute));
-  const canRetryLatestAssistant = latestAssistantTextRow?.actions?.canRetry === true;
   const canForkLatestAssistant = latestAssistantTextRow?.actions?.canFork === true;
   const backgroundResultTitle = resolveBackgroundResultTitle(unit);
   const hasAssistantWorkContent = unit.timelineOnly
@@ -1700,29 +1730,6 @@ function ConversationTurnGroupImpl({
               assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
             />
           ) : null}
-          {canRenderAssistantActions && latestAssistantTextRow ? (
-            // 文件 summary 是整轮完成后的聚合结果；轮尾工具栏如果跟着
-            // assistant text 内联渲染，会插到 summary 前面，读起来像 summary 不是本轮收尾。
-            // 工具栏移出文档流：opacity-0 仍占高时，每轮下面都会空出一条看不见的空隙。
-            <ConversationAssistantTextActions
-              rowId={latestAssistantTextRow.rowId}
-              entityId={latestAssistantTextRow.entityId}
-              text={assistantCopyText}
-              createdAt={latestAssistantTextRow.createdAt}
-              feedback={readAssistantFeedback(latestAssistantTextRow)}
-              sessionId={context.sessionId}
-              onFork={canForkLatestAssistant ? onFork : undefined}
-              onRetry={canRetryLatestAssistant ? onRetry : undefined}
-              onFeedbackChange={onFeedbackChange}
-              hookInvocations={unit.hookInvocations}
-              turnId={unit.turnId}
-              className="pointer-events-none absolute top-full left-0 z-10 opacity-0 transition-opacity group-hover/assistant-turn:pointer-events-auto group-hover/assistant-turn:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100"
-            />
-          ) : hasHookActions ? (
-            <MessageActions className="pointer-events-none absolute top-full left-0 z-10 opacity-0 transition-opacity group-hover/assistant-turn:pointer-events-auto group-hover/assistant-turn:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
-              <ConversationHookDetailsAction rows={unit.hookInvocations} turnId={unit.turnId} />
-            </MessageActions>
-          ) : null}
           {unit.assistantTailRows.length > 0 ? (
             // turnTailBoundary 之前虽然从工作历史中拆出，却仍在 flow 内渲染，
             // 使 CronCreate、文件 summary 与操作栏看起来落在 fork 分割线之后。boundary
@@ -1732,6 +1739,13 @@ function ConversationTurnGroupImpl({
               context={assistantRowContext}
               assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
             />
+          ) : null}
+          {/* 正文行的操作栏已经在正文下方渲染，这里不再重复一遍 —— 两处都画就会出现
+              两颗分叉按钮。只有「本轮没有可渲染正文、但有 hook 执行」时才在轮尾补一个。 */}
+          {!canRenderAssistantActions && hasHookActions ? (
+            <MessageActions>
+              <ConversationHookDetailsAction rows={unit.hookInvocations} turnId={unit.turnId} />
+            </MessageActions>
           ) : null}
         </div>
       ) : (

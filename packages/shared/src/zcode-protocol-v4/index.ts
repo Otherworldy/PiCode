@@ -51,6 +51,7 @@ export * from "./telemetry.js";
 export * from "./controller.js";
 export * from "./workspace-hook-review.js";
 export * from "./cuaPermission.js";
+export * from "./turn-usage.js";
 
 export {
   executionOutputPreviewSchema,

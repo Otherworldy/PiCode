@@ -55,6 +55,18 @@ export function resolveConversationTurnWorkStatus(
   };
 }
 
+/**
+ * 净工时的等待部分：已结束的 `waitedMs` 加上进行中那段。
+ * 客户端不判断谁在等，只按 CLI 下发的事实扣：等待期间秒数不走。
+ */
+function waitedMsAt(
+  fact: { waitedMs?: number; waitingSince?: number },
+  nowMs: number,
+): number {
+  const running = fact.waitingSince === undefined ? 0 : Math.max(0, nowMs - fact.waitingSince);
+  return (fact.waitedMs ?? 0) + running;
+}
+
 export function resolveConversationTurnWorkDurationMs(
   header: TurnHeaderRow | undefined,
   options: { nowMs?: number },
@@ -62,11 +74,16 @@ export function resolveConversationTurnWorkDurationMs(
 ): number | undefined {
   if (!header) return undefined;
   if (header.activeMs !== undefined) return header.activeMs;
-  if (header.endedAt !== undefined) return Math.max(header.endedAt - header.startedAt, 0);
+  if (header.endedAt !== undefined) {
+    // 缺 activeMs 的旧快照 / 中断轮：这里拿到的 endedAt-startedAt 是墙钟，
+    // 同样要扣等待，否则审批中被打断的轮会把盯弹窗的时间报成干活。
+    return Math.max(header.endedAt - header.startedAt - (header.waitedMs ?? 0), 0);
+  }
   // UI 每秒传入 nowMs 只用于运行中“工作中 N 秒”；完成态缺少
   // activeMs/endedAt 时不能继续吃当前时钟，否则历史“已工作”会随时间增长。
+  // 运行中也要扣等待：审批和提问不是干活，秒数不能跟着走。
   if (isRunning && options.nowMs !== undefined) {
-    return Math.max(options.nowMs - header.startedAt, 0);
+    return Math.max(options.nowMs - header.startedAt - waitedMsAt(header, options.nowMs), 0);
   }
   return undefined;
 }
@@ -120,7 +137,7 @@ function resolveSegmentDurationMs(options: {
   if (fact?.activeMs !== undefined) return fact.activeMs;
   if (fact?.endedAt !== undefined) return Math.max(0, fact.endedAt - fact.startedAt);
   if (fact && options.segmentRunning && options.nowMs !== undefined) {
-    return Math.max(0, options.nowMs - fact.startedAt);
+    return Math.max(0, options.nowMs - fact.startedAt - waitedMsAt(fact, options.nowMs));
   }
   if (options.segmentCount === 1) {
     return resolveConversationTurnWorkDurationMs(

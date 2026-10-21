@@ -1,4 +1,4 @@
-import type { PiHostEvent } from "./types.js";
+import type { PiHostEvent, PiMessageUsage } from "./types.js";
 
 export type PiJsonlSummary = {
   title: string;
@@ -71,6 +71,59 @@ export function visibleUserText(text: string): string {
     .join("\n")
     .trimEnd();
   return kept.trim().length === 0 ? "" : kept;
+}
+
+/**
+ * 重放时把 jsonl 里 assistant 消息已经写下的用量和时长搬回去。缺了它们，
+ * 重开会话就看不清上一轮的用量。只搬 Pi 已记录的字段，不重算 token。
+ */
+function replayedUsageFields(
+  message: Record<string, unknown>,
+  entryTimestamp: number,
+): {
+  usage?: PiMessageUsage;
+  timestamp?: number;
+  durationMs?: number;
+  provider?: string;
+  model?: string;
+} {
+  const numberField = (value: unknown): number | undefined =>
+    typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  const usage = asRecord(message.usage);
+  const startedAt = numberField(message.timestamp);
+  const recordedDuration = numberField(message.durationMs);
+  // legacy 消息没有 durationMs：用落盘时刻与请求开始时刻的差回退。这会略微高估
+  // （含持久化开销），只用于历史重放，且两个时刻都在时才算。
+  const durationMs =
+    recordedDuration ??
+    (startedAt !== undefined && entryTimestamp > 0
+      ? Math.max(0, entryTimestamp - startedAt)
+      : undefined);
+  const input = numberField(usage?.input);
+  const output = numberField(usage?.output);
+  const cacheRead = numberField(usage?.cacheRead);
+  const cacheWrite = numberField(usage?.cacheWrite);
+  const totalTokens = numberField(usage?.totalTokens);
+  return {
+    ...(input === undefined &&
+    output === undefined &&
+    cacheRead === undefined &&
+    cacheWrite === undefined
+      ? {}
+      : {
+          usage: {
+            ...(input === undefined ? {} : { input }),
+            ...(output === undefined ? {} : { output }),
+            ...(cacheRead === undefined ? {} : { cacheRead }),
+            ...(cacheWrite === undefined ? {} : { cacheWrite }),
+            ...(totalTokens === undefined ? {} : { totalTokens }),
+          },
+        }),
+    ...(startedAt === undefined ? {} : { timestamp: startedAt }),
+    ...(durationMs === undefined ? {} : { durationMs }),
+    ...(typeof message.provider === "string" ? { provider: message.provider } : {}),
+    ...(typeof message.model === "string" ? { model: message.model } : {}),
+  };
 }
 
 function clip(text: string, max: number): string {
@@ -297,7 +350,12 @@ export function readPiJsonl(
       events.push({
         type: "message_end",
         ...(timestamp > 0 ? { at: timestamp } : {}),
-        message: { role: "assistant", content: message.content, id },
+        message: {
+          role: "assistant",
+          content: message.content,
+          id,
+          ...replayedUsageFields(message, timestamp),
+        },
       });
       continue;
     }

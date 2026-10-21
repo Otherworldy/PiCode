@@ -6,6 +6,7 @@ import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import type { AssistantPreviewCardsAutoOpenRequest } from "@/lib/assistantPreviewCards.js";
 import type { OpenAutomationsMain } from "@/lib/taskNavigationHistory.js";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
+import type { AssistantFeedbackHandler } from "@/v4/ConversationRowView.js";
 import type { WorkflowCausalityGraphData } from "@/components/workflow-graph/types.js";
 import type { WorkflowRunSettingsChange } from "@/components/workflow-timeline/workflowRunSettings.js";
 import type { WorkflowDraftPosition, WorkflowRunCardSummary } from "@/ToolCallBlocks/shared.js";
@@ -24,7 +25,9 @@ import type {
   AttachmentRef,
   CommandAck,
   ConversationRowTarget,
+  HookInvocationRow,
   TurnHeaderRow,
+  TurnUsage,
   V4ConversationFileChangesResult,
   V4ConversationFileRewindPreviewResult,
 } from "@zcode/shared/zcode-protocol-v4";
@@ -63,6 +66,20 @@ export interface ConversationRowRenderContext {
   messageStreamFirstReasoningRowId?: number;
   /** 思考行缺少 durationMs 时，按相邻事件补上的时长。 */
   reasoningDurationMsByRowId?: ReadonlyMap<number, number>;
+  /**
+   * 当前轮的用量汇总。操作栏挂在正文行内部，拿不到 turnHeader，
+   * 由 TurnGroup 通过 context 注入；客户端只读，不自己累加。
+   */
+  turnUsage?: TurnUsage;
+  /** 当前轮的 hook 执行行，供操作栏里的 hook 详情 popover 使用。 */
+  turnHookInvocations?: readonly HookInvocationRow[];
+  /** 当前轮 id，hook 详情 popover 做 testid 用。 */
+  turnId?: string;
+  /**
+   * 操作栏在正文行内部渲染，拿不到 TurnGroup 的 props，反馈回调由这里注入。
+   * 与上下文里已有的 onOpenCodeViewer 等回调一致。
+   */
+  onFeedbackChange?: AssistantFeedbackHandler;
   /** 常规设置：是否聚合连续的 Explore-compatible 工具。 */
   toolGroupingExploreEnabled?: boolean;
   /** 常规设置：是否聚合连续的非只读 Shell 工具。 */

@@ -240,3 +240,190 @@ test("replay keeps later assistant text after tools and plugin messages", () => 
   assert.equal(tools.length, 2);
   assert.equal(tools.every((row) => row.kind === "toolCall" && row.status === "success"), true);
 });
+
+function turnHeaderOf(projector: PiToV4Projector) {
+  const header = projector
+    .getSnapshot()
+    .rows.window.find((row) => row.kind === "turnHeader");
+  assert.ok(header !== undefined && header.kind === "turnHeader");
+  return header;
+}
+
+const usageLine =
+  '{"type":"message","id":"a1","timestamp":"2026-01-02T03:04:17.000Z","message":{"role":"assistant","provider":"lens","model":"m","content":[{"type":"text","text":"hello"}],"usage":{"input":1505,"output":239,"cacheRead":86016,"cacheWrite":0,"totalTokens":87760},"timestamp":1767323051000,"durationMs":5202}}';
+
+const usageSample = [
+  '{"type":"session","version":3,"id":"s2","timestamp":"2026-01-02T03:04:05.000Z","cwd":"C:\\\\work"}',
+  '{"type":"message","id":"u1","timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}',
+  usageLine,
+].join("\n");
+
+test("重放把本轮用量带回 turnHeader，重开会话也能看到", () => {
+  const projector = new PiToV4Projector("s2", "e1");
+  projector.replay(readPiJsonl(usageSample).events);
+  const header = turnHeaderOf(projector);
+  assert.deepEqual(header.usage, {
+    providerId: "lens",
+    modelId: "m",
+    inputTokens: 1505,
+    cacheReadTokens: 86_016,
+    cacheWriteTokens: 0,
+    outputTokens: 239,
+    llmDurationMs: 5202,
+  });
+});
+
+test("legacy 消息没有 durationMs 时用落盘时刻与请求开始时刻回退", () => {
+  // 落盘时间减请求开始时间：17 秒 - 11 秒 = 6 秒，其中 5.2 秒是真实耗时，
+  // 回退值略高估（含持久化开销），只用于历史重放。
+  const legacy = usageLine.replace(',"durationMs":5202', "");
+  const sample = [
+    '{"type":"session","version":3,"id":"s3","timestamp":"2026-01-02T03:04:05.000Z"}',
+    '{"type":"message","id":"u1","timestamp":"2026-01-02T03:04:06.000Z","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}',
+    legacy,
+  ].join("\n");
+  const projector = new PiToV4Projector("s3", "e1");
+  projector.replay(readPiJsonl(sample).events);
+  const header = turnHeaderOf(projector);
+  // 落盘时刻与 fixture 里的 message.timestamp 相差 6 秒，回退值就是它。
+  assert.equal(header.usage?.llmDurationMs, 6_000);
+});
+
+test("实时事件累积本轮用量，首 token 等待有打点", () => {
+  const projector = new PiToV4Projector("s4", "e1");
+  projector.apply({ type: "agent_start" });
+  projector.apply({ type: "message_start", message: { role: "user", content: "hi" } });
+  // 请求开始时刻由 Pi 的 AssistantMessage.timestamp 给。
+  const requestStartedAt = Date.now() - 1_000;
+  projector.apply({
+    type: "message_start",
+    message: { role: "assistant", id: "a1", timestamp: requestStartedAt },
+  });
+  projector.apply({
+    type: "message_update",
+    assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "he" },
+  });
+  projector.apply({
+    type: "message_end",
+    message: {
+      role: "assistant",
+      id: "a1",
+      content: [{ type: "text", text: "hello" }],
+      usage: { input: 10, output: 20, cacheRead: 30, cacheWrite: 0 },
+      durationMs: 900,
+      provider: "lens",
+      model: "m",
+    },
+  });
+  const header = turnHeaderOf(projector);
+  assert.equal(header.usage?.inputTokens, 10);
+  assert.equal(header.usage?.outputTokens, 20);
+  assert.equal(header.usage?.llmDurationMs, 900);
+  // 首个增量在请求开始约 1 秒后到达，TTFT 应落在合理区间而不是 0。
+  assert.ok((header.usage?.ttftMs ?? 0) >= 900, `实际 ${String(header.usage?.ttftMs)}`);
+});
+
+test("没有 usage 的消息不产出用量，也不画卡", () => {
+  const projector = new PiToV4Projector("s5", "e1");
+  projector.apply({ type: "agent_start" });
+  projector.apply({ type: "message_start", message: { role: "user", content: "hi" } });
+  projector.apply({
+    type: "message_end",
+    message: { role: "assistant", id: "a1", content: [{ type: "text", text: "ok" }] },
+  });
+  assert.equal(turnHeaderOf(projector).usage, undefined);
+});
+
+test("全零用量的调用不产出用量卡", () => {
+  const projector = new PiToV4Projector("s6", "e1");
+  projector.apply({ type: "agent_start" });
+  projector.apply({ type: "message_start", message: { role: "user", content: "hi" } });
+  projector.apply({
+    type: "message_end",
+    message: {
+      role: "assistant",
+      id: "a1",
+      content: [{ type: "text", text: "boom" }],
+      stopReason: "error",
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    },
+  });
+  assert.equal(turnHeaderOf(projector).usage, undefined);
+});
+
+test("失败尝试的零用量不占时长，也不抹掉首 token 等待", () => {
+  const projector = new PiToV4Projector("s7", "e1");
+  projector.apply({ type: "agent_start" });
+  projector.apply({ type: "message_start", message: { role: "user", content: "hi" } });
+  // 第一次尝试超时：Pi 给全零 usage、有 timestamp、没有 durationMs，但仍会 emit 两个事件。
+  projector.apply({
+    type: "message_start",
+    message: { role: "assistant", id: "a-fail", timestamp: Date.now() - 60_000 },
+  });
+  projector.apply({
+    type: "message_end",
+    message: {
+      role: "assistant",
+      id: "a-fail",
+      content: [],
+      stopReason: "error",
+      errorMessage: "timeout",
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0 },
+    },
+  });
+  // 第二次成功。
+  projector.apply({
+    type: "message_start",
+    message: { role: "assistant", id: "a-ok", timestamp: Date.now() - 5_000 },
+  });
+  projector.apply({
+    type: "message_update",
+    assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "ok" },
+  });
+  projector.apply({
+    type: "message_end",
+    message: {
+      role: "assistant",
+      id: "a-ok",
+      content: [{ type: "text", text: "ok" }],
+      usage: { input: 10, output: 20, cacheRead: 30, cacheWrite: 0 },
+      durationMs: 900,
+      provider: "lens",
+      model: "m",
+    },
+  });
+  const header = turnHeaderOf(projector);
+  assert.equal(header.usage?.outputTokens, 20);
+  // 失败尝试的 60 秒不能进分母。
+  assert.equal(header.usage?.llmDurationMs, 900);
+  // 失败尝试没有首 token，但它整次被跳过，不该把成功那次的 TTFT 连带丢掉。
+  assert.ok(header.usage?.ttftMs !== undefined, "首 token 等待被失败尝试抹掉了");
+});
+
+test("先调工具再补正文时，首 token 从 toolCall 算起", () => {
+  const projector = new PiToV4Projector("s8", "e1");
+  projector.apply({ type: "agent_start" });
+  projector.apply({ type: "message_start", message: { role: "user", content: "hi" } });
+  projector.apply({
+    type: "message_start",
+    message: { role: "assistant", id: "a1", timestamp: Date.now() - 2_000 },
+  });
+  // 只发 toolCall，没有 text_delta：一条只调工具的消息不能等到正文才算首 token。
+  projector.apply({
+    type: "message_update",
+    assistantMessageEvent: { type: "toolcall_delta", contentIndex: 0, delta: '{"cmd"' },
+  });
+  projector.apply({
+    type: "message_end",
+    message: {
+      role: "assistant",
+      id: "a1",
+      content: [{ type: "text", text: "done" }],
+      usage: { input: 1, output: 2, cacheRead: 3, cacheWrite: 0 },
+      durationMs: 3_000,
+    },
+  });
+  const header = turnHeaderOf(projector);
+  assert.ok(header.usage?.ttftMs !== undefined, "toolCall 没被当成首 token");
+  assert.ok((header.usage?.ttftMs ?? 0) >= 1_900, `实际 ${String(header.usage?.ttftMs)}`);
+});

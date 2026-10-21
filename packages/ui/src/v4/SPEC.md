@@ -12,17 +12,45 @@
 - 两段正文之间的工具和思考各自成一块，单独折叠，互不影响。
 - 只有空白的 assistant 正文不是边界，也不显示。工具回合里模型常带一段 `\n\n`，它不能把连续终端调用切成多块。
 - 第一块沿用「工作中 / 已工作」和整轮时长。它是当前唯一正在工作的工具区时保持展开，不能收起。
+- 时长报的是净工作时间：「这个活干了多久」，不是用户等了多久。权限审批、`ask_user_question` 提问和 workspace hook 审核的等待不算工时。等待区间由 CLI 投影按 `permission_requested`/`permission_resolved`、`workspace_hook_review_requested`/`workspace_hook_review_settled` 的事件时间戳累计，客户端不自行判断谁在等。运行中整轮用 `waitedMs` 加当前 `waitingSince` 继续扣，等待期间秒数不走。
 - 后面的块标题写出这一块的工具次数和时长（「调用 N 次工具，工作 …」），始终有箭头，可以单独收起。
 - 工作已经结束的工具区默认收起。轮次还在跑时，只展开最后一块、且后面还没有 assistant 正文的工具区；正文一出现，前面的工具区就收起。用户仍可手动展开已结束的块。轮次结束后全部默认收起。
 - `ask_user_question` 留在折叠外，收起工作块时问卷还在。
 - `<process_event>` 通知不是正文：不切开折叠，只显示 summary。
 - 纯 Computer Use response 里的正文仍留在 CUA 分组内，不用它切开分组。
 - 压缩分隔线，以及折叠区外的插件 UI 卡片，不进这些块。
+- 分段时长与整轮同一口径：`workSegments[].activeMs` 同样排除等待，运行中用 `workSegments[].waitedMs` 加 `waitingSince` 扣。
 - 思考行显示具体时长（「持续了 12 秒」），不用「持续了几秒」。有 `durationMs` 用它；否则同一批工具共用消息时间时，用这条消息与上一条更早事件的间隔，实时思考则用下一条更晚事件的间隔。
 
 ## 所有者
 
 每一块的开合状态只活在对应 UI 组件里，不是会话事实。刷新后回到上面的默认开合。
+
+# 本轮用量
+
+## 行为
+
+- 在每轮对话末尾的操作栏里渲染一个用量 pill，位置紧跟在复制、反馈、fork、hook 按钮之后，消息时间戳之前，与 dsh 同一处。标题写「用量 N tok」，N 是本轮总 token 数（未缓存输入 + 缓存读取 + 缓存写入 + 输出）。
+- 点 pill 从上方弹出明细，再点外面或再点一次收起。弹出层列出：提供方 / 模型、缓存命中率、未缓存输入、缓存读取、缓存写入（为 0 时省略）、输出、本轮吐字速度。开合状态只活在这个 pill 里，换会话或刷新后回到收起。
+- 操作栏常显，不依赖悬停。它排在所有轮内内容（包括 `assistantTailRows`）之后，占文档流高度，不做浮层，否则会压住下一轮。
+- 缓存命中率是 `cacheReadTokens / (inputTokens + cacheReadTokens + cacheWriteTokens)`。Pi 的 `usage.input` 不含 cache，三类互不相交，相加就是这一轮的 prompt 总量。不能用 `cacheReadTokens / inputTokens`：实测 `input=22`、`cacheRead=3840` 会算出 17400%。
+- 吐字速度是 `outputTokens / (llmDurationMs - ttftMs)`。分母是首 token 之后的解码时间：工具执行、等待审批都在首 token 之前或之外，自然不进分母；思考 token 计入 output，所以思考那段的解码时间留在分母里。`ttftMs` 缺失，或者扣完不足 100ms（墙钟差值不可信）时退回总时长。输出为 0、或算出来不足 1 tok/s 时不显示这一行。
+- 卡片只统计当前会话自己的模型调用。子代理在独立会话里跑，它的 token 不计入父轮的这张卡。
+- 提供方与模型取本轮最后一次模型调用。一轮里换过模型时卡片只显示最后一次，不按调用拆开。
+- 运行中的轮同样显示，数字是本轮到现在为止的累计值，随每次模型调用更新。
+- 历史会话重开后卡片照旧显示。用量和时长跟着 assistant 消息一起落 jsonl，重放时从消息本身读，不从重新计算的时间戳猜。
+
+## 所有者
+
+本轮用量的所有者是 CLI 投影（`apps/zcode-cli/packages/pi-host/src/projector.ts`）。它从 Pi 的 `message_end` 读 `usage`、`timestamp`、`durationMs`，累加进 `turnHeader` 行的 `usage` 字段，客户端只读不算。
+
+TTFT 由投影在收到首个文本或思考增量时用本机时钟打点，Pi 不提供这个数。历史重放没有首 token 时刻，`ttftMs` 缺省，命中率与总量不受影响。
+
+`cost` 不参与这张卡：订阅制下目录价和实际账单不是一回事，模型配置里的 `ZERO_COST` 也会把它按 0 写出。
+
+## 失败
+
+`usage` 缺失（legacy 消息、provider 不报用量）时不画 pill，不拿 0 填充。`usage` 全零（失败、中断、deferred 回填的调用）时整次跳过：它既不占 token 也不占时长，否则一次失败尝试会把整轮的首 token 等待抹掉。`durationMs` 缺失时只隐去吐字速度那一行，其余字段照常显示。
 
 # 分支摘要
 
@@ -69,3 +97,21 @@ widget 文本的所有者是 Pi extension UI（`setWidget` → 快照 `extension
 ## 失败
 
 目录打不开时不画一个点了没反应的标题。停止仍只在这一行有唯一的活会话控制句柄时出现。
+
+# 子智能体工具卡的摘要行
+
+## 行为
+
+- `picode_subagent`（派发子智能体）没有专用卡面：详情、结果和展开交互沿用未知工具的兜底卡。
+- 摘要行不显示 wire 名 `Picode_subagent`，也不显示兜底卡的扳手图标和「工具调用」主文本：只留「子智能体」、子智能体图标（与 Agent 卡同一枚 Bot）和状态文字。运行态的扫光仍走兜底卡。
+- 分享页与只读时间线同样按这个名字认领，不把 wire 名印给匿名分享读者。
+
+## 所有者
+
+- 工具名认领：`packages/ui/src/lib/subagentToolNames.ts`，比对 `toolName` / `kind` / `title` / raw 里的 wire 名（抹掉大小写与分隔符）。
+- 卡面：`packages/ui/src/ToolCallBlocks/renderers/subagent.tsx`，由 `resolveRenderer.ts` 在 family 分流之前认领。
+- 文案：`chat.toolCall.kind.subagent`（中文「子智能体」/ 英文 `SubAgent`）。
+
+## 失败
+
+`picode_subagent` 不登记进 `packages/shared` 的已知工具表：登记成 `agent` family 后这张卡会落到 Agent 卡上，而 Agent 卡按 `subagent_type` 一类键读角色、且不渲染工具输出，于是派给谁和子智能体的回答都会消失。名字认领必须排在 family 分流之前，登记前后两种世界都要成立。

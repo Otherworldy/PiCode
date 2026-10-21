@@ -1,5 +1,6 @@
 import type { ZCodeContextUsageBreakdownItem } from "@zcode/shared";
 import {
+  addTurnUsage,
   applyConversationDeltas,
   applyConversationDeltasMutable,
   DELIVERY_PROFILES,
@@ -11,6 +12,7 @@ import {
   type QueueState,
   type StatePatch,
   type ToolCallRow,
+  type TurnUsage,
 } from "@zcode/shared/zcode-protocol-v4";
 import { summarizeTurnFileChanges } from "./file-rewind.js";
 import { PI_PROCESS_WORK_PREFIX } from "./pi-process-bridge.js";
@@ -24,7 +26,7 @@ import {
 import { createEmptySnapshot, emptyAvailability } from "./snapshot.js";
 import { isControlCommandTitle, visibleUserText } from "./jsonl-history.js";
 import { isOpenPlanReviewResult } from "./plan-review-signal.js";
-import type { PiAssistantDelta, PiHostEvent } from "./types.js";
+import type { PiAssistantDelta, PiHostEvent, PiMessageUsage } from "./types.js";
 
 function messageText(content: unknown): string {
   if (typeof content === "string") return content;
@@ -96,6 +98,12 @@ export class PiToV4Projector {
   private nextRowId = 1;
   private turnId = "";
   private productTurnId = "";
+  /** 本轮用量累计。开轮清空，每次模型调用结束累加。 */
+  private turnUsage: TurnUsage | undefined;
+  /** 本次模型请求的开始时刻（Pi 的 AssistantMessage.timestamp）。 */
+  private requestStartedAt: number | undefined;
+  /** 本次请求首个文字/思考增量的到达时刻，用来算首 token 等待。Pi 不提供这个数。 */
+  private firstTokenAt: number | undefined;
   private streamingTextRowId: number | null = null;
   private streamingReasoningRowId: number | null = null;
   private streamingToolId: string | null = null;
@@ -191,6 +199,9 @@ export class PiToV4Projector {
     this.streamingReasoningRowId = null;
     this.streamingToolId = null;
     this.assistantMessageId = undefined;
+    this.turnUsage = undefined;
+    this.requestStartedAt = undefined;
+    this.firstTokenAt = undefined;
     this.pendingError = undefined;
     this.toolRowId.clear();
     this.toolArgs.clear();
@@ -515,12 +526,17 @@ export class PiToV4Projector {
         });
       case "agent_settled":
         return this.settleTurn(event.at);
-      case "message_end":
+      case "message_end": {
         if (event.message.role !== "assistant") return [];
         this.pendingError = clipError(
           event.message.stopReason === "error" ? event.message.errorMessage : undefined,
         );
-        return this.flushAssistant(event.message.content);
+        // 用量要在 flush 之后追加：flushAssistant 可能把上一条没冲完的正文写完，
+        // 两条 delta 的先后不影响行序，但先写正文再写轮头更新更好读。
+        const usage = this.recordTurnUsage(event.message);
+        const flushed = this.flushAssistant(event.message.content);
+        return usage.length === 0 ? flushed : [...flushed, ...usage];
+      }
       case "message_start":
         if (event.message.role === "assistant") {
           // 同一轮里 Pi 会连续写多条 assistant（工具来回、插件 custom_message）。
@@ -530,12 +546,32 @@ export class PiToV4Projector {
             this.streamingReasoningRowId = null;
           }
           if (event.message.id) this.assistantMessageId = event.message.id;
+          // 一次模型调用的开始：首 token 等待从这里起算。Pi 的 timestamp 是请求
+          // 发出时刻；legacy 消息没有它，退回收到事件的本机时钟。重放不打点：
+          // jsonl 里的 message_start 是合成的，拿重放时刻起算会和后面的 live 增量错配。
+          if (!this.replaying) {
+            this.requestStartedAt = event.message.timestamp ?? Date.now();
+            this.firstTokenAt = undefined;
+          }
           return [];
         }
         return event.message.role === "user"
           ? this.appendUser(messageText(event.message.content), event.message.id)
           : [];
       case "message_update":
+        // 首 token 时刻只能在这里打点：Pi 给 usage 和 durationMs，但不给首输出
+        // 时刻，而吐字速度要用它把等待时间从分母里扣掉。toolCall 也是一种输出，
+        // 先调工具再补正文的消息不能等到 text_delta 才算首 token。
+        if (
+          !this.replaying &&
+          this.firstTokenAt === undefined &&
+          (event.assistantMessageEvent.type === "text_delta" ||
+            event.assistantMessageEvent.type === "thinking_delta" ||
+            event.assistantMessageEvent.type === "toolcall_start" ||
+            event.assistantMessageEvent.type === "toolcall_delta")
+        ) {
+          this.firstTokenAt = Date.now();
+        }
         return this.stream(event.assistantMessageEvent);
       case "tool_execution_start":
         return this.toolStart(event);
@@ -649,6 +685,9 @@ export class PiToV4Projector {
     this.streamingTextRowId = null;
     this.streamingReasoningRowId = null;
     this.assistantMessageId = undefined;
+    this.turnUsage = undefined;
+    this.requestStartedAt = undefined;
+    this.firstTokenAt = undefined;
     const startedAt = at ?? Date.now();
     const header: ConversationRow = {
       ...this.base(this.turnId),
@@ -1168,6 +1207,58 @@ export class PiToV4Projector {
       deltas.push({ op: "state.updated", patch: { control } });
     }
     return deltas;
+  }
+
+  /**
+   * 累加本轮用量并回写到 turnHeader。Pi 的 usage 是原始字段：`input` 是未缓存
+   * 输入，与 cacheRead/cacheWrite 互不相交，派生值交给 turn-usage 的纯函数去算。
+   */
+  private recordTurnUsage(message: {
+    usage?: PiMessageUsage;
+    durationMs?: number;
+    provider?: string;
+    model?: string;
+  }): ConversationDelta[] {
+    const usage = message.usage;
+    if (usage === undefined) return [];
+    const inputTokens = Math.max(0, usage.input ?? 0);
+    const cacheReadTokens = Math.max(0, usage.cacheRead ?? 0);
+    const cacheWriteTokens = Math.max(0, usage.cacheWrite ?? 0);
+    const outputTokens = Math.max(0, usage.output ?? 0);
+    // 失败、中断和 deferred 回填也会走 message_end，而 Pi 这时给的 usage 是全零
+    // （仍有 timestamp，但没有 durationMs）。把它们当真实调用会白白拉长分母，
+    // 还会让下面「缺一次首 token 就整体丢弃」连带废掉整轮的速度。
+    if (inputTokens + cacheReadTokens + cacheWriteTokens + outputTokens === 0) return [];
+    this.turnUsage = addTurnUsage(this.turnUsage, {
+      ...(message.provider === undefined ? {} : { providerId: message.provider }),
+      ...(message.model === undefined ? {} : { modelId: message.model }),
+      inputTokens,
+      cacheReadTokens,
+      cacheWriteTokens,
+      outputTokens,
+      // legacy 消息和 deferred 结果没有 durationMs。缺了就不写时长，卡片只隐去
+      // 吐字速度那一行，token 数和命中率照常显示。
+      ...(message.durationMs === undefined
+        ? {}
+        : { llmDurationMs: Math.max(0, message.durationMs) }),
+      ...(this.requestStartedAt === undefined || this.firstTokenAt === undefined
+        ? {}
+        : { ttftMs: Math.max(0, this.firstTokenAt - this.requestStartedAt) }),
+    });
+    this.requestStartedAt = undefined;
+    this.firstTokenAt = undefined;
+    return this.upsertTurnUsage();
+  }
+
+  private upsertTurnUsage(): ConversationDelta[] {
+    // turnId 为空说明还没开轮（message_end 早于 agent_start）；这时没有行可写。
+    if (this.turnUsage === undefined || this.turnId === "") return [];
+    const header = this.snapshot.rows.window.find(
+      (row): row is Extract<ConversationRow, { kind: "turnHeader" }> =>
+        row.kind === "turnHeader" && row.turnId === this.turnId,
+    );
+    if (header === undefined) return [];
+    return [{ op: "row.upserted", row: { ...header, usage: this.turnUsage } }];
   }
 
   private flushAssistant(content: unknown): ConversationDelta[] {

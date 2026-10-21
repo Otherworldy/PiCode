@@ -54,6 +54,7 @@ import type {
   TimelineMarkerRow,
   ToolCallRow,
   TurnHeaderRow,
+  TurnUsage,
   UserInputRow,
   V4ConversationFileRewindPreviewResult,
 } from "@zcode/shared/zcode-protocol-v4";
@@ -136,6 +137,7 @@ import {
   splitUserInputEpilogue,
 } from "@/v4/ConversationUserInputEpilogue.js";
 import { ConversationHookDetailsAction } from "@/v4/ConversationHookDetailsAction.js";
+import { ConversationTurnUsagePill } from "@/v4/ConversationTurnUsagePill.js";
 import { formatModelChangeLabel } from "@/v4/composer/modelTriggerDisplay.js";
 import { formatMessageTimeLabel } from "@/v4/messageTimeLabel.js";
 import { parseConversationShareContext } from "@/lib/conversationShareContext.js";
@@ -1599,6 +1601,7 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
   createdAt,
   feedback = null,
   hookInvocations,
+  usage,
   sessionId,
   turnId,
   onFork,
@@ -1611,6 +1614,7 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
   createdAt: number;
   feedback?: AssistantMessageFeedback | null;
   hookInvocations?: readonly HookInvocationRow[];
+  usage?: TurnUsage;
   sessionId?: string | null;
   turnId?: string;
   onFork?: (target: ConversationRowTarget) => void;
@@ -1629,7 +1633,7 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
     id: localFeedback === "dislike" ? "chat.message.disliked" : "chat.message.dislike",
   });
   const forkLabel = intl.formatMessage({ id: "chat.message.fork" });
-  const timeLabel = formatMessageTimeLabel(createdAt, locale, intl);
+  const timeLabel = formatMessageTimeLabel(createdAt, locale);
   const resolveTooltip = (label: string): string | undefined => label;
 
   useEffect(() => {
@@ -1750,6 +1754,8 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
       {turnId && hookInvocations ? (
         <ConversationHookDetailsAction rows={hookInvocations} turnId={turnId} />
       ) : null}
+      {/* 本轮用量紧跟在操作按钮后面、时间戳前面，与 dsh 同一处。 */}
+      {usage ? <ConversationTurnUsagePill usage={usage} /> : null}
       {/* 旧 conversation surface 删除后，V4 动作栏漏掉了消息创建时间；
           时间是 row.createdAt 的只读派生展示，不新增 renderer 状态。 */}
       {timeLabel ? (
@@ -1915,9 +1921,9 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
           />
         </div>
       ) : null}
-      {/* 完成态动作行悬停显现（对齐旧 MessageActions）：复制 + fork（图标 ghost）。
-          一轮对用户是一个回复：action 只在轮尾段（hideActions 由 TurnGroup 裁决），
-          复制内容 = 整轮全部 text 段合并（copyText 覆盖）。轮尾已有底栏分叉，不再在正文后面画一颗。 */}
+      {/* 完成态动作行：复制、反馈、分叉、hook 详情、本轮用量。
+          一轮对用户是一个回复，只在最新一段正文后面画，轮尾不再重复一遍。
+          这里常显而不悬停：用量 pill 藏起来就等于没有。 */}
       {row.state === "complete" && !hideActions && !deferActions ? (
         <ConversationAssistantTextActions
           rowId={row.rowId}
@@ -1928,11 +1934,11 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
           sessionId={context.sessionId}
           onFork={onFork}
           onRetry={onRetry}
-          onFeedbackChange={onFeedbackChange}
-          className={cn(
-            "mt-1",
-            "opacity-0 transition-opacity group-hover/assistant-row:opacity-100 focus-within:opacity-100",
-          )}
+          hookInvocations={context.turnHookInvocations}
+          usage={context.turnUsage}
+          turnId={context.turnId}
+          onFeedbackChange={onFeedbackChange ?? context.onFeedbackChange}
+          className="mt-3"
         />
       ) : null}
     </RowShell>

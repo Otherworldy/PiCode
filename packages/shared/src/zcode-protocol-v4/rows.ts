@@ -51,11 +51,36 @@ export const turnWorkSegmentSchema = z.object({
   startedAt: timestampSchema,
   endedAt: timestampSchema.optional(),
   activeMs: z.number().nonnegative().optional(),
+  // 段内已结束的等待累计毫秒数（权限审批、用户提问、hook 审核）。
+  waitedMs: z.number().nonnegative().optional(),
+  // 当前仍在进行的那段等待的起点。没有等待时不写。
+  waitingSince: timestampSchema.optional(),
 });
 export type TurnWorkSegment = z.infer<typeof turnWorkSegmentSchema>;
 
 // turnHeader：product turn 边界 + 权威工时 + 每轮文件摘要。
 // guide 产生的内部折叠边界由 workSegments 表达；行归属仍由 CLI 决定，客户端零归属逻辑。
+/**
+ * 本轮模型调用的用量汇总。Pi 的 `usage.input` 不含 cache，三类互不相交，
+ * 相加才是这一轮的 prompt 总量。命中率不能拿 `cacheRead / input` 算：
+ * 实测 input=22、cacheRead=3840 会得出 17400%。
+ */
+export const turnUsageSchema = z.object({
+  providerId: z.string().optional(),
+  modelId: z.string().optional(),
+  inputTokens: z.number().nonnegative(),
+  cacheReadTokens: z.number().nonnegative(),
+  cacheWriteTokens: z.number().nonnegative(),
+  outputTokens: z.number().nonnegative(),
+  /** 本轮所有模型调用的时长之和（含首 token 等待），Pi 的单调钟 durationMs。
+   * 任一次调用缺时长就不写：缺了当 0 会让吐字速度偏大。 */
+  llmDurationMs: z.number().nonnegative().optional(),
+  /** 首 token 等待之和。历史重放没有这个数，缺省时吐字速度退回总时长。 */
+  ttftMs: z.number().nonnegative().optional(),
+});
+
+export type TurnUsage = z.infer<typeof turnUsageSchema>;
+
 export const turnHeaderRowSchema = z.object({
   ...rowBaseFields,
   kind: z.literal("turnHeader"),
@@ -80,9 +105,16 @@ export const turnHeaderRowSchema = z.object({
   endedAt: timestampSchema.optional(),
   // 权威工时：排除权限等待/用户输入等待/verifier 等待。
   activeMs: z.number().optional(),
+  // 本轮已结束的等待累计毫秒数。运行中客户端用 waitedMs + (now - waitingSince) 扣秒数，
+  // 免得「工作中 N 秒」把审批和提问的等待算成干活时间。
+  waitedMs: z.number().nonnegative().optional(),
+  // 当前仍在进行的那段等待的起点。没有等待时不写。
+  waitingSince: timestampSchema.optional(),
   // guide 不切 product turn，但每条 accepted guide 都开启独立视觉工作段。
   // 普通 turn 缺省以保持旧 snapshot 兼容；一旦出现 guide，CLI 负责完整投影首段与后续段。
   workSegments: z.array(turnWorkSegmentSchema).optional(),
+  // 本轮用量。缺省表示这一轮没有发生过模型调用，客户端不画用量卡。
+  usage: turnUsageSchema.optional(),
   originMeta: backgroundResultOriginMetaSchema.optional(),
   // origin === "workflowLaunch" 的轮上在场（活投影来源）；与 originMeta 并列，不复用其形状。
   workflowLaunch: workflowLaunchMetaSchema.optional(),

@@ -1,18 +1,8 @@
-import type { IntlInstance } from "@/i18n/IntlProvider.js";
-
-type DateTimeFormatterKind = "time" | "monthDayTime" | "yearMonthDayTime";
+type DateTimeFormatterKind = "monthDayTime" | "yearMonthDayTime";
 
 const MESSAGE_TIME_LABEL_CACHE_LIMIT = 4_000;
 const messageTimeLabelCache = new Map<string, string>();
 const dateTimeFormatterCache = new Map<string, Intl.DateTimeFormat>();
-
-function isSameDay(left: Date, right: Date): boolean {
-  return (
-    left.getFullYear() === right.getFullYear() &&
-    left.getMonth() === right.getMonth() &&
-    left.getDate() === right.getDate()
-  );
-}
 
 function getDayCacheKey(date: Date): string {
   return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
@@ -25,17 +15,17 @@ function getDateTimeFormatter(locale: string, kind: DateTimeFormatterKind): Intl
 
   const formatter = new Intl.DateTimeFormat(
     locale,
-    kind === "time"
-      ? { hour: "2-digit", minute: "2-digit" }
-      : kind === "monthDayTime"
-        ? { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }
-        : {
-            year: "numeric",
-            month: "numeric",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          },
+    kind === "monthDayTime"
+      ? // 用 short 而不是 numeric：中文下 numeric 会输出 10/20，
+        // short 才是「10月20日 19:45」；英文对应紧凑的 Oct 20。
+        { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }
+      : {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        },
   );
   dateTimeFormatterCache.set(cacheKey, formatter);
   return formatter;
@@ -49,10 +39,14 @@ function cacheMessageTimeLabel(cacheKey: string, label: string): string {
   return label;
 }
 
+/**
+ * 消息时间戳：今年显示「10月20日 19:45」，跨年补上年份。
+ * 不再按「今天只显示时分」压缩：轮尾的用量数字要和日期一起读才有意义，
+ * 单看 07:56 分不清是哪天的这一轮。
+ */
 export function formatMessageTimeLabel(
   timestamp: number,
   locale: string,
-  intl: IntlInstance,
   nowTimestamp = Date.now(),
 ): string | null {
   if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
@@ -65,29 +59,11 @@ export function formatMessageTimeLabel(
   const cached = messageTimeLabelCache.get(cacheKey);
   if (cached !== undefined) return cached;
 
-  const timeText = getDateTimeFormatter(locale, "time").format(messageDate);
-  if (isSameDay(messageDate, now)) {
-    return cacheMessageTimeLabel(cacheKey, timeText);
-  }
-
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  if (isSameDay(messageDate, yesterday)) {
-    return cacheMessageTimeLabel(
-      cacheKey,
-      intl.formatMessage({ id: "chat.message.time.yesterday" }, { time: timeText }),
-    );
-  }
-
-  if (messageDate.getFullYear() === now.getFullYear()) {
-    return cacheMessageTimeLabel(
-      cacheKey,
-      getDateTimeFormatter(locale, "monthDayTime").format(messageDate),
-    );
-  }
-
   return cacheMessageTimeLabel(
     cacheKey,
-    getDateTimeFormatter(locale, "yearMonthDayTime").format(messageDate),
+    getDateTimeFormatter(
+      locale,
+      messageDate.getFullYear() === now.getFullYear() ? "monthDayTime" : "yearMonthDayTime",
+    ).format(messageDate),
   );
 }
