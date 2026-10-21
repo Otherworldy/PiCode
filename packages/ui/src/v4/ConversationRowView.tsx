@@ -2,6 +2,7 @@ import { GenUiMessageResponse } from "@/gen-ui/index.js";
 /* oxlint-disable eslint(max-lines) -- v4 逐行 row 渲染分发集中收口（每种 row 一个 memo 叶子 + timelineMarker 分隔线），拆分会打散行类型对照。 */
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { compactFailureText } from "@/v4/compactFailureText.js";
+import { ConversationCappedScroll } from "@/v4/ConversationCappedScroll.js";
 import { processEventSummary } from "@/v4/conversationTurnFlowItems.js";
 import {
   ResumeHereAfterText,
@@ -2299,8 +2300,14 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
         onClick={handleClick}
       />
       {summaryOpen && foldableSummary ? (
-        <div className="px-4 pb-2 text-ui-base whitespace-pre-wrap text-[var(--color-foreground)]">
-          {foldableSummary}
+        // 压缩摘要动辄几千字，不限高会把后面的轮次顶出几屏。限高、块内滚、
+        // padding 留在框外，否则滚到底时最后一行贴着裁切边缘。
+        <div className="px-4 pb-2">
+          <ConversationCappedScroll>
+            <div className="text-ui-base whitespace-pre-wrap text-[var(--color-foreground)]">
+              {foldableSummary}
+            </div>
+          </ConversationCappedScroll>
         </div>
       ) : null}
     </div>

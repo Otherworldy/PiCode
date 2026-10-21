@@ -987,6 +987,42 @@ body {
   }
 }
 
+/*
+ * 一轮里连续跑十几个工具时，整块放任长下去会把后面的轮次推到几屏之外；
+ * 压缩摘要也一样。口径照 dsh 的 ChatGroupSeat：400px / 50vh，超出在块内滚。
+ *
+ * overscroll-behavior-y 保持 auto：滚到块底时把滚动交还给页面，
+ * 否则指针停在块里，页面就动不了了。
+ */
+.zcode-capped-scroll {
+  max-height: min(400px, 50vh);
+  /* 只纵向滚。单独写 overflow-y: auto 会把 overflow-x 的计算值也拉成 auto，
+     于是内容一横向溢出就冒出横条；clip 不建横向滚动容器，也不像 hidden
+     那样能程序化横向滚动。宽度始终由父级决定，这里不做任何限宽。 */
+  overflow-x: clip;
+  overflow-y: auto;
+  overscroll-behavior-y: auto;
+}
+
+/* 能滚的方向才渐隐，不滚的块边缘保持干净。 */
+.zcode-capped-scroll[data-scroll-up="true"] {
+  mask-image: linear-gradient(to bottom, transparent 0, #000 24px, #000 100%);
+}
+
+.zcode-capped-scroll[data-scroll-down="true"] {
+  mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 24px), transparent 100%);
+}
+
+.zcode-capped-scroll[data-scroll-up="true"][data-scroll-down="true"] {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 24px,
+    #000 calc(100% - 24px),
+    transparent 100%
+  );
+}
+
 /* 「工作中」这行要表明仍在推进。dsh 用一层扫光遮罩叠在真实文字上，
    这里用文字渐变 + 背景位移达到同样的扫过效果：不额外插一层 DOM，
    也不靠 JS 计时。

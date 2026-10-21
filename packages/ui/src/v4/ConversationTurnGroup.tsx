@@ -51,6 +51,8 @@ import {
 } from "@/lib/assistantCodeComment.js";
 import { useAssistantPreviewCardsForAssistantTextRow } from "@/v4/useAssistantPreviewCardsForRow.js";
 import { shouldShowTurnChatLoading } from "@/v4/chatLoadingVisibility.js";
+import { chunkAssistantWorkRenderItems } from "@/v4/conversationAssistantWorkChunks.js";
+import { ConversationCappedScroll } from "@/v4/ConversationCappedScroll.js";
 import {
   buildAssistantWorkRenderItems,
   ENABLE_CHANGES_TOOL_CALL_GROUPING,
@@ -59,8 +61,7 @@ import {
   ENABLE_TERMINAL_TOOL_CALL_GROUPING,
   type ConversationAssistantWorkRenderItem,
 } from "@/v4/conversationAssistantWorkItems.js";
-import type { ConversationCuaGroupEvent } from "@/v4/conversationCuaGroups.js";
-import { ConversationAgentToolCallRow } from "@/v4/ConversationAgentToolCallRow.js";
+import type { ConversationCuaGroupEvent } from "@/v4/conversationCuaGroups.js";import { ConversationAgentToolCallRow } from "@/v4/ConversationAgentToolCallRow.js";
 import { ConversationFileSummaryPanel } from "@/v4/ConversationFileSummaryPanel.js";
 import { WorkflowNotificationToolRow } from "@/v4/WorkflowNotificationToolRow.js";
 import { ConversationWorkflowDigests } from "@/v4/ConversationWorkflowDigests.js";
@@ -475,6 +476,7 @@ function OpenConversationAssistantWorkItems({
       showReasoning,
     ],
   );
+  const chunkList = useMemo(() => chunkAssistantWorkRenderItems(items), [items]);
 
   // history 外壳不能在这层投影前创建：当 CUA 消费原 message
   // 或运行中 shell 被延迟分类时，会留下 pt-5 和空的 gap-4 容器。只有确认
@@ -485,23 +487,47 @@ function OpenConversationAssistantWorkItems({
 
   // 连续工作项（工具/explore/reasoning）统一 gap-4 组容器（对齐旧版 tool-call-group），
   // 取代继承父级 gap-5/gap-2 + 每行 py-2 的双重且不一致的间距。
+  //
+  // 正文把工作块切开：一条连续工具链装进限高容器，正文留在外面正常排版。
+  // 工具只用一两张卡时不套框，免得为了两行内容多出一条滚动条。
+  const renderWorkItem = (item: ConversationAssistantWorkRenderItem) =>
+    item.kind === "row" ? (
+      <ConversationTurnRow
+        key={item.key}
+        row={item.row}
+        context={context}
+        hideAssistantActions={false}
+        assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
+      />
+    ) : item.kind === "agentToolCall" ? (
+      <ConversationAgentToolCallRow key={item.key} item={item} context={context} />
+    ) : item.kind === "exploreGroup" ? (
+      <ConversationExploreGroupRow key={item.key} item={item} context={context} />
+    ) : (
+      <ConversationToolGroupRow key={item.key} item={item} context={context} />
+    );
+
+  // 只有尾部那一块算「还在跑」：`stageTailIsRunning` 是整轮级别的，
+  // 直接下发给每块会让已结束的块也跟着跳到底部。
+  const runningChunkKey = stageTailIsRunning ? chunkList[chunkList.length - 1]?.key : undefined;
+
   const content = (
     <div className="flex flex-col gap-4">
-      {items.map((item) =>
-        item.kind === "row" ? (
+      {chunkList.map((chunk) =>
+        chunk.kind === "text" ? (
           <ConversationTurnRow
-            key={item.key}
-            row={item.row}
+            key={chunk.key}
+            row={chunk.item.row}
             context={context}
-            hideAssistantActions={item.row.kind === "assistantText"}
+            hideAssistantActions
             assistantCodeCommentProjectionEnabled={assistantCodeCommentProjectionEnabled}
           />
-        ) : item.kind === "agentToolCall" ? (
-          <ConversationAgentToolCallRow key={item.key} item={item} context={context} />
-        ) : item.kind === "exploreGroup" ? (
-          <ConversationExploreGroupRow key={item.key} item={item} context={context} />
+        ) : chunk.items.length === 1 ? (
+          renderWorkItem(chunk.items[0]!)
         ) : (
-          <ConversationToolGroupRow key={item.key} item={item} context={context} />
+          <ConversationCappedScroll key={chunk.key} running={chunk.key === runningChunkKey}>
+            {chunk.items.map(renderWorkItem)}
+          </ConversationCappedScroll>
         ),
       )}
     </div>
