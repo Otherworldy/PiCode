@@ -1,19 +1,38 @@
-import { PET_BUBBLE_GAP, PET_BUBBLE_MARGIN, petBubbleTop } from "./petBubble.js";
+import { petWindowLayout } from "./bubbleGeometry.js";
 
 /** 播放页脚本的前半段：加载、动作链、像素框测量与舞台布局。 */
 export function renderPetPlayerMotionScript(): string {
   return `
 const manifest = JSON.parse(document.getElementById("pet-manifest").textContent);
 const video = document.getElementById("pet");
-const frame = document.getElementById("frame");
 const stage = document.getElementById("stage");
 const bubble = document.getElementById("bubble");
+const geometry = manifest.geometry || {};
 // 裁到角色像素框时：点、拖、右键只在角色矩形里生效，不包含视频自带的透明留白。
 // 框要到拿到具体帧才知道，所以每换一段片段重新量一次；量不出来就先铺满整块。
 // 设置里关掉裁剪后不会再量，舞台就是整帧。
 const cropToCharacter = manifest.crop !== false;
 let charBox = null;
 const scale = manifest.displayScale > 0 ? manifest.displayScale : 1;
+const petWindowLayout = ${petWindowLayout.toString()};
+let stageWidth = 0;
+let stageHeight = 0;
+let layoutCache = null;
+// 编辑态：窗口被临时放大，角色在窗口里的位置由主进程报上来的偏移算出来。
+let editBase = null;
+
+function computeLayout(rect) {
+  return petWindowLayout({
+    stageWidth: stageWidth,
+    stageHeight: stageHeight,
+    defaultWidth: geometry.defaultWidth || manifest.size || 320,
+    rect: rect === undefined ? geometry.rect || null : rect,
+    bubbleHeight: geometry.bubbleHeight || 76,
+    gap: geometry.gap == null ? 6 : geometry.gap,
+    inset: geometry.inset == null ? 8 : geometry.inset,
+    margin: geometry.margin == null ? 4 : geometry.margin,
+  });
+}
 function layout(box) {
   const vw = video.videoWidth;
   const vh = video.videoHeight;
@@ -22,12 +41,24 @@ function layout(box) {
   const s = base * scale;
   const crop = box || { x: 0, y: 0, w: vw, h: vh };
   charBox = crop;
-  stage.style.width = Math.round(crop.w * s) + "px";
-  stage.style.height = Math.round(crop.h * s) + "px";
+  stageWidth = Math.round(crop.w * s);
+  stageHeight = Math.round(crop.h * s);
+  stage.style.width = stageWidth + "px";
+  stage.style.height = stageHeight + "px";
   video.style.left = -Math.round(crop.x * s) + "px";
   video.style.top = -Math.round(crop.y * s) + "px";
   video.style.width = Math.round(vw * s) + "px";
   video.style.height = Math.round(vh * s) + "px";
+  applyLayout();
+}
+// 窗口按「角色 + 气泡」的并集摆放；角色在窗口里的位置变了，气泡跟着走。
+function applyLayout(rect) {
+  if (!stageWidth || !stageHeight) return;
+  layoutCache = computeLayout(rect);
+  const base = editBase;
+  stage.style.left = (base ? base.left : layoutCache.stageLeft) + stageWidth / 2 + "px";
+  stage.style.bottom = (base ? base.bottom : layoutCache.stageBottom) + "px";
+  if (typeof placeBubble === "function") placeBubble();
 }
 const probeCanvas = document.createElement("canvas");
 function measureBox() {
@@ -157,7 +188,7 @@ function syncBox() {
     const box = unionBox(first, next);
     if (box) {
       layout(box);
-      window.pet?.send({ type: "box", width: stage.offsetWidth, height: stage.offsetHeight });
+      window.pet?.send({ type: "box", width: stageWidth, height: stageHeight });
     }
   }, 220);
 }
@@ -172,8 +203,6 @@ function unionBox(a, b) {
 }
 video.addEventListener("playing", () => {
   syncBox();
-  if (video.requestVideoFrameCallback) video.requestVideoFrameCallback(() => placeBubble());
-  else placeBubble();
 });
 video.addEventListener("ended", () => {
   if (state.mode === "turn") state.facing = state.facing === "left" ? "right" : "left";
@@ -192,47 +221,5 @@ video.addEventListener("ended", () => {
   }
   resumeLoop();
 });
-const petBubbleTop = ${petBubbleTop.toString()};
-const probe = document.createElement("canvas");
-function opaqueRow() {
-  const width = video.videoWidth;
-  const height = video.videoHeight;
-  if (!width || !height) return -1;
-  const sampleW = 64;
-  const sampleH = Math.max(1, Math.round((height * sampleW) / width));
-  probe.width = sampleW;
-  probe.height = sampleH;
-  const ctx = probe.getContext("2d", { willReadFrequently: true });
-  if (!ctx) return -1;
-  ctx.clearRect(0, 0, sampleW, sampleH);
-  try {
-    ctx.drawImage(video, 0, 0, sampleW, sampleH);
-    const data = ctx.getImageData(0, 0, sampleW, sampleH).data;
-    for (let y = 0; y < sampleH; y++) {
-      for (let x = 0; x < sampleW; x++) {
-        if (data[(y * sampleW + x) * 4 + 3] > 24) return Math.round((y / sampleH) * height);
-      }
-    }
-  } catch {
-    return -1;
-  }
-  return -1;
-}
-function placeBubble() {
-  if (bubble.style.display === "none") return;
-  const rect = stage.getBoundingClientRect();
-  const row = opaqueRow();
-  const box = charBox;
-  const ratio =
-    row < 0 || !box || box.h <= 0 ? -1 : Math.max(0, (row - box.y) / box.h);
-  bubble.style.top = petBubbleTop({
-    stageTop: rect.top,
-    stageHeight: rect.height,
-    rowRatio: ratio,
-    bubbleHeight: bubble.offsetHeight,
-    gap: ${PET_BUBBLE_GAP},
-    minTop: ${PET_BUBBLE_MARGIN},
-  }) + "px";
-}
 `;
 }

@@ -318,15 +318,22 @@ export * from "./pluginStoreOrdering.js";
 export * from "./session-debug.js";
 export { redactFeedbackText } from "./feedbackPrivacy.js";
 export {
+  DESKTOP_PET_BUBBLE_MAX_HEIGHT,
+  DESKTOP_PET_BUBBLE_MAX_OFFSET,
+  DESKTOP_PET_BUBBLE_MAX_WIDTH,
+  DESKTOP_PET_BUBBLE_MIN_HEIGHT,
+  DESKTOP_PET_BUBBLE_MIN_WIDTH,
   DESKTOP_PET_DISPLAY_SCALE_DEFAULT,
   DESKTOP_PET_DISPLAY_SCALE_MAX,
   DESKTOP_PET_DISPLAY_SCALE_MIN,
   DESKTOP_PET_READER_HOTKEY_DEFAULT,
   normalizeDesktopPetCropCharacter,
   normalizeDesktopPetDisplayScale,
+  normalizeDesktopPetReaderBubbleRect,
   normalizeDesktopPetReaderHotkey,
   normalizeDesktopPetReaderHotkeyMode,
 } from "./desktopPetReader.js";
+export type { DesktopPetReaderBubbleRect } from "./desktopPetReader.js";
 export type { DesktopPetPersistedSettings } from "./desktopPetReader.js";
 export {
   deriveDesktopPetMood,

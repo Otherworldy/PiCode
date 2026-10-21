@@ -1901,6 +1901,14 @@ const zhCN: Record<string, string> = {
   "settings.desktopPetBubbleDescription": "任务提醒气泡用黑底白字，或白底黑字。",
   "settings.desktopPetBubble.dark": "黑底",
   "settings.desktopPetBubble.light": "白底",
+  "settings.desktopPetBubbleRect": "气泡大小与位置",
+  "settings.desktopPetBubbleRectDescription":
+    "只影响摸鱼正文。点「在桌面上调整」后，在宠物所在屏幕上拖动气泡移动、拖四角方块缩放，回车保存、Esc 取消。消息提醒气泡不受影响。",
+  "settings.desktopPetBubbleRectEdit": "在桌面上调整",
+  "settings.desktopPetBubbleRectEditing": "正在调整…",
+  "settings.desktopPetBubbleRectReset": "恢复默认",
+  "settings.desktopPetBubbleRectValue": "{width} × {height}",
+  "settings.desktopPetBubbleRectAuto": "自动",
   "settings.desktopPetDisplayScale": "显示大小",
   "settings.desktopPetDisplayScaleDescription":
     "宠物在屏幕上看起来的大小。默认 100%，觉得太大就往下调。",

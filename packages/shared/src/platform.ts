@@ -18,7 +18,10 @@ import type { OAuthStateRegistration } from "./oauth.js";
 import type { DesktopPetDownloadStatus } from "./desktopPetDownload.js";
 import type { DesktopPetInstalledPack } from "./desktopPetInstalled.js";
 import type { DesktopPetMood } from "./desktopPetMood.js";
-import type { DesktopPetPersistedSettings } from "./desktopPetReader.js";
+import type {
+  DesktopPetPersistedSettings,
+  DesktopPetReaderBubbleRect,
+} from "./desktopPetReader.js";
 import type { AppSettings, Locale } from "./protocol.js";
 import type { ArmsCustomEventPayload, RendererTelemetryEventPayload } from "./telemetry.js";
 import type {
@@ -558,6 +561,15 @@ export interface IPlatformService {
 
   /** 删除已下载缓存包（彻底删除磁盘文件）或移除本地导入链接（不删物理文件）。 */
   deleteDesktopPetPack?(id: string, sourceType: "download" | "local"): Promise<boolean>;
+
+  /**
+   * 把宠物窗口切到编辑态，让用户在屏幕上拖拽摸鱼气泡的大小和位置。
+   * 返回保存后的矩形；取消或没有可用宠物时返回 null。
+   */
+  editDesktopPetBubble?(): Promise<DesktopPetReaderBubbleRect | null>;
+
+  /** 把摸鱼气泡恢复成默认摆放。 */
+  resetDesktopPetBubble?(): Promise<void>;
 
   /** 打开系统多文件选择框，返回选中的文件路径；取消时返回空数组 */
   selectFiles?(): Promise<string[]>;

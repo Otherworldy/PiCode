@@ -7,9 +7,50 @@ export interface DesktopPetPersistedSettings {
   displayScale: number;
   /** 只保留角色真正占用的像素，窗口和点击区贴着角色。缺省开启。 */
   cropCharacter: boolean;
+  /** 摸鱼气泡的大小与位置。null 表示按角色头顶自动摆放。 */
+  readerBubbleRect: DesktopPetReaderBubbleRect | null;
   readerPath: string;
   readerHotkey: string;
   readerHotkeyMode: "toggle" | "hold";
+}
+
+/**
+ * 摸鱼文本气泡相对角色的矩形。原点在角色脚底中心，宽度向右、高度向上，单位是页面像素。
+ * 只影响摸鱼正文；消息提醒气泡仍按缺省摆放。
+ */
+export interface DesktopPetReaderBubbleRect {
+  /** 气泡左边相对角色水平中心的偏移，正数向右。 */
+  x: number;
+  /** 气泡底边相对角色脚底的偏移，正数向上。 */
+  y: number;
+  w: number;
+  h: number;
+}
+
+export const DESKTOP_PET_BUBBLE_MIN_WIDTH = 160;
+export const DESKTOP_PET_BUBBLE_MAX_WIDTH = 1600;
+export const DESKTOP_PET_BUBBLE_MIN_HEIGHT = 44;
+export const DESKTOP_PET_BUBBLE_MAX_HEIGHT = 1200;
+export const DESKTOP_PET_BUBBLE_MAX_OFFSET = 2400;
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.round(Math.min(max, Math.max(min, value)));
+}
+
+/** 摸鱼气泡矩形。缺字段、类型不对或明显越界时回到自动摆放。 */
+export function normalizeDesktopPetReaderBubbleRect(
+  value: unknown,
+): DesktopPetReaderBubbleRect | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<Record<keyof DesktopPetReaderBubbleRect, unknown>>;
+  const numbers = [raw.x, raw.y, raw.w, raw.h];
+  if (numbers.some((item) => typeof item !== "number" || !Number.isFinite(item))) return null;
+  return {
+    x: clampNumber(raw.x as number, -DESKTOP_PET_BUBBLE_MAX_OFFSET, DESKTOP_PET_BUBBLE_MAX_OFFSET),
+    y: clampNumber(raw.y as number, -DESKTOP_PET_BUBBLE_MAX_OFFSET, DESKTOP_PET_BUBBLE_MAX_OFFSET),
+    w: clampNumber(raw.w as number, DESKTOP_PET_BUBBLE_MIN_WIDTH, DESKTOP_PET_BUBBLE_MAX_WIDTH),
+    h: clampNumber(raw.h as number, DESKTOP_PET_BUBBLE_MIN_HEIGHT, DESKTOP_PET_BUBBLE_MAX_HEIGHT),
+  };
 }
 
 export const DESKTOP_PET_DISPLAY_SCALE_DEFAULT = 1;

@@ -1,6 +1,7 @@
 import {
   normalizeDesktopPetCropCharacter,
   normalizeDesktopPetDisplayScale,
+  normalizeDesktopPetReaderBubbleRect,
   normalizeDesktopPetReaderHotkey,
   normalizeDesktopPetReaderHotkeyMode,
   type AppSettings,
@@ -18,6 +19,7 @@ export function petFormFromSettings(
     bubbleTone: settings?.desktopPetBubbleTone === "light" ? "light" : "dark",
     displayScale: normalizeDesktopPetDisplayScale(settings?.desktopPetDisplayScale),
     cropCharacter: normalizeDesktopPetCropCharacter(settings?.desktopPetCropCharacter),
+    readerBubbleRect: normalizeDesktopPetReaderBubbleRect(settings?.desktopPetReaderBubbleRect),
     readerPath: settings?.desktopPetReaderPath?.trim() ?? "",
     readerHotkey: normalizeDesktopPetReaderHotkey(settings?.desktopPetReaderHotkey),
     readerHotkeyMode: normalizeDesktopPetReaderHotkeyMode(settings?.desktopPetReaderHotkeyMode),

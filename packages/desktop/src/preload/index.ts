@@ -295,6 +295,14 @@ contextBridge.exposeInMainWorld("zcode", {
       error?: string;
       pack?: import("@zcode/shared").DesktopPetInstalledPack;
     }>,
+  editDesktopPetBubble: () =>
+    ipcRenderer.invoke(PlatformChannels.DesktopPetState, { action: "bubble-edit" }) as Promise<
+      import("@zcode/shared").DesktopPetReaderBubbleRect | null
+    >,
+  resetDesktopPetBubble: () =>
+    ipcRenderer.invoke(PlatformChannels.DesktopPetState, {
+      action: "bubble-reset",
+    }) as Promise<void>,
   deleteDesktopPetPack: (id: string, sourceType: "download" | "local") =>
     ipcRenderer.invoke(PlatformChannels.DesktopPetState, {
       action: "delete",

@@ -27,6 +27,8 @@ export function createDesktopPlatform(options: {
     importDesktopPetPack: (dir) =>
       window.zcode.importDesktopPetPack?.(dir) ??
       Promise.resolve({ success: false, error: "not-supported" }),
+    editDesktopPetBubble: () => window.zcode.editDesktopPetBubble?.() ?? Promise.resolve(null),
+    resetDesktopPetBubble: () => window.zcode.resetDesktopPetBubble?.() ?? Promise.resolve(),
     deleteDesktopPetPack: (id, sourceType) =>
       window.zcode.deleteDesktopPetPack?.(id, sourceType) ?? Promise.resolve(false),
     selectFiles: () => window.zcode.selectFiles?.() ?? Promise.resolve([]),

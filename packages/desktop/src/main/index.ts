@@ -29,6 +29,8 @@ import {
 import {
   bindDesktopPet,
   disposeDesktopPet,
+  editDesktopPetBubble,
+  resetDesktopPetBubble,
   isDesktopPetMediaPath,
   isDesktopPetWindow,
   clearDesktopPetMood,
@@ -1459,6 +1461,10 @@ app.whenReady().then(async () => {
       appPath: app.getAppPath(),
     }),
     preloadPath: join(import.meta.dirname, "../preload/pet.cjs"),
+    patchSettings: (patch) => {
+      void mainSettingService.update(patch);
+    },
+    locale: () => currentApplicationLocale,
   });
   // 插件 UI 沙箱：注册表 + renderer 可调 IPC；scheme 的 privileged 注册已随 zcode-media 在 ready 前完成。
   installPluginSandboxHost({
@@ -1507,6 +1513,7 @@ app.whenReady().then(async () => {
           desktopPetBubbleTone: restoredPetSettings.bubbleTone,
           desktopPetDisplayScale: restoredPetSettings.displayScale,
           desktopPetCropCharacter: restoredPetSettings.cropCharacter,
+          desktopPetReaderBubbleRect: restoredPetSettings.readerBubbleRect,
           desktopPetReaderPath: restoredPetSettings.readerPath,
           desktopPetReaderHotkey: restoredPetSettings.readerHotkey,
           desktopPetReaderHotkeyMode: restoredPetSettings.readerHotkeyMode,
@@ -1714,6 +1721,8 @@ app.whenReady().then(async () => {
     listDesktopPetInstalledPacks,
     importDesktopPetPack,
     deleteDesktopPetPack,
+    editDesktopPetBubble,
+    resetDesktopPetBubble,
     stopDesktopPetDownload,
     findDesktopPetReaderText,
     noteDesktopPetMood,

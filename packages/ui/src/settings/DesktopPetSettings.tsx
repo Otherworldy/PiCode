@@ -22,11 +22,11 @@ import { usePlatform } from "@/hooks/usePlatform.js";
 import { useSettings } from "@/hooks/useSettingService.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { DesktopPetDownloadDialog } from "./DesktopPetDownloadDialog.js";
+import { DesktopPetBubbleRectRow } from "./DesktopPetBubbleRectRow.js";
+import { DesktopPetBubbleStyleRows } from "./DesktopPetBubbleStyleRows.js";
 import { DesktopPetPacksCardGrid } from "./DesktopPetPacksCardGrid.js";
 import { petFormFromSettings } from "./desktopPetSettingsForm.js";
 import { SettingsGroupCard, SettingsRow } from "./SettingsPageParts.js";
-
-const PET_DISPLAY_SCALE_OPTIONS = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.5];
 
 export function DesktopPetSettings() {
   const { intl } = useZCodeIntl();
@@ -42,6 +42,7 @@ export function DesktopPetSettings() {
   const [downloadStatus, setDownloadStatus] = useState<DesktopPetDownloadStatus>({ phase: "idle" });
   const [installedPacks, setInstalledPacks] = useState<DesktopPetInstalledPack[]>([]);
   const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
+  const [bubbleEditing, setBubbleEditing] = useState(false);
 
   const enabled = form.enabled;
   const packDir = form.packDir;
@@ -50,6 +51,7 @@ export function DesktopPetSettings() {
   const bubbleTone = form.bubbleTone;
   const displayScale = form.displayScale;
   const cropCharacter = form.cropCharacter;
+  const readerBubbleRect = form.readerBubbleRect;
   const readerHotkey = form.readerHotkey;
   const readerHotkeyMode = form.readerHotkeyMode;
 
@@ -100,6 +102,7 @@ export function DesktopPetSettings() {
         bubbleTone: saved.bubbleTone === "light" ? ("light" as const) : ("dark" as const),
         displayScale: normalizeDesktopPetDisplayScale(saved.displayScale),
         cropCharacter: normalizeDesktopPetCropCharacter(saved.cropCharacter),
+        readerBubbleRect: saved.readerBubbleRect ?? null,
         readerPath: saved.readerPath?.trim() ?? "",
         readerHotkey: normalizeDesktopPetReaderHotkey(saved.readerHotkey),
         readerHotkeyMode: normalizeDesktopPetReaderHotkeyMode(saved.readerHotkeyMode),
@@ -187,68 +190,17 @@ export function DesktopPetSettings() {
           />
         }
       />
-      <SettingsRow
-        label={intl.formatMessage({ id: "settings.desktopPetBubble" })}
-        description={intl.formatMessage({ id: "settings.desktopPetBubbleDescription" })}
-        control={
-          <Select
-            value={bubbleTone}
-            onValueChange={(value) => {
-              const tone = value === "light" ? "light" : "dark";
-              remember({ bubbleTone: tone });
-              void update({ desktopPetBubbleTone: tone });
-            }}
-          >
-            <SelectTrigger
-              size="lg"
-              className="w-48"
-              aria-label={intl.formatMessage({ id: "settings.desktopPetBubble" })}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="dark">
-                {intl.formatMessage({ id: "settings.desktopPetBubble.dark" })}
-              </SelectItem>
-              <SelectItem value="light">
-                {intl.formatMessage({ id: "settings.desktopPetBubble.light" })}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        }
-      />
-
-      <SettingsRow
-        label={intl.formatMessage({ id: "settings.desktopPetDisplayScale" })}
-        description={intl.formatMessage({ id: "settings.desktopPetDisplayScaleDescription" })}
-        control={
-          <Select
-            value={String(displayScale)}
-            onValueChange={(value) => {
-              const next = normalizeDesktopPetDisplayScale(Number(value));
-              remember({ displayScale: next });
-              void update({ desktopPetDisplayScale: next });
-            }}
-          >
-            <SelectTrigger
-              size="lg"
-              className="w-48"
-              aria-label={intl.formatMessage({ id: "settings.desktopPetDisplayScale" })}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PET_DISPLAY_SCALE_OPTIONS.map((value) => (
-                <SelectItem key={value} value={String(value)}>
-                  {intl.formatMessage(
-                    { id: "settings.desktopPetDisplayScaleValue" },
-                    { percent: Math.round(value * 100) },
-                  )}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        }
+      <DesktopPetBubbleStyleRows
+        tone={bubbleTone}
+        displayScale={displayScale}
+        onTone={(tone) => {
+          remember({ bubbleTone: tone });
+          void update({ desktopPetBubbleTone: tone });
+        }}
+        onDisplayScale={(scale) => {
+          remember({ displayScale: scale });
+          void update({ desktopPetDisplayScale: scale });
+        }}
       />
 
       <SettingsRow
@@ -283,6 +235,28 @@ export function DesktopPetSettings() {
         status={downloadStatus}
         onStart={startDownload}
         onStop={stopDownload}
+      />
+
+      <DesktopPetBubbleRectRow
+        rect={readerBubbleRect}
+        enabled={enabled}
+        editing={bubbleEditing}
+        onReset={() => {
+          remember({ readerBubbleRect: null });
+          void update({ desktopPetReaderBubbleRect: null });
+          void platform.resetDesktopPetBubble?.();
+        }}
+        onEdit={() => {
+          setBubbleEditing(true);
+          void (async () => {
+            const rect = await platform.editDesktopPetBubble?.();
+            setBubbleEditing(false);
+            if (!rect) return;
+            remember({ readerBubbleRect: rect });
+            // 主进程已经写进 setting.json，再走一次设置服务让其他窗口的快照一起刷新。
+            void update({ desktopPetReaderBubbleRect: rect });
+          })();
+        }}
       />
 
       <SettingsRow

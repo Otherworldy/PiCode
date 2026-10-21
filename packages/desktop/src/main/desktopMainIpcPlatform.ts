@@ -89,6 +89,8 @@ export function registerPlatformIpcHandlers(options: {
     pack?: import("@zcode/shared").DesktopPetInstalledPack;
   };
   deleteDesktopPetPack?: (id: string, sourceType: "download" | "local") => boolean;
+  editDesktopPetBubble?: () => Promise<import("@zcode/shared").DesktopPetReaderBubbleRect | null>;
+  resetDesktopPetBubble?: () => void;
   stopDesktopPetDownload?: () => void;
   findDesktopPetReaderText?: (query: string) => Promise<boolean>;
   noteDesktopPetMood?: (senderId: number, mood: unknown) => void;
@@ -142,6 +144,13 @@ export function registerPlatformIpcHandlers(options: {
           req.sourceType === "local" ? "local" : "download",
         ) ?? false
       );
+    }
+    if (request?.action === "bubble-edit") {
+      return options.editDesktopPetBubble?.() ?? null;
+    }
+    if (request?.action === "bubble-reset") {
+      options.resetDesktopPetBubble?.();
+      return null;
     }
     if (request?.action === "find") {
       const found = await options.findDesktopPetReaderText?.(request.query ?? "");

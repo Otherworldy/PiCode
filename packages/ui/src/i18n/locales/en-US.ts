@@ -2016,6 +2016,14 @@ const enUS: Record<string, string> = {
     "Task reminder bubble uses white text on black, or black text on white.",
   "settings.desktopPetBubble.dark": "Black",
   "settings.desktopPetBubble.light": "White",
+  "settings.desktopPetBubbleRect": "Bubble size and position",
+  "settings.desktopPetBubbleRectDescription":
+    "Applies to bubble text only. Choose Adjust on screen, then drag the bubble to move it and drag the corner handles to resize; Enter saves, Esc cancels. Task reminder bubbles stay where they are.",
+  "settings.desktopPetBubbleRectEdit": "Adjust on screen",
+  "settings.desktopPetBubbleRectEditing": "Adjusting…",
+  "settings.desktopPetBubbleRectReset": "Reset",
+  "settings.desktopPetBubbleRectValue": "{width} × {height}",
+  "settings.desktopPetBubbleRectAuto": "Auto",
   "settings.desktopPetDisplayScale": "Display size",
   "settings.desktopPetDisplayScaleDescription":
     "How big the pet looks on screen. 100% is the default; turn it down if it feels large.",
