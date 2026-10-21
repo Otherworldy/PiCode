@@ -50,6 +50,7 @@ import {
 } from "./keyHeld.js";
 import { loadPetPack, petStageHeight, type PetClip, type PetPack } from "./pack.js";
 import { petContextMenu, type PetMenuEntry, type PetMenuSource } from "./petMenu.js";
+import { PET_BUBBLE_SPACE } from "./petBubble.js";
 import { petBubbleTone, renderPetPlayerHtml, type PetBubbleTone } from "./playerHtml.js";
 import {
   PET_READER_CHUNK_BYTES,
@@ -78,7 +79,7 @@ interface PetLogger {
 }
 
 interface PetManifest extends PetMenuSource {
-  /** 角色画面的像素区域。窗口下沿对齐，上方留 64px 气泡条。 */
+  /** 角色画面的像素区域。窗口下沿对齐，上方留气泡条。 */
   stage: { width: number; height: number };
   /** 用户选的显示缩放，渲染端乘在角色像素上。 */
   displayScale: number;
@@ -490,7 +491,7 @@ function showPet(pack: PetPack): void {
   const stageHeight = Math.round(petStageHeight(pack.aspect, pack.size) * scale);
   const cached = settings.cropCharacter ? readPetBox(pack.rootDir) : null;
   const width = cached || settings.cropCharacter ? pack.size : Math.round(pack.size * scale);
-  const height = (cached ? cached.height : stageHeight) + 64;
+  const height = (cached ? cached.height : stageHeight) + PET_BUBBLE_SPACE;
   if (!petWindow || petWindow.isDestroyed()) {
     petWindow = new BrowserWindow({
       width,
@@ -992,7 +993,7 @@ function hasOwn(patch: Partial<AppSettings>, key: keyof AppSettings): boolean {
   return Object.prototype.hasOwnProperty.call(patch, key);
 }
 
-/** 渲染端量到角色像素框后报上来：写缓存，并把窗口高度收到角色区域 + 64。 */
+/** 渲染端量到角色像素框后报上来：写缓存，并把窗口高度收到角色区域 + 气泡条。 */
 function rememberPetBox(width: unknown, height: unknown): void {
   if (!petWindow || petWindow.isDestroyed() || !settings.cropCharacter) return;
   const boxWidth = typeof width === "number" && Number.isFinite(width) ? Math.round(width) : 0;
@@ -1005,7 +1006,7 @@ function rememberPetBox(width: unknown, height: unknown): void {
     }
   }
   const bounds = petWindow.getBounds();
-  const nextHeight = boxHeight + 64;
+  const nextHeight = boxHeight + PET_BUBBLE_SPACE;
   if (nextHeight === bounds.height) return;
   // 下沿固定：只改高度，角色脚下不会跳。宽度留给气泡，不动。
   petWindow.setBounds({
