@@ -359,6 +359,8 @@ export type ConversationRowTargetResolution =
       editTarget?: ConversationEditTarget;
       messageId?: string;
       messageIds?: string[];
+      /** 文件撤销范围：turn 行只撤该轮，user 行撤它及之后所有 turn。 */
+      scope?: "turn" | "suffix";
     }
   | {
       ok: false;
@@ -896,6 +898,15 @@ export class ProductProjection {
       }
       return { ok: true, action, row, messageId };
     }
+    if (action === "fileRewindPreview" && row.kind === "userInput" && row.origin === "realUser") {
+      // 回退到此处：锚点是 user 行，撤销范围是它及之后所有 turn。
+      // 只给 preview 放行：apply 与对话裁切必须由 editUserQuery(restoreToInput + workspaceMode=rewind)
+      // 一条命令完成，单独 apply 无法保证与裁切的原子性。
+      const messageId = this.messageIdByRowId.get(row.rowId);
+      return messageId
+        ? { ok: true, action, row, messageId, scope: "suffix" }
+        : { ok: false, status: "rejected", reasonCode: "guard.actionUnavailable" };
+    }
     if (row.kind !== "turnHeader") {
       return {
         ok: false,
@@ -903,14 +914,20 @@ export class ProductProjection {
         reasonCode: "guard.actionUnavailable",
       };
     }
-    if (
-      (action === "applyFileRewind" || action === "fileRewindPreview") &&
-      (!row.fileChanges || row.actions?.canRewindFiles !== true)
-    ) {
+    if (action === "applyFileRewind" || action === "fileRewindPreview") {
+      if (!row.fileChanges || row.actions?.canRewindFiles !== true) {
+        return {
+          ok: false,
+          status: "rejected",
+          reasonCode: "guard.actionUnavailable",
+        };
+      }
       return {
-        ok: false,
-        status: "rejected",
-        reasonCode: "guard.actionUnavailable",
+        ok: true,
+        action,
+        row,
+        messageIds: this.getMessageIdsForTurnRow(row.rowId),
+        scope: "turn",
       };
     }
     return {
@@ -3496,28 +3513,19 @@ export class ProductProjection {
       (item) => item.payload.kind !== "workspaceHookReview",
     );
     pendingInteractions.push(interaction);
-    return [
-      { op: "state.updated", patch: { pendingInteractions } },
-      ...this.syncWaitState(event),
-    ];
+    return [{ op: "state.updated", patch: { pendingInteractions } }, ...this.syncWaitState(event)];
   }
 
   private onWorkspaceHookReviewSettled(event: SessionEvent): ConversationDelta[] {
     const payload = event.payload as WorkspaceHookReviewSettledPayload;
     endWait(this.waitClock, this.ms(event), `hook:${payload.interactionId}`);
-    return [
-      ...this.removeWorkspaceHookReview(payload.interactionId),
-      ...this.syncWaitState(event),
-    ];
+    return [...this.removeWorkspaceHookReview(payload.interactionId), ...this.syncWaitState(event)];
   }
 
   private onWorkspaceHookReviewSuperseded(event: SessionEvent): ConversationDelta[] {
     const payload = event.payload as WorkspaceHookReviewSupersededPayload;
     endWait(this.waitClock, this.ms(event), `hook:${payload.interactionId}`);
-    return [
-      ...this.removeWorkspaceHookReview(payload.interactionId),
-      ...this.syncWaitState(event),
-    ];
+    return [...this.removeWorkspaceHookReview(payload.interactionId), ...this.syncWaitState(event)];
   }
 
   private removeWorkspaceHookReview(interactionId: string): ConversationDelta[] {
@@ -3587,9 +3595,9 @@ export class ProductProjection {
       if (name === "askuserquestion" || name === "ask_user_question") return false;
       return Boolean(
         payload.toolCallId ||
-          payload.toolName ||
-          payload.options?.length ||
-          !payload.questions?.length,
+        payload.toolName ||
+        payload.options?.length ||
+        !payload.questions?.length,
       );
     });
     if (remaining.length === this.snapshot.pendingInteractions.length) return [];
@@ -3989,7 +3997,9 @@ export class ProductProjection {
     const endedAt = this.ms(event);
     return Math.max(
       0,
-      endedAt - this.currentProductTurnStartedAtMs - waitedMsIn(this.waitClock, this.currentProductTurnStartedAtMs, endedAt),
+      endedAt -
+        this.currentProductTurnStartedAtMs -
+        waitedMsIn(this.waitClock, this.currentProductTurnStartedAtMs, endedAt),
     );
   }
 
@@ -5866,4 +5876,3 @@ function createExitPlanModeApprovalQuestion(reason: string): UserInputQuestionPa
     ],
   };
 }
-

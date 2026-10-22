@@ -40,7 +40,11 @@ export interface FileRewindPreview {
   unsafeFiles: Array<{
     operationCount: number;
     path: string;
-    reason: "checkpoint_missing" | "checkpoint_unreadable" | "external_modified" | "file_read_failed";
+    reason:
+      | "checkpoint_missing"
+      | "checkpoint_unreadable"
+      | "external_modified"
+      | "file_read_failed";
     toolNames: string[];
     message?: string;
   }>;
@@ -56,7 +60,7 @@ type TextEdit = { oldText: string; newText: string };
 type FileDiffStat = { additions: number; deletions: number; lines: string[] };
 type FileOp =
   | { kind: "edit"; path: string; edits: TextEdit[]; diff?: FileDiffStat }
-  | { kind: "write"; path: string; content: string };
+  | { kind: "write"; path: string; content: string; overwrote: boolean };
 type UnsafeReason = FileRewindPreview["unsafeFiles"][number]["reason"];
 
 interface ParsedTurn {
@@ -88,7 +92,9 @@ function editsOf(value: unknown): TextEdit[] | null {
   return edits;
 }
 
-function fileDiffStat(row: Extract<ConversationRow, { kind: "toolCall" }>): FileDiffStat | undefined {
+function fileDiffStat(
+  row: Extract<ConversationRow, { kind: "toolCall" }>,
+): FileDiffStat | undefined {
   const display = row.output?.display;
   if (!display || display.kind !== "file_diff") return undefined;
   const lines = display.structuredPatch[0]?.lines;
@@ -99,11 +105,11 @@ function fileDiffStat(row: Extract<ConversationRow, { kind: "toolCall" }>): File
   };
 }
 
-function parseTurn(rows: readonly ConversationRow[], turnId: string): ParsedTurn {
+function parseTurn(rows: readonly ConversationRow[], turnIds: ReadonlySet<string>): ParsedTurn {
   const files = new Map<string, FileOp[]>();
   let bashCount = 0;
   for (const row of rows) {
-    if (row.kind !== "toolCall" || row.turnId !== turnId || row.status !== "success") continue;
+    if (row.kind !== "toolCall" || !turnIds.has(row.turnId) || row.status !== "success") continue;
     if (row.toolName === "Bash") {
       bashCount += 1;
       continue;
@@ -116,9 +122,14 @@ function parseTurn(rows: readonly ConversationRow[], turnId: string): ParsedTurn
       toolInputPath(row.inputText) || (display?.kind === "file_diff" ? display.filePath : "");
     const op: FileOp | null =
       row.toolName === "Write"
-        ? typeof args?.content === "string"
-          ? { kind: "write", path, content: args.content }
-          : { kind: "write", path, content: "" }
+        ? {
+            kind: "write",
+            path,
+            content: typeof args?.content === "string" ? args.content : "",
+            // write 的 diff 带删除行 = 它覆盖了已有内容。Pi 的 write 没有 before 快照，
+            // 这种撤销只能删文件，会把锚点之前就存在的文件一起删掉，必须判为不可安全撤销。
+            overwrote: (diff?.deletions ?? 0) > 0,
+          }
         : { kind: "edit", path, edits: editsOf(args?.edits) ?? [], ...(diff ? { diff } : {}) };
     const list = files.get(path) ?? [];
     list.push(op);
@@ -203,7 +214,7 @@ export function summarizeTurnFileChanges(
   rows: readonly ConversationRow[],
   turnId: string,
 ): TurnFileChangeSummary | null {
-  const { files } = parseTurn(rows, turnId);
+  const { files } = parseTurn(rows, new Set([turnId]));
   const items = [];
   for (const [path, ops] of files) {
     if (!path) continue;
@@ -272,15 +283,54 @@ export type ReadTurnFile = (
   path: string,
 ) => Promise<{ content: string } | { missing: true } | { error: string }>;
 
+/**
+ * anchor turn 及其之后所有 turn 的 id。锚点不在窗口里时只撤它自己，
+ * 避免窗口裁剪把整段后缀当成空集合。
+ */
+export function suffixTurnIds(rows: readonly ConversationRow[], anchorTurnId: string): string[] {
+  const turnIds = rows.filter((row) => row.kind === "turnHeader").map((row) => row.turnId);
+  const index = turnIds.indexOf(anchorTurnId);
+  if (index < 0) return [anchorTurnId];
+  return turnIds.slice(index);
+}
+
 export async function planTurnFileRewind(
   rows: readonly ConversationRow[],
   turnId: string,
   read: ReadTurnFile,
 ): Promise<FileRewindPlan> {
-  const { files, bashCount } = parseTurn(rows, turnId);
+  return planFileRewind(rows, new Set([turnId]), read);
+}
+
+/**
+ * 回退到此处：撤销 anchor turn 及其之后所有 turn 的文件改动。
+ * 多个 turn 的写操作按事件顺序合并后从新到旧撤销，同一文件以最早的状态为准；
+ * 逐 turn 各算一遍会拿「当前磁盘」去校验更早的 checkpoint，得到错误的 unsafe。
+ */
+export async function planSuffixFileRewind(
+  rows: readonly ConversationRow[],
+  anchorTurnId: string,
+  read: ReadTurnFile,
+): Promise<FileRewindPlan> {
+  return planFileRewind(rows, new Set(suffixTurnIds(rows, anchorTurnId)), read);
+}
+
+async function planFileRewind(
+  rows: readonly ConversationRow[],
+  turnIds: ReadonlySet<string>,
+  read: ReadTurnFile,
+): Promise<FileRewindPlan> {
+  const { files, bashCount } = parseTurn(rows, turnIds);
   const ignoredFiles =
     bashCount > 0
-      ? [{ operationCount: bashCount, path: "shell", reason: "bash_ignored" as const, toolNames: ["Bash"] }]
+      ? [
+          {
+            operationCount: bashCount,
+            path: "shell",
+            reason: "bash_ignored" as const,
+            toolNames: ["Bash"],
+          },
+        ]
       : [];
   const safeFiles: FileRewindPreview["safeFiles"] = [];
   const unsafeFiles: FileRewindPreview["unsafeFiles"] = [];
@@ -323,7 +373,12 @@ export async function planTurnFileRewind(
         reason = "external_modified";
         break;
       }
-      // write 没有旧内容。内容仍等于这次写入时，退回就是删掉该文件。
+      if (op.overwrote) {
+        // 覆盖已有文件的 write 没有旧内容可恢复；退回成删除会连锚点前的文件一起删掉。
+        reason = "checkpoint_missing";
+        break;
+      }
+      // 新建文件的 write：内容仍等于这次写入时，退回就是删掉该文件。
       content = null;
     }
     if (reason) {

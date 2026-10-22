@@ -639,6 +639,7 @@ export interface AgentRuntime {
   }): Promise<ConversationRewindResult>;
   previewWorkspaceFileRewind(options?: {
     abortSignal?: AbortSignal;
+    expandSuffix?: boolean;
     targetCheckpointId?: string;
     targetMessageId?: MessageId;
     targetMessageIds?: MessageId[];
@@ -647,6 +648,7 @@ export interface AgentRuntime {
   }): Promise<WorkspaceFileRewindPreview>;
   applyWorkspaceFileRewind(options?: {
     abortSignal?: AbortSignal;
+    expandSuffix?: boolean;
     targetCheckpointId?: string;
     targetMessageId?: MessageId;
     targetMessageIds?: MessageId[];

@@ -247,6 +247,18 @@ type UserInputEditHandler = (
 
 type AssistantMessageFeedback = "like" | "dislike";
 
+/**
+ * 回退确认的触发条件：preview 里出现任何一类文件都算“这条消息之后有文件改动”。
+ * ignored（bash 改的）虽然不能撤销，也要让用户看见。
+ */
+function hasFileRewindChanges(preview: V4ConversationFileRewindPreviewResult): boolean {
+  return (
+    preview.safeFiles.length > 0 ||
+    preview.unsafeFiles.length > 0 ||
+    preview.ignoredFiles.length > 0
+  );
+}
+
 function getAttachmentTypeLabel(filename: string, mimeType: string): string {
   const leaf = filename.split(/[\\/]/u).at(-1) ?? filename;
   const dotIndex = leaf.lastIndexOf(".");
@@ -937,6 +949,11 @@ const UserInputRowView = memo(function UserInputRowView({
   const [rewindCustom, setRewindCustom] = useState(false);
   const [rewindInstructions, setRewindInstructions] = useState("");
   const [rewindSubmitting, setRewindSubmitting] = useState(false);
+  // 回退前发现这条消息之后有文件改动：先问要不要一起撤销，拿到回答再裁切对话。
+  const [fileRewindPrompt, setFileRewindPrompt] = useState<{
+    choice: ResumeHereChoice;
+    preview: V4ConversationFileRewindPreviewResult;
+  } | null>(null);
   const inputApiRef = useRef<LexicalChatInputHandle | null>(null);
   // 从菜单点「自定义提示词」时菜单会先关；这一刻 pendingSend 还要留给对话框确认，不能一并清掉。
   const pendingCustomRef = useRef(false);
@@ -1017,6 +1034,9 @@ const UserInputRowView = memo(function UserInputRowView({
       setSubmitting(false);
       setRewindOpen(false);
       setRewindSubmitting(false);
+      // 回退入口被收回（转只读、分支总结开始）时确认框也要关：
+      // 留着的话确认按钮会走进 runRewind 的提前 return，用户看不到任何反馈。
+      setFileRewindPrompt(null);
     }
   }, [onEdit]);
 
@@ -1155,12 +1175,18 @@ const UserInputRowView = memo(function UserInputRowView({
     },
     [context.prepareRewindHere],
   );
-  const confirmRewind = useCallback(
-    async (choice: ResumeHereChoice) => {
-      if (!context.onRewindHere || !row.entityId) return;
+  const rewindTarget = useMemo<ConversationRowTarget | null>(
+    () => (row.entityId ? { rowId: row.rowId, entityId: row.entityId } : null),
+    [row.entityId, row.rowId],
+  );
+  // 回退命令不可重入：双击会在文件撤销后再发一条裁切，第二条被判 stale 弹假失败。
+  const rewindInFlightRef = useRef(false);
+  // 真正提交回退。确认框与“直接回退”都从这里进，保证裁切只有一条路径。
+  const runRewind = useCallback(
+    async (choice: ResumeHereChoice, workspaceMode: "preserve" | "rewind") => {
+      if (!context.onRewindHere || !row.entityId || rewindInFlightRef.current) return;
       // 总结要等模型写完才返回。选择浮层留着的话，生成过程就像发生在浮层里。
-      setRewindOpen(false);
-      setRewindCustom(false);
+      rewindInFlightRef.current = true;
       setRewindSubmitting(true);
       try {
         await context.onRewindHere({
@@ -1169,8 +1195,10 @@ const UserInputRowView = memo(function UserInputRowView({
           text: parsedShareContext.visibleContent,
           ...(row.attachments ? { attachments: row.attachments } : {}),
           ...choice,
+          workspaceMode,
         });
       } finally {
+        rewindInFlightRef.current = false;
         setRewindSubmitting(false);
       }
     },
@@ -1182,6 +1210,60 @@ const UserInputRowView = memo(function UserInputRowView({
       row.rowId,
     ],
   );
+  const confirmRewind = useCallback(
+    async (choice: ResumeHereChoice) => {
+      setRewindOpen(false);
+      setRewindCustom(false);
+      if (!context.onRewindHere || !row.entityId) return;
+      const { previewFileRewind } = context;
+      // 没有文件预检能力（只读 / 远程未启用）时保持原行为：只裁切对话。
+      if (!previewFileRewind || !rewindTarget) {
+        await runRewind(choice, "preserve");
+        return;
+      }
+      setRewindSubmitting(true);
+      let preview: V4ConversationFileRewindPreviewResult | null = null;
+      try {
+        preview = await previewFileRewind(rewindTarget);
+      } catch (error: unknown) {
+        // 预检失败不能变成“静默撤销”，回退到旧行为：只裁切对话，不动文件。
+        logger.warn("[v4-user-row] 文件回滚预检失败，仅回退对话", {
+          error: error instanceof Error ? error.message : String(error),
+          rowId: row.rowId,
+        });
+        preview = null;
+      } finally {
+        setRewindSubmitting(false);
+      }
+      if (!preview || !hasFileRewindChanges(preview)) {
+        await runRewind(choice, "preserve");
+        return;
+      }
+      setFileRewindPrompt({ choice, preview });
+    },
+    [
+      context.onRewindHere,
+      context.previewFileRewind,
+      rewindTarget,
+      row.entityId,
+      row.rowId,
+      runRewind,
+    ],
+  );
+  const confirmFileRewind = useCallback(async () => {
+    const prompt = fileRewindPrompt;
+    if (!prompt) return;
+    // 文件撤销与对话裁切必须是一条命令：拆成两条时文件撤销会 bump revision，
+    // 随后的裁切拿着旧 revision 被判 stale，回退必然失败。
+    setFileRewindPrompt(null);
+    await runRewind(prompt.choice, "rewind");
+  }, [fileRewindPrompt, runRewind]);
+  const skipFileRewind = useCallback(async () => {
+    const prompt = fileRewindPrompt;
+    if (!prompt) return;
+    setFileRewindPrompt(null);
+    await runRewind(prompt.choice, "preserve");
+  }, [fileRewindPrompt, runRewind]);
   const rewindWorkspaceDisabled = submitting || editWorkspaceRewindAvailability?.enabled !== true;
   const rewindWorkspaceMenuOpen = pendingSend?.workspaceMode === "rewind";
   const rewindWorkspaceButton = (
@@ -1646,6 +1728,20 @@ const UserInputRowView = memo(function UserInputRowView({
             customInstructions: rewindInstructions.trim(),
           })
         }
+      />
+      <ConversationFileRewindDialog
+        variant="rewindHere"
+        open={fileRewindPrompt !== null}
+        // 关闭等于取消整个回退：不撤文件、也不裁切对话。
+        onOpenChange={(open) => {
+          if (!open) setFileRewindPrompt(null);
+        }}
+        preview={fileRewindPrompt?.preview ?? null}
+        previewLoading={false}
+        applying={false}
+        error={null}
+        onApply={() => void confirmFileRewind()}
+        onConversationOnly={() => void skipFileRewind()}
       />
     </RowShell>
   );

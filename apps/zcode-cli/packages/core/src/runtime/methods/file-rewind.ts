@@ -18,6 +18,8 @@ import type {
   WorkspaceCheckpointArtifact,
 } from "../deps.js";
 import {
+  activeSuffixMessageIdsForRewind,
+  readActiveSessionMessages,
   selectCheckpointForRewind,
   selectCheckpointsForMessages,
   throwIfTurnAborted,
@@ -80,6 +82,8 @@ export async function previewWorkspaceFileRewind(
   this: AgentRuntimeInternal,
   options: {
     abortSignal?: AbortSignal;
+    /** 把锚点展开成 active chain 后缀：回退到此处要撤销锚点之后所有 turn 的文件改动。 */
+    expandSuffix?: boolean;
     targetCheckpointId?: string;
     targetMessageId?: MessageId;
     targetMessageIds?: MessageId[];
@@ -95,6 +99,8 @@ export async function applyWorkspaceFileRewind(
   this: AgentRuntimeInternal,
   options: {
     abortSignal?: AbortSignal;
+    /** 同 preview：展开成 active chain 后缀。 */
+    expandSuffix?: boolean;
     targetCheckpointId?: string;
     targetMessageId?: MessageId;
     targetMessageIds?: MessageId[];
@@ -104,8 +110,7 @@ export async function applyWorkspaceFileRewind(
     commitAfterApply?: () => Promise<void>;
   } = {},
 ): Promise<WorkspaceFileRewindApplyResult> {
-  const traceContext =
-    options.traceContext ?? getCurrentTraceContext() ?? this.rootTraceContext;
+  const traceContext = options.traceContext ?? getCurrentTraceContext() ?? this.rootTraceContext;
   const plan = await buildWorkspaceFileRewindPlan.call(this, {
     ...options,
     traceContext,
@@ -278,6 +283,7 @@ async function buildWorkspaceFileRewindPlan(
   this: AgentRuntimeInternal,
   options: {
     abortSignal?: AbortSignal;
+    expandSuffix?: boolean;
     targetCheckpointId?: string;
     targetMessageId?: MessageId;
     targetMessageIds?: MessageId[];
@@ -285,8 +291,7 @@ async function buildWorkspaceFileRewindPlan(
     traceContext?: TraceContext;
   },
 ): Promise<WorkspaceFileRewindPlan> {
-  const traceContext =
-    options.traceContext ?? getCurrentTraceContext() ?? this.rootTraceContext;
+  const traceContext = options.traceContext ?? getCurrentTraceContext() ?? this.rootTraceContext;
   if (!this.artifactStore || !this.fileSystemPort) {
     return {
       canApply: false,
@@ -308,10 +313,22 @@ async function buildWorkspaceFileRewindPlan(
   }
 
   const events = await this.eventStore.getEvents(this.sessionId);
+  const targetMessageIds = await expandSuffixMessageIds.call(this, options);
+  // suffix 展开落空就没有可撤销范围：不能让 resolveTargetCheckpoints 退化成
+  // 「最后一条 checkpoint」，那会撤销与锚点无关的文件。
+  if (options.expandSuffix && !targetMessageIds?.length) {
+    return {
+      canApply: false,
+      ignoredFiles: [],
+      operations: [],
+      safeFiles: [],
+      unsafeFiles: [],
+    };
+  }
   const checkpoints = resolveTargetCheckpoints(events, {
     targetCheckpointId: options.targetCheckpointId,
     targetMessageId: options.targetMessageId,
-    targetMessageIds: options.targetMessageIds,
+    targetMessageIds,
   });
   if (checkpoints.length === 0) {
     return {
@@ -473,6 +490,34 @@ async function buildWorkspaceFileRewindPlan(
   };
 }
 
+/**
+ * suffix 展开：把锚点消息扩成 active chain 中它及其后的全部 messageId。
+ * 回退到此处要撤销的是「锚点之后所有 turn」的文件改动，只按锚点所在 turn 的
+ * messageIds 撤销会留下后续 turn 的残余改动。
+ * 展开落空时返回空集合，调用方据此 fail closed，不能退化成「最后一条 checkpoint」。
+ */
+async function expandSuffixMessageIds(
+  this: AgentRuntimeInternal,
+  options: {
+    expandSuffix?: boolean;
+    targetMessageId?: MessageId;
+    targetMessageIds?: MessageId[];
+  },
+): Promise<MessageId[] | undefined> {
+  const requested = options.targetMessageIds?.length
+    ? options.targetMessageIds
+    : options.targetMessageId
+      ? [options.targetMessageId]
+      : [];
+  if (!options.expandSuffix || requested.length === 0) return options.targetMessageIds;
+
+  const activeMessages = await readActiveSessionMessages(this);
+  const expanded = requested.flatMap((messageId) =>
+    activeSuffixMessageIdsForRewind(activeMessages, messageId),
+  );
+  return Array.from(new Set(expanded));
+}
+
 function resolveCheckpointFilePath(workspaceRoot: string, path: string): string {
   return isAbsolute(path) ? path : resolve(workspaceRoot, path);
 }
@@ -509,10 +554,7 @@ function resolveTargetCheckpoints(
       .map((event) => event.payload)
       .filter((payload): payload is CheckpointCreatedPayload => {
         const checkpoint = payload as Partial<CheckpointCreatedPayload>;
-        return (
-          checkpoint.scope === RewindScope.Workspace ||
-          checkpoint.scope === RewindScope.Both
-        );
+        return checkpoint.scope === RewindScope.Workspace || checkpoint.scope === RewindScope.Both;
       });
   }
 

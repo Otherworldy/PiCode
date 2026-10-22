@@ -160,6 +160,7 @@ export const commandPayloadSchemas = {
   }),
   // running 时对稳定 assistant row 可用。
   forkAssistant: z.object({ target: conversationRowTargetSchema }),
+  // 撤销范围由 target 行类型决定：turn 行只撤该轮，user 行撤它及之后所有 turn。
   applyFileRewind: z.object({ target: conversationRowTargetSchema }),
   editUserQuery: z.object({
     target: conversationRowTargetSchema,

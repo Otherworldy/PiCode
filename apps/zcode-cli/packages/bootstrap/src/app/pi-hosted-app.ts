@@ -2,9 +2,27 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { abortInflightNetworkFetches } from "@zcode/adapters/network";
-import { planTurnFileRewind, readProcessSshRemoteSpec, sendDelivery, setInflightNetworkAbort, sshReadText, sshRemoveFile, sshWriteText, summarizeTurnFileChanges, type HostedSession } from "@zcode/pi-host";
+import {
+  planSuffixFileRewind,
+  planTurnFileRewind,
+  readProcessSshRemoteSpec,
+  sendDelivery,
+  setInflightNetworkAbort,
+  sshReadText,
+  sshRemoveFile,
+  sshWriteText,
+  suffixTurnIds,
+  summarizeTurnFileChanges,
+  type HostedSession,
+} from "@zcode/pi-host";
 import { remotePosixPath } from "@zcode/shared/node";
-import { RewindStrategy, type CollaborationMode, type ModelSelection, type SessionId, type TurnId } from "@zcode/contracts";
+import {
+  RewindStrategy,
+  type CollaborationMode,
+  type ModelSelection,
+  type SessionId,
+  type TurnId,
+} from "@zcode/contracts";
 import type { PromptInput, SendInputResult, SubmitPromptOptions, ZCodeApp } from "./types.js";
 import { parseProviderQualifiedModelSelection } from "./provider-registry-selection.js";
 
@@ -20,11 +38,27 @@ const emptyRewind = {
 
 async function rewindTurnFiles(hosted: HostedSession, turnId: TurnId | undefined) {
   if (!turnId) return emptyRewind;
-  return planTurnFileRewind(
-    hosted.projector.getSnapshot().rows.window,
-    String(turnId),
-    (path) => readTurnFile(hosted, path),
+  return planTurnFileRewind(hosted.projector.getSnapshot().rows.window, String(turnId), (path) =>
+    readTurnFile(hosted, path),
   );
+}
+
+/** 回退到此处：锚点 turn 及之后所有 turn 一起撤销。 */
+async function rewindSuffixFiles(hosted: HostedSession, anchorTurnId: string | undefined) {
+  if (!anchorTurnId) return emptyRewind;
+  return planSuffixFileRewind(hosted.projector.getSnapshot().rows.window, anchorTurnId, (path) =>
+    readTurnFile(hosted, path),
+  );
+}
+
+function rewindFilePlan(
+  hosted: HostedSession,
+  options?: { expandSuffix?: boolean; targetTurnId?: TurnId },
+) {
+  const anchorTurnId = options?.targetTurnId ? String(options.targetTurnId) : undefined;
+  return options?.expandSuffix
+    ? rewindSuffixFiles(hosted, anchorTurnId)
+    : rewindTurnFiles(hosted, options?.targetTurnId);
 }
 
 function absoluteTurnPath(hosted: HostedSession, filePath: string): string {
@@ -209,14 +243,24 @@ export function createPiHostedApp(
           : {}),
       };
     },
-    previewWorkspaceFileRewind: async (options?: { targetTurnId?: TurnId }) =>
-      (await rewindTurnFiles(hosted, options?.targetTurnId)).preview,
+    previewWorkspaceFileRewind: async (options?: {
+      expandSuffix?: boolean;
+      targetTurnId?: TurnId;
+    }) => (await rewindFilePlan(hosted, options)).preview,
     applyWorkspaceFileRewind: async (options?: {
+      expandSuffix?: boolean;
       targetTurnId?: TurnId;
       commitAfterApply?: () => Promise<void>;
     }) => {
-      const turnId = options?.targetTurnId ? String(options.targetTurnId) : "";
-      const plan = await rewindTurnFiles(hosted, options?.targetTurnId);
+      const anchorTurnId = options?.targetTurnId ? String(options.targetTurnId) : "";
+      const revertedTurnIds = options?.expandSuffix
+        ? anchorTurnId
+          ? suffixTurnIds(hosted.projector.getSnapshot().rows.window, anchorTurnId)
+          : []
+        : anchorTurnId
+          ? [anchorTurnId]
+          : [];
+      const plan = await rewindFilePlan(hosted, options);
       if (!plan.preview.canApply) {
         return {
           applied: false,
@@ -228,18 +272,20 @@ export function createPiHostedApp(
       try {
         for (const file of plan.restores) {
           const current = await readTurnFile(hosted, file.path);
-          const previous = "content" in current && typeof current.content === "string" ? current.content : null;
+          const previous =
+            "content" in current && typeof current.content === "string" ? current.content : null;
           journal.push({ path: file.path, content: previous, deleted: false });
           await writeTurnFile(hosted, file.path, file.content);
         }
         for (const path of plan.deletes) {
           const current = await readTurnFile(hosted, path);
-          const previous = "content" in current && typeof current.content === "string" ? current.content : null;
+          const previous =
+            "content" in current && typeof current.content === "string" ? current.content : null;
           journal.push({ path, content: previous, deleted: true });
           await removeTurnFile(hosted, path);
         }
         await options?.commitAfterApply?.();
-        if (turnId) hosted.markTurnFilesReverted(turnId);
+        for (const turnId of revertedTurnIds) hosted.markTurnFilesReverted(turnId);
       } catch (error) {
         try {
           for (const entry of [...journal].reverse()) {
@@ -307,7 +353,8 @@ export function createPiHostedApp(
       hosted.reloadHistory(content);
     },
     getMode: () =>
-      (hosted.projector.getSnapshot().config.mode as CollaborationMode) || ("build" as CollaborationMode),
+      (hosted.projector.getSnapshot().config.mode as CollaborationMode) ||
+      ("build" as CollaborationMode),
     listModels: () => {
       const listed = hosted.listModels();
       const models =
@@ -339,7 +386,8 @@ export function createPiHostedApp(
     listThoughtLevels: () => ["off", "low", "medium", "high"],
     async setMode(mode: CollaborationMode) {
       const previousMode =
-        (hosted.projector.getSnapshot().config.mode as CollaborationMode) || ("build" as CollaborationMode);
+        (hosted.projector.getSnapshot().config.mode as CollaborationMode) ||
+        ("build" as CollaborationMode);
       applyCollaborationMode(mode);
       return { mode, previousMode, traceId: "pi-host" };
     },
@@ -366,7 +414,14 @@ export function createPiHostedApp(
       if (bytes.byteLength > input.maxBytes) throw new Error("fault.attachment.previewTooLarge");
       return { bytes, mediaType: input.mime };
     },
-    async sendInput(input: PromptInput, options?: { queueDelivery?: "guide"; inputId?: string; intent?: { modelSelection?: ModelSelection } }) {
+    async sendInput(
+      input: PromptInput,
+      options?: {
+        queueDelivery?: "guide";
+        inputId?: string;
+        intent?: { modelSelection?: ModelSelection };
+      },
+    ) {
       const phaseRunning = hosted.projector.getSnapshot().control.phase === "running";
       const delivery = sendDelivery({
         guide: options?.queueDelivery === "guide",
@@ -454,7 +509,12 @@ export function createPiHostedApp(
       const model = parsed?.modelId ?? (typeof modelId === "string" ? modelId : modelId.modelId);
       const previousModel = hosted.projector.getSnapshot().config.model || "";
       await hosted.setModel(provider, model);
-      return { model, previousModel, thoughtLevel: hosted.projector.getSnapshot().config.thought, traceId: "pi-host" };
+      return {
+        model,
+        previousModel,
+        thoughtLevel: hosted.projector.getSnapshot().config.thought,
+        traceId: "pi-host",
+      };
     },
     async setThoughtLevel(level: string) {
       hosted.setThinkingLevel(level);

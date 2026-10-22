@@ -367,9 +367,13 @@ export interface V4GatewayHost {
   ): Promise<V4ConversationFileChangesResult>;
   previewConversationFileRewind?(
     sessionId: string,
-    targetRowId: number,
-    messageIds: string[],
-    targetTurnId: TurnId | null,
+    input: {
+      messageId?: string;
+      messageIds: string[];
+      /** turn：文件摘要面板的该轮改动；suffix：回退到此处，锚点及之后所有 turn。 */
+      scope: "turn" | "suffix";
+      targetTurnId: TurnId | null;
+    },
   ): Promise<V4ConversationFileRewindPreviewResult>;
   /**
    * workflow run 的事件日志分页（详情页审计面）。缺席 = 该会话 runtime 没有这个能力
@@ -1956,14 +1960,13 @@ export class ConversationV4Gateway {
         ? await this.ensureColdReadyPublisher(params.sessionId)
         : await this.hydratePublisher(params.sessionId);
     const resolution = this.resolveQueryRowTarget(publisher, params, "fileRewindPreview");
-    const messageIds = resolution.messageIds ?? [];
     const targetTurnId = toRuntimeTurnId(resolution.row.turnId);
-    return this.host.previewConversationFileRewind(
-      params.sessionId,
-      params.target.rowId,
-      messageIds,
+    return this.host.previewConversationFileRewind(params.sessionId, {
+      ...(resolution.messageId ? { messageId: resolution.messageId } : {}),
+      messageIds: resolution.messageIds ?? [],
+      scope: resolution.scope ?? "turn",
       targetTurnId,
-    );
+    });
   }
 
   private resolveQueryRowTarget(
@@ -2895,9 +2898,7 @@ export class ConversationV4Gateway {
       this.scheduleFlush(routeKey, state, publisher);
     }
     // 流式 token 不刷侧栏。行新增和状态变化才入列，否则新建会话永远不出现。
-    if (
-      deltas.some((delta) => delta.op !== "row.delta" && delta.op !== "embeddedBrowser.open")
-    ) {
+    if (deltas.some((delta) => delta.op !== "row.delta" && delta.op !== "embeddedBrowser.open")) {
       this.publishCurrentSummaryToIndex(sessionId);
     }
   }

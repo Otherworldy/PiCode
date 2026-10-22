@@ -29,6 +29,7 @@ import {
   formatWorkspaceRewindNoticeBody,
   getLatestActiveSessionMessageId,
   isTurnCancellationError,
+  readActiveSessionMessages,
   selectCheckpointForMessage,
   selectCheckpointsForMessages,
   throwIfTurnAborted,
@@ -160,7 +161,7 @@ async function rewindWorkspaceCascadeToMessage(
   },
 ): Promise<WorkspaceRewindResult> {
   const sessionEvents = await this.eventStore.getEvents(this.sessionId);
-  const activeMessages = await readActiveMessagesForWorkspaceRewind.call(this);
+  const activeMessages = await readActiveSessionMessages(this);
   const suffixMessageIds = activeSuffixMessageIdsForRewind(activeMessages, options.targetMessageId);
   const checkpoints = selectCheckpointsForMessages(
     sessionEvents,
@@ -195,23 +196,6 @@ async function rewindWorkspaceCascadeToMessage(
   });
 }
 
-async function readActiveMessagesForWorkspaceRewind(
-  this: AgentRuntimeInternal,
-): Promise<MessageWithParts[]> {
-  if (!this.sessionStore) return [];
-
-  const session = await this.sessionStore.getSession(this.sessionId);
-  const persistedMessages = await this.sessionStore.messages({
-    sessionID: this.sessionId,
-  });
-  return activeSessionMessages(persistedMessages, {
-    branchCutAfterMessageId: session?.revert?.branchCutAfterMessageID,
-    rewindCreatedMessageId: session?.revert?.createdMessageID,
-    rewindKeptMessageIds: session?.revert?.keptMessageIDs,
-    rewindTargetMessageId: session?.revert?.targetMessageID,
-  });
-}
-
 async function rewindWorkspaceToCheckpoints(
   this: AgentRuntimeInternal,
   options: {
@@ -242,7 +226,7 @@ async function rewindWorkspaceToCheckpoints(
 
   const evaluation = evaluateRewindTarget({
     checkpointAvailable: true,
-    items: buildMessageRewindEvaluationItems(await readActiveMessagesForWorkspaceRewind.call(this)),
+    items: buildMessageRewindEvaluationItems(await readActiveSessionMessages(this)),
     scope: RewindScope.Workspace,
     targetMessageId: options.targetMessageId,
   });

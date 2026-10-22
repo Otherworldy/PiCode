@@ -4578,6 +4578,13 @@ const enUS: Record<string, string> = {
   "chat.message.rewindDraftConflict":
     "Send or clear the current draft before rewinding to this message.",
   "chat.message.rewindFailed": "Could not rewind to this message.",
+  "chat.message.rewindFiles.title": "Revert file changes",
+  "chat.message.rewindFiles.description":
+    "Rewinding here restores these files to their state before this point. You can also rewind the conversation only and keep the files as they are.",
+  "chat.message.rewindFiles.apply": "Revert files and rewind",
+  "chat.message.rewindFiles.conversationOnly": "Rewind conversation only",
+  "chat.message.rewindFiles.unsafe":
+    "The files changed outside this session and cannot be safely reverted. You can rewind the conversation only instead.",
   "chat.message.restore": "Restore",
   "chat.message.copy": "Copy",
   "chat.message.copy.copied": "Copied",

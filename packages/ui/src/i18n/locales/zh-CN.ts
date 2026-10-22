@@ -4286,6 +4286,12 @@ const zhCN: Record<string, string> = {
   "chat.message.rewindHere": "回退到此处",
   "chat.message.rewindDraftConflict": "请先发送或清空当前输入，再回退到这条消息。",
   "chat.message.rewindFailed": "无法回退到这条消息。",
+  "chat.message.rewindFiles.title": "撤销文件改动",
+  "chat.message.rewindFiles.description":
+    "回退到此处会把这些文件恢复到该点之前。也可以只回退对话，保留文件现状。",
+  "chat.message.rewindFiles.apply": "撤销文件并回退",
+  "chat.message.rewindFiles.conversationOnly": "只回退对话",
+  "chat.message.rewindFiles.unsafe": "文件已被外部修改，无法安全撤销。可以改用「只回退对话」。",
   "chat.message.restore": "恢复",
   "chat.message.copy": "复制",
   "chat.message.copy.copied": "已复制",

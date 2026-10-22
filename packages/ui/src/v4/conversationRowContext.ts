@@ -105,6 +105,7 @@ export interface ConversationRowRenderContext {
   /**
    * 用户消息回退到此处：先由行内选总结，再裁切这条及之后的内容。
    * 不重发。成功后宿主把原文填进当前输入框。false 表示没裁切。
+   * workspaceMode=rewind：先撤销锤点及之后所有 turn 的文件改动再裁切（同一条命令内完成）。
    */
   onRewindHere?: (target: {
     rowId: number;
@@ -113,6 +114,7 @@ export interface ConversationRowRenderContext {
     attachments?: readonly AttachmentRef[];
     summarize: boolean;
     customInstructions?: string;
+    workspaceMode?: "preserve" | "rewind";
   }) => Promise<boolean | void> | boolean | void;
   /** Assistant Preview Cards：Website 卡片预览入口，由 app shell 注入 side pane 行为。 */
   onOpenBrowserUrl?: (url: string) => void;

@@ -1,6 +1,7 @@
 import {
   RewindScope,
   SessionEventType,
+  activeSessionMessages,
   parseCheckpointCreatedPayload,
   parseCompactBoundaryPayload,
 } from "../deps.js";
@@ -10,6 +11,7 @@ import type {
   MessageWithParts,
   SessionEvent,
   SessionId,
+  SessionStorePort,
   DiffHunk,
   CheckpointCreatedPayload,
   RewindTargetEvaluation,
@@ -142,6 +144,28 @@ export function activeSuffixMessageIdsForRewind(
   if (targetIndex < 0) return [];
 
   return messages.slice(targetIndex).map((message) => message.info.id as MessageId);
+}
+
+/**
+ * 回退与文件撤销共用的 active chain 读取。suffix 展开必须基于活动链：
+ * projection 窗口只保留尾部若干行，按窗口展开会漏掉被裁掉的 turn。
+ */
+export async function readActiveSessionMessages(runtime: {
+  sessionId: SessionId;
+  sessionStore?: SessionStorePort;
+}): Promise<MessageWithParts[]> {
+  if (!runtime.sessionStore) return [];
+
+  const session = await runtime.sessionStore.getSession(runtime.sessionId);
+  const persistedMessages = await runtime.sessionStore.messages({
+    sessionID: runtime.sessionId,
+  });
+  return activeSessionMessages(persistedMessages, {
+    branchCutAfterMessageId: session?.revert?.branchCutAfterMessageID,
+    rewindCreatedMessageId: session?.revert?.createdMessageID,
+    rewindKeptMessageIds: session?.revert?.keptMessageIDs,
+    rewindTargetMessageId: session?.revert?.targetMessageID,
+  });
 }
 
 function checkpointMatchesMessage(

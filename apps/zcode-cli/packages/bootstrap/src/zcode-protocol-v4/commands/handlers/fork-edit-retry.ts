@@ -11,12 +11,7 @@ import type {
   CommandPayloadMap,
   CommandResult,
 } from "@zcode/shared/zcode-protocol-v4";
-import {
-  RewindStrategy,
-  traceContextToLogContext,
-  type MessageId,
-  type TurnId,
-} from "@zcode/contracts";
+import { traceContextToLogContext, type MessageId, type TurnId } from "@zcode/contracts";
 import { mapAttachmentRefsToTurnAttachments } from "../attachment-refs.js";
 import { inputIntentMetadataFromCanonical } from "../input-intent.js";
 import { startPromptTurn } from "../prompt-turn.js";
@@ -29,9 +24,13 @@ import {
   V4InputAdmissionRejectedError,
 } from "./session-flow.js";
 import { applyGoalCommand } from "./goal-compact.js";
+import {
+  CONVERSATION_COMMAND_LOG_MODULE,
+  restoreUserQueryToInput,
+  submitConversationRewind,
+} from "./conversation-rewind.js";
 import type { ConversationEditTarget } from "../../product-projection.js";
 
-const CONVERSATION_COMMAND_LOG_MODULE = "bootstrap.zcode_protocol_v4.commands";
 const EDIT_USER_QUERY_COMPLETED_EVENT = "conversation.command.edit_user_query.completed";
 const FORK_ASSISTANT_COMPLETED_EVENT = "conversation.command.fork_assistant.completed";
 
@@ -88,42 +87,6 @@ class V4RetryTargetNotLatestError extends Error {
 }
 
 /**
- * rewind 截断（直驱 core）：edit/retry 不再伪造 `/rewind` slash turn，而是
- * 直接提交 same-session active branch cut。workspaceMode=rewind 会在文件写入全部
- * 成功后，于同一 commit gate 调用这个 primitive。
- *
- * 组合 rewind 过去在 file transaction callback 中调用 app.submitPrompt，
- * 它会把 `/rewind` 再排入 runtime command queue；当前 edit 命令等待回调，
- * 嵌套 rewind 又等待当前命令释放队列，最终 UI 永久停在编辑态。
- * 完成后 legacy 广播 session_rewound（过渡钩子，旧侧栏消费者感知；v4 投影走
- * RewindTriggered 事件自收口，不依赖本广播）。
- */
-async function submitConversationRewind(
-  host: V4CommandCoreHost,
-  record: V4SessionRecordView,
-  anchorMessageId: string,
-  summary?: { summarize?: boolean; customInstructions?: string },
-): Promise<void> {
-  const result = await record.app.runtime.rewindConversationToMessage({
-    events: [],
-    targetMessageId: anchorMessageId as MessageId,
-    traceContext: record.traceContext,
-    ...(summary?.summarize
-      ? {
-          summarize: true,
-          ...(summary.customInstructions
-            ? { customInstructions: summary.customInstructions }
-            : {}),
-        }
-      : {}),
-  });
-  if (result.strategy !== RewindStrategy.ActiveChain) {
-    throw new Error(`conversation rewind unavailable for ${anchorMessageId}: ${result.strategy}`);
-  }
-  await host.afterLegacyStateMutation?.(record, "session_rewound");
-}
-
-/**
  * editUserQuery：target 是 user 实体，用其 canonical transcript messageId 作 rewind
  * 锚点 → 整段截断 → 原生 prompt turn 重发 newText。
  * 附件命令面：attachments（AttachmentRef → TurnAttachment）随重发提交。
@@ -148,37 +111,15 @@ async function editUserQuery(
   const editTarget = resolution.editTarget;
   if (payload.restoreToInput) {
     // 回退到此处和编辑重发共用 navigateTree 裁切，但用户还没发出新内容。
-    // 不入输入队列、不回滚文件；裁切失败时按编辑同一条路径把 jsonl 画回去。
-    if (record.activeAbortController) {
-      await preemptActiveTurnAndWait(host, record, {
-        abortMessage: "v4 editUserQuery restore preempts active turn",
-        goalPausedMutationReason: "edit_user_query_goal_paused",
-      });
-    }
-    let rewound = false;
-    try {
-      rewound = true;
-      await submitConversationRewind(host, record, editTarget.transcriptMessageId, summary);
-    } catch (error) {
-      if (rewound) await record.app.restoreRewoundConversation?.();
-      throw error;
-    }
-    host.logger?.info?.("v4 editUserQuery restored to input", {
-      ...traceContextToLogContext(record.traceContext),
-      clientId: envelope.clientId,
-      commandId: envelope.commandId,
-      event: "conversation.command.edit_user_query.restored_to_input",
-      module: CONVERSATION_COMMAND_LOG_MODULE,
-      sessionId: record.app.sessionId,
-      status: "completed",
-      targetEntityId: payload.target.entityId,
-      targetRowId: payload.target.rowId,
+    // workspaceMode=rewind 时先撤销锚点及之后所有 turn 的文件改动，两步在同一条命令内完成。
+    return restoreUserQueryToInput({
+      editTarget,
+      envelope,
+      host,
+      record,
+      summary,
+      workspaceMode: payload.workspaceMode ?? "preserve",
     });
-    return {
-      type: "editUserQuery",
-      disposition: "rewind",
-      sessionId: record.app.sessionId,
-    };
   }
   const attachmentRefs = payload.attachments ?? stableAttachmentRefs(editTarget);
   // attachments 缺省与 [] 语义不同；必须基于 effective refs 校验，

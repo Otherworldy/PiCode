@@ -2266,6 +2266,8 @@ export function SessionPane({
       attachments?: readonly AttachmentRef[];
       summarize: boolean;
       customInstructions?: string;
+      /** rewind：同一条命令里先撤销锚点及之后所有 turn 的文件改动再裁切。 */
+      workspaceMode?: "preserve" | "rewind";
     }) => {
       if (rewindDraftBlocked()) return false;
       const current = snapshotRef.current;
@@ -2277,7 +2279,7 @@ export function SessionPane({
             target: { rowId: input.rowId, entityId: input.entityId },
             newText: input.text,
             restoreToInput: true,
-            workspaceMode: "preserve",
+            workspaceMode: input.workspaceMode ?? "preserve",
             ...(input.summarize
               ? {
                   summarize: true,
@@ -2291,13 +2293,24 @@ export function SessionPane({
           current.revision,
           current.logEpoch,
         );
-        if (ack.status !== "accepted" && ack.status !== "duplicate") {
+        // 领域级否决走 accepted + result.disposition=blocked（文件不安全、裁切不可用），
+        // ack.status 仍是 accepted；只判 status 会把「什么都没做」当成功，把原文填回输入框。
+        const blocked =
+          ack.result?.type === "editUserQuery" && ack.result.disposition === "blocked"
+            ? ack.result
+            : undefined;
+        if (blocked || (ack.status !== "accepted" && ack.status !== "duplicate")) {
+          const reasonCode = blocked?.reasonCode ?? ack.reasonCode;
           toast(
-            ack.reasonCode === "guard.branchSummaryCancelled"
+            reasonCode === "guard.branchSummaryCancelled"
               ? intl.formatMessage({ id: "chat.tree.cancelled" })
-              : ack.message || intl.formatMessage({ id: "chat.message.rewindFailed" }),
+              : reasonCode === "guard.workspaceRewindUnsafeFiles"
+                ? intl.formatMessage({ id: "chat.message.rewindFiles.unsafe" })
+                : ack.message || intl.formatMessage({ id: "chat.message.rewindFailed" }),
           );
-          logger.warn(`[v4-pane] 回退被拒绝: ${ack.status} ${ack.reasonCode ?? ""}`);
+          logger.warn(
+            `[v4-pane] 回退被拒绝: ${blocked?.disposition ?? ack.status} ${reasonCode ?? ""}`,
+          );
           return false;
         }
         setComposerRestoreRequest({

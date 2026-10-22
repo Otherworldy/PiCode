@@ -254,12 +254,25 @@ async function resolveConversationBackingRecord(
 
 async function previewConversationFileRewind(
   record: ZCodeProtocolSessionRecord,
-  messageIds: readonly string[],
-  targetTurnId?: TurnId | null,
+  input: {
+    messageId?: string;
+    messageIds: readonly string[];
+    scope: "turn" | "suffix";
+    targetTurnId?: TurnId | null;
+  },
 ): Promise<V4ConversationFileRewindPreviewResult> {
+  // suffix：core 按 active chain 用 messageId 展开，Pi host 按投影窗口用 turnId 展开，
+  // 两条实现都要拿到自己的锚点；展开落空时 core 直接 fail closed，不会退化成单 turn。
+  if (input.scope === "suffix") {
+    return record.app.runtime.previewWorkspaceFileRewind({
+      expandSuffix: true,
+      ...(input.messageId ? { targetMessageId: input.messageId as MessageId } : {}),
+      ...(input.targetTurnId ? { targetTurnId: input.targetTurnId } : {}),
+    });
+  }
   return record.app.runtime.previewWorkspaceFileRewind({
-    targetMessageIds: messageIds as MessageId[],
-    ...(targetTurnId ? { targetTurnId } : {}),
+    targetMessageIds: input.messageIds as MessageId[],
+    ...(input.targetTurnId ? { targetTurnId: input.targetTurnId } : {}),
   });
 }
 
@@ -593,7 +606,10 @@ type SessionTreeHost = {
     editorText?: string;
     tree: SessionTreeHost["readSessionTree"] extends () => infer T ? T : never;
   }>;
-  labelSessionEntry(entryId: string, label?: string): ReturnType<SessionTreeHost["readSessionTree"]>;
+  labelSessionEntry(
+    entryId: string,
+    label?: string,
+  ): ReturnType<SessionTreeHost["readSessionTree"]>;
   deleteSessionBranch(entryId: string): ReturnType<SessionTreeHost["readSessionTree"]>;
 };
 
@@ -1070,7 +1086,15 @@ export function createConversationV4Gateway(
     },
     setAssistantFeedback: async (sessionId, input) => {
       const record = context.sessions.get(sessionId);
-      const hosted = (record?.app as { piHosted?: { setFeedback: (entityId: string, feedback: "like" | "dislike" | null) => void } } | undefined)?.piHosted;
+      const hosted = (
+        record?.app as
+          | {
+              piHosted?: {
+                setFeedback: (entityId: string, feedback: "like" | "dislike" | null) => void;
+              };
+            }
+          | undefined
+      )?.piHosted;
       if (!record || !hosted) throw new Error("proto.sessionNotFound");
       hosted.setFeedback(input.entityId, input.feedback);
     },
@@ -1493,8 +1517,7 @@ export function createConversationV4Gateway(
       if (!record) return null;
       const cwd = (record.app as { piHosted?: { cwd?: string } }).piHosted?.cwd;
       const samePath = (left: string, right: string) => {
-        const norm = (value: string) =>
-          value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+        const norm = (value: string) => value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
         return norm(left) === norm(right);
       };
       return {
@@ -1502,9 +1525,7 @@ export function createConversationV4Gateway(
         lastActivityAt: record.updatedAt,
         ...(record.parentSessionId ? { parentSessionId: String(record.parentSessionId) } : {}),
         // 主工作区不写。写了的话列表会把仓库目录名当成分支。
-        ...(cwd && !samePath(cwd, record.workspace.workspacePath)
-          ? { workingDirectory: cwd }
-          : {}),
+        ...(cwd && !samePath(cwd, record.workspace.workspacePath) ? { workingDirectory: cwd } : {}),
       };
     },
     listWorkspaceSessionIds: (workspaceId) =>
@@ -1712,12 +1733,12 @@ export function createConversationV4Gateway(
       }
       return record.app.readDynamicWorkflowRunNodeResult(input);
     },
-    previewConversationFileRewind: async (sessionId, _targetRowId, messageIds, targetTurnId) => {
+    previewConversationFileRewind: async (sessionId, input) => {
       const record = context.sessions.get(sessionId);
       if (!record) {
         throw new Error(`fault.fileRewindPreview.sessionNotFound: ${sessionId}`);
       }
-      return previewConversationFileRewind(record, messageIds, targetTurnId);
+      return previewConversationFileRewind(record, input);
     },
     // 冷订阅不再在 eventStore / transcript 之间 XOR。message/part
     // 是已完成正文权威，session_entry 只补 legacy goal，内存事件只补

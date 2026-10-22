@@ -28,7 +28,7 @@ interface ConversationFileRewindDialogProps {
   applying: boolean;
   error: string | null;
   onApply: () => void;
-  variant?: "fileRewind" | "editConflict";
+  variant?: "fileRewind" | "editConflict" | "rewindHere";
   onConversationOnly?: () => void;
 }
 
@@ -59,10 +59,12 @@ function PreviewFileList({
       {files.map((file) => (
         <div
           key={`${type}:${file.path}`}
-          className="flex items-center justify-between gap-3 rounded-md border border-border bg-input/30 px-2 py-1.5"
+          className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2"
         >
-          <span className="min-w-0 truncate font-mono text-ui-xs text-foreground">{file.path}</span>
-          <span className="shrink-0 text-ui-xs text-foreground-subtle">
+          <span className="min-w-0 truncate font-mono text-ui-base text-foreground">
+            {file.path}
+          </span>
+          <span className="shrink-0 text-ui-sm text-foreground-subtle">
             {"reason" in file
               ? formatReason(file.reason, intl)
               : intl.formatMessage(
@@ -95,7 +97,8 @@ export function ConversationFileRewindDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-lg"
+        // 宽度对齐项目确认框（AlertDialog 全系 sm:max-w-md）；内部仍是 Dialog 默认规格。
+        className="sm:max-w-md"
         data-testid={variant === "editConflict" ? TID_V4_EDIT_WORKSPACE_CONFLICT_DIALOG : undefined}
       >
         <DialogHeader>
@@ -104,7 +107,9 @@ export function ConversationFileRewindDialog({
               id:
                 variant === "editConflict"
                   ? "chat.edit.workspaceConflict.title"
-                  : "chat.changeSummary.rewindDialog.title",
+                  : variant === "rewindHere"
+                    ? "chat.message.rewindFiles.title"
+                    : "chat.changeSummary.rewindDialog.title",
             })}
           </DialogTitle>
           <DialogDescription>
@@ -112,7 +117,9 @@ export function ConversationFileRewindDialog({
               id:
                 variant === "editConflict"
                   ? "chat.edit.workspaceConflict.description"
-                  : "chat.changeSummary.rewindDialog.description",
+                  : variant === "rewindHere"
+                    ? "chat.message.rewindFiles.description"
+                    : "chat.changeSummary.rewindDialog.description",
             })}
           </DialogDescription>
         </DialogHeader>
@@ -124,7 +131,7 @@ export function ConversationFileRewindDialog({
             </div>
           ) : preview ? (
             <>
-              {variant === "fileRewind" ? (
+              {variant !== "editConflict" && safeCount > 0 ? (
                 <section className="grid gap-1">
                   <h3 className="text-ui-base font-medium">
                     {intl.formatMessage(
@@ -135,15 +142,17 @@ export function ConversationFileRewindDialog({
                   <PreviewFileList files={preview.safeFiles} type="safe" />
                 </section>
               ) : null}
-              <section className="grid gap-1">
-                <h3 className="text-ui-base font-medium">
-                  {intl.formatMessage(
-                    { id: "chat.changeSummary.rewindDialog.unsafeTitle" },
-                    { count: String(unsafeCount) },
-                  )}
-                </h3>
-                <PreviewFileList files={preview.unsafeFiles} type="unsafe" />
-              </section>
+              {variant === "editConflict" || unsafeCount > 0 ? (
+                <section className="grid gap-1">
+                  <h3 className="text-ui-base font-medium">
+                    {intl.formatMessage(
+                      { id: "chat.changeSummary.rewindDialog.unsafeTitle" },
+                      { count: String(unsafeCount) },
+                    )}
+                  </h3>
+                  <PreviewFileList files={preview.unsafeFiles} type="unsafe" />
+                </section>
+              ) : null}
               {ignoredCount > 0 ? (
                 <section className="grid gap-1">
                   <h3 className="text-ui-base font-medium">
@@ -162,7 +171,7 @@ export function ConversationFileRewindDialog({
             </p>
           )}
           {error ? <p className="text-ui-base text-danger">{error}</p> : null}
-          {variant === "fileRewind" && preview && !preview.canApply ? (
+          {variant !== "editConflict" && preview && !preview.canApply ? (
             <p className="text-ui-base text-foreground-subtle">
               {intl.formatMessage({ id: "chat.changeSummary.rewindDialog.cannotApply" })}
             </p>
@@ -174,6 +183,7 @@ export function ConversationFileRewindDialog({
               <Button
                 type="button"
                 variant="ghost"
+                size="lg"
                 disabled={applying}
                 onClick={() => onOpenChange(false)}
               >
@@ -181,6 +191,7 @@ export function ConversationFileRewindDialog({
               </Button>
               <Button
                 type="button"
+                size="lg"
                 disabled={applying || previewLoading}
                 data-testid={TID_V4_EDIT_WORKSPACE_CONFLICT_CONVERSATION_ONLY}
                 onClick={onConversationOnly}
@@ -189,10 +200,33 @@ export function ConversationFileRewindDialog({
                 {intl.formatMessage({ id: "chat.edit.workspaceConflict.conversationOnly" })}
               </Button>
             </>
+          ) : variant === "rewindHere" ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                disabled={applying}
+                onClick={onConversationOnly}
+              >
+                {intl.formatMessage({ id: "chat.message.rewindFiles.conversationOnly" })}
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="lg"
+                disabled={!preview?.canApply || applying || previewLoading}
+                onClick={onApply}
+              >
+                {applying ? <Loader2Icon className="animate-spin" /> : <Undo2Icon />}
+                {intl.formatMessage({ id: "chat.message.rewindFiles.apply" })}
+              </Button>
+            </>
           ) : (
             <Button
               type="button"
               variant="destructive"
+              size="lg"
               disabled={!preview?.canApply || applying || previewLoading}
               onClick={onApply}
             >
