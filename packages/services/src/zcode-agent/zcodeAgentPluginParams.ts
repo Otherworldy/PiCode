@@ -109,6 +109,9 @@ export interface ZCodeAgentSkillReferenceCatalogParams extends ZCodeAgentWorkspa
   sessionId?: string;
 }
 
+// 子智能体工具清单：只服务设置页的内置角色工具勾选，没有会话概念。
+export type ZCodeAgentToolCatalogParams = ZCodeAgentWorkspaceTarget;
+
 /** 插件 UI：UI 发起的 `ui://` 资源读取。 */
 export interface ZCodeAgentReadMcpResourceParams extends ZCodeAgentWorkspaceTarget {
   instance: import("@zcode/shared/mcp-apps").McpAppInstance;

@@ -3190,6 +3190,29 @@ export type ZCodeSkillsReferenceCatalogResult = z.infer<
   typeof zcodeSkillsReferenceCatalogResultSchema
 >;
 
+// ── 子智能体工具清单──
+// workspace 级、无会话：照 skills/referenceCatalog 的先例，每次调用现扫 Pi 内置工具与
+// 用户包扩展注册的工具。设置页可能没有活动会话，所以不读会话快照，也不收 sessionId。
+export const zcodeAgentToolCatalogParamsSchema = z
+  .object({
+    workspace: zcodeWorkspaceRefSchema,
+  })
+  .strict();
+export type ZCodeAgentToolCatalogParams = z.infer<typeof zcodeAgentToolCatalogParamsSchema>;
+export const zcodeAgentToolCatalogEntrySchema = z
+  .object({
+    name: nonEmptyString,
+    source: z.enum(["builtin", "extension"]),
+  })
+  .strict();
+export type ZCodeAgentToolCatalogEntry = z.infer<typeof zcodeAgentToolCatalogEntrySchema>;
+export const zcodeAgentToolCatalogResultSchema = z
+  .object({
+    tools: z.array(zcodeAgentToolCatalogEntrySchema),
+  })
+  .strict();
+export type ZCodeAgentToolCatalogResult = z.infer<typeof zcodeAgentToolCatalogResultSchema>;
+
 // ── 已保存工作流的 GUI 中枢──
 // workspace 级、无会话的五个方法，照 skills/referenceCatalog 的先例：每次调用现扫
 // `<cwd>/.PiCode/workflows/`（挂载时快照会漏掉手改的文件）。形状与 @zcode/contracts 的
@@ -4146,6 +4169,7 @@ export const zcodeProtocolMethods = {
   pluginsListUiSurfaces: "plugins/listUiSurfaces",
   pluginsReferenceCatalogWithCategory: "plugins/referenceCatalogWithCategory",
   skillsReferenceCatalog: "skills/referenceCatalog",
+  agentToolCatalog: "agents/toolCatalog",
   // 已保存工作流的 GUI 中枢：workspace 级、无会话。
   workflowsList: "workflows/list",
   workflowsGet: "workflows/get",

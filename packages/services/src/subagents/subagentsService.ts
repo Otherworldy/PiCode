@@ -8,6 +8,7 @@ import {
   createAgentStateId,
   createPluginAgentStateId,
   parseBuiltInSubagentModelSelectionOverrides,
+  parseBuiltInSubagentToolOverrides,
   parsePluginSubagentModelSelectionOverrides,
   DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS,
   ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID,
@@ -21,6 +22,9 @@ import {
   type AgentsListResult,
   type BuiltInSubagentModelOverrideParams,
   type BuiltInSubagentModelSelectionOverrides,
+  type BuiltInSubagentToolOverride,
+  type BuiltInSubagentToolOverrideParams,
+  type BuiltInSubagentToolOverrides,
   type PluginSubagentModelOverrideParams,
   type PluginSubagentModelSelectionOverrides,
   type SubAgentConfig,
@@ -50,6 +54,7 @@ const subagentLogger = createServiceLogger("subagents");
 
 interface AgentsStateFile {
   builtInModelSelectionOverrides: BuiltInSubagentModelSelectionOverrides;
+  builtInToolOverrides: BuiltInSubagentToolOverrides;
   pluginAgentModelSelectionOverrides: PluginSubagentModelSelectionOverrides;
   disabledAgentIds: string[];
   // 仅供旧版本回滚保留；新版存在选择字段后，禁止再从这两个字段恢复覆盖。
@@ -92,9 +97,11 @@ const PLUGIN_MANIFEST_PATHS = [
 
 function createBuiltInAgents(
   modelSelectionOverrides: BuiltInSubagentModelSelectionOverrides = {},
+  toolOverrides: BuiltInSubagentToolOverrides = {},
 ): AgentSummary[] {
   return BUILT_IN_SUBAGENTS.map((agent) => {
     const override = modelSelectionOverrides[agent.name];
+    const tools = resolveBuiltInTools(agent.tools, toolOverrides[agent.name]);
     return {
       id: createAgentStateId({
         name: agent.name,
@@ -108,7 +115,9 @@ function createBuiltInAgents(
       modelSelection: override,
       modelSelectionOverride: override,
       systemPrompt: agent.systemPrompt,
-      tools: [...agent.tools],
+      tools: tools.tools,
+      ...(tools.toolsOverride ? { toolsOverride: tools.toolsOverride } : {}),
+      ...(tools.toolsExclude ? { toolsExclude: tools.toolsExclude } : {}),
       path: `built-in:${agent.name}`,
       scope: "built-in",
       source: "built-in",
@@ -118,9 +127,28 @@ function createBuiltInAgents(
   });
 }
 
+function resolveBuiltInTools(
+  roleTools: readonly string[],
+  override: BuiltInSubagentToolOverride | undefined,
+): { tools: string[]; toolsOverride?: string[]; toolsExclude?: string[] } {
+  if (!override) return { tools: [...roleTools] };
+  // inherit 用 `*` 表示“全部内置工具”，与 piToolNamesForAgent 的通配语义一致。
+  const base = override.tools === "inherit" ? ["*"] : (override.tools ?? [...roleTools]);
+  const excluded = new Set(override.excludeTools ?? []);
+  const inheritsAll = base.includes("*");
+  // 通配时排除表要在 Pi 白名单里减；显式列表在这里就减完，toolsOverride 始终是生效列表。
+  const tools = inheritsAll ? [...base] : base.filter((tool) => !excluded.has(tool));
+  return {
+    tools,
+    toolsOverride: [...tools],
+    ...(inheritsAll && excluded.size > 0 ? { toolsExclude: [...excluded] } : {}),
+  };
+}
+
 function emptyAgentsState(): AgentsStateFile {
   return {
     builtInModelSelectionOverrides: {},
+    builtInToolOverrides: {},
     pluginAgentModelSelectionOverrides: {},
     disabledAgentIds: [],
   };
@@ -141,6 +169,7 @@ async function readAgentStateFile(options?: SubagentsServiceOptions): Promise<Ag
     const raw = await readFile(await resolveSubagentStateFile(options), "utf-8");
     const parsed = JSON.parse(raw) as {
       builtInModelSelectionOverrides?: unknown;
+      builtInToolOverrides?: unknown;
       pluginAgentModelSelectionOverrides?: unknown;
       builtInModelOverrides?: unknown;
       builtInThoughtLevelOverrides?: unknown;
@@ -150,6 +179,7 @@ async function readAgentStateFile(options?: SubagentsServiceOptions): Promise<Ag
     return {
       ...parsed,
       builtInModelSelectionOverrides: selections,
+      builtInToolOverrides: parseBuiltInSubagentToolOverrides(parsed.builtInToolOverrides),
       pluginAgentModelSelectionOverrides: parsePluginSubagentModelSelectionOverrides(
         parsed.pluginAgentModelSelectionOverrides,
       ),
@@ -558,7 +588,10 @@ export function createSubagentsService(options?: SubagentsServiceOptions): ISuba
           });
       }
       const state = await readAgentStateFile(storageOptions);
-      const builtInAgents = createBuiltInAgents(state.builtInModelSelectionOverrides);
+      const builtInAgents = createBuiltInAgents(
+        state.builtInModelSelectionOverrides,
+        state.builtInToolOverrides,
+      );
       const fileAgents = await discoverFileAgents({
         diagnostics,
         includeUserAgents: capability.userScopeAvailable,
@@ -637,6 +670,47 @@ export function createSubagentsService(options?: SubagentsServiceOptions): ISuba
           {
             ...state,
             builtInModelSelectionOverrides,
+          },
+          storageOptions,
+        );
+      };
+
+      const queued = writeQueue.then(runUpdate, runUpdate);
+      writeQueue = queued.catch(() => {});
+      await queued;
+    },
+
+    async setBuiltInToolOverride(params: BuiltInSubagentToolOverrideParams): Promise<void> {
+      // RPC 不在运行时校验类型；脏角色名会被 reader 丢掉，但键会永久留在文件里。
+      if (!BUILT_IN_AGENT_NAMES.has(params.agentName)) {
+        throw new Error("无效内置 Subagent 身份");
+      }
+      const runUpdate = async () => {
+        const state = await readAgentStateFile(storageOptions);
+        const builtInToolOverrides = { ...state.builtInToolOverrides };
+        if (params.tools === null) {
+          delete builtInToolOverrides[params.agentName];
+        } else {
+          const excludeTools = (params.excludeTools ?? [])
+            .map((tool) => tool.trim())
+            .filter((tool) => tool.length > 0);
+          builtInToolOverrides[params.agentName] = {
+            ...(params.tools === "inherit"
+              ? { tools: "inherit" as const }
+              : {
+                  tools: [
+                    ...new Set(
+                      params.tools.map((tool) => tool.trim()).filter((tool) => tool.length > 0),
+                    ),
+                  ],
+                }),
+            ...(excludeTools.length > 0 ? { excludeTools: [...new Set(excludeTools)] } : {}),
+          };
+        }
+        await writeAgentStateFile(
+          {
+            ...state,
+            builtInToolOverrides,
           },
           storageOptions,
         );

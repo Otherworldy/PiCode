@@ -69,6 +69,11 @@ export interface ExploreSubagentRuntimeRequest {
   agentId: string;
   agentType: string;
   allowedTools: readonly string[];
+  /**
+   * `allowedTools` 是否只是“没声明”的结果。显式空数组（无工具）不能当成继承父会话，
+   * 否则设置页关掉全部工具会反向拿到全集。
+   */
+  inheritAllowedTools?: boolean;
   /** 每次读取都返回 runtime task registry 的当前 foreground/background 状态。 */
   background: boolean;
   disallowedTools?: readonly string[];
@@ -118,6 +123,7 @@ export interface ExploreSubagentPortOptions {
   outputRootDir?: string;
   profiles?: readonly AgentProfile[];
   builtInModelSelectionOverrides?: import("@zcode/shared").BuiltInSubagentModelSelectionOverrides;
+  builtInToolOverrides?: import("@zcode/shared").BuiltInSubagentToolOverrides;
   runtimeTaskRegistry?: RuntimeTaskRegistry;
   createAgentId?: () => string;
   getAllowedTools?: (profile: AgentProfile) => readonly string[];
@@ -132,6 +138,7 @@ export function createExploreSubagentPort(options: ExploreSubagentPortOptions): 
   const borrowedForegroundAgentIds = new Set<string>();
   const profiles = normalizeAgentProfiles(options.profiles ?? [], {
     builtInModelSelectionOverrides: options.builtInModelSelectionOverrides,
+    builtInToolOverrides: options.builtInToolOverrides,
   });
   const autoBackgroundMs = normalizeAutoBackgroundMs(options.autoBackgroundMs);
 
@@ -1131,6 +1138,7 @@ async function runAgentToCompletion(
       agentId: lifecycle.agentId,
       agentType: request.agentType,
       allowedTools: resolveAllowedTools(lifecycle.profile, options),
+      inheritAllowedTools: inheritsAvailableTools(lifecycle.profile),
       // 显式 background Agent 的 child tool 会被镜像到父会话；
       // 过去丢失这个来源会让父 turn 把仍在运行的 child tool 误当前台孤儿收口。这里必须
       // 保留 getter，foreground 后续转后台时，每条 mirror event 才会读取 registry 当前值，
@@ -2117,6 +2125,12 @@ function resolveTotalTokens(usage: ModelUsage): number | undefined {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function inheritsAvailableTools(profile: AgentProfile): boolean {
+  // 内置 Explore 的工具面由它自己的默认白名单决定，不跟随父会话。
+  if (isBuiltInExploreAgentProfile(profile)) return false;
+  return profile.tools === undefined || profile.tools.includes("*");
 }
 
 function resolveAllowedTools(

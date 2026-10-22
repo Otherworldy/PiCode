@@ -65,6 +65,7 @@ import {
   testProviderModelConnectivity,
 } from "./workspace-model-runtime.js";
 import { getSkillReferenceCatalog } from "./skill-reference-catalog.js";
+import { getAgentToolCatalog } from "./agent-tool-catalog.js";
 import {
   deleteSavedWorkflowOp,
   getSavedWorkflowOp,
@@ -135,7 +136,11 @@ import {
   HostSessionRegistry,
   mapPiToolName,
 } from "@zcode/pi-host";
-import { createPiCapabilityPorts, hostBrowserSkillPaths, piRuntimeMcpServers } from "./pi-capabilities.js";
+import {
+  createPiCapabilityPorts,
+  hostBrowserSkillPaths,
+  piRuntimeMcpServers,
+} from "./pi-capabilities.js";
 import { createInMemorySessionEventStore } from "@zcode/contracts";
 
 export type { ZCodeProtocolAgentDependencies, ZCodeProtocolSessionRecord };
@@ -775,6 +780,8 @@ export class ZCodeProtocolAgentServer {
         return await listPluginUiSurfaces(this.context, request.params);
       case zcodeProtocolMethods.skillsReferenceCatalog:
         return await getSkillReferenceCatalog(this.context, request.params);
+      case zcodeProtocolMethods.agentToolCatalog:
+        return await getAgentToolCatalog(this.context, request.params);
       case zcodeProtocolMethods.workflowsList:
         return await listSavedWorkflowsOp(this.context, request.params);
       case zcodeProtocolMethods.workflowsGet:

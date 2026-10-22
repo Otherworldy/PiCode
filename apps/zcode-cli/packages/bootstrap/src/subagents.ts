@@ -13,8 +13,10 @@ import {
   createAgentStateId,
   createPluginAgentStateId,
   parseBuiltInSubagentModelSelectionOverrides,
+  parseBuiltInSubagentToolOverrides,
   parsePluginSubagentModelSelectionOverrides,
   type BuiltInSubagentModelSelectionOverrides,
+  type BuiltInSubagentToolOverrides,
   type PluginSubagentModelSelectionOverrides,
 } from "@zcode/shared";
 
@@ -26,6 +28,7 @@ interface LoadZCodeAgentProfilesInput {
 
 interface LoadZCodeAgentProfilesResult {
   builtInModelSelectionOverrides: BuiltInSubagentModelSelectionOverrides;
+  builtInToolOverrides: BuiltInSubagentToolOverrides;
   pluginAgentModelSelectionOverrides: PluginSubagentModelSelectionOverrides;
   diagnostics: AgentProfileParseDiagnostic[];
   profiles: AgentProfile[];
@@ -107,6 +110,7 @@ export async function loadZCodeAgentProfiles(
 
   return {
     builtInModelSelectionOverrides: agentState.builtInModelSelectionOverrides,
+    builtInToolOverrides: agentState.builtInToolOverrides,
     pluginAgentModelSelectionOverrides: agentState.pluginAgentModelSelectionOverrides,
     diagnostics,
     profiles,
@@ -183,6 +187,7 @@ export function loadPluginAgentProfiles(
 
   return {
     builtInModelSelectionOverrides: {},
+    builtInToolOverrides: {},
     pluginAgentModelSelectionOverrides: {},
     diagnostics,
     profiles,
@@ -252,6 +257,7 @@ function countBareProfileNames(
 
 function readAgentState(storageRoot: string): {
   builtInModelSelectionOverrides: BuiltInSubagentModelSelectionOverrides;
+  builtInToolOverrides: BuiltInSubagentToolOverrides;
   pluginAgentModelSelectionOverrides: PluginSubagentModelSelectionOverrides;
   disabledAgentIds: Set<string>;
 } {
@@ -259,6 +265,7 @@ function readAgentState(storageRoot: string): {
     const raw = readFileSync(join(storageRoot, "v2", "agents-state.json"), "utf8");
     const parsed = JSON.parse(raw) as {
       builtInModelSelectionOverrides?: unknown;
+      builtInToolOverrides?: unknown;
       pluginAgentModelSelectionOverrides?: unknown;
       disabledAgentIds?: unknown;
     };
@@ -269,6 +276,7 @@ function readAgentState(storageRoot: string): {
       builtInModelSelectionOverrides: normalizeBuiltInSelectionOverrides(
         parsed.builtInModelSelectionOverrides,
       ),
+      builtInToolOverrides: parseBuiltInSubagentToolOverrides(parsed.builtInToolOverrides),
       disabledAgentIds: new Set(
         Array.isArray(parsed.disabledAgentIds)
           ? parsed.disabledAgentIds.filter(
@@ -280,6 +288,7 @@ function readAgentState(storageRoot: string): {
   } catch {
     return {
       builtInModelSelectionOverrides: {},
+      builtInToolOverrides: {},
       pluginAgentModelSelectionOverrides: {},
       disabledAgentIds: new Set(),
     };

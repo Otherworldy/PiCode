@@ -41,6 +41,7 @@ import {
   zcodeProcessChildProcessesResultSchema,
   type ZCodeProcessChildProcess,
   zcodeSkillsReferenceCatalogResultSchema,
+  zcodeAgentToolCatalogResultSchema,
   zcodeMcpReadResourceResultSchema,
   zcodeMcpUiCallToolResultSchema,
   zcodeMcpUiCancelCallResultSchema,
@@ -184,6 +185,7 @@ import type {
   ZCodeAgentSetThoughtLevelParams,
   ZCodeAgentPluginReferenceCatalogParams,
   ZCodeAgentSkillReferenceCatalogParams,
+  ZCodeAgentToolCatalogParams,
   ZCodeAgentReadMcpResourceParams,
   ZCodeAgentCallMcpToolForUiParams,
   ZCodeAgentCancelMcpToolCallForUiParams,
@@ -3978,6 +3980,17 @@ export function createZCodeAgentService(
           ...(params.sessionId ? { sessionId: params.sessionId } : {}),
         },
         zcodeSkillsReferenceCatalogResultSchema,
+      );
+    },
+
+    async getAgentToolCatalog(params: ZCodeAgentToolCatalogParams) {
+      // 与 Plugin / Skill 引用一样，Pi 的工具面只存在于 workspace agent 进程；
+      // 独立管理进程没有 resident Session，也没有 Pi 包解析结果。
+      const client = await getReadOnlyClient(params);
+      return client.request(
+        zcodeProtocolMethods.agentToolCatalog,
+        { workspace: buildWorkspaceRef(params) },
+        zcodeAgentToolCatalogResultSchema,
       );
     },
 

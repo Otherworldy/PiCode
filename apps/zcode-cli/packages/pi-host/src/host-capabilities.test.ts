@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import {
   createCapabilityTools,
   piToolNamesForAgent,
   resolveZcodeSubagentLaunchModel,
+  runZcodeSubagent,
   subagentDefaultModelFromSettings,
   toZcodeSubagentProfile,
 } from "./host-capabilities.js";
@@ -17,7 +21,43 @@ test("agent tool names map onto Pi tools", () => {
     "find",
     "ls",
   ]);
-  assert.deepEqual(piToolNamesForAgent(["WebSearch"], available), []);
+  // 内置名只从 available 取，SSH 工作区不会落回本机 bash。
+  assert.deepEqual(piToolNamesForAgent(["Bash"], ["read", "exec"]), []);
+  // powershell 也是本机内置工具，同样不能透传到 SSH 子会话。
+  assert.deepEqual(piToolNamesForAgent(["powershell"], ["read", "exec"]), []);
+  // Pi 原名按精确名处理：勾了 bash 就只声明 bash，不会连带 powershell。
+  assert.deepEqual(piToolNamesForAgent(["bash"], ["bash", "powershell"]), ["bash"]);
+  // Claude 风格别名保留原有的兼容展开。
+  assert.deepEqual(piToolNamesForAgent(["Bash"], ["bash", "powershell"]), ["bash", "powershell"]);
+  // 空数组是显式“无工具”，与 pi-subagents 一致。
+  assert.deepEqual(piToolNamesForAgent([], available), []);
+  // `inherit` 等同通配。
+  assert.deepEqual(piToolNamesForAgent(["inherit"], available), available);
+  // 通配时要减掉排除表。
+  assert.deepEqual(piToolNamesForAgent(["*"], available, ["bash"]), [
+    "read",
+    "grep",
+    "find",
+    "ls",
+    "edit",
+    "write",
+  ]);
+});
+
+test("web tool names go into the subagent allowlist", () => {
+  const available = ["read", "bash", "edit", "write"];
+  // 联网工具由用户扩展注册，不在 available 里也要留在白名单。
+  assert.deepEqual(piToolNamesForAgent(["WebSearch"], available), ["one_search"]);
+  assert.deepEqual(piToolNamesForAgent(["Read", "web_fetch", "fetch_content"], available), [
+    "read",
+    "web_fetch",
+  ]);
+  assert.deepEqual(
+    piToolNamesForAgent(["one_search", "get_search_content", "source_check"], available),
+    ["one_search", "get_search_content", "source_check"],
+  );
+  // 扩展工具名交给 Pi 按精确名匹配，不能先转小写。
+  assert.deepEqual(piToolNamesForAgent(["TodoWrite"], available), ["TodoWrite"]);
 });
 
 test("capability tools call PiCode subagents", async () => {
@@ -26,9 +66,7 @@ test("capability tools call PiCode subagents", async () => {
     cwd: "D:/work",
     sessionId: "sess_browser",
     ports: {
-      listSubagents: async () => [
-        { name: "Explore", description: "search", systemPrompt: "look" },
-      ],
+      listSubagents: async () => [{ name: "Explore", description: "search", systemPrompt: "look" }],
     },
     runSubagent: async (profile, task) => {
       calls.push(`${profile.name}:${task}`);
@@ -154,4 +192,26 @@ test("inherit stays unset and a saved selection keeps its thought level", () => 
     }).thought,
     "low",
   );
+});
+
+test("settings-configured tools that no extension provides fail before launch", async () => {
+  const root = await mkdtemp(join(tmpdir(), "zcode-subagent-tools-"));
+  const agentDir = join(root, "agent");
+  await mkdir(agentDir, { recursive: true });
+  const result = await runZcodeSubagent({
+    cwd: root,
+    parentSessionFile: join(root, "parent.jsonl"),
+    profile: {
+      name: "researcher",
+      description: "research",
+      systemPrompt: "You are researcher.",
+      source: "built-in",
+      toolsSource: "override",
+      tools: ["read", "one_search"],
+    },
+    task: "hello",
+    agentDir,
+    modelRuntime: undefined,
+  });
+  assert.match(result, /tools not available: one_search/);
 });

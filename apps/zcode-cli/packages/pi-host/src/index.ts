@@ -49,6 +49,12 @@ export { completePiPrompt, createSdkSessionFactory, listPiCatalog, mutatePiCatal
 export { summarizeSessionTitleContent } from "./session-title-live.js";
 export { ensurePiSdk, getPiSdkStatus } from "./pi-sdk.js";
 export { listPiSkills } from "./pi-skills.js";
+export {
+  listPiAgentExtensions,
+  listPiAgentTools,
+  type PiAgentExtensionTools,
+  type PiAgentToolEntry,
+} from "./pi-agent-tools.js";
 export { listPiSlashCommands, listSessionSlashCommands } from "./pi-slash-commands.js";
 export {
   checkPiPluginUpdates,

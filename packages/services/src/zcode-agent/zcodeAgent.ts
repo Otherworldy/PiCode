@@ -29,6 +29,7 @@ import type {
   ZCodePluginsInstallResult,
   ZCodePluginsReferenceCatalogResult,
   ZCodeSkillsReferenceCatalogResult,
+  ZCodeAgentToolCatalogResult,
   ZCodeMcpReadResourceResult,
   ZCodeMcpUiCallToolResult,
   ZCodeMcpUiCancelCallResult,
@@ -134,6 +135,7 @@ import type {
   ZCodeAgentPluginViewParams,
   ZCodeAgentPluginReferenceCatalogParams,
   ZCodeAgentSkillReferenceCatalogParams,
+  ZCodeAgentToolCatalogParams,
   ZCodeAgentReadMcpResourceParams,
   ZCodeAgentReadMcpResourceForUiParams,
   ZCodeAgentListMcpResourcesForUiParams,
@@ -643,6 +645,8 @@ export interface IZCodeAgentService {
   getSkillReferenceCatalog(
     params: ZCodeAgentSkillReferenceCatalogParams,
   ): Promise<ZCodeSkillsReferenceCatalogResult>;
+  /** 子智能体工具清单：workspace 级、无会话，现扫 Pi 内置工具与用户包扩展工具。 */
+  getAgentToolCatalog(params: ZCodeAgentToolCatalogParams): Promise<ZCodeAgentToolCatalogResult>;
   /** 插件 UI：读取插件 MCP 的 `ui://` 资源；走 session 所在 workspace agent 进程。 */
   openMcpUiInstance(
     params: import("../plugin-ui-bridge/contract.js").PluginUiPrepareSandboxParams & {

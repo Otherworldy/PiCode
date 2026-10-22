@@ -152,6 +152,7 @@ export function createPiCapabilityPorts(
       });
       return normalizeAgentProfiles(loaded.profiles, {
         builtInModelSelectionOverrides: loaded.builtInModelSelectionOverrides,
+        builtInToolOverrides: loaded.builtInToolOverrides,
       }).map(toZcodeSubagentProfile);
     },
   };

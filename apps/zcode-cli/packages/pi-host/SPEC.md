@@ -4,16 +4,16 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
 
 ## 所有权
 
-| 状态 | 所有者 | 派生 |
-|---|---|---|
-| LLM 上下文 / fork / compact 树 | Pi `SessionManager` jsonl | 适配器不另写对话日志 |
-| 屏幕行 / revision / snapshot | `PiToV4Projector` | UI 只读 V4 |
-| 队列芯片 / held / autoDrain / sendNow | `HostQueue`（PiCode CommandInbox 语义） | 不投影 Pi `queue_update` |
-| 插件 UI 请求 | `ExtensionUiHost` | `pendingInteractions` / widget / status / toast |
-| 含子代理的 session | `HostSessionRegistry` | 绕过 spawn 的 child 只显示扁工具卡 |
-| 账号与模型目录 | Pi `ModelRuntime`（`~/.pi/agent/auth.json` + `models.json`） | 壳不再强制 PiCode OAuth/登录页。测试可仍注入 delegate stream |
-| 工作区 key | `workspaceIdentity?.trim() \|\| workspacePath` | Pi cwd = `workspacePath` |
-| 远控 | 现有 Host attachment | 不为手机另起 Pi |
+| 状态                                  | 所有者                                                       | 派生                                                         |
+| ------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| LLM 上下文 / fork / compact 树        | Pi `SessionManager` jsonl                                    | 适配器不另写对话日志                                         |
+| 屏幕行 / revision / snapshot          | `PiToV4Projector`                                            | UI 只读 V4                                                   |
+| 队列芯片 / held / autoDrain / sendNow | `HostQueue`（PiCode CommandInbox 语义）                      | 不投影 Pi `queue_update`                                     |
+| 插件 UI 请求                          | `ExtensionUiHost`                                            | `pendingInteractions` / widget / status / toast              |
+| 含子代理的 session                    | `HostSessionRegistry`                                        | 绕过 spawn 的 child 只显示扁工具卡                           |
+| 账号与模型目录                        | Pi `ModelRuntime`（`~/.pi/agent/auth.json` + `models.json`） | 壳不再强制 PiCode OAuth/登录页。测试可仍注入 delegate stream |
+| 工作区 key                            | `workspaceIdentity?.trim() \|\| workspacePath`               | Pi cwd = `workspacePath`                                     |
+| 远控                                  | 现有 Host attachment                                         | 不为手机另起 Pi                                              |
 
 ## 事件顺序
 
@@ -128,16 +128,16 @@ UI 设计模式是输入框模式菜单里的勾选，不是斜杠命令。点�
 
 ## 呈现
 
-| Pi | V4 `toolName` |
-|---|---|
-| `read` | `Read` |
-| `bash` / `powershell` | `Bash` |
-| `edit` | `Edit` |
-| `write` | `Write` |
-| `grep` | `Grep` |
-| `find` / `ls` | `Glob` |
-| 子代理（经 Registry） | `Agent` |
-| 其它 | 原名 → Fallback |
+| Pi                    | V4 `toolName`   |
+| --------------------- | --------------- |
+| `read`                | `Read`          |
+| `bash` / `powershell` | `Bash`          |
+| `edit`                | `Edit`          |
+| `write`               | `Write`         |
+| `grep`                | `Grep`          |
+| `find` / `ls`         | `Glob`          |
+| 子代理（经 Registry） | `Agent`         |
+| 其它                  | 原名 → Fallback |
 
 `plugin-adapters` 只提供空 `PluginViewRegistry`。未命中的 `custom()` 降级为 widget 文本。
 
@@ -157,9 +157,11 @@ UI 设计模式是输入框模式菜单里的勾选，不是斜杠命令。点�
 
 运行列表上的角色名是 `picode_subagent` 的 `agent`，不是工具名 `subagent`。新子会话把这个名字写在 jsonl 旁边的 `.role`，并放进本进程活表。更早的文件没有 `.role` 时，从系统提示第一句 `You are <name>.` 读。两边都没有才留 `subagent`。
 
-设置页拥有代理定义：用户 `~/.PiCode/agents`，项目 `<workspace>/.PiCode/agents`，内置 `scout`、`researcher`、`evidence-auditor`、`worker`、`reviewer`、`oracle`、`delegate`。这些角色对齐 [pi-subagents](https://github.com/nicobailon/pi-subagents) 的内置分工、工具和默认思考档位，不再提供 `general-purpose` / `Explore`。Pi 会话挂一个 `picode_subagent` 工具，按这份定义起子会话。子会话不再挂这个工具，也不挂 MCP。同名的 Pi 插件工具 `subagent` 在主会话上禁用，避免两套定义争用。
+设置页拥有代理定义：用户 `~/.PiCode/agents`，项目 `<workspace>/.PiCode/agents`，内置 `scout`、`researcher`、`evidence-auditor`、`worker`、`reviewer`、`oracle`、`delegate`。这些角色对齐 [pi-subagents](https://github.com/nicobailon/pi-subagents) 的内置分工、工具和默认思考档位，不再提供 `general-purpose` / `Explore`。Pi 会话挂一个 `picode_subagent` 工具，按这份定义起子会话。子会话按角色的 `tools` 建工具白名单：Pi 内置工具按可用集收口，其它名字按工具名反查提供它的扩展并只加载那几个（`file://` 形式的 `additionalExtensionPaths` + `noExtensions`），不会把用户的全部插件再起一份。codemode、tool-search、MCP 是 Pi 内置扩展，需要注册对应工厂才会加载，子会话不注册，所以本来就不挂。设置页覆盖里显式列出的扩展工具在解析后仍找不到 provider 时直接失败（`subagent failed: tools not available: ...`）；内置工具的平台差异（如非 Windows 的 powershell）与角色默认缺失只静默裁剪，否则没装 web 插件的用户所有内置角色都起不来。用户/项目/插件角色维持原有的静默裁剪。子会话不再挂这个工具，也不挂 MCP。同名的 Pi 插件工具 `subagent` 在主会话上禁用，避免两套定义争用。
 
 子会话模型的优先级与插件一致：设置里该角色的模型，然后是 Pi `settings.json` 的 `subagents.defaultModel`，最后是父会话当前模型。角色写了思考档位时用那一档，除非这次选择自己带了档位。`defaultModel` 写了但目录里没有时直接失败，不改用父会话。显式指定的模型同样找不到就失败。
+
+内置角色的工具面可以被设置页覆盖（`builtInToolOverrides`），覆盖与模型覆盖同一份状态文件，存储与读写规则见 `packages/services/src/subagents/SPEC.md`。设置页候选项来自 `agents/toolCatalog`，由 `listPiAgentTools(cwd)` 现扫 Pi 内置工具与用户包扩展工具。
 
 ## MCP
 
@@ -167,7 +169,7 @@ UI 设计模式是输入框模式菜单里的勾选，不是斜杠命令。点�
 
 桌面 `--prepare-storage` 只解析会话库路径，不迁移、也不创建 Pi MCP 文件。这个 Worker 不能改 cwd，Windows 上继承到的目录经常是 `C:\Windows\System32`。在那里创建项目 `.pi` 会 EPERM，进程在写出库路径之前退出，桌面只能看到传输中断。迁移仍只发生在真正的会话进程里，并且用该工作区当项目目录。
 
-会话加载 Pi 的 `codemode`、`tool_search` 和 MCP 扩展，不再注册 PiCode 的 `mcp` 代理工具。插件 MCP 和内置 `node_repl` 不进这两个文件，会话创建时用 `registerMcpServer` 注册。`picode_subagent` 拉起的子会话不挂这三个扩展。对话分叉不是子会话：新会话仍加载它们，`codemode` 和 `mcp__node_repl__js` 不会因为带了父会话 id 而消失。
+会话加载 Pi 的 `codemode`、`tool_search` 和 MCP 扩展，不再注册 PiCode 的 `mcp` 代理工具。插件 MCP 和内置 `node_repl` 不进这两个文件，会话创建时用 `registerMcpServer` 注册。`picode_subagent` 拉起的子会话不挂这三个扩展：子会话的 loader 用 `noExtensions`，只挂权限扩展与白名单需要的扩展文件，不注册这三个内置工厂。白名单同样过滤扩展注册的工具，未列出的插件工具不会由默认注册路径声明给模型（扩展自己调 `setActiveTools` 不在白名单保证内）。子会话显式发 `session_start` 并调 `bindExtensions`，让按需加载的扩展能注册请求期 hook；结束前先发 `session_shutdown` 再 `dispose()`。子会话把文件里的 Pi 设置快照到内存（global 与 project 两个 scope 的 `packages` 都算），重试在 loader 加载后关掉；子会话写设置只落在内存，不写用户文件。对话分叉不是子会话：新会话仍加载它们，`codemode` 和 `mcp__node_repl__js` 不会因为带了父会话 id 而消失。
 
 浏览器和官方鉴权仍走这条 Pi 连接。`node_repl` 的每次请求带 `com.zcode/request-context.session_id`。官方 HTTP 仍用现有的逐请求 JWT fetch；官方 stdio 仍把身份头放进 `_meta`。设置页和侧栏项目 MCP 对话框打开时只读配置，不自动 connect。用户点刷新，或在设置里启用一台服务器时，状态检查仍可能再打开一份 `McpPort`，与会话里的 Pi 连接不是同一个客户端。
 
@@ -188,6 +190,7 @@ SDK 来源是 `AppSettings.piSdkSource`。缺省 `builtin`，用打进 `zcode.cj
 设置页通过 `pi/models` 读写 `~/.pi/agent/models.json`（apiKey 明文回读，输入框不脱敏；保存时空字符串清掉密钥，请求不带 `apiKey` 则保留原值）和 `settings.json` 默认模型与思考等级；保存后 `registerProvider`/`unregisterProvider` 更新活着的 `ModelRuntime`。打开设置页的 `get` 只读这份目录，不等 `workspace/readPresentation`；改完模型后的展示刷新放到后台，不挡住设置页。`get` 和插件 `list` 在协议入口不跟会话命令排队。渠道的 `api` 是默认请求格式。模型项没写 `api` 时补成渠道的；写成另一种驱动时保留，运行时用模型项上的 `api`。壳不另写 PiCode 供应商库。PiCode 账号登录、升级套餐、Coding Plan 额度不再作为产品面。
 
 模型设置界面包含两个标签页：「默认模型」与「供应商管理」：
+
 - 「默认模型」页提供全局默认模型（供应商+模型ID）及默认思考等级（Reasoning Level）的直观选择与持久化，展示当前默认模型详细规格，并提供跳转至「供应商管理」的快捷入口；若未配置任何供应商或模型，展示空状态与前往添加供应商的操作。同页还有标题总结开关和可选的总结模型。开关缺省开启；总结模型留空表示跟随当前对话模型。这两项写在 `~/.pi/agent/zcode-title-summary.json`，不进 Pi 的 `settings.json`。
 - 「供应商管理」页提供供应商与模型的增删改查、测试连接等管理能力。
 
@@ -209,15 +212,15 @@ SSH 工作区不部署远端 zcode-server，也不从 PiCode CDN 下载或上传
 
 编辑供应商是两步弹窗：第一步写名称、ID、端点、密钥和渠道 `api`；第二步是单列模型卡片，可从端点拉取或手填模型 ID。状态所有者仍是 `models.json`，不另建一套绑定表。已有供应商的 ID 不可改。
 
-|界面|落盘（Pi `models.json` 模型项）|
-|---|---|
-|别名|`name`|
-|API 格式|跟随渠道则写成渠道 `api`；选了别的驱动则写模型项 `api`|
-|上下文窗口|`contextWindow`|
-|最大输出|`maxTokens`|
-|图片输入|`input` 含 `image`|
-|启用的思考等级|`thinkingLevelMap` 的 key；已有 value（含自定义 mapping）保留|
-|默认思考等级|向导不编辑。文件里已有的 `defaultThinkingLevel` 原样保留；`ModelRuntime` 不消费|
+| 界面           | 落盘（Pi `models.json` 模型项）                                                 |
+| -------------- | ------------------------------------------------------------------------------- |
+| 别名           | `name`                                                                          |
+| API 格式       | 跟随渠道则写成渠道 `api`；选了别的驱动则写模型项 `api`                          |
+| 上下文窗口     | `contextWindow`                                                                 |
+| 最大输出       | `maxTokens`                                                                     |
+| 图片输入       | `input` 含 `image`                                                              |
+| 启用的思考等级 | `thinkingLevelMap` 的 key；已有 value（含自定义 mapping）保留                   |
+| 默认思考等级   | 向导不编辑。文件里已有的 `defaultThinkingLevel` 原样保留；`ModelRuntime` 不消费 |
 
 测试连接复用 `discover`（`GET {baseUrl}/models`），不走旧 PiCode `testModelConnectivity`。不做拖拽排序、思考格式、自定义 Headers、超时、子智能体可用、PDF 能力——这些不进设置页。`compat` 等文件里已有的字段保存时原样留下。
 

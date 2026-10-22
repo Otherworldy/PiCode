@@ -3673,6 +3673,14 @@ const zhCN: Record<string, string> = {
   "settings.subagents.form.tools.card.title": "控制该子智能体可以调用的工具范围。",
   "settings.subagents.form.tools.mode.all": "默认所有权限",
   "settings.subagents.form.tools.mode.custom": "自定义可用工具",
+  "settings.subagents.form.tools.builtin.hint":
+    "候选项来自当前工作区的 Pi 运行时；未勾选的工具不会声明给该子智能体。",
+  "settings.subagents.form.tools.builtin.loading": "正在读取可用工具…",
+  "settings.subagents.form.tools.builtin.restore": "恢复角色默认",
+  "settings.subagents.form.tools.builtin.all": "使用全部内置工具",
+  "settings.subagents.form.tools.builtin.error":
+    "读取运行时工具清单失败（{message}），只显示当前工具。",
+  "settings.subagents.form.tools.builtin.empty": "至少保留一个可用工具。",
   "settings.subagents.form.disallowedTools.label": "禁用工具",
   "settings.subagents.form.skills.label": "技能",
   "settings.subagents.form.background.label": "允许后台运行",

@@ -3919,6 +3919,14 @@ const enUS: Record<string, string> = {
   "settings.subagents.form.tools.card.title": "Control which tools this SubAgent can use.",
   "settings.subagents.form.tools.mode.all": "Default all permissions",
   "settings.subagents.form.tools.mode.custom": "Custom allowed tools",
+  "settings.subagents.form.tools.builtin.hint":
+    "Options come from the Pi runtime of the selected workspace. Unchecked tools are not declared to this SubAgent.",
+  "settings.subagents.form.tools.builtin.loading": "Loading available tools…",
+  "settings.subagents.form.tools.builtin.restore": "Restore role default",
+  "settings.subagents.form.tools.builtin.all": "Use all built-in tools",
+  "settings.subagents.form.tools.builtin.error":
+    "Could not read the runtime tool list ({message}). Showing the current tools only.",
+  "settings.subagents.form.tools.builtin.empty": "Keep at least one tool enabled.",
   "settings.subagents.form.disallowedTools.label": "Disallowed tools",
   "settings.subagents.form.skills.label": "Skills",
   "settings.subagents.form.background.label": "Run in background",

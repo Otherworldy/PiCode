@@ -22,6 +22,7 @@ import type {
 } from "@zcode/contracts";
 import type {
   BuiltInSubagentModelSelectionOverrides,
+  BuiltInSubagentToolOverrides,
   ZCodeProviderAccountAccess,
 } from "@zcode/shared";
 import type { EffectiveModelSelectionResult } from "@zcode/shared/model-selection";
@@ -150,6 +151,7 @@ export interface AgentRuntimeConfig {
     outputRootDir?: string;
     profiles?: readonly AgentProfile[];
     builtInModelSelectionOverrides?: BuiltInSubagentModelSelectionOverrides;
+    builtInToolOverrides?: BuiltInSubagentToolOverrides;
   };
   toolAllowlist?: readonly string[];
   toolDisallowlist?: readonly string[];

@@ -6,6 +6,7 @@ import { filterSubagentChildToolNames } from "./tool-policy.js";
 import {
   BUILT_IN_SUBAGENTS,
   type BuiltInSubagentModelSelectionOverrides,
+  type BuiltInSubagentToolOverrides,
   type ModelSelection,
 } from "@zcode/shared";
 import { resolveProfileModelSelection } from "./profile-model-selection.js";
@@ -38,6 +39,10 @@ export interface AgentProfile {
   source: AgentProfileSource;
   systemPrompt: string;
   tools?: readonly string[];
+  /** `tools` 为 `["*"]` 时要在 Pi 白名单里减掉的工具名。 */
+  toolsExclude?: readonly string[];
+  /** 工具面来自设置页覆盖还是角色默认；覆盖缺工具时子会话直接失败。 */
+  toolsSource?: "role" | "override";
 }
 
 export interface AgentProfileParseDiagnostic {
@@ -77,12 +82,19 @@ export function normalizeAgentProfiles(
   profiles: readonly AgentProfile[],
   options: {
     builtInModelSelectionOverrides?: BuiltInSubagentModelSelectionOverrides;
+    builtInToolOverrides?: BuiltInSubagentToolOverrides;
   } = {},
 ): AgentProfile[] {
   const overrides = options.builtInModelSelectionOverrides ?? {};
+  const toolOverrides = options.builtInToolOverrides ?? {};
   const active = new Map<string, AgentProfile>();
   for (const agent of BUILT_IN_SUBAGENTS) {
     const modelSelection = overrides[agent.name];
+    const toolOverride = toolOverrides[agent.name];
+    const base =
+      toolOverride?.tools === "inherit" ? ["*"] : [...(toolOverride?.tools ?? agent.tools)];
+    const excluded = new Set(toolOverride?.excludeTools ?? []);
+    const inheritsAll = base.includes("*");
     active.set(agent.name, {
       name: agent.name,
       description: agent.description,
@@ -92,7 +104,11 @@ export function normalizeAgentProfiles(
       ...(agent.thinking ? { thinking: agent.thinking } : {}),
       source: "built-in",
       systemPrompt: agent.systemPrompt,
-      tools: [...agent.tools],
+      // 通配时保留排除表，到 Pi 白名单里再减；显式列表直接减完。
+      tools: inheritsAll ? base : base.filter((tool) => !excluded.has(tool)),
+      ...(inheritsAll && excluded.size > 0 ? { toolsExclude: [...excluded] } : {}),
+      // 覆盖显式写了工具面时，运行时缺工具要报错；角色默认缺失只静默裁剪。
+      toolsSource: toolOverride?.tools !== undefined ? "override" : "role",
     });
   }
   for (const profile of profiles) {
@@ -103,9 +119,14 @@ export function normalizeAgentProfiles(
 
 export function formatAgentProfilesForPrompt(
   profiles: readonly AgentProfile[],
-  options: { embeddedSearchEnabled?: boolean } = {},
+  options: {
+    embeddedSearchEnabled?: boolean;
+    builtInToolOverrides?: BuiltInSubagentToolOverrides;
+  } = {},
 ): string | null {
-  const active = normalizeAgentProfiles(profiles);
+  const active = normalizeAgentProfiles(profiles, {
+    builtInToolOverrides: options.builtInToolOverrides,
+  });
   if (active.length === 0) return null;
 
   return [
@@ -116,11 +137,27 @@ export function formatAgentProfilesForPrompt(
         : profile.tools
           ? filterSubagentChildToolNames(profile.tools, profile.disallowedTools)
           : undefined;
-      const toolText = typeof tools === "string" ? tools : tools?.join(", ");
+      const toolText =
+        typeof tools === "string" ? tools : formatProfileToolList(tools, profile.toolsExclude);
       const suffix = toolText ? ` (Tools: ${toolText})` : "";
       return `- ${profile.name}: ${profile.description}${suffix}`;
     }),
   ].join("\n");
+}
+
+function formatProfileToolList(
+  tools: readonly string[] | undefined,
+  excludeTools: readonly string[] | undefined,
+): string | undefined {
+  if (!tools) return undefined;
+  // 通配与空列表都是设置页里的合法状态，提示词里要写成人能读的短语。
+  if (tools.includes("*")) {
+    return excludeTools && excludeTools.length > 0
+      ? `all built-in tools except ${excludeTools.join(", ")}`
+      : "all built-in tools";
+  }
+  if (tools.length === 0) return "no tools";
+  return tools.join(", ");
 }
 
 export function parseAgentProfileFromMarkdown(input: {

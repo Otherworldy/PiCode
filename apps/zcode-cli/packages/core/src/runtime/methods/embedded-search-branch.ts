@@ -38,6 +38,7 @@ export function refreshBranchAwareBuiltInTools(runtime: AgentRuntimeInternal): v
     // 共用同一个 helper，不能在这里重写一遍判断。
     includeDynamicWorkflow: resolveRuntimeDynamicWorkflowToolsIncluded(runtime.config),
     agentProfiles: runtime.config.subagents?.profiles,
+    builtInToolOverrides: runtime.config.subagents?.builtInToolOverrides,
     allowedTools: resolveBuiltInToolAllowlist(runtime.config),
     disallowedTools: runtime.config.toolDisallowlist,
     silentDuplicateWarnings: true,

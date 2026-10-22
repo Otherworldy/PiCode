@@ -13,10 +13,13 @@ import {
   type AgentsCapability,
   type AgentsListResult,
   type AgentSummary,
+  BUILT_IN_SUBAGENTS,
   BUILT_IN_SUBAGENT_NAMES,
   type BuiltInSubagentName,
+  type BuiltInSubagentToolOverride,
   type ModelSelection,
   type SubAgentConfig,
+  type ZCodeAgentToolCatalogEntry,
 } from "@zcode/shared";
 import type { ModelSelectionView } from "@zcode/services";
 import { Button } from "@/components/ui/button.js";
@@ -60,6 +63,8 @@ import {
   SubagentReasoningField,
   type SubagentReasoningFieldState,
 } from "@/settings/SubagentReasoningField.js";
+import { useAgentToolCatalog } from "@/hooks/useAgentToolCatalog.js";
+import { mergeSubagentToolOptions, subagentToolLabel } from "@/lib/subagentToolLabels.js";
 import { refreshLoadedSubagentsStoreForWorkspace } from "@/store/subagentsStore.js";
 import {
   PluginScopeMenu,
@@ -96,7 +101,7 @@ const TOOL_OPTIONS = [
   "WebSearch",
 ] as const;
 const TOOL_OPTION_SET = new Set<string>(TOOL_OPTIONS);
-const RISKY_TOOLS = new Set<string>(["Bash", "Edit", "Write"]);
+const RISKY_TOOLS = new Set<string>(["Bash", "Edit", "Write", "PowerShell"]);
 
 interface AgentGroups {
   builtIn: AgentSummary[];
@@ -120,8 +125,12 @@ interface SubagentFormInitialState {
   inheritAllTools: boolean;
   selectedTools: string[];
   preservedTools: string[];
+  builtInToolsMode: BuiltInToolsMode;
+  excludedTools: string[];
   systemPrompt: string;
 }
+
+type BuiltInToolsMode = "default" | "inherit" | "custom";
 
 interface SubagentsSectionProps {
   onManageModels?: () => void;
@@ -145,7 +154,7 @@ function supportsEnabledToggle(agent: AgentSummary): boolean {
   return isEditableUserAgent(agent) && agent.scope === "user";
 }
 
-function isBuiltInAgent(agent: AgentSummary): boolean {
+function isBuiltInAgent(agent: Pick<AgentSummary, "scope" | "source">): boolean {
   return agent.scope === "built-in" || agent.source === "built-in";
 }
 
@@ -170,6 +179,12 @@ function getKnownTools(values: readonly string[] | undefined): string[] {
   return values?.filter((tool) => TOOL_OPTION_SET.has(tool)) ?? [];
 }
 
+/** 内置角色的出厂工具面：清空覆盖时用它做“恢复默认”。 */
+function builtInRoleTools(name: string | undefined): string[] | undefined {
+  const role = BUILT_IN_SUBAGENTS.find((agent) => agent.name === name);
+  return role ? [...role.tools] : undefined;
+}
+
 function getPreservedTools(values: readonly string[] | undefined): string[] {
   return values?.filter((tool) => !TOOL_OPTION_SET.has(tool)) ?? [];
 }
@@ -185,8 +200,9 @@ function mergeTools(
 }
 
 function allowsAllTools(tools: readonly string[] | undefined): boolean {
-  // 通配符 * 表示全部工具，不能按数组长度显示成 1 个工具。
-  return !tools || tools.length === 0 || tools.some((tool) => tool.trim() === "*");
+  // 通配符 * 表示全部工具；undefined（未声明）也当全部。空数组是显式“无工具”，
+  // 不能按数组长度显示成 1 个工具，也不能显示成全部。
+  return !tools || tools.some((tool) => tool.trim() === "*");
 }
 
 function toPersistedModel(model: string): string | undefined {
@@ -301,11 +317,25 @@ function createSubagentFormInitialState(
     | "description"
     | "color"
     | "modelSelection"
+    | "scope"
+    | "source"
     | "tools"
+    | "toolsOverride"
+    | "toolsExclude"
     | "systemPrompt"
     | "injectAgentsMd"
   >,
 ): SubagentFormInitialState {
+  // 内置角色不改 Markdown：工具卡片直接编白名单，选择集就是覆盖集。
+  const builtIn = initial !== undefined && isBuiltInAgent(initial);
+  const toolsOverride = initial?.toolsOverride;
+  const builtInToolsMode: BuiltInToolsMode = builtIn
+    ? toolsOverride?.includes("*")
+      ? "inherit"
+      : toolsOverride !== undefined
+        ? "custom"
+        : "default"
+    : "custom";
   return {
     name: initial?.name ?? "",
     description: initial?.description ?? "",
@@ -313,9 +343,15 @@ function createSubagentFormInitialState(
     model: toSubagentModelValue(initial?.modelSelection),
     thoughtLevel: initial?.modelSelection?.options?.reasoningLevel,
     injectAgentsMd: initial?.injectAgentsMd ?? true,
-    inheritAllTools: initial?.tools === undefined || initial.tools.length === 0,
-    selectedTools: getKnownTools(initial?.tools),
-    preservedTools: getPreservedTools(initial?.tools),
+    inheritAllTools: builtIn ? false : initial?.tools === undefined || initial.tools.length === 0,
+    selectedTools: builtIn
+      ? builtInToolsMode === "custom"
+        ? [...(toolsOverride ?? [])]
+        : []
+      : getKnownTools(initial?.tools),
+    preservedTools: builtIn ? [] : getPreservedTools(initial?.tools),
+    builtInToolsMode,
+    excludedTools: builtIn ? [...(initial?.toolsExclude ?? [])] : [],
     systemPrompt: initial?.systemPrompt ?? "",
   };
 }
@@ -474,8 +510,10 @@ function AgentListRow({
 }) {
   const { intl } = useZCodeIntl();
   const editable = isEditableUserAgent(agent);
+  const builtIn = isBuiltInAgent(agent);
   const showEnabledToggle = supportsEnabledToggle(agent);
-  const rowEditable = editable && !isOperating;
+  // 内置角色不改文件，但也要能进表单改工具白名单与模型覆盖。
+  const rowEditable = (editable || builtIn) && !isOperating;
   const hasModelOverrideControl = supportsModelOverride(agent);
   // 有覆盖控件的行由控件本身表达模型，不再重复显示模型徽标。
   const showModelBadge = !hasModelOverrideControl;
@@ -800,6 +838,9 @@ function SubagentForm({
   scopeKey,
   workspaceTabs,
   onScopeKeyChange,
+  toolCatalog,
+  toolCatalogLoading,
+  toolCatalogError,
 }: {
   initial?: AgentSummary;
   modelSelectionView?: ModelSelectionView | null;
@@ -809,13 +850,18 @@ function SubagentForm({
   saving: boolean;
   onCancel: () => void;
   onDelete?: (agent: AgentSummary) => void;
-  onSave: (config: SubAgentConfig) => Promise<void>;
+  onSave: (config: SubAgentConfig, builtInTools?: BuiltInSubagentToolOverride) => Promise<void>;
   scopeKey: string;
   workspaceTabs: WorkspaceTabState[];
   onScopeKeyChange: (scopeKey: string) => void;
+  /** 内置角色才有：运行时扫描出的工具与来源。 */
+  toolCatalog?: readonly ZCodeAgentToolCatalogEntry[];
+  toolCatalogLoading?: boolean;
+  toolCatalogError?: string | null;
 }) {
   const recommendStartPlan = useStartPlanRecommendation(modelSelectionView, "subagent");
   const { intl } = useZCodeIntl();
+  const builtIn = initial !== undefined && isBuiltInAgent(initial);
   const initialFormStateKey = createSubagentFormInitialStateKey(initial);
   const initialFormState = useMemo(
     () => createSubagentFormInitialState(initial),
@@ -830,11 +876,58 @@ function SubagentForm({
   const [injectAgentsMd, setInjectAgentsMd] = useState(initialFormState.injectAgentsMd);
   const [inheritAllTools, setInheritAllTools] = useState(initialFormState.inheritAllTools);
   const [selectedTools, setSelectedTools] = useState<string[]>(initialFormState.selectedTools);
+  const [builtInToolsMode, setBuiltInToolsMode] = useState<BuiltInToolsMode>(
+    initialFormState.builtInToolsMode,
+  );
+  const [excludedTools, setExcludedTools] = useState<string[]>(initialFormState.excludedTools);
   const [systemPrompt, setSystemPrompt] = useState(initialFormState.systemPrompt);
   const [nameError, setNameError] = useState<string | null>(null);
   const [descriptionError, setDescriptionError] = useState<string | null>(null);
   const [promptError, setPromptError] = useState<string | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
+  const roleDefaultTools = useMemo(
+    () => (builtIn ? builtInRoleTools(initial?.name) : undefined),
+    [builtIn, initial?.name],
+  );
+  const catalogTools = useMemo(() => (toolCatalog ?? []).map((tool) => tool.name), [toolCatalog]);
+  const builtinCatalogTools = useMemo(
+    () => (toolCatalog ?? []).filter((tool) => tool.source === "builtin").map((tool) => tool.name),
+    [toolCatalog],
+  );
+  // inherit 模式以 Pi 内置工具为底；清单未就绪时用角色默认兜底，不能把勾选框清空。
+  const inheritBaseTools = useMemo(
+    () => (builtinCatalogTools.length > 0 ? builtinCatalogTools : (roleDefaultTools ?? [])),
+    [builtinCatalogTools, roleDefaultTools],
+  );
+  const builtInSelection = useMemo(() => {
+    if (builtInToolsMode === "default") return roleDefaultTools ?? [];
+    if (builtInToolsMode === "inherit") {
+      return inheritBaseTools.filter((tool) => !excludedTools.includes(tool));
+    }
+    return selectedTools;
+  }, [builtInToolsMode, roleDefaultTools, inheritBaseTools, excludedTools, selectedTools]);
+  // 运行时清单在前，角色默认与当前选择兜底在后：扩展被卸载后旧覆盖名仍可见、可取消。
+  const toolOptions = useMemo(() => {
+    if (builtInToolsMode === "inherit") {
+      return mergeSubagentToolOptions(inheritBaseTools, roleDefaultTools);
+    }
+    if (builtInToolsMode === "default") {
+      return mergeSubagentToolOptions(catalogTools, roleDefaultTools);
+    }
+    return mergeSubagentToolOptions(
+      catalogTools,
+      roleDefaultTools,
+      initial?.toolsOverride,
+      selectedTools,
+    );
+  }, [
+    builtInToolsMode,
+    inheritBaseTools,
+    catalogTools,
+    roleDefaultTools,
+    initial?.toolsOverride,
+    selectedTools,
+  ]);
   const inheritModelLabel = intl.formatMessage({
     id: "settings.subagents.model.inherit",
   });
@@ -890,15 +983,16 @@ function SubagentForm({
     !isSubagentThoughtLevelAvailable(thoughtLevelState, thoughtLevel),
   );
   const trimmedName = name.trim();
-  const canSave = Boolean(
-    trimmedName.length >= 3 &&
-    trimmedName.length <= 50 &&
-    /^[a-zA-Z0-9-]+$/u.test(trimmedName) &&
-    description.trim() &&
-    systemPrompt.trim() &&
-    modelAvailable &&
-    !thoughtLevelInvalid,
-  );
+  const identityValid = builtIn
+    ? builtInToolsMode !== "custom" || selectedTools.length > 0
+    : Boolean(
+        trimmedName.length >= 3 &&
+        trimmedName.length <= 50 &&
+        /^[a-zA-Z0-9-]+$/u.test(trimmedName) &&
+        description.trim() &&
+        systemPrompt.trim(),
+      );
+  const canSave = Boolean(identityValid && modelAvailable && !thoughtLevelInvalid);
   const selectedColorIndex = Math.max(0, AGENT_COLORS.indexOf(color));
 
   useEffect(() => {
@@ -918,6 +1012,8 @@ function SubagentForm({
     setInjectAgentsMd(nextInitialState.injectAgentsMd);
     setInheritAllTools(nextInitialState.inheritAllTools);
     setSelectedTools(nextInitialState.selectedTools);
+    setBuiltInToolsMode(nextInitialState.builtInToolsMode);
+    setExcludedTools(nextInitialState.excludedTools);
     setSystemPrompt(nextInitialState.systemPrompt);
     setNameError(null);
     setDescriptionError(null);
@@ -928,7 +1024,12 @@ function SubagentForm({
   const validate = (): boolean => {
     const trimmedName = name.trim();
     let valid = true;
-    if (trimmedName.length < 3 || trimmedName.length > 50) {
+    if (builtIn) {
+      // 内置角色的名称/描述/提示词不属于设置页，只有模型需要校验。
+      setNameError(null);
+      setDescriptionError(null);
+      setPromptError(null);
+    } else if (trimmedName.length < 3 || trimmedName.length > 50) {
       setNameError(
         intl.formatMessage(
           { id: "settings.subagents.form.validation.nameLength" },
@@ -946,25 +1047,27 @@ function SubagentForm({
     } else {
       setNameError(null);
     }
-    if (!description.trim()) {
-      setDescriptionError(
-        intl.formatMessage({
-          id: "settings.subagents.form.validation.descriptionRequired",
-        }),
-      );
-      valid = false;
-    } else {
-      setDescriptionError(null);
-    }
-    if (!systemPrompt.trim()) {
-      setPromptError(
-        intl.formatMessage({
-          id: "settings.subagents.form.validation.promptRequired",
-        }),
-      );
-      valid = false;
-    } else {
-      setPromptError(null);
+    if (!builtIn) {
+      if (!description.trim()) {
+        setDescriptionError(
+          intl.formatMessage({
+            id: "settings.subagents.form.validation.descriptionRequired",
+          }),
+        );
+        valid = false;
+      } else {
+        setDescriptionError(null);
+      }
+      if (!systemPrompt.trim()) {
+        setPromptError(
+          intl.formatMessage({
+            id: "settings.subagents.form.validation.promptRequired",
+          }),
+        );
+        valid = false;
+      } else {
+        setPromptError(null);
+      }
     }
     // 不可用模型会展示为“选择模型”，保存时也必须阻止历史值被静默写回。
     if (!isSubagentModelAvailable(modelSelectGroups, model, modelSelectionLoading)) {
@@ -984,10 +1087,43 @@ function SubagentForm({
   };
 
   const toggleTool = (tool: string) => {
+    if (builtIn) {
+      if (builtInToolsMode === "default") {
+        // 从角色默认开始改，第一次点击就切到自定义，不能偷偷改默认值。
+        setBuiltInToolsMode("custom");
+        setSelectedTools(
+          (roleDefaultTools ?? []).includes(tool)
+            ? (roleDefaultTools ?? []).filter((item) => item !== tool)
+            : [...(roleDefaultTools ?? []), tool],
+        );
+        return;
+      }
+      if (builtInToolsMode === "inherit") {
+        setExcludedTools((current) =>
+          current.includes(tool) ? current.filter((item) => item !== tool) : [...current, tool],
+        );
+        return;
+      }
+      setSelectedTools((current) =>
+        current.includes(tool) ? current.filter((item) => item !== tool) : [...current, tool],
+      );
+      return;
+    }
     setInheritAllTools(false);
     setSelectedTools((current) =>
       current.includes(tool) ? current.filter((item) => item !== tool) : [...current, tool],
     );
+  };
+
+  const restoreRoleDefaultTools = () => {
+    setBuiltInToolsMode("default");
+    setExcludedTools([]);
+    setSelectedTools([...(roleDefaultTools ?? [])]);
+  };
+
+  const useAllBuiltinTools = () => {
+    setBuiltInToolsMode("inherit");
+    setExcludedTools([]);
   };
 
   const handleToolsModeChange = (value: string) => {
@@ -1009,89 +1145,119 @@ function SubagentForm({
       if (!chosen) return;
       selection = chosen;
     }
-    await onSave({
-      name: name.trim(),
-      description: description.trim(),
-      systemPrompt: systemPrompt.trim(),
-      color,
-      injectAgentsMd,
-      ...(selection ? { modelSelection: selection } : {}),
-      tools: inheritAllTools
+    const builtInTools: BuiltInSubagentToolOverride | undefined = builtIn
+      ? builtInToolsMode === "default"
         ? undefined
-        : mergeTools(selectedTools, initialFormState.preservedTools),
-      disallowedTools: initial?.disallowedTools,
-      skills: initial?.skills,
-      permissionMode: initial?.permissionMode,
-      ...(initial?.maxTurns ? { maxTurns: initial.maxTurns } : {}),
-      ...(initial?.background !== undefined ? { background: initial.background } : {}),
-      mcpServers: initial?.mcpServers,
-    });
+        : builtInToolsMode === "inherit"
+          ? {
+              tools: "inherit",
+              ...(excludedTools.length > 0 ? { excludeTools: [...excludedTools] } : {}),
+            }
+          : { tools: [...selectedTools] }
+      : undefined;
+    await onSave(
+      {
+        name: name.trim(),
+        description: description.trim(),
+        systemPrompt: systemPrompt.trim(),
+        color,
+        injectAgentsMd,
+        ...(selection ? { modelSelection: selection } : {}),
+        tools: builtIn
+          ? builtInToolsMode === "inherit"
+            ? ["*"]
+            : builtInSelection
+          : inheritAllTools
+            ? undefined
+            : mergeTools(selectedTools, initialFormState.preservedTools),
+        disallowedTools: initial?.disallowedTools,
+        skills: initial?.skills,
+        permissionMode: initial?.permissionMode,
+        ...(initial?.maxTurns ? { maxTurns: initial.maxTurns } : {}),
+        ...(initial?.background !== undefined ? { background: initial.background } : {}),
+        mcpServers: initial?.mcpServers,
+      },
+      builtInTools,
+    );
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-border p-4">
-      <div className="flex justify-end">
-        <label className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-          <span className="shrink-0 text-ui-base text-foreground-subtle">
-            {intl.formatMessage({ id: "settings.scope.label" })}
-          </span>
-          <PluginScopeMenu
-            align="end"
-            disabled={Boolean(initial)}
-            selectedScopeKey={scopeKey}
-            workspaceTabs={workspaceTabs}
-            onScopeKeyChange={onScopeKeyChange}
-          />
-        </label>
-      </div>
-      <div className="grid gap-3 md:grid-cols-[minmax(12rem,14rem)_auto_minmax(0,1fr)] md:items-start">
-        <div className="space-y-1.5">
-          <FormFieldLabel>
-            {intl.formatMessage({ id: "settings.subagents.form.name.label" })}
-          </FormFieldLabel>
-          <Input
-            type="text"
-            size="lg"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder={intl.formatMessage({
-              id: "settings.subagents.form.name.placeholder",
-            })}
-          />
-          {nameError ? <p className="text-ui-base text-destructive">{nameError}</p> : null}
-        </div>
-        <div className="space-y-1.5">
-          <FormFieldLabel>
-            {intl.formatMessage({ id: "settings.subagents.form.color.label" })}
-          </FormFieldLabel>
-          <div
-            role="radiogroup"
-            className="relative inline-grid w-56 grid-cols-8 rounded-lg border border-input-border bg-input p-1"
-          >
-            <span
-              className="pointer-events-none absolute top-1 size-6 rounded-full border border-border-hover bg-surface shadow-xs transition-[left]"
-              style={{
-                left: `calc(0.25rem + ((100% - 0.5rem) / ${AGENT_COLORS.length}) * ${selectedColorIndex})`,
-              }}
-              aria-hidden="true"
+      {builtIn ? null : (
+        <div className="flex justify-end">
+          <label className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+            <span className="shrink-0 text-ui-base text-foreground-subtle">
+              {intl.formatMessage({ id: "settings.scope.label" })}
+            </span>
+            <PluginScopeMenu
+              align="end"
+              disabled={Boolean(initial)}
+              selectedScopeKey={scopeKey}
+              workspaceTabs={workspaceTabs}
+              onScopeKeyChange={onScopeKeyChange}
             />
-            {AGENT_COLORS.map((option) => (
-              <button
-                key={option}
-                type="button"
-                role="radio"
-                aria-checked={color === option}
-                aria-label={intl.formatMessage({
-                  id: `settings.subagents.color.${option}`,
-                })}
-                className="relative z-10 flex size-6 items-center justify-center rounded-full outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring"
-                onClick={() => setColor(option)}
-              >
-                <span className={cn("size-3.5 rounded-full", COLOR_DOT_CLASS[option])} />
-              </button>
-            ))}
-          </div>
+          </label>
         </div>
+      )}
+      <div
+        className={cn(
+          "grid gap-3 md:items-start",
+          builtIn
+            ? "md:grid-cols-[minmax(0,1fr)]"
+            : "md:grid-cols-[minmax(12rem,14rem)_auto_minmax(0,1fr)]",
+        )}
+      >
+        {builtIn ? null : (
+          <>
+            <div className="space-y-1.5">
+              <FormFieldLabel>
+                {intl.formatMessage({ id: "settings.subagents.form.name.label" })}
+              </FormFieldLabel>
+              <Input
+                type="text"
+                size="lg"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder={intl.formatMessage({
+                  id: "settings.subagents.form.name.placeholder",
+                })}
+              />
+              {nameError ? <p className="text-ui-base text-destructive">{nameError}</p> : null}
+            </div>
+            <div className="space-y-1.5">
+              <FormFieldLabel>
+                {intl.formatMessage({ id: "settings.subagents.form.color.label" })}
+              </FormFieldLabel>
+              <div
+                role="radiogroup"
+                className="relative inline-grid w-56 grid-cols-8 rounded-lg border border-input-border bg-input p-1"
+              >
+                <span
+                  className="pointer-events-none absolute top-1 size-6 rounded-full border border-border-hover bg-surface shadow-xs transition-[left]"
+                  style={{
+                    left: `calc(0.25rem + ((100% - 0.5rem) / ${AGENT_COLORS.length}) * ${selectedColorIndex})`,
+                  }}
+                  aria-hidden="true"
+                />
+                {AGENT_COLORS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    role="radio"
+                    aria-checked={color === option}
+                    aria-label={intl.formatMessage({
+                      id: `settings.subagents.color.${option}`,
+                    })}
+                    className="relative z-10 flex size-6 items-center justify-center rounded-full outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => setColor(option)}
+                  >
+                    <span className={cn("size-3.5 rounded-full", COLOR_DOT_CLASS[option])} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
         <div className="space-y-1.5">
           <FormFieldLabel>
             {intl.formatMessage({ id: "settings.subagents.form.model.label" })}
@@ -1137,107 +1303,181 @@ function SubagentForm({
         </div>
       </div>
 
-      <div className="space-y-1.5">
-        <FormFieldLabel>
-          {intl.formatMessage({
-            id: "settings.subagents.form.description.label",
-          })}
-        </FormFieldLabel>
-        <Input
-          type="text"
-          size="lg"
-          value={description}
-          onChange={(event) => setDescription(event.target.value)}
-          placeholder={intl.formatMessage({
-            id: "settings.subagents.form.description.placeholder",
-          })}
-        />
-        {descriptionError ? (
-          <p className="text-ui-base text-destructive">{descriptionError}</p>
-        ) : null}
-      </div>
+      {builtIn ? null : (
+        <div className="space-y-1.5">
+          <FormFieldLabel>
+            {intl.formatMessage({
+              id: "settings.subagents.form.description.label",
+            })}
+          </FormFieldLabel>
+          <Input
+            type="text"
+            size="lg"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder={intl.formatMessage({
+              id: "settings.subagents.form.description.placeholder",
+            })}
+          />
+          {descriptionError ? (
+            <p className="text-ui-base text-destructive">{descriptionError}</p>
+          ) : null}
+        </div>
+      )}
 
       <div className="space-y-2 pt-1">
         <FormFieldLabel>
           {intl.formatMessage({ id: "settings.subagents.form.tools.label" })}
         </FormFieldLabel>
-        <div className="flex min-w-0 items-center gap-2">
-          <Select value={inheritAllTools ? "all" : "custom"} onValueChange={handleToolsModeChange}>
-            <SelectTrigger size="lg" className="w-fit justify-between">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">
-                {intl.formatMessage({
-                  id: "settings.subagents.form.tools.mode.all",
-                })}
-              </SelectItem>
-              <SelectItem value="custom">
-                {intl.formatMessage({
-                  id: "settings.subagents.form.tools.mode.custom",
-                })}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          <span className="min-w-0 text-ui-base font-normal text-foreground-subtle">
-            {intl.formatMessage({
-              id: "settings.subagents.form.tools.card.title",
-            })}
-          </span>
-        </div>
-        {inheritAllTools ? null : (
-          <div className="rounded-lg border border-border bg-card p-1">
-            <div className="grid max-h-72 gap-1 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
-              {TOOL_OPTIONS.map((tool) => (
-                <ToolCheckbox
-                  key={tool}
-                  checked={selectedTools.includes(tool)}
-                  disabled={false}
-                  label={tool}
-                  onToggle={() => toggleTool(tool)}
-                />
-              ))}
+        {builtIn ? (
+          <div className="space-y-2">
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+              <span className="min-w-0 text-ui-base font-normal text-foreground-subtle">
+                {toolCatalogLoading
+                  ? intl.formatMessage({ id: "settings.subagents.form.tools.builtin.loading" })
+                  : intl.formatMessage({ id: "settings.subagents.form.tools.builtin.hint" })}
+              </span>
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={
+                    saving || builtInToolsMode === "inherit" || builtinCatalogTools.length === 0
+                  }
+                  onClick={useAllBuiltinTools}
+                >
+                  {intl.formatMessage({ id: "settings.subagents.form.tools.builtin.all" })}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={saving || !roleDefaultTools || builtInToolsMode === "default"}
+                  onClick={restoreRoleDefaultTools}
+                >
+                  {intl.formatMessage({ id: "settings.subagents.form.tools.builtin.restore" })}
+                </Button>
+              </div>
             </div>
+            <div className="rounded-lg border border-border bg-card p-1">
+              <div className="grid max-h-72 gap-1 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
+                {toolOptions.map((tool) => (
+                  <ToolCheckbox
+                    key={tool}
+                    checked={builtInSelection.includes(tool)}
+                    // inherit 模式的选项必须来自运行时内置清单；清单没到位时不让人写出不可见的排除项。
+                    disabled={
+                      saving || (builtInToolsMode === "inherit" && builtinCatalogTools.length === 0)
+                    }
+                    label={subagentToolLabel(tool)}
+                    onToggle={() => toggleTool(tool)}
+                  />
+                ))}
+              </div>
+            </div>
+            {toolCatalogError ? (
+              <p className="text-ui-base text-destructive">
+                {intl.formatMessage(
+                  { id: "settings.subagents.form.tools.builtin.error" },
+                  { message: toolCatalogError },
+                )}
+              </p>
+            ) : null}
+            {builtInToolsMode === "custom" && selectedTools.length === 0 ? (
+              <p className="text-ui-base text-destructive">
+                {intl.formatMessage({ id: "settings.subagents.form.tools.builtin.empty" })}
+              </p>
+            ) : null}
           </div>
+        ) : (
+          <>
+            <div className="flex min-w-0 items-center gap-2">
+              <Select
+                value={inheritAllTools ? "all" : "custom"}
+                onValueChange={handleToolsModeChange}
+              >
+                <SelectTrigger size="lg" className="w-fit justify-between">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">
+                    {intl.formatMessage({
+                      id: "settings.subagents.form.tools.mode.all",
+                    })}
+                  </SelectItem>
+                  <SelectItem value="custom">
+                    {intl.formatMessage({
+                      id: "settings.subagents.form.tools.mode.custom",
+                    })}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <span className="min-w-0 text-ui-base font-normal text-foreground-subtle">
+                {intl.formatMessage({
+                  id: "settings.subagents.form.tools.card.title",
+                })}
+              </span>
+            </div>
+            {inheritAllTools ? null : (
+              <div className="rounded-lg border border-border bg-card p-1">
+                <div className="grid max-h-72 gap-1 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
+                  {TOOL_OPTIONS.map((tool) => (
+                    <ToolCheckbox
+                      key={tool}
+                      checked={selectedTools.includes(tool)}
+                      disabled={false}
+                      label={tool}
+                      onToggle={() => toggleTool(tool)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      <div className="space-y-1.5">
-        <FormFieldLabel>
-          {intl.formatMessage({
-            id: "settings.subagents.form.systemPrompt.label",
-          })}
-        </FormFieldLabel>
-        <SettingsFormTextarea
-          value={systemPrompt}
-          onChange={(event) => setSystemPrompt(event.target.value)}
-          rows={3}
-          className="max-h-56 min-h-16 resize-y overflow-y-auto text-ui-base"
-          placeholder={intl.formatMessage({
-            id: "settings.subagents.form.systemPrompt.placeholder",
-          })}
-        />
-        {promptError ? <p className="text-ui-base text-destructive">{promptError}</p> : null}
-      </div>
+      {builtIn ? null : (
+        <div className="space-y-1.5">
+          <FormFieldLabel>
+            {intl.formatMessage({
+              id: "settings.subagents.form.systemPrompt.label",
+            })}
+          </FormFieldLabel>
+          <SettingsFormTextarea
+            value={systemPrompt}
+            onChange={(event) => setSystemPrompt(event.target.value)}
+            rows={3}
+            className="max-h-56 min-h-16 resize-y overflow-y-auto text-ui-base"
+            placeholder={intl.formatMessage({
+              id: "settings.subagents.form.systemPrompt.placeholder",
+            })}
+          />
+          {promptError ? <p className="text-ui-base text-destructive">{promptError}</p> : null}
+        </div>
+      )}
 
-      <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-card px-3 py-2.5">
-        <p className="min-w-0 text-ui-base font-medium text-foreground">
-          {intl.formatMessage({
-            id: "settings.subagents.form.injectAgentsMd.label",
-          })}
-        </p>
-        <Switch
-          checked={injectAgentsMd}
-          onCheckedChange={setInjectAgentsMd}
-          aria-label={intl.formatMessage({
-            id: "settings.subagents.form.injectAgentsMd.label",
-          })}
-        />
-      </div>
+      {builtIn ? null : (
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-card px-3 py-2.5">
+          <p className="min-w-0 text-ui-base font-medium text-foreground">
+            {intl.formatMessage({
+              id: "settings.subagents.form.injectAgentsMd.label",
+            })}
+          </p>
+          <Switch
+            checked={injectAgentsMd}
+            onCheckedChange={setInjectAgentsMd}
+            aria-label={intl.formatMessage({
+              id: "settings.subagents.form.injectAgentsMd.label",
+            })}
+          />
+        </div>
+      )}
 
       <SettingsFormActions
         leadingAction={
-          initial && onDelete ? (
+          initial && onDelete && !builtIn ? (
             <Button
               type="button"
               variant="link"
@@ -1410,10 +1650,23 @@ export function SubagentsSection({ onManageModels }: SubagentsSectionProps) {
   }, [subagentsService, targetWorkspaceIdentity, targetWorkspacePath]);
 
   const handleSave = useCallback(
-    async (config: SubAgentConfig) => {
+    async (config: SubAgentConfig, builtInTools?: BuiltInSubagentToolOverride) => {
       setSaving(true);
       try {
-        if (editingAgent) {
+        const builtInName = editingAgent ? getBuiltInSubagentName(editingAgent) : null;
+        if (builtInName) {
+          // 内置角色没有可写的 Markdown：模型与工具都写用户级覆盖。
+          // 表单没给工具覆盖（角色默认模式）就是删掉覆盖。
+          await subagentsService.setBuiltInModelOverride({
+            agentName: builtInName,
+            modelSelection: config.modelSelection,
+          });
+          await subagentsService.setBuiltInToolOverride({
+            agentName: builtInName,
+            tools: builtInTools?.tools ?? null,
+            ...(builtInTools?.excludeTools ? { excludeTools: builtInTools.excludeTools } : {}),
+          });
+        } else if (editingAgent) {
           await subagentsService.updateAgent({
             agentId: editingAgent.id,
             config,
@@ -1540,7 +1793,7 @@ export function SubagentsSection({ onManageModels }: SubagentsSectionProps) {
   );
 
   const handleEdit = useCallback((agent: AgentSummary) => {
-    if (!isEditableUserAgent(agent)) {
+    if (!isEditableUserAgent(agent) && !isBuiltInAgent(agent)) {
       return;
     }
     setEditingAgent(agent);
@@ -1628,7 +1881,15 @@ export function SubagentsSection({ onManageModels }: SubagentsSectionProps) {
     }
     return agents.find((agent) => agent.id === editingAgent.id) ?? editingAgent;
   }, [agents, editingAgent]);
-  const isFormView = canManageUserAgents && (showForm || currentEditingAgent !== null);
+  const builtInEditing = currentEditingAgent !== null && isBuiltInAgent(currentEditingAgent);
+  // 内置角色的工具候选项现扫 Pi 运行时；没有工作区或拉取失败时由表单退回当前工具名。
+  const agentToolCatalog = useAgentToolCatalog({
+    workspacePath: targetWorkspacePath || workspaceTabs[0]?.workspacePath || "",
+    workspaceIdentity: targetWorkspaceIdentity,
+    enabled: builtInEditing,
+  });
+  const isFormView =
+    (showForm || currentEditingAgent !== null) && (canManageUserAgents || builtInEditing);
 
   if (isFormView) {
     return (
@@ -1674,6 +1935,9 @@ export function SubagentsSection({ onManageModels }: SubagentsSectionProps) {
             scopeKey={selectedScopeKey}
             workspaceTabs={workspaceTabs}
             onScopeKeyChange={setSelectedScopeKey}
+            toolCatalog={agentToolCatalog.tools}
+            toolCatalogLoading={agentToolCatalog.loading}
+            toolCatalogError={agentToolCatalog.error}
           />
         </div>
       </div>

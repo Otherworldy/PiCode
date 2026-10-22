@@ -3,8 +3,14 @@ import { basename, dirname, join } from "node:path";
 import type { CreateAgentSessionOptions } from "@earendil-works/pi-coding-agent";
 import { noteLiveSubagentUsage, trackLiveSubagent } from "./live-subagents.js";
 import { mapThought } from "./model-delegate.js";
+import { listPiAgentExtensions } from "./pi-agent-tools.js";
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
-import { createPermissionExtension, gateTool, type ToolPermissionCheck } from "./permission-gate.js";
+import { PI_BUILTIN_NAME_SET, piLocalToolNames } from "./pi-tool-names.js";
+import {
+  createPermissionExtension,
+  gateTool,
+  type ToolPermissionCheck,
+} from "./permission-gate.js";
 
 export interface ZcodeSubagentModel {
   providerId: string;
@@ -17,6 +23,12 @@ export interface ZcodeSubagentProfile {
   description: string;
   systemPrompt: string;
   tools?: readonly string[];
+  /** `tools` 为 `["*"]` 时要减掉的工具名。 */
+  toolsExclude?: readonly string[];
+  /** 内置角色对缺失工具报错；用户/项目/插件角色维持原有的静默裁剪。 */
+  source?: "built-in" | "user" | "project";
+  /** 工具来自设置页覆盖时缺工具直接失败；角色默认缺失只静默裁剪。 */
+  toolsSource?: "role" | "override";
   /** 设置里的角色覆盖。缺席才继续看 defaultModel 和父会话。 */
   model?: ZcodeSubagentModel;
   /** 角色自己的思考档位。覆盖没带档位时仍用它。 */
@@ -30,6 +42,9 @@ export function toZcodeSubagentProfile(profile: {
   description: string;
   systemPrompt: string;
   tools?: readonly string[];
+  toolsExclude?: readonly string[];
+  source?: "built-in" | "user" | "project";
+  toolsSource?: "role" | "override";
   thinking?: string;
   modelSelection?: {
     providerId: string;
@@ -45,6 +60,9 @@ export function toZcodeSubagentProfile(profile: {
     description: profile.description,
     systemPrompt: profile.systemPrompt,
     ...(profile.tools ? { tools: profile.tools } : {}),
+    ...(profile.toolsExclude ? { toolsExclude: profile.toolsExclude } : {}),
+    ...(profile.source ? { source: profile.source } : {}),
+    ...(profile.toolsSource ? { toolsSource: profile.toolsSource } : {}),
     ...(roleThought ? { thought: roleThought } : {}),
     ...(selection?.providerId && selection.modelId
       ? {
@@ -78,7 +96,10 @@ async function readSubagentDefaultModel(agentDir: string): Promise<string | unde
 function splitModelThought(spec: string): { body: string; thought?: string } {
   const index = spec.lastIndexOf(":");
   if (index <= 0) return { body: spec };
-  const thought = spec.slice(index + 1).trim().toLowerCase();
+  const thought = spec
+    .slice(index + 1)
+    .trim()
+    .toLowerCase();
   if (!THOUGHT_LEVELS.has(thought)) return { body: spec };
   return { body: spec.slice(0, index).trim(), thought };
 }
@@ -119,7 +140,10 @@ export function resolveZcodeSubagentLaunchModel<TModel>(input: {
   if (fallback.model) {
     return {
       model: fallback.model,
-      thinkingLevel: thinkingOf(fallback.thought || input.profileThought, input.parentThinkingLevel),
+      thinkingLevel: thinkingOf(
+        fallback.thought || input.profileThought,
+        input.parentThinkingLevel,
+      ),
     };
   }
   return {
@@ -154,8 +178,15 @@ export interface PiCapabilityPorts {
   listSubagents(cwd: string): Promise<ZcodeSubagentProfile[]>;
 }
 
-const PI_BUILTIN_TOOL_NAMES = ["read", "bash", "powershell", "edit", "write", "grep", "find", "ls"];
+/** 联网工具由用户扩展注册（pi-web-tools 等）。设置页存的是 Claude 风格的名字，这里对到实际工具名。 */
+const PI_WEB_TOOL_ALIASES: Record<string, readonly string[]> = {
+  web_search: ["one_search"],
+  websearch: ["one_search"],
+  fetch_content: ["web_fetch"],
+  webfetch: ["web_fetch"],
+};
 
+/** Claude 风格名字的兼容映射；Pi 原名在 `piToolNamesForAgent` 里按精确名处理。 */
 const PI_TOOL_ALIASES: Record<string, readonly string[]> = {
   read: ["read"],
   grep: ["grep"],
@@ -163,6 +194,7 @@ const PI_TOOL_ALIASES: Record<string, readonly string[]> = {
   find: ["find"],
   ls: ["ls"],
   bash: ["bash", "powershell"],
+  powershell: ["powershell"],
   edit: ["edit"],
   write: ["write"],
 };
@@ -170,13 +202,45 @@ const PI_TOOL_ALIASES: Record<string, readonly string[]> = {
 export function piToolNamesForAgent(
   tools: readonly string[] | undefined,
   available: readonly string[],
+  excludeTools?: readonly string[],
 ): string[] {
-  if (!tools || tools.length === 0 || tools.some((name) => name.trim() === "*")) return [...available];
-  const allowed = new Set<string>();
-  for (const name of tools) {
-    for (const mapped of PI_TOOL_ALIASES[name.trim().toLowerCase()] ?? []) allowed.add(mapped);
+  const excluded = new Set(excludeTools ?? []);
+  const withoutExcluded = (names: string[]) => names.filter((name) => !excluded.has(name));
+  // 缺省与通配都是“全部可用工具”；空数组是显式“无工具”（对齐 pi-subagents）。
+  if (!tools) return withoutExcluded([...available]);
+  if (tools.some((name) => name.trim() === "*" || name.trim() === "inherit")) {
+    return withoutExcluded([...available]);
   }
-  return available.filter((name) => allowed.has(name));
+  const allowed = new Set<string>();
+  for (const raw of tools) {
+    const rawName = raw.trim();
+    if (!rawName) continue;
+    // Pi 原名按精确名收口：设置页取消勾选的工具不能因为别名展开又回来。
+    if (PI_BUILTIN_NAME_SET.has(rawName)) {
+      if (available.includes(rawName)) allowed.add(rawName);
+      continue;
+    }
+    const name = rawName.toLowerCase();
+    const web = PI_WEB_TOOL_ALIASES[name];
+    if (web) {
+      // 联网工具由扩展注册，名字对上了就进白名单；未安装时只是多一个无效项。
+      for (const mapped of web) allowed.add(mapped);
+      continue;
+    }
+    const builtin = PI_TOOL_ALIASES[name];
+    if (builtin) {
+      // 内置工具只认 available 里真有的实现，SSH 工作区才不会落回本机工具。
+      for (const mapped of builtin) if (available.includes(mapped)) allowed.add(mapped);
+      continue;
+    }
+    // 其余名字当扩展工具原样放行，pi-web-tools 的 one_search / web_fetch 就是这一类。
+    // 保留原大小写：Pi 按精确名匹配。
+    allowed.add(rawName);
+  }
+  return withoutExcluded([
+    ...available.filter((name) => allowed.has(name)),
+    ...[...allowed].filter((name) => !available.includes(name)),
+  ]);
 }
 
 type CodingTool = {
@@ -224,6 +288,27 @@ function assistantText(messages: readonly { role?: string; content?: unknown }[]
   return chunks.join("\n");
 }
 
+/** 角色声明的工具解析成 Pi 实际工具名：Pi 原名精确，别名展开，通配无目标。 */
+function piRequestedToolTargets(tools: readonly string[] | undefined): string[] {
+  const targets = new Set<string>();
+  for (const raw of tools ?? []) {
+    const name = raw.trim();
+    if (!name || name === "*" || name === "inherit") continue;
+    if (PI_BUILTIN_NAME_SET.has(name)) {
+      targets.add(name);
+      continue;
+    }
+    const lower = name.toLowerCase();
+    const mapped = PI_WEB_TOOL_ALIASES[lower] ?? PI_TOOL_ALIASES[lower];
+    if (mapped) {
+      for (const target of mapped) targets.add(target);
+      continue;
+    }
+    targets.add(name);
+  }
+  return [...targets];
+}
+
 export async function runZcodeSubagent(input: {
   cwd: string;
   parentSessionFile: string;
@@ -256,21 +341,60 @@ export async function runZcodeSubagent(input: {
   });
   if (launchModel.error) return `subagent failed: ${launchModel.error}`;
   const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } = piCoding();
-  const allowed = piToolNamesForAgent(
-    input.profile.tools,
-    input.sshTools?.map((tool) => tool.name) ?? PI_BUILTIN_TOOL_NAMES,
-  );
+  const requestedTargets = piRequestedToolTargets(input.profile.tools);
+  const extensionToolNames = requestedTargets.filter((name) => !PI_BUILTIN_NAME_SET.has(name));
+  const extensionPaths: string[] = [];
+  const extensionTools: string[] = [];
+  if (extensionToolNames.length > 0) {
+    // 白名单只管声明；提供工具的扩展要按名字反查并显式加载，不能把用户全部插件再起一份。
+    const wanted = new Set(extensionToolNames);
+    for (const extension of await listPiAgentExtensions(input.cwd, input.agentDir)) {
+      if (!extension.tools.some((tool) => wanted.has(tool))) continue;
+      extensionPaths.push(extension.path);
+      extensionTools.push(...extension.tools);
+    }
+  }
+  const available = [
+    ...(input.sshTools?.map((tool) => tool.name) ?? piLocalToolNames()),
+    ...extensionTools,
+  ];
+  const allowed = piToolNamesForAgent(input.profile.tools, available, input.profile.toolsExclude);
+  // 设置页显式配过的扩展工具是产品承诺：缺 provider 就失败，而不是静默少一个。
+  // 内置工具的平台差异（如非 Windows 的 powershell）和角色默认缺失只静默裁剪。
+  if (input.profile.toolsSource === "override") {
+    const missing = requestedTargets.filter(
+      (name) => !PI_BUILTIN_NAME_SET.has(name) && !available.includes(name),
+    );
+    if (missing.length > 0) return `subagent failed: tools not available: ${missing.join(", ")}`;
+  }
   const childDir = join(
     dirname(input.parentSessionFile),
     basename(input.parentSessionFile, ".jsonl"),
     "picode-subagent",
   );
   await mkdir(childDir, { recursive: true });
+  // 子会话要拿到用户 Pi 包里的联网工具，就得让 Pi 看到 packages。
+  // packages 按 global / project 两个 scope 读，合并成一份会弄丢其中一边；
+  // 用内存 storage 保存两个 scope 的快照，子会话写设置也不会落到用户文件。
+  const fileSettings = SettingsManager.create(input.cwd, input.agentDir);
+  const stored = {
+    global: JSON.stringify(fileSettings.getGlobalSettings()),
+    project: JSON.stringify(fileSettings.getProjectSettings()),
+  };
+  const childSettings = SettingsManager.fromStorage({
+    withLock(scope, fn) {
+      const next = fn(stored[scope]);
+      if (next !== undefined) stored[scope] = next;
+    },
+  });
   const loader = new DefaultResourceLoader({
     cwd: input.cwd,
     agentDir: input.agentDir,
-    settingsManager: SettingsManager.inMemory({ retry: { enabled: false } }),
+    settingsManager: childSettings,
+    // 只加载白名单需要的扩展，不加载用户的全部包；技能不加载。
+    // codemode / tool-search / MCP 是 Pi 内置扩展，只有注册了它们的工厂才会加载，这里没注册。
     noExtensions: true,
+    ...(extensionPaths.length > 0 ? { additionalExtensionPaths: extensionPaths } : {}),
     noSkills: true,
     extensionFactories: [createPermissionExtension(input.check)],
     appendSystemPrompt: [input.profile.systemPrompt || input.profile.description].filter(
@@ -278,6 +402,8 @@ export async function runZcodeSubagent(input: {
     ),
   });
   await loader.reload();
+  // reload() 会重读设置，把之前 applyOverrides 的 retry 开关抹掉，所以关重试放在它之后。
+  childSettings.applyOverrides({ retry: { enabled: false } });
   const { session } = await createAgentSession({
     cwd: input.cwd,
     agentDir: input.agentDir,
@@ -290,8 +416,11 @@ export async function runZcodeSubagent(input: {
       : {}),
     resourceLoader: loader,
     sessionManager: SessionManager.create(input.cwd, childDir),
-    settingsManager: SettingsManager.inMemory({ retry: { enabled: false } }),
+    settingsManager: childSettings,
   });
+  // 扩展的 session_start 与 resources_discover 只在 bindExtensions 里发；子会话要跑
+  // 扩展的请求期 hook 就得显式绑一次。扩展报错不挡子会话，由扩展自己承担。
+  await session.bindExtensions({ mode: "print" }).catch(() => undefined);
   let cancelled = false;
   const stopChild = () => {
     cancelled = true;
@@ -382,7 +511,9 @@ export async function runZcodeSubagent(input: {
   try {
     await session.prompt(input.task);
     if (cancelled || input.signal?.aborted) return "subagent cancelled";
-    return assistantText(session.messages as { role?: string; content?: unknown }[]) || "(no response)";
+    return (
+      assistantText(session.messages as { role?: string; content?: unknown }[]) || "(no response)"
+    );
   } catch (error) {
     if (cancelled || input.signal?.aborted) return "subagent cancelled";
     return `subagent failed: ${error instanceof Error ? error.message : String(error)}`;
@@ -391,6 +522,21 @@ export async function runZcodeSubagent(input: {
     stopUsage();
     release();
     input.signal?.removeEventListener("abort", stopChild);
+    // dispose() 不替扩展收尾；和 Pi 自己的宿主一样，先发一次 session_shutdown。
+    // 第三方 handler 不 resolve 时不能卡死父会话，所以给一个有界等待。
+    try {
+      const runner = session.extensionRunner;
+      if (runner.hasHandlers("session_shutdown")) {
+        await Promise.race([
+          runner.emit({ type: "session_shutdown", reason: "quit" }),
+          new Promise<void>((resolve) => {
+            setTimeout(resolve, 5000).unref?.();
+          }),
+        ]);
+      }
+    } catch {
+      // 收尾失败不改变子会话结果。
+    }
     session.dispose();
   }
 }
@@ -400,7 +546,11 @@ export async function createCapabilityTools(input: {
   ports: PiCapabilityPorts;
   check?: ToolPermissionCheck;
   sessionId?: string;
-  runSubagent: (profile: ZcodeSubagentProfile, task: string, signal?: AbortSignal) => Promise<string>;
+  runSubagent: (
+    profile: ZcodeSubagentProfile,
+    task: string,
+    signal?: AbortSignal,
+  ) => Promise<string>;
 }) {
   const agents = await input.ports.listSubagents(input.cwd).catch(() => []);
   const catalog =

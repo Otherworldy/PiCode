@@ -6,6 +6,7 @@ import type {
   AgentUpdateParams,
   AgentDeleteParams,
   BuiltInSubagentModelOverrideParams,
+  BuiltInSubagentToolOverrideParams,
   PluginSubagentModelOverrideParams,
   SubagentsListMode,
 } from "@zcode/shared";
@@ -23,6 +24,9 @@ export interface ISubagentsService {
   setEnabled(params: { agentId: string; enabled: boolean }): Promise<void>;
 
   setBuiltInModelOverride(params: BuiltInSubagentModelOverrideParams): Promise<void>;
+
+  /** 内置角色的工具覆盖；`tools` 为 null 时回到角色默认，空数组表示无工具。 */
+  setBuiltInToolOverride(params: BuiltInSubagentToolOverrideParams): Promise<void>;
 
   /** 只写用户 state 的完整覆盖，不改插件 Markdown。 */
   setPluginAgentModelOverride(params: PluginSubagentModelOverrideParams): Promise<void>;

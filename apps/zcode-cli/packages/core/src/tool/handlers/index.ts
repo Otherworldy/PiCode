@@ -182,6 +182,7 @@ interface RegisterBuiltInToolsOptions {
   includeBrowserUse?: boolean;
   embeddedSearchEnabled?: boolean;
   agentProfiles?: readonly AgentProfile[];
+  builtInToolOverrides?: import("@zcode/shared").BuiltInSubagentToolOverrides;
   allowedTools?: readonly string[];
   disallowedTools?: readonly string[];
   silentDuplicateWarnings?: boolean;
@@ -283,6 +284,7 @@ function resolveBuiltInToolEntryForBranch(
     return createAgentToolEntry({
       embeddedSearchEnabled: options.embeddedSearchEnabled,
       profiles: options.agentProfiles,
+      builtInToolOverrides: options.builtInToolOverrides,
       dynamicWorkflowEnabled: options.includeDynamicWorkflow !== false,
     });
   }
@@ -290,6 +292,7 @@ function resolveBuiltInToolEntryForBranch(
     return createTaskToolEntry({
       embeddedSearchEnabled: options.embeddedSearchEnabled,
       profiles: options.agentProfiles,
+      builtInToolOverrides: options.builtInToolOverrides,
       dynamicWorkflowEnabled: options.includeDynamicWorkflow !== false,
     });
   }

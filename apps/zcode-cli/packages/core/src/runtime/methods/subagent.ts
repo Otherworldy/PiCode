@@ -71,6 +71,7 @@ export function createDefaultSubagentPort(
     outputRootDir: this.config.subagents?.outputRootDir,
     profiles: this.config.subagents?.profiles,
     builtInModelSelectionOverrides: this.config.subagents?.builtInModelSelectionOverrides,
+    builtInToolOverrides: this.config.subagents?.builtInToolOverrides,
     runtimeTaskRegistry: this.runtimeTaskRegistry,
     emitParentEvent: async (event, traceContext) => {
       if (isStaleBranchRuntimeTaskEvent(this, event)) return;
@@ -497,7 +498,8 @@ function resolveSubagentToolAllowlist(
     ...(request.disallowedTools ?? []),
   ]);
   const inheritsAvailableTools =
-    request.allowedTools.length === 0 || request.allowedTools.includes("*");
+    request.inheritAllowedTools ??
+    (request.allowedTools.length === 0 || request.allowedTools.includes("*"));
   if (inheritsAvailableTools) {
     const parentAllowedMcpToolNames = filterMcpToolNamesByParentAllowlist(
       visibleMcpToolNames,
@@ -633,7 +635,8 @@ function validateSubagentMcpRequirements(
   access: ResolvedSubagentMcpAccess,
 ): void {
   const inheritsAvailableTools =
-    request.allowedTools.length === 0 || request.allowedTools.includes("*");
+    request.inheritAllowedTools ??
+    (request.allowedTools.length === 0 || request.allowedTools.includes("*"));
   if (inheritsAvailableTools) return;
 
   const normalizedAllowedTools = effectiveAllowedTools.map((toolName) => toolName.trim());

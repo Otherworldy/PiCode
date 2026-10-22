@@ -92,11 +92,13 @@ function buildAgentProviderDescription(
   options: {
     embeddedSearchEnabled?: boolean;
     profiles?: readonly AgentProfile[];
+    builtInToolOverrides?: import("@zcode/shared").BuiltInSubagentToolOverrides;
     dynamicWorkflowEnabled?: boolean;
   } = {},
 ): string {
   const agentList = formatAgentProfilesForPrompt(options.profiles ?? [], {
     embeddedSearchEnabled: options.embeddedSearchEnabled,
+    builtInToolOverrides: options.builtInToolOverrides,
   });
 
   return [
@@ -320,6 +322,7 @@ export function createAgentToolEntry(
   _options: {
     embeddedSearchEnabled?: boolean;
     profiles?: readonly AgentProfile[];
+    builtInToolOverrides?: import("@zcode/shared").BuiltInSubagentToolOverrides;
     /** 见 buildAgentProviderDescription：缺省 true，只有灰度显式关闭时才去掉工作流那一行。 */
     dynamicWorkflowEnabled?: boolean;
   } = {},
@@ -337,6 +340,7 @@ export function createTaskToolEntry(
   options: {
     embeddedSearchEnabled?: boolean;
     profiles?: readonly AgentProfile[];
+    builtInToolOverrides?: import("@zcode/shared").BuiltInSubagentToolOverrides;
     /** Task 是 Agent 的兼容别名，描述整段内嵌 Agent 的，因此同一道门一起传下去。 */
     dynamicWorkflowEnabled?: boolean;
   } = {},

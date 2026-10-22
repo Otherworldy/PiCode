@@ -2,7 +2,11 @@ import type { ConfigResult } from "@zcode/adapters/config";
 import { GEN_UI_OUTPUT_ROOT_ENV } from "@zcode/shared/node";
 import { resolveInitialModelSelection, type ModelSelectionOptions } from "@zcode/provider";
 import { resolveBashTimeoutPolicy, type AgentProfile, type AgentRuntimeConfig } from "@zcode/core";
-import { type BuiltInSubagentModelSelectionOverrides } from "@zcode/shared";
+import {
+  parseBuiltInSubagentToolOverrides,
+  type BuiltInSubagentModelSelectionOverrides,
+  type BuiltInSubagentToolOverrides,
+} from "@zcode/shared";
 import {
   type CollaborationMode,
   type HookConfigSource,
@@ -38,6 +42,7 @@ export function resolveAppRuntimeConfig(input: {
   persistedMode?: CollaborationMode;
   builtInMcpServers?: Record<string, McpServerConfig>;
   builtInSubagentModelSelectionOverrides?: BuiltInSubagentModelSelectionOverrides;
+  builtInSubagentToolOverrides?: BuiltInSubagentToolOverrides;
   pluginHooks?: Partial<Record<HookEventName, HookMatcherConfig[]>>;
   pluginMcpServers?: Record<string, McpServerConfig>;
   pluginRuntimeFeatures?: AgentRuntimeConfig["runtimeFeatures"];
@@ -173,6 +178,10 @@ export function resolveAppRuntimeConfig(input: {
         ...(input.builtInSubagentModelSelectionOverrides ?? {}),
         ...runtimeBuiltInModelSelectionOverrides,
       },
+      builtInToolOverrides: parseBuiltInSubagentToolOverrides({
+        ...(input.builtInSubagentToolOverrides ?? {}),
+        ...(options.runtimeConfig?.subagents?.builtInToolOverrides ?? {}),
+      }),
       profiles: [...(options.runtimeConfig?.subagents?.profiles ?? []), ...subagentProfiles],
     },
     memory: {

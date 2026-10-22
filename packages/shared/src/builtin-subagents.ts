@@ -13,13 +13,16 @@ export interface BuiltInSubagentDefinition {
 const NO_WEB =
   "Web tools are not part of this session unless they are actually available. If one is missing, say so and do not invent sources.";
 
+/** 联网工具由 Pi 侧扩展注册（pi-web-tools 等）；角色只把它们写进工具白名单。 */
+const WEB_TOOLS = ["one_search", "web_fetch", "get_search_content", "source_check"] as const;
+
 export const BUILT_IN_SUBAGENTS: readonly BuiltInSubagentDefinition[] = [
   {
     name: "scout",
     description: "Fast local codebase recon: relevant files, entry points, data flow, and risks.",
     color: "cyan",
     thinking: "low",
-    tools: ["read", "grep", "find", "ls", "bash", "write"],
+    tools: ["read", "grep", "find", "ls", "bash", "write", ...WEB_TOOLS],
     systemPrompt: [
       "You are scout. Map only the code another agent needs in order to act.",
       "Start from the paths, symbols, and names in the task. Use find for paths and grep for exact text. Read selectively.",
@@ -32,7 +35,7 @@ export const BUILT_IN_SUBAGENTS: readonly BuiltInSubagentDefinition[] = [
     description: "Web and docs research that returns a concise sourced brief.",
     color: "blue",
     thinking: "medium",
-    tools: ["read", "write", "web_search", "fetch_content", "get_search_content", "source_check"],
+    tools: ["read", "write", ...WEB_TOOLS],
     systemPrompt: [
       "You are researcher. Answer the question with a short brief backed by sources.",
       "Split the question into a few angles. Search those angles, then fetch the original page before treating an important claim as fact.",
@@ -45,7 +48,7 @@ export const BUILT_IN_SUBAGENTS: readonly BuiltInSubagentDefinition[] = [
     description: "Checks whether important research claims are actually supported by their sources.",
     color: "purple",
     thinking: "high",
-    tools: ["read", "web_search", "fetch_content", "get_search_content", "source_check"],
+    tools: ["read", ...WEB_TOOLS],
     systemPrompt: [
       "You are evidence-auditor. Check the few claims that could change the conclusion. Do not redo the research.",
       "A URL is not evidence. Inspect the source and say whether it supports, contradicts, or fails to support the wording.",
@@ -58,7 +61,7 @@ export const BUILT_IN_SUBAGENTS: readonly BuiltInSubagentDefinition[] = [
     description: "Implementation agent. Edits the approved task and escalates unapproved decisions.",
     color: "green",
     thinking: "high",
-    tools: ["read", "grep", "find", "ls", "bash", "edit", "write"],
+    tools: ["read", "grep", "find", "ls", "bash", "edit", "write", ...WEB_TOOLS],
     systemPrompt: [
       "You are worker, the only writer for this task. Make the smallest correct change that finishes the assigned work.",
       "Read the task, plan, and named files first. Validate them against the code, then edit.",
@@ -71,7 +74,7 @@ export const BUILT_IN_SUBAGENTS: readonly BuiltInSubagentDefinition[] = [
     description: "Reviews a diff, plan, or proposed change for correctness, tests, and extra complexity.",
     color: "orange",
     thinking: "high",
-    tools: ["read", "grep", "find", "ls"],
+    tools: ["read", "grep", "find", "ls", ...WEB_TOOLS],
     systemPrompt: [
       "You are reviewer. Inspect the change or plan and report findings with evidence. Do not guess, and do not rewrite the work.",
       "Check that the change matches the request, handles the relevant edge cases, and is no larger than it needs to be.",
@@ -83,7 +86,7 @@ export const BUILT_IN_SUBAGENTS: readonly BuiltInSubagentDefinition[] = [
     description: "Challenges a plan or decision without editing. Protects earlier constraints from drift.",
     color: "yellow",
     thinking: "high",
-    tools: ["read", "grep", "find", "ls", "bash"],
+    tools: ["read", "grep", "find", "ls", "bash", ...WEB_TOOLS],
     systemPrompt: [
       "You are oracle. You do not edit files and you do not become a second decision-maker.",
       "Restate the constraints and open questions already in the task. Keep them unless the code shows they are wrong.",
@@ -95,7 +98,7 @@ export const BUILT_IN_SUBAGENTS: readonly BuiltInSubagentDefinition[] = [
     name: "delegate",
     description: "Lightweight general delegate that stays close to the parent session.",
     color: "pink",
-    tools: ["read", "grep", "find", "ls", "bash", "edit", "write"],
+    tools: ["read", "grep", "find", "ls", "bash", "edit", "write", ...WEB_TOOLS],
     systemPrompt: [
       "You are delegate. Do the assigned task with the tools you have.",
       "Be direct. Return the result the caller needs, not a tour of the work.",
