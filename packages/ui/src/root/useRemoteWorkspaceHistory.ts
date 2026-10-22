@@ -576,11 +576,20 @@ async function selectRemoteWorkspaceProjectFromDialog({
 
   bindRemoteWorkspacePath(canonicalPath, sessionId);
   bindRemoteWorkspaceIdentity(workspaceIdentity, sessionId);
+  // 断开重连的项目还留着用户改过的名字：新 tab 必须带上，否则会退回派生名。
+  const canonicalWorkspaceKey = buildWorkspaceSessionKey({
+    workspacePath: canonicalPath,
+    workspaceIdentity,
+  });
+  const persistedDisplayName = getRemoteSessions().find(
+    (entry) => buildWorkspaceSessionKey(entry) === canonicalWorkspaceKey,
+  )?.displayName;
   addTab(canonicalPath, {
     remoteSessionId: sessionId,
     remoteTarget: stripRemoteTargetSecrets(remoteTarget),
     workspaceIdentity,
     localWorkspacePath,
+    ...(persistedDisplayName ? { displayName: persistedDisplayName } : {}),
   });
   // startDraft 之前在调用方等待 pinned/timeline 刷新结束后才执行，
   // tab 已切到远端但草稿 owner 仍是旧状态，形成可见的空白中间帧。

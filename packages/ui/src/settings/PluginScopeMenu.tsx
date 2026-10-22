@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import { formatRemoteWorkspaceDisplayLabel } from "@/lib/remoteWorkspaceHistory.js";
+import { resolveWorkspaceDisplayLabel } from "@/lib/workspaceDisplayName.js";
 import { getWorkspaceKey } from "@/lib/workspaceKey.js";
 import type { WorkspaceTabState } from "@/store/tabStore.js";
 
@@ -64,7 +64,7 @@ export function PluginScopeMenu({
     workspaceOptions ??
     workspaceTabs.filter(isPluginScopeWorkspaceConnected).map((tab) => ({
       key: getPluginWorkspaceKey(tab),
-      label: formatRemoteWorkspaceDisplayLabel(tab.label, tab.remoteTarget),
+      label: resolveWorkspaceDisplayLabel(tab.label, tab.remoteTarget, tab.displayName),
       remote: Boolean(tab.remoteTarget || tab.remoteSessionId),
     }));
   const selectedWorkspace = scopeWorkspaces.find((workspace) => workspace.key === selectedScopeKey);

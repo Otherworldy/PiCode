@@ -10,7 +10,7 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { formatTaskRelativeTime } from "@/lib/taskListItemPresentation.js";
 import { getTaskChangeSummary } from "@/lib/taskChangeSummary.js";
 import { getPathLeaf } from "@/lib/path.js";
-import { formatRemoteWorkspaceDisplayLabel } from "@/lib/remoteWorkspaceHistory.js";
+import { resolveWorkspaceDisplayLabel } from "@/lib/workspaceDisplayName.js";
 import { logger } from "@/logger.js";
 import { useRemoteWorkspaceSessionStore } from "@/store/remoteWorkspaceSessionStore.js";
 import type { WorkspaceTabState } from "@/store/tabStore.js";
@@ -71,9 +71,10 @@ export function WorkspaceArchivedTasksFlatSection({
           (tab) =>
             [
               buildTaskWorkspaceKey(tab.workspacePath, tab.workspaceIdentity),
-              formatRemoteWorkspaceDisplayLabel(
+              resolveWorkspaceDisplayLabel(
                 tab.label || getPathLeaf(tab.workspacePath),
                 tab.remoteTarget,
+                tab.displayName,
               ),
             ] as const,
         ),
@@ -105,9 +106,10 @@ export function WorkspaceArchivedTasksFlatSection({
         workspaces={workspaceTabs.map((tab) => ({
           workspacePath: tab.workspacePath,
           workspaceIdentity: tab.workspaceIdentity,
-          label: formatRemoteWorkspaceDisplayLabel(
+          label: resolveWorkspaceDisplayLabel(
             tab.label || getPathLeaf(tab.workspacePath),
             tab.remoteTarget,
+            tab.displayName,
           ),
           service: workspaceServiceLookup.get(
             buildTaskWorkspaceKey(tab.workspacePath, tab.workspaceIdentity),

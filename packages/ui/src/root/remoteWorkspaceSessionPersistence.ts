@@ -124,12 +124,14 @@ export function restorePersistedRemoteWorkspaceSessions({
         !isConversationWorkspace && persistedEntry.workspacePath === unavailableWorkspacePath
           ? "unavailable-local-directory"
           : undefined;
+      const localDisplayName = persistedEntry.displayName?.trim();
       restoredTabs.push(
-        workspacePurpose || availability
+        workspacePurpose || availability || localDisplayName
           ? {
               workspacePath: persistedEntry.workspacePath,
               workspacePurpose,
               availability,
+              ...(localDisplayName ? { displayName: localDisplayName } : {}),
             }
           : persistedEntry.workspacePath,
       );
@@ -166,10 +168,12 @@ export function restorePersistedRemoteWorkspaceSessions({
     // 启动只恢复“断开态远程 tab”，不做自动重连。
     // 这样 setting.json 中的 lastConnectionStatus 才能真实反映上次结果，
     // 用户关闭的远端 tab 也不会在下次启动被后台拉回。
+    const remoteDisplayName = persistedEntry.displayName?.trim();
     restoredTabs.push({
       workspacePath: persistedEntry.workspacePath,
       remoteTarget: persistedEntry.target,
       workspaceIdentity,
+      ...(remoteDisplayName ? { displayName: remoteDisplayName } : {}),
     });
     seenRemoteWorkspaceKeys.add(workspaceKey);
   }

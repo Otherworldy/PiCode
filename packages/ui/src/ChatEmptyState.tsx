@@ -31,10 +31,10 @@ import { useRemoteConnectionEntryVisibility } from "@/hooks/useRemoteConnectionE
 import { cn } from "@/components/lib/utils.js";
 import { getPathLeaf } from "@/lib/path.js";
 import {
-  formatRemoteWorkspaceDisplayLabel,
   formatRemoteWorkspaceTargetSubtitle,
   hasRemoteWorkspaceIdentity,
 } from "@/lib/remoteWorkspaceHistory.js";
+import { resolveWorkspaceDisplayLabel } from "@/lib/workspaceDisplayName.js";
 import { logger } from "@/logger.js";
 import { SSHDialog } from "@/SSHDialog.js";
 import {
@@ -95,6 +95,8 @@ function getWorkspaceTriggerTitle(path: string, homeLabel: string) {
 export interface ChatEmptyWorkspaceMenuTab {
   workspacePath: string;
   label: string;
+  /** 用户自定义的项目显示名；缺省时按主机名/目录名派生。 */
+  displayName?: string;
   remoteSessionId?: string;
   remoteTarget?: RemoteTarget;
   workspaceIdentity?: string;
@@ -153,6 +155,8 @@ function filterVisibleWorkspaceMenuTabs({
       const searchableText = [
         workspaceTitle,
         workspaceTab.label,
+        // 改过名的项目要能用新名字搜到，否则列表 slice(0, 5) 会把目标项挤掉。
+        workspaceTab.displayName ?? "",
         workspaceTab.workspacePath,
         getRemoteWorkspaceSearchText(workspaceTab),
       ]
@@ -256,9 +260,10 @@ export function ChatEmptyWorkspacePreviewMenu({
   );
   const currentWorkspaceTitle = isConversationWorkspace
     ? intl.formatMessage({ id: "chat.empty.selectProject" })
-    : formatRemoteWorkspaceDisplayLabel(
+    : resolveWorkspaceDisplayLabel(
         getWorkspaceTriggerTitle(workspacePath, homeWorkspaceLabel),
         currentWorkspaceTab?.remoteTarget,
+        currentWorkspaceTab?.displayName,
       );
   const CurrentWorkspaceIcon = isCurrentRemoteWorkspace
     ? Cloud
@@ -349,9 +354,10 @@ export function ChatEmptyWorkspacePreviewMenu({
         </div>
         <div className="p-1">
           {visibleWorkspaceTabs.map((workspaceTab, index) => {
-            const workspaceTitle = formatRemoteWorkspaceDisplayLabel(
+            const workspaceTitle = resolveWorkspaceDisplayLabel(
               getWorkspaceListTitle(workspaceTab.workspacePath, homeWorkspaceLabel),
               workspaceTab.remoteTarget,
+              workspaceTab.displayName,
             );
             const isRemoteWorkspace = hasRemoteWorkspaceIdentity(workspaceTab);
             const WorkspaceIcon = isRemoteWorkspace

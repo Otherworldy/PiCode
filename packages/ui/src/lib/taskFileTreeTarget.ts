@@ -1,6 +1,6 @@
 import type { ZCodeTaskMeta } from "@zcode/shared";
 import { getPathLeaf } from "@/lib/path.js";
-import { formatRemoteWorkspaceDisplayLabel } from "@/lib/remoteWorkspaceHistory.js";
+import { resolveWorkspaceDisplayLabel } from "@/lib/workspaceDisplayName.js";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
 import type { WorkspaceTabState } from "@/store/tabStore.js";
 
@@ -42,9 +42,10 @@ function resolveTaskFileTreeTarget(
 
   return {
     workspacePath: task.workspacePath,
-    workspaceName: formatRemoteWorkspaceDisplayLabel(
+    workspaceName: resolveWorkspaceDisplayLabel(
       matchingTab?.label || getPathLeaf(task.workspacePath) || task.workspacePath,
       matchingTab?.remoteTarget,
+      matchingTab?.displayName,
     ),
     ...(task.workspaceIdentity?.trim() ? { workspaceIdentity: task.workspaceIdentity } : {}),
     ...(matchingTab?.remoteSessionId

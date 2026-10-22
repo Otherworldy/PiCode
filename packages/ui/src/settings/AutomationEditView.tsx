@@ -1451,6 +1451,7 @@ export function AutomationEditView({
       workspaceOptions.map((option) => ({
         workspacePath: option.workspacePath,
         label: option.label,
+        ...(option.displayName ? { displayName: option.displayName } : {}),
         ...(option.workspaceIdentity ? { workspaceIdentity: option.workspaceIdentity } : {}),
         ...(option.workspacePurpose ? { workspacePurpose: option.workspacePurpose } : {}),
       })),

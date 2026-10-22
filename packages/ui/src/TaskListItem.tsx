@@ -65,7 +65,7 @@ import {
 import { useOptionalTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceReadOnly, isWorkspaceTab, type WorkspaceTabState } from "@/store/tabStore.js";
 import { isSameWorkspaceTab } from "@/store/tabWorkspaceIdentity.js";
-import { formatRemoteWorkspaceDisplayLabel } from "@/lib/remoteWorkspaceHistory.js";
+import { resolveWorkspaceDisplayLabel } from "@/lib/workspaceDisplayName.js";
 import { TaskTitleOverflowText } from "@/components/TaskTitleOverflowText.js";
 import { createTaskWorkbenchDragPreview } from "@/lib/taskWorkbenchDragPreview.js";
 import { runUserAction } from "@/lib/userActionTelemetry.js";
@@ -427,7 +427,7 @@ export const MemoTaskItem = memo(function TaskListItem({
         })
       );
     });
-    return formatRemoteWorkspaceDisplayLabel(folderLabel, tab?.remoteTarget);
+    return resolveWorkspaceDisplayLabel(folderLabel, tab?.remoteTarget, tab?.displayName);
   });
   const taskItemKey = `${buildTaskWorkspaceKey(task.workspacePath, task.workspaceIdentity)}:${task.taskId}`;
   // 工作流运行行：标题下的第二条通道，

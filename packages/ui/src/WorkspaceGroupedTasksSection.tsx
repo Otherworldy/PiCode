@@ -28,7 +28,7 @@ import { shouldHideGroupedTaskContent, useGroupedTaskView } from "@/hooks/useGro
 import type { WorkspaceTabState } from "@/store/tabStore.js";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
 import { getPathLeaf } from "@/lib/path.js";
-import { formatRemoteWorkspaceDisplayLabel } from "@/lib/remoteWorkspaceHistory.js";
+import { resolveWorkspaceDisplayLabel } from "@/lib/workspaceDisplayName.js";
 import { resolveTaskFileTreeTargetFromTabs } from "@/lib/taskFileTreeTarget.js";
 import { toast } from "@/components/ui/toast.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
@@ -867,9 +867,10 @@ export function WorkspaceGroupedTasksSection({
           id: "workspaceSidebar.conversationsSection",
         });
       }
-      return formatRemoteWorkspaceDisplayLabel(
+      return resolveWorkspaceDisplayLabel(
         tab?.label || getPathLeaf(task.workspacePath) || task.workspacePath,
         tab?.remoteTarget,
+        tab?.displayName,
       );
     },
     [intl, workspaceTabByKey],
@@ -883,9 +884,10 @@ export function WorkspaceGroupedTasksSection({
         id: "workspaceSidebar.conversationsSection",
       });
     }
-    return formatRemoteWorkspaceDisplayLabel(
+    return resolveWorkspaceDisplayLabel(
       tab?.label || getPathLeaf(activeWorkspacePath) || activeWorkspacePath,
       tab?.remoteTarget,
+      tab?.displayName,
     );
   }, [activeWorkspaceIdentity, activeWorkspacePath, intl, workspaceTabByKey]);
 

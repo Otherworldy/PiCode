@@ -23,6 +23,7 @@ import {
   LoaderCircle,
   RefreshCwIcon,
   MessageCirclePlus,
+  PencilIcon,
   ScrollText,
   XIcon,
 } from "lucide-react";
@@ -49,10 +50,10 @@ import {
 } from "@/components/ui/tooltip.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import {
-  buildWorkspaceSessionKey,
-  formatRemoteWorkspaceDisplayLabel,
-} from "@/lib/remoteWorkspaceHistory.js";
+import { buildWorkspaceSessionKey } from "@/lib/remoteWorkspaceHistory.js";
+import { resolveWorkspaceDisplayLabel } from "@/lib/workspaceDisplayName.js";
+import { useTabStore } from "@/store/TabStoreProvider.js";
+import { TaskRenameDialog } from "@/TaskRenameDialog.js";
 import { TaskList } from "@/TaskList.js";
 import { selectWorkspaceZCodeState, useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
 import type { WorkspaceTabState } from "@/store/tabStore.js";
@@ -61,6 +62,7 @@ import { ReconnectingRemoteWorkspaceLogTooltip } from "@/WorkspaceSidebar/Reconn
 import { cn } from "@/components/lib/utils.js";
 import {
   TID_WORKSPACE_CLOSE,
+  TID_WORKSPACE_RENAME,
   TID_WORKSPACE_FILE_TREE_BUTTON,
   TID_WORKSPACE_ITEM,
   TID_WORKSPACE_PROJECT_MCP_BUTTON,
@@ -238,7 +240,11 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
     isDisconnectedRemoteWorkspace && reconnectingRemoteWorkspaceKeys.includes(remoteWorkspaceKey),
   );
   const remoteWorkspaceError = remoteWorkspaceErrorByWorkspaceKey[remoteWorkspaceKey];
-  const workspaceSidebarLabel = formatRemoteWorkspaceDisplayLabel(tab.label, tab.remoteTarget);
+  const workspaceSidebarLabel = resolveWorkspaceDisplayLabel(
+    tab.label,
+    tab.remoteTarget,
+    tab.displayName,
+  );
   const sshWorkspaceTooltipDetails = getSshWorkspaceTooltipDetails(tab);
   const reconnectRuntimeLogs =
     reconnectingRemoteWorkspaceLogsByWorkspaceKey[remoteWorkspaceKey] ?? [];
@@ -272,6 +278,27 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
   const [workspaceRowHovered, setWorkspaceRowHovered] = useState(false);
   const [workspaceRowFocusWithin, setWorkspaceRowFocusWithin] = useState(false);
   const [workspaceActionMenuOpen, setWorkspaceActionMenuOpen] = useState(false);
+  const [workspaceRenameOpen, setWorkspaceRenameOpen] = useState(false);
+  const [workspaceRenameDraft, setWorkspaceRenameDraft] = useState("");
+  const workspaceRenameInputRef = useRef<HTMLInputElement | null>(null);
+  const setWorkspaceDisplayName = useTabStore((state) => state.setWorkspaceDisplayName);
+  // 输入框预置当前自定义名（没有就留空），占位文案展示当前派生名：
+  // 清空提交即恢复默认，不会被误存成“把主机名写死”。
+  const openWorkspaceRename = () => {
+    setWorkspaceRenameDraft(tab.displayName ?? "");
+    setWorkspaceRenameOpen(true);
+  };
+  const confirmWorkspaceRename = () => {
+    setWorkspaceDisplayName(tab.id, workspaceRenameDraft);
+    setWorkspaceRenameOpen(false);
+  };
+  useEffect(() => {
+    if (!workspaceRenameOpen) {
+      return;
+    }
+    workspaceRenameInputRef.current?.focus();
+    workspaceRenameInputRef.current?.select();
+  }, [workspaceRenameOpen]);
   const [isHoverNone] = useState(
     () =>
       typeof window !== "undefined" &&
@@ -961,6 +988,23 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
                             onOpenPluginSync={() => setRemotePluginSyncOpen(true)}
                           />
                           <DropdownMenuItem
+                            data-testid={testId(TID_WORKSPACE_RENAME, tab.workspacePath)}
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                            }}
+                            onSelect={(event) => {
+                              // 菜单是受控的：preventDefault 会挡掉 Radix 的自动关闭，
+                              // 必须自己收起，否则改名弹框会和这个下拉同时挂在屏幕上。
+                              event.preventDefault();
+                              setWorkspaceActionMenuOpen(false);
+                              openWorkspaceRename();
+                            }}
+                          >
+                            <PencilIcon className="h-3.5 w-3.5" />
+                            {intl.formatMessage({ id: "workspaceSidebar.rename" })}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
                             data-testid={testId(TID_WORKSPACE_CLOSE, tab.workspacePath)}
                             onMouseDown={(event) => {
                               event.preventDefault();
@@ -1276,6 +1320,20 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
             zcodeSessionService: services.zcodeSessionService,
           });
         }}
+      />
+      <TaskRenameDialog
+        open={workspaceRenameOpen}
+        value={workspaceRenameDraft}
+        inputRef={workspaceRenameInputRef}
+        intl={intl}
+        titleId="workspaceSidebar.rename"
+        placeholder={workspaceSidebarLabel}
+        onOpenChange={setWorkspaceRenameOpen}
+        onChange={setWorkspaceRenameDraft}
+        onCancel={() => {
+          setWorkspaceRenameOpen(false);
+        }}
+        onConfirm={confirmWorkspaceRename}
       />
     </li>
   );

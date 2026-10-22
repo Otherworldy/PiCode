@@ -17,6 +17,8 @@ export function TaskRenameDialog({
   value,
   inputRef,
   intl,
+  titleId = "taskList.rename",
+  placeholder,
   onOpenChange,
   onChange,
   onCancel,
@@ -25,6 +27,10 @@ export function TaskRenameDialog({
   open: boolean;
   value: string;
   inputRef: RefObject<HTMLInputElement | null>;
+  /** 复用同一套输入框时换标题；缺省是任务重命名。 */
+  titleId?: string;
+  /** 占位文案用调用方给的现成文本（例如当前派生项目名），缺省走任务重命名文案。 */
+  placeholder?: string;
   intl: {
     formatMessage: (desc: { id: string }, values?: Record<string, string>) => string;
   };
@@ -37,17 +43,20 @@ export function TaskRenameDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl overflow-hidden rounded-2xl p-0">
-        <div className="flex min-w-0 flex-col gap-6 p-6">
-          <DialogHeader className="space-y-2">
-            <DialogTitle>{intl.formatMessage({ id: "taskList.rename" })}</DialogTitle>
+      <DialogContent className="max-w-3xl gap-0 overflow-hidden rounded-2xl p-0">
+        <div className="flex min-w-0 flex-col gap-0">
+          <DialogHeader className="gap-2 px-6 py-5 pb-0">
+            <DialogTitle className="text-lg font-medium text-foreground">
+              {intl.formatMessage({ id: titleId })}
+            </DialogTitle>
           </DialogHeader>
-          <div className="flex min-w-0 flex-col space-y-4">
+          <div className="flex min-w-0 flex-col px-6 py-6">
             <Input
               ref={inputRef}
               value={value}
               size="lg"
-              placeholder={intl.formatMessage({ id: "taskList.renamePlaceholder" })}
+              className="h-10"
+              placeholder={placeholder ?? intl.formatMessage({ id: "taskList.renamePlaceholder" })}
               onChange={(event) => {
                 onChange(event.target.value);
               }}
@@ -82,7 +91,7 @@ export function TaskRenameDialog({
               }}
             />
           </div>
-          <DialogFooter className="flex items-center justify-end gap-3">
+          <DialogFooter className="flex items-center justify-end gap-3 px-6 pb-6">
             <Button
               type="button"
               variant="secondary"

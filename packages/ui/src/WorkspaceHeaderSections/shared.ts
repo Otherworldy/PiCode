@@ -28,6 +28,8 @@ export interface WorkspaceHeaderTitleSectionProps {
   remoteTarget?: RemoteTarget;
   localWorkspacePath?: string;
   projectName: string;
+  /** 用户自定义的项目显示名；缺省按远程主机名/目录名派生。 */
+  projectDisplayName?: string;
   activeTaskTitle: string;
   activeTaskChangeSummary?: ZCodeTaskChangeSummary | null;
   activeTaskId: string | null;

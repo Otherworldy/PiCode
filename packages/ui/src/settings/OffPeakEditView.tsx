@@ -208,6 +208,7 @@ export function OffPeakEditView({
       localWorkspaceOptions.map((option) => ({
         workspacePath: option.workspacePath,
         label: option.label,
+        ...(option.displayName ? { displayName: option.displayName } : {}),
       })),
     [localWorkspaceOptions],
   );

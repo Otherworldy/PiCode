@@ -92,7 +92,7 @@ import {
 } from "@/lib/sidebarPurposeSectionPreferences.js";
 import { useShortcutCommandLabel } from "@/shortcuts/useShortcutBindings.js";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
-import { formatRemoteWorkspaceDisplayLabel } from "@/lib/remoteWorkspaceHistory.js";
+import { resolveWorkspaceDisplayLabel } from "@/lib/workspaceDisplayName.js";
 import {
   increaseWorkspaceTaskVisibleLimit,
   resolveVisibleWorkspaceTaskKeys,
@@ -196,7 +196,7 @@ function WorkspaceDragOverlay({ tab, width }: { tab: WorkspaceTabState; width: n
         <Folder className="size-3.5 shrink-0 text-foreground-subtle" />
       )}
       <span className="min-w-0 flex-1 truncate px-1">
-        {formatRemoteWorkspaceDisplayLabel(tab.label, tab.remoteTarget)}
+        {resolveWorkspaceDisplayLabel(tab.label, tab.remoteTarget, tab.displayName)}
       </span>
     </div>
   );

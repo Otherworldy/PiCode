@@ -7,6 +7,8 @@ import { useLocalWorkspaceScopes } from "@/hooks/useLocalWorkspaceScopes.js";
 interface AutomationProjectOption {
   workspacePath: string;
   label: string;
+  /** 用户自定义的项目显示名；设置页的项目候选与侧栏保持一致。 */
+  displayName?: string;
   workspacePurpose?: WorkspacePurpose;
 }
 
@@ -47,6 +49,7 @@ function resolveAutomationProjectOptions(
     result.push({
       workspacePath: tab.workspacePath,
       label: tab.label || workspaceBasename(tab.workspacePath),
+      ...(tab.displayName ? { displayName: tab.displayName } : {}),
     });
   }
 

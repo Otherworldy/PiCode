@@ -85,11 +85,20 @@ const remoteWorkspaceTargetSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
+/** 项目显示名：用户可见的短名，不能换行，避免污染侧栏行高。 */
+const workspaceDisplayNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(80)
+  .refine((value) => !value.includes("\n") && !value.includes("\r"));
+
 const appWorkspaceSessionEntrySchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("local"),
     workspacePath: nonEmptyStringSchema,
     workspacePurpose: z.enum(["project", "conversation"]).default("project"),
+    displayName: workspaceDisplayNameSchema.optional(),
   }),
   z.object({
     kind: z.literal("remote"),
@@ -100,6 +109,7 @@ const appWorkspaceSessionEntrySchema = z.discriminatedUnion("kind", [
     lastOpenedAt: z.number().int().nonnegative(),
     lastConnectionStatus: z.enum(["connected", "failed"]),
     lastConnectionError: z.string().optional(),
+    displayName: workspaceDisplayNameSchema.optional(),
   }),
 ]);
 

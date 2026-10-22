@@ -421,7 +421,15 @@ export function buildPersistedWorkspaceSessionEntries(
         return entries;
       }
 
-      entries.push(remoteEntry);
+      // 自定义项目名以 tab 为准。快照可能还带着上一轮写进去的旧名字，
+      // 必须先剥掉：否则清空自定义名后 tab 没有 displayName，旧名字会被原样写回、
+      // 下次启动又从设置里恢复出来。
+      const { displayName: _persistedDisplayName, ...remoteEntryWithoutDisplayName } = remoteEntry;
+      entries.push(
+        tab.displayName
+          ? { ...remoteEntryWithoutDisplayName, displayName: tab.displayName }
+          : remoteEntryWithoutDisplayName,
+      );
       return entries;
     }
 
@@ -429,6 +437,7 @@ export function buildPersistedWorkspaceSessionEntries(
       kind: "local",
       workspacePath: tab.workspacePath,
       ...(tab.workspacePurpose ? { workspacePurpose: tab.workspacePurpose } : {}),
+      ...(tab.displayName ? { displayName: tab.displayName } : {}),
     });
     return entries;
   }, []);

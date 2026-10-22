@@ -88,7 +88,7 @@ import { getGitDirtyFileCount } from "@/git-branch-switcher/display.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { getPathLeaf, toFileUrl } from "@/lib/path.js";
-import { formatRemoteWorkspaceDisplayLabel } from "@/lib/remoteWorkspaceHistory.js";
+import { resolveWorkspaceDisplayLabel } from "@/lib/workspaceDisplayName.js";
 import { shouldOpenAssistantHtmlInBrowser } from "@/lib/assistantPreviewCards.js";
 import { setWorkspaceSidebarResizeActive } from "@/lib/workspaceSidebarResizeState.js";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
@@ -765,18 +765,24 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
     // 这里按 path 去重后再统计，避免入口里“未提交更改文件数”被重复计算。
     return getGitDirtyFileCount(gitState.datasets);
   }, [gitState.datasets.staged, gitState.datasets.unstaged]);
-  const workspaceRemoteTarget = useMemo(
+  const activeWorkspaceTabForHeader = useMemo(
     () =>
       workspaceTabs.find(
         (tab) =>
           tab.workspacePath === workspaceAbsPath &&
           (!workspaceIdentity || tab.workspaceIdentity === workspaceIdentity),
-      )?.remoteTarget,
+      ),
     [workspaceAbsPath, workspaceIdentity, workspaceTabs],
   );
+  const workspaceRemoteTarget = activeWorkspaceTabForHeader?.remoteTarget;
   const workspaceProjectDisplayName = useMemo(
-    () => formatRemoteWorkspaceDisplayLabel(projectName, workspaceRemoteTarget),
-    [projectName, workspaceRemoteTarget],
+    () =>
+      resolveWorkspaceDisplayLabel(
+        projectName,
+        workspaceRemoteTarget,
+        activeWorkspaceTabForHeader?.displayName,
+      ),
+    [projectName, workspaceRemoteTarget, activeWorkspaceTabForHeader?.displayName],
   );
   const workspaceLocalPathForRemoteMcpSync = useMemo(
     () =>
@@ -1375,9 +1381,10 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
           openFileTreeRequest({
             target: {
               workspacePath: ownerWorkspace.workspacePath,
-              workspaceName: formatRemoteWorkspaceDisplayLabel(
+              workspaceName: resolveWorkspaceDisplayLabel(
                 ownerWorkspace.label,
                 ownerWorkspace.remoteTarget,
+                ownerWorkspace.displayName,
               ),
               workspaceIdentity: ownerWorkspace.workspaceIdentity,
               workspaceRemoteSessionId: ownerWorkspace.remoteSessionId,
@@ -1777,6 +1784,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                           remoteTarget={workspaceRemoteTarget}
                           localWorkspacePath={workspaceLocalPathForRemoteMcpSync}
                           projectName={projectName}
+                          projectDisplayName={activeWorkspaceTabForHeader?.displayName}
                           activeTaskTitle={activeTaskTitle}
                           activeTaskChangeSummary={activeTaskChangeSummary}
                           activeTaskId={activeTaskId}

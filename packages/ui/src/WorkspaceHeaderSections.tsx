@@ -27,10 +27,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import {
-  formatRemoteWorkspaceDisplayLabel,
-  formatRemoteWorkspaceHeaderHostLabel,
-} from "@/lib/remoteWorkspaceHistory.js";
+import { formatRemoteWorkspaceHeaderHostLabel } from "@/lib/remoteWorkspaceHistory.js";
+import { resolveWorkspaceDisplayLabel } from "@/lib/workspaceDisplayName.js";
 import { resolveWorkspaceHeaderProvider } from "@/lib/workspaceHeaderProvider.js";
 import { toast } from "@/components/ui/toast.js";
 import { useFeedbackStore } from "@/feedback/feedbackStore.js";
@@ -79,6 +77,7 @@ export function WorkspaceHeaderTitleSection({
   remoteTarget,
   localWorkspacePath,
   projectName,
+  projectDisplayName,
   activeTaskTitle,
   activeTaskChangeSummary: _activeTaskChangeSummary,
   activeTaskId,
@@ -193,7 +192,11 @@ export function WorkspaceHeaderTitleSection({
   const remoteWorkspaceHostLabel = remoteTarget
     ? formatRemoteWorkspaceHeaderHostLabel(remoteTarget)
     : null;
-  const workspaceDisplayLabel = formatRemoteWorkspaceDisplayLabel(projectName, remoteTarget);
+  const workspaceDisplayLabel = resolveWorkspaceDisplayLabel(
+    projectName,
+    remoteTarget,
+    projectDisplayName,
+  );
   // SSH 项目名已经是主机地址，再拼 @ host 会重复。WSL / Docker 仍用目录名，继续补连接标识。
   const showRemoteWorkspaceHostLabel = Boolean(
     remoteTarget?.kind !== "ssh" &&

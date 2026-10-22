@@ -12,7 +12,7 @@ import { isShortcutRecordingActive } from "@/shortcuts/bindings.js";
 import { isRendererReloadNavigation } from "@/lib/rendererNavigation.js";
 import { useOptionalBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { shouldPublishCompleteWorkspaceSnapshot } from "@/root/rootPlatformWorkspaceSync.js";
-import { formatRemoteWorkspaceDisplayLabel } from "@/lib/remoteWorkspaceHistory.js";
+import { resolveWorkspaceDisplayLabel } from "@/lib/workspaceDisplayName.js";
 import {
   createShareImportIntent,
   isShareImportIntentSame,
@@ -467,9 +467,10 @@ export function useRootPlatformEffects({
         return [
           {
             workspacePath: tab.workspacePath,
-            label: formatRemoteWorkspaceDisplayLabel(
+            label: resolveWorkspaceDisplayLabel(
               tab.label || tab.workspacePath,
               tab.remoteTarget,
+              tab.displayName,
             ),
             ...(workspaceIdentity ? { workspaceIdentity } : {}),
             ...(tab.remoteSessionId ? { remoteSessionId: tab.remoteSessionId } : {}),

@@ -160,6 +160,8 @@ export interface WorkspaceShellLayoutProps extends Omit<AppProps, "baseFeedbackS
   workspaceTabs: Array<{
     workspacePath: string;
     label: string;
+    /** 用户自定义的项目显示名；空值走主机名/目录名派生。 */
+    displayName?: string;
     remoteSessionId?: string;
     remoteTarget?: import("@zcode/shared").RemoteTarget;
     workspaceIdentity?: string;

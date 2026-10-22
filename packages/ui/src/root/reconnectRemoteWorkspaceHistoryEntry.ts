@@ -49,6 +49,7 @@ type ManualReconnectRemoteWorkspaceParams = {
       remoteTarget?: Parameters<IPlatformService["connectRemote"]>[0];
       workspaceIdentity?: string;
       localWorkspacePath?: string;
+      displayName?: string;
     },
   ) => void;
   commitRemoteWorkspaceSessionMutation: (
@@ -192,6 +193,8 @@ export async function reconnectRemoteWorkspaceHistoryEntry({
       remoteTarget: stripRemoteTargetSecrets(reconnectTarget),
       workspaceIdentity: resolvedWorkspaceIdentity,
       localWorkspacePath: sessionEntry.localWorkspacePath,
+      // 重连不能把用户改过的项目名丢掉：持久化条目里的名字要回填到新 tab。
+      ...(sessionEntry.displayName ? { displayName: sessionEntry.displayName } : {}),
     });
     if (activateWorkspaceAfterReconnect) {
       // 侧栏重连过去会先激活只有 identity、尚无 remoteSessionId 的断连 tab，

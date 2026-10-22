@@ -1,5 +1,5 @@
 import { resolveWorkspaceKey, type RemoteTarget, type WorkspacePurpose } from "@zcode/shared";
-import { formatRemoteWorkspaceDisplayLabel } from "@/lib/remoteWorkspaceHistory.js";
+import { resolveWorkspaceDisplayLabel } from "@/lib/workspaceDisplayName.js";
 import { isWorkspaceTab, isWorkspaceTabReadOnly, type WindowTabState } from "@/store/tabStore.js";
 
 export interface AutomationWorkspaceOption {
@@ -8,6 +8,8 @@ export interface AutomationWorkspaceOption {
   remoteSessionId?: string;
   remoteTarget?: RemoteTarget;
   label: string;
+  /** 用户自定义的项目显示名；缺省走主机名/目录名派生。 */
+  displayName?: string;
   workspacePurpose?: WorkspacePurpose;
 }
 
@@ -77,10 +79,12 @@ export function buildAutomationWorkspaceOptions(
       ...(tab.workspaceIdentity ? { workspaceIdentity: tab.workspaceIdentity } : {}),
       ...(tab.remoteSessionId ? { remoteSessionId: tab.remoteSessionId } : {}),
       ...(tab.remoteTarget ? { remoteTarget: tab.remoteTarget } : {}),
-      label: formatRemoteWorkspaceDisplayLabel(
+      label: resolveWorkspaceDisplayLabel(
         tab.label || workspaceLabelFromPath(tab.workspacePath),
         tab.remoteTarget,
+        tab.displayName,
       ),
+      ...(tab.displayName ? { displayName: tab.displayName } : {}),
     });
   }
   return [...byKey.values()];

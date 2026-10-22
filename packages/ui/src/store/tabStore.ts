@@ -20,6 +20,7 @@ import {
   type WorkspaceExpansionState,
 } from "@/lib/workspaceExpansionPreference.js";
 import { isSameWorkspaceTab } from "@/store/tabWorkspaceIdentity.js";
+import { normalizeWorkspaceDisplayName } from "@/lib/workspaceDisplayName.js";
 
 export const SETTINGS_TAB_ID = "__settings__" satisfies TabId;
 
@@ -41,6 +42,8 @@ export interface WorkspaceTabState extends TabState {
   workspaceIdentity?: string;
   localWorkspacePath?: string;
   workspacePurpose?: WorkspacePurpose;
+  /** 用户自定义的项目显示名；空值表示按目录名/主机名派生。 */
+  displayName?: string;
 }
 
 export interface WorkspaceTabOptions {
@@ -51,10 +54,13 @@ export interface WorkspaceTabOptions {
   workspaceIdentity?: string;
   localWorkspacePath?: string;
   workspacePurpose?: WorkspacePurpose;
+  displayName?: string;
 }
 
 export interface RestorableWorkspaceTab {
   workspacePath: string;
+  /** 用户自定义的项目显示名；持久化恢复时带回 tab。 */
+  displayName?: string;
   availability?: WorkspaceAvailability;
   remoteSessionId?: string;
   remoteTarget?: RemoteTarget;
@@ -133,6 +139,8 @@ export interface TabStoreState {
   restoreTabs: (tabs: Array<string | RestorableWorkspaceTab>, activeIndex: number) => void;
   /** 启动首帧后补齐持久化标签页；保留当前 active identity 和用户在此期间新增的标签页。 */
   completeTabRestore: (tabs: Array<string | RestorableWorkspaceTab>) => void;
+  /** 设置项目显示名；空串恢复默认派生名。只改展示，不改路径与身份。 */
+  setWorkspaceDisplayName: (tabId: TabId, displayName: string) => void;
 }
 
 // ============================================================================
@@ -161,6 +169,7 @@ function createWorkspaceTab(
     workspaceIdentity: options?.workspaceIdentity,
     localWorkspacePath: options?.localWorkspacePath,
     workspacePurpose: options?.workspacePurpose,
+    displayName: normalizeWorkspaceDisplayName(options?.displayName),
   };
 }
 
@@ -177,6 +186,8 @@ function mergeWorkspaceTabOptions(
     workspaceIdentity: options?.workspaceIdentity ?? tab.workspaceIdentity,
     localWorkspacePath: options?.localWorkspacePath ?? tab.localWorkspacePath,
     workspacePurpose: options?.workspacePurpose ?? tab.workspacePurpose,
+    // 活 tab 上的名字是用户当下的意图；补齐恢复/重连带来的旧快照不能覆盖它。
+    displayName: tab.displayName ?? normalizeWorkspaceDisplayName(options?.displayName),
   };
 }
 
@@ -489,6 +500,21 @@ export function createTabStore(storage: StorageLike | null | undefined = undefin
       });
     },
 
+    setWorkspaceDisplayName: (tabId, displayName) => {
+      set((state) => {
+        const nextDisplayName = normalizeWorkspaceDisplayName(displayName);
+        const index = state.tabs.findIndex((tab) => tab.id === tabId);
+        const current = state.tabs[index];
+        // 空串表示恢复默认名：与当前值相同时不制造新的 tabs 引用，避免持久化 debounce 空转。
+        if (!current || !isWorkspaceTab(current) || current.displayName === nextDisplayName) {
+          return state;
+        }
+        const tabs = [...state.tabs];
+        tabs[index] = { ...current, displayName: nextDisplayName };
+        return { tabs };
+      });
+    },
+
     openSettingsTab: () => {
       const existing = get().tabs.find(isSettingsTab);
       if (existing) {
@@ -581,6 +607,7 @@ export function createTabStore(storage: StorageLike | null | undefined = undefin
           workspaceIdentity: normalized.workspaceIdentity,
           workspacePurpose: normalized.workspacePurpose,
           availability: normalized.availability,
+          displayName: normalized.displayName,
         });
       });
       const safeIndex = Math.min(Math.max(activeIndex, 0), tabs.length - 1);
@@ -614,6 +641,7 @@ export function createTabStore(storage: StorageLike | null | undefined = undefin
             localWorkspacePath: normalized.localWorkspacePath,
             workspacePurpose: normalized.workspacePurpose,
             availability: normalized.availability,
+            displayName: normalized.displayName,
           };
           const existing = state.tabs.find(
             (tab): tab is WorkspaceTabState =>

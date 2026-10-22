@@ -199,6 +199,8 @@ export const TID_WORKSPACE_LIST = "workspace-list";
 export const TID_WORKSPACE_ITEM = "workspace-item";
 /** 侧边栏关闭工作区按钮（动态后缀为 workspacePath） */
 export const TID_WORKSPACE_CLOSE = "workspace-close";
+/** 侧边栏重命名项目菜单项 */
+export const TID_WORKSPACE_RENAME = "workspace-rename";
 /** 项目视图里的对话二级分区 */
 export const TID_CONVERSATION_SECTION = "conversation-section";
 /** 项目视图里的项目二级分区 */
