@@ -355,23 +355,6 @@ export interface AppSettings {
   nativeSearchEnhancementsEnabled?: boolean;
   /** 新建或冷恢复 Session 是否启用 Memory；默认关闭。 */
   memoryEnabled?: boolean;
-  onboardingOccupation?:
-    | "office"
-    | "developer"
-    | "independent"
-    | "infrastructure"
-    | "product"
-    | "design"
-    | "student"
-    | "creator"
-    | "operations"
-    | "marketing"
-    | "finance"
-    | "accounting"
-    | "legal"
-    | "other"
-    | null;
-  proactiveSuggestionsEnabled?: boolean;
   /** 上次关闭时的完整 workspace 会话（含本地与远端 workspace） */
   lastWorkspaceSession?: PersistedWorkspaceSessionEntry[];
   /** 上次关闭时激活的 tab 索引 */

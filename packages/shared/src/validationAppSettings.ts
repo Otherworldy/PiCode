@@ -12,25 +12,6 @@ import {
 } from "./browser-use/command-metadata.js";
 import { providerFamilyConnectionSelectionSettingsSchema } from "./provider-family-connection-selection.js";
 
-/** 引导职业枚举；单独导出供 onboarding 记录回填 settings 时做窄化校验。 */
-const appSettingsOccupationSchema = z.enum([
-  "office",
-  "developer",
-  "independent",
-  "infrastructure",
-  "product",
-  "design",
-  "student",
-  "creator",
-  "operations",
-  "marketing",
-  "finance",
-  "accounting",
-  "legal",
-  "other",
-]);
-export const appSettingsOccupationEnum = appSettingsOccupationSchema;
-
 const nonEmptyStringSchema = z.string().trim().min(1);
 
 export const localeSchema = z.enum(["zh-CN", "en-US"]);
@@ -473,8 +454,6 @@ const appSettingsObjectSchema = z.object({
   providerFamilyDomainUpdatedAt: z.number().int().nonnegative().optional(),
   providerFamilyDomainMigrated: z.boolean().default(false),
   nativeSearchEnhancementsEnabled: z.boolean().default(true),
-  onboardingOccupation: appSettingsOccupationSchema.nullish(),
-  proactiveSuggestionsEnabled: z.boolean().optional(),
   memoryEnabled: z.boolean().default(false),
   lastWorkspaceSession: z.array(appWorkspaceSessionEntrySchema).default([]),
   lastActiveTabIndex: z.number().int().nonnegative().default(0),
@@ -558,25 +537,6 @@ export const appSettingsPatchSchema = z.object({
   providerFamilyDomainUpdatedAt: z.number().int().nonnegative().optional(),
   providerFamilyDomainMigrated: z.boolean().optional(),
   nativeSearchEnhancementsEnabled: z.boolean().optional(),
-  onboardingOccupation: z
-    .enum([
-      "office",
-      "developer",
-      "independent",
-      "infrastructure",
-      "product",
-      "design",
-      "student",
-      "creator",
-      "operations",
-      "marketing",
-      "finance",
-      "accounting",
-      "legal",
-      "other",
-    ])
-    .nullish(),
-  proactiveSuggestionsEnabled: z.boolean().optional(),
   memoryEnabled: z.boolean().optional(),
   lastWorkspaceSession: z.array(appWorkspaceSessionEntrySchema).optional(),
   lastActiveTabIndex: z.number().int().nonnegative().optional(),

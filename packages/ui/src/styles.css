@@ -934,31 +934,6 @@ body {
   }
 }
 
-@keyframes zcode-draft-prompt-waterfall {
-  from {
-    opacity: 0;
-    clip-path: inset(0 0 100% 0);
-    transform: translateY(-12px);
-  }
-
-  to {
-    opacity: 1;
-    clip-path: inset(0 0 0 0);
-    transform: translateY(0);
-  }
-}
-
-.zcode-draft-prompt-waterfall {
-  animation: zcode-draft-prompt-waterfall 260ms cubic-bezier(0.22, 1, 0.36, 1)
-    var(--zcode-draft-prompt-waterfall-delay, 0ms) both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .zcode-draft-prompt-waterfall {
-    animation: none;
-  }
-}
-
 @keyframes markdown-image-loading-shimmer {
   from {
     background-position: 100% 0;

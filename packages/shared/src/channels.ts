@@ -151,8 +151,6 @@ export const ServiceChannels = {
   OffPeakTask: "off-peak-task",
   /** To-Dos 队列（与会话 Task、闲时任务独立） */
   Todo: "todo",
-  /** Onboarding 完成记录服务（本地持久化，后续上传服务器） */
-  OnboardingRecord: "onboarding-record",
 } as const;
 
 export type ServiceChannelName = (typeof ServiceChannels)[keyof typeof ServiceChannels];

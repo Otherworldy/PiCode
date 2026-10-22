@@ -8,7 +8,6 @@ import {
   ISystemService,
   ITerminalService,
   ISettingService,
-  IOnboardingRecordService,
   ICredentialService,
   IBroadcastService,
   IZCodeTaskService,
@@ -60,7 +59,6 @@ export class RemoteServiceAccess implements IServiceAccessor {
   readonly systemService: ISystemService;
   readonly terminalService: ITerminalService;
   readonly settingService: ISettingService;
-  readonly onboardingRecordService: IOnboardingRecordService;
   readonly credentialService: ICredentialService;
   readonly broadcastService: IBroadcastService;
   readonly zcodeTaskService: IZCodeTaskService;
@@ -124,9 +122,6 @@ export class RemoteServiceAccess implements IServiceAccessor {
     );
     this.settingService = ProxyChannel.toService<ISettingService>(
       channelClient.getChannel(ISettingService.channelName),
-    );
-    this.onboardingRecordService = ProxyChannel.toService<IOnboardingRecordService>(
-      channelClient.getChannel(IOnboardingRecordService.channelName),
     );
     this.credentialService = ProxyChannel.toService<ICredentialService>(
       channelClient.getChannel(ICredentialService.channelName),

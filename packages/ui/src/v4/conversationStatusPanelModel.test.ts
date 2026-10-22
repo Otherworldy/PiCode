@@ -61,12 +61,6 @@ test("git repositories keep the git tool even when the worktree is clean", () =>
   assert.equal(shown.git?.branchName, "todo-1");
   assert.equal(shown.git?.added, 0);
   assert.equal(shown.hasContent, true);
-
-  const office = buildConversationStatusPanelModel({
-    isOfficeMode: true,
-    gitSummary,
-  });
-  assert.equal(office.git, null);
 });
 
 test("dirty files with no line stats still show the git tool", () => {

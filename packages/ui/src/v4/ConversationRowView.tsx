@@ -1,6 +1,5 @@
 import { GenUiMessageResponse } from "@/gen-ui/index.js";
 /* oxlint-disable eslint(max-lines) -- v4 逐行 row 渲染分发集中收口（每种 row 一个 memo 叶子 + timelineMarker 分隔线），拆分会打散行类型对照。 */
-import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { compactFailureText } from "@/v4/compactFailureText.js";
 import { ConversationCappedScroll } from "@/v4/ConversationCappedScroll.js";
 import { processEventSummary } from "@/v4/conversationTurnFlowItems.js";
@@ -1922,13 +1921,11 @@ function AssistantMessageBody({
   row,
   visibleText,
   streaming,
-  isOfficeMode,
   context,
 }: {
   row: AssistantTextRow;
   visibleText: string;
   streaming: boolean;
-  isOfficeMode: boolean;
   context: ConversationRowRenderContext;
 }) {
   return (
@@ -1942,7 +1939,6 @@ function AssistantMessageBody({
       workspaceRemoteSessionId={context.workspaceRemoteSessionId}
       theme={context.theme}
       codePreviewSettings={context.codePreviewSettings}
-      forceCodeWrap={isOfficeMode}
       onOpenCodeViewer={context.onOpenCodeViewer}
       onOpenFileLink={context.onOpenFileLink}
       onOpenExternalUrl={context.onOpenBrowserUrl}
@@ -1983,7 +1979,6 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
 }) {
   const { intl } = useZCodeIntl();
   const streaming = row.state === "streaming";
-  const isOfficeMode = useIsOfficeMode();
   const codeCommentCardsEnabled = useAssistantCodeCommentFeatureEnabled();
   const projectsCodeComments = codeCommentCardsEnabled && codeCommentProjectionEnabled === true;
   const visibleText = useMemo(
@@ -2034,7 +2029,6 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
               row={row}
               visibleText={visibleText}
               streaming={streaming}
-              isOfficeMode={isOfficeMode}
               context={context}
             />
           </ResumeHereAfterText>
@@ -2043,7 +2037,6 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
             row={row}
             visibleText={visibleText}
             streaming={streaming}
-            isOfficeMode={isOfficeMode}
             context={context}
           />
         )}
@@ -2268,7 +2261,6 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
   context: ConversationRowRenderContext;
 }) {
   const { intl } = useZCodeIntl();
-  const isOfficeMode = useIsOfficeMode();
   const marker = row.marker;
   const [summaryRowId, setSummaryRowId] = useState<number | null>(null);
   const summary = marker.type === "compact" ? marker.summary : undefined;
@@ -2285,8 +2277,7 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
     switch (marker.type) {
       case "compact": {
         const running = marker.status === "running";
-        const automaticOptimization = isOfficeMode && marker.origin === "auto";
-        const scope = automaticOptimization ? "chat.contextOptimization" : "chat.contextCompaction";
+        const scope = "chat.contextCompaction";
         const statusMessage =
           marker.status === "running"
             ? "started"
@@ -2296,7 +2287,7 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
                 ? "interrupted"
                 : marker.status === "failed"
                   ? "failed"
-                  : marker.origin === "auto" && !automaticOptimization
+                  : marker.origin === "auto"
                     ? "completedAuto"
                     : "completed";
         const failureText =
@@ -2395,7 +2386,7 @@ const TimelineMarkerRowView = memo(function TimelineMarkerRowView({
       default:
         return null;
     }
-  }, [branchSummaryText, intl, isOfficeMode, marker, modelSelectionView, summary]);
+  }, [branchSummaryText, intl, marker, modelSelectionView, summary]);
 
   // 压缩摘要和分支摘要都可点开/收起。开合只在这一行，刷新后回到收起。
   // fork 跳父会话（Tier 1）：仅 forkNotice 且宿主提供 onNavigateToRow 时可点，

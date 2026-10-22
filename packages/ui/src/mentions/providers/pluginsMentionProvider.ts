@@ -12,7 +12,6 @@ import { filterMentionItemsWithOptions } from "@/mentions/mentionSearch.js";
 import { buildPluginMentionMarkdown } from "@/mentions/mentionMarkdown.js";
 import { usePluginReferenceCatalog } from "@/hooks/usePluginReferenceCatalog.js";
 import { usePluginStoreOrder } from "@/hooks/usePluginStoreOrder.js";
-import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 
 interface PluginMentionLabels {
@@ -111,8 +110,7 @@ export function usePluginsMentionProvider(
 ): MentionCategoryResult {
   const { intl, locale } = useZCodeIntl();
   const { order } = usePluginStoreOrder(enabled);
-  const isOfficeMode = useIsOfficeMode();
-  const modeOrder = isOfficeMode ? order?.work : order?.code;
+  const modeOrder = order?.code;
   const catalog = usePluginReferenceCatalog(workspacePath, workspaceIdentity, sessionId, enabled);
 
   const allItems = useMemo(

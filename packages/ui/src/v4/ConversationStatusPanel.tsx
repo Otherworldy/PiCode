@@ -1,7 +1,6 @@
 /* oxlint-disable eslint(max-lines) -- 状态面板同时维护收起态摘要、展开态分区、菜单策略和宽度自适应，同文件能保证两种形态共享同一内容优先级。 */
 import type { ModelSelectionView } from "@zcode/services";
 import type { ZCodeProvider } from "@zcode/shared";
-import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { RunningSubagentModelControl } from "@/v4/RunningSubagentModelControl.js";
 import {
   RunningSubagentUsageBreakdown,
@@ -1947,13 +1946,11 @@ function ConversationStatusPanelImpl({
   onOpenWorkflowRunDirectory,
   className,
 }: ConversationStatusPanelProps) {
-  const isOfficeMode = useIsOfficeMode();
   const miniMeasureRef = useRef<HTMLDivElement | null>(null);
   const [miniWidth, setMiniWidth] = useState(320);
   const model = useMemo(
     () =>
       buildConversationStatusPanelModel({
-        isOfficeMode,
         gitSummary,
         gitDirtyFileCount,
         gitWorktreeChangeSummary,
@@ -1967,7 +1964,6 @@ function ConversationStatusPanelImpl({
         workflowRuns,
       }),
     [
-      isOfficeMode,
       backgroundWorks,
       extensionWidgets,
       gitDirtyFileCount,

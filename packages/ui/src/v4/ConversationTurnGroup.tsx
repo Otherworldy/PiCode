@@ -1,5 +1,4 @@
 /* eslint-disable max-lines -- turn group 需要在同一处维护普通 assistant 与后台结果的严格行序，拆分会重复 actions/preview/tail 协议。 */
-import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { Fragment, memo, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronRightIcon, Loader2Icon } from "lucide-react";
 import {
@@ -1491,7 +1490,6 @@ function ConversationTurnGroupImpl({
   onEdit,
   shareSelection,
 }: ConversationTurnGroupProps) {
-  const isOfficeMode = useIsOfficeMode();
   const { intl } = useZCodeIntl();
   const visibleUserRows = useMemo(() => unit.visibleUserInputs, [unit.visibleUserInputs]);
   const firstReasoningRowId = useMemo(
@@ -1793,7 +1791,7 @@ function ConversationTurnGroupImpl({
               完成后的结果摘要，必须等回复结束再跟随最终 assistant 正文收尾。 */}
           <CronAutomationTurnCards cards={cronAutomationTurnCards} context={context} />
           <OffPeakTurnCards cards={offPeakTurnCards} context={context} />
-          {!isOfficeMode && unit.header?.fileChanges ? (
+          {unit.header?.fileChanges ? (
             <ConversationFileSummaryPanel header={unit.header} context={context} />
           ) : null}
           {unit.browserTurnEndRows.length > 0 ? (

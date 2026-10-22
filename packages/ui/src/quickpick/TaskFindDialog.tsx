@@ -18,7 +18,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { isImeComposingKeyEvent } from "@/lib/imeComposition.js";
 import {
   getConversationFindState,
@@ -65,7 +64,6 @@ export function TaskFindDialog({
   onFileChangeFindNavigate,
   onOpenFileChanges,
 }: TaskFindDialogProps) {
-  const isOfficeMode = useIsOfficeMode();
   const { intl } = useZCodeIntl();
   const titleId = useId();
   const descriptionId = useId();
@@ -331,13 +329,12 @@ export function TaskFindDialog({
           onClick: () => moveSelection("next"),
           children: <ArrowDownIcon className="size-3.5" />,
         })}
-        {(!isOfficeMode || scope === "changes") &&
-          renderFindIconButton({
-            label: nextScopeLabel,
-            tooltipLabel: scopeTooltipLabel,
-            onClick: handleToggleScope,
-            children: <ScopeIcon className="size-3.5" />,
-          })}
+        {renderFindIconButton({
+          label: nextScopeLabel,
+          tooltipLabel: scopeTooltipLabel,
+          onClick: handleToggleScope,
+          children: <ScopeIcon className="size-3.5" />,
+        })}
       </div>
       <div className="ml-0.5 flex shrink-0 border-l border-border pl-1.5">
         {renderFindIconButton({

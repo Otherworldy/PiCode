@@ -19,10 +19,7 @@ import { Input } from "@/components/ui/input.js";
 import { Button } from "@/components/ui/button.js";
 import { SettingsBadge, SettingsGroupCard, SettingsRow } from "@/settings/SettingsPageParts.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import { useOptionalServices } from "@/hooks/useServices.js";
 import { PiSdkSourceSetting } from "@/settings/PiSdkSourceSetting.js";
-import { ProactiveSuggestionsSetting } from "@/settings/ProactiveSuggestionsSetting.js";
-import { normalizeInterfaceMode, type InterfaceMode } from "@/lib/interfaceMode.js";
 import {
   createSettingsPageConfig,
   resolveSettingsSectionForPlatform,
@@ -37,8 +34,6 @@ const ZCODE_INTERACTION_BEHAVIOR_OPTIONS: readonly ZCodeInteractionBehavior[] = 
 
 export function GeneralSectionContent({
   localePreference,
-  interfaceMode = "coding",
-  setInterfaceMode = () => {},
   notificationEnabled,
   notificationSoundEnabled,
   closeToTrayOnWindows,
@@ -76,8 +71,6 @@ export function GeneralSectionContent({
   onZCodeInteractionBehaviorChange,
 }: {
   localePreference: LocalePreference;
-  interfaceMode?: InterfaceMode;
-  setInterfaceMode?: (mode: InterfaceMode) => void;
   notificationEnabled: boolean;
   notificationSoundEnabled: boolean;
   closeToTrayOnWindows: boolean;
@@ -116,7 +109,6 @@ export function GeneralSectionContent({
   onZCodeInteractionBehaviorChange: (behavior: ZCodeInteractionBehavior) => Promise<void>;
 }) {
   const { intl } = useZCodeIntl();
-  const hasServices = Boolean(useOptionalServices());
   // 部分 SSR 单测会用精简 props 直接渲染本组件，新增终端设置项后旧 helper 未必同步传值。
   // 这里把运行时缺省值兜到“继承系统 profile”，避免 undefined.trim() 把无关测试打断。
   const [localTerminalFontFamily, setLocalTerminalFontFamily] = useState(terminalFontFamily);
@@ -223,37 +215,6 @@ export function GeneralSectionContent({
           <PiSdkSourceSetting />
         </SettingsGroupCard>
       ) : null}
-
-      <SettingsGroupCard>
-        <SettingsRow
-          controlLayout="wide"
-          label={intl.formatMessage({ id: "settings.interfaceMode" })}
-          description={intl.formatMessage({ id: "settings.interfaceMode.description" })}
-          control={
-            <Select
-              value={interfaceMode}
-              onValueChange={(value) => setInterfaceMode(normalizeInterfaceMode(value))}
-            >
-              <SelectTrigger
-                size="lg"
-                className="w-full min-w-0 sm:w-64"
-                aria-label={intl.formatMessage({ id: "settings.interfaceMode" })}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="coding">
-                  {intl.formatMessage({ id: "settings.interfaceMode.coding" })}
-                </SelectItem>
-                <SelectItem value="office">
-                  {intl.formatMessage({ id: "settings.interfaceMode.office" })}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          }
-        />
-        {hasServices ? <ProactiveSuggestionsSetting /> : null}
-      </SettingsGroupCard>
 
       <SettingsGroupCard>
         <SettingsRow

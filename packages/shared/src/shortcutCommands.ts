@@ -12,8 +12,6 @@ export type ShortcutChannel = "window" | "menu";
 
 /** 可配置快捷键的命令 ID，与 SHORTCUT_COMMANDS 一一对应。 */
 export type ShortcutCommandId =
-  | "toggleInterfaceMode"
-  | "openOnboarding"
   | "openCommandCenter"
   | "openSettings"
   | "findInTask"
@@ -95,8 +93,6 @@ export const SHORTCUT_COMMANDS: readonly ShortcutCommandEntry[] = [
     scope: "composer",
     defaultBindings: ["Shift+Enter"],
   },
-  { id: "toggleInterfaceMode", channel: "window", defaultBindings: ["CmdOrCtrl+Shift+u"] },
-  { id: "openOnboarding", channel: "window", defaultBindings: ["CmdOrCtrl+Shift+o"] },
 ];
 
 /** 按命令 ID 取默认绑定；未知命令返回空数组（生效表 resolve 对未知命令整体忽略）。 */

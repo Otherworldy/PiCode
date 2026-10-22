@@ -1,4 +1,3 @@
-import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 /* eslint-disable max-lines -- 商店列表页把标题/搜索/已安装条/公开-个人分段/Featured/分类折叠聚合成一个连贯浏览面，拆散反而难以维持 1:1 布局。 */
 import { useMemo, useState } from "react";
 import { Download, Loader2, Settings2 } from "lucide-react";
@@ -57,8 +56,7 @@ export function PluginStoreListView({
   onOpenManage: () => void;
 }) {
   const { intl, locale } = useZCodeIntl();
-  const isOfficeMode = useIsOfficeMode();
-  const modeOrder = isOfficeMode ? order?.work : order?.code;
+  const modeOrder = order?.code;
   const keyword = query.trim().toLowerCase();
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   // 旧版会话恢复入口退出市场；统一过滤所有浏览投影，旧缓存/精选也不能重新露出。

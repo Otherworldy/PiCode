@@ -1,6 +1,5 @@
 import { memo, type ReactNode, useEffect, useMemo, useState } from "react";
 import { TID_CHAT_TOOL_CALL_BLOCK, testId } from "@zcode/shared";
-import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { mapToolStatus } from "@/lib/mapToolStatus.js";
 import { buildToolDisplayModel } from "@/lib/toolDisplay.js";
@@ -161,7 +160,6 @@ function ToolCallBlockComponent({
   const pluginUi = providedPluginUi ?? inheritedPluginUi;
   const { toolCall, childToolCalls } = toolCallNode;
   const { intl } = useZCodeIntl();
-  const isOfficeMode = useIsOfficeMode();
   const toolEntranceAnimationKey = `${streamingEntranceKeyPrefix}:${toolCall.toolId}`;
   // tool 在流式对话中新出现时如果没有淡入，会和同一段文字的渐入节奏割裂。
   // 这里按 toolId 记录已经展示过的 tool，切换任务或虚拟列表重挂时不重复播放。
@@ -295,7 +293,6 @@ function ToolCallBlockComponent({
 
   const renderContext: ToolCallBlockRenderContext = useMemo(
     () => ({
-      isOfficeMode,
       toolCallNode,
       workspacePath,
       theme,
@@ -334,7 +331,6 @@ function ToolCallBlockComponent({
       resumeMenuForToolId,
     }),
     [
-      isOfficeMode,
       agentSummaryAction,
       authoritativeAgentType,
       childToolList,

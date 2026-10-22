@@ -316,15 +316,15 @@ export function EditToolCallBlock(context: ToolCallBlockRenderContext) {
         // edit 的 diff 预览挂在 content 里；单文件和子文件如果不可展开，
         // 用户只能看到摘要行，无法在消息流里直接查看变更。
         {...layoutConfig}
-        canToggle={!context.isOfficeMode && layoutConfig.canToggle}
-        forceOpen={!context.isOfficeMode && layoutConfig.forceOpen}
+        canToggle={layoutConfig.canToggle}
+        forceOpen={layoutConfig.forceOpen}
         kindLabel={context.kindLabelOverride ?? kindLabel}
         sourceLabel={context.sourceLabel}
         primaryText={primaryText}
         prioritizePrimaryText
         expandedPrimaryText={expandedPrimaryText}
         secondaryText={secondaryText}
-        diffCount={context.isOfficeMode ? undefined : diffCount}
+        diffCount={diffCount}
         hideDiffCountWhenOpen={hasMultipleFiles}
         statusLabel={effectiveStatusLabel}
         statusTooltip={isFailed ? errorText : undefined}

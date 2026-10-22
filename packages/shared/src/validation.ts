@@ -37,7 +37,6 @@ import {
 import { zcodeTaskModeSchema } from "./zcode-task-mode-schema.js";
 
 export {
-  appSettingsOccupationEnum,
   appSettingsPatchSchema,
   appSettingsSchema,
   localeSchema,

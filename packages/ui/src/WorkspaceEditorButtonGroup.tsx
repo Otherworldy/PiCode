@@ -16,8 +16,6 @@ import {
   resolveWorkspaceEditorSelection,
   shouldPersistWorkspaceEditorSelection,
 } from "@/lib/workspaceEditorSelection.js";
-import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
-import { isFileManagerOpenTarget } from "@/lib/openWithEditors.js";
 import { logger } from "@/logger.js";
 
 export function WorkspaceEditorButtonGroup({
@@ -35,7 +33,6 @@ export function WorkspaceEditorButtonGroup({
 }) {
   const { intl } = useZCodeIntl();
   const platform = usePlatform();
-  const isOfficeMode = useIsOfficeMode();
 
   const [installedEditors, setInstalledEditors] = useState<EditorInfo[]>([]);
   const [selectedEditorId, setSelectedEditorId] = useState<string | null>(() =>
@@ -66,13 +63,11 @@ export function WorkspaceEditorButtonGroup({
   const { availableEditors, selectedEditor } = useMemo(
     () =>
       resolveWorkspaceEditorSelection({
-        installedEditors: isOfficeMode
-          ? installedEditors.filter(isFileManagerOpenTarget)
-          : installedEditors,
+        installedEditors,
         selectedEditorId,
         remoteTarget,
       }),
-    [installedEditors, isOfficeMode, remoteTarget, selectedEditorId],
+    [installedEditors, remoteTarget, selectedEditorId],
   );
 
   useEffect(() => {

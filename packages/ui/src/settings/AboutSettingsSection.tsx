@@ -390,7 +390,7 @@ function UpdateActionCard({
       {snapshot.phase === "downloading" ? (
         <div className="mt-4 space-y-1.5">
           <div className="flex items-center justify-between text-ui-xs text-foreground-subtle">
-            <span>{intl.formatMessage({ id: "settings.about.downloading", progress: "" })}</span>
+            <span>{intl.formatMessage({ id: "settings.about.downloading" })}</span>
             <span className="font-mono">{progress.label}</span>
           </div>
           <div className="h-2 w-full overflow-hidden rounded-full border border-border/50 bg-surface">

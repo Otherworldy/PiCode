@@ -166,7 +166,6 @@ export const CodeBlockContainer = ({
 );
 
 export type CodeBlockHeaderProps = HTMLAttributes<HTMLDivElement> & {
-  showWrapButton?: boolean;
   displayFile?: string;
   language?: string;
 };
@@ -176,7 +175,6 @@ export const CodeBlockHeader = ({
   className,
   displayFile,
   language,
-  showWrapButton = true,
   ...props
 }: CodeBlockHeaderProps) => {
   const languageLabel = language?.trim() || "text";
@@ -201,9 +199,9 @@ export const CodeBlockHeader = ({
           <CodeBlockActions>
             {isMermaidLanguage(languageLabel) ? (
               <CodeBlockMermaidPreviewButton />
-            ) : showWrapButton ? (
+            ) : (
               <CodeBlockWrapButton />
-            ) : null}
+            )}
             <CodeBlockCopyButton />
           </CodeBlockActions>
         </>

@@ -7,13 +7,12 @@ const modeOrderSchema = z.object({
 });
 const pluginStoreOrderSchema = z.object({
   code: modeOrderSchema.optional().catch(undefined),
-  work: modeOrderSchema.optional().catch(undefined),
 });
 
 export type PluginStoreModeOrder = z.infer<typeof modeOrderSchema>;
 export type PluginStoreOrder = z.infer<typeof pluginStoreOrderSchema>;
 
-/** 排序只是展示配置；错误模式独立回退，不能阻止目录浏览或污染另一种模式。 */
+/** 排序只是展示配置；错误配置回退为空，不能阻止目录浏览。 */
 export function parsePluginStoreOrder(value: unknown): PluginStoreOrder | null {
   return pluginStoreOrderSchema.safeParse(value).data ?? null;
 }
