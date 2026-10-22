@@ -16,6 +16,40 @@ import {
 import type { IFileService } from "@zcode/services";
 
 const TEXT_READ_BYTES = 256 * 1024;
+/** 面板/发行版环境里常见的开发根目录；`$HOME` 不可用时的后备。 */
+const REMOTE_START_DIRECTORY_FALLBACKS = [
+  "/www/wwwroot",
+  "/var/www",
+  "/opt",
+  "/srv",
+  "/home",
+] as const;
+
+function buildRemoteStartDirectoryCommand(): string {
+  const candidates = REMOTE_START_DIRECTORY_FALLBACKS.map((path) => quotePosixArg(path)).join(" ");
+  // 只读探测：$HOME 优先，其次常见开发目录，都没有就回 /。
+  return [
+    'if [ -d "$HOME" ]; then printf %s "$HOME";',
+    `else for d in ${candidates}; do [ -d "$d" ] && { printf %s "$d"; break; }; done; fi`,
+  ].join(" ");
+}
+
+/**
+ * 远程目录浏览器的起始目录。
+ *
+ * 以前固定写死 `/home`，在只有 root 的服务器上是空目录。改成探测远端 `$HOME`，
+ * 失败时依次退到常见开发目录；任何失败都只影响起始位置，不抛给调用方。
+ */
+export async function resolveRemoteStartDirectory(
+  spec: SshRemoteSpec,
+  runRemoteCommand: typeof runSsh = runSsh,
+): Promise<string> {
+  const result = await runRemoteCommand(spec, buildRemoteStartDirectoryCommand()).catch(
+    () => undefined,
+  );
+  const candidate = result?.code === 0 ? result.stdout.toString("utf8").trim() : "";
+  return candidate.startsWith("/") ? candidate : "/";
+}
 
 function unsupported(method: string): never {
   throw new Error(`SSH workspace does not support ${method}`);
@@ -49,7 +83,10 @@ export function createSshFileService(spec: SshRemoteSpec): IFileService {
       const dir = params.path;
       const hidden = params.includeHidden === false ? " ! -name '.*'" : "";
       return parseFindEntries(
-        await sshText(spec, `find ${quotePosixArg(dir)} -mindepth 1 -maxdepth 1${hidden} -printf '%y\\t%f\\n'`),
+        await sshText(
+          spec,
+          `find ${quotePosixArg(dir)} -mindepth 1 -maxdepth 1${hidden} -printf '%y\\t%f\\n'`,
+        ),
         dir,
       );
     },
@@ -72,7 +109,10 @@ export function createSshFileService(spec: SshRemoteSpec): IFileService {
     async readTextFile(params): Promise<FileTextSlice> {
       const fileStat = await statRemote(spec, params.path);
       const offset = Math.max(0, Math.trunc(params.offset ?? 0));
-      const length = Math.min(TEXT_READ_BYTES, Math.max(0, Math.trunc(params.length ?? TEXT_READ_BYTES)));
+      const length = Math.min(
+        TEXT_READ_BYTES,
+        Math.max(0, Math.trunc(params.length ?? TEXT_READ_BYTES)),
+      );
       if (fileStat.type !== "file" || offset >= (fileStat.size ?? 0)) {
         return {
           path: params.path,
@@ -107,7 +147,11 @@ export function createSshFileService(spec: SshRemoteSpec): IFileService {
         `dd if=${quotePosixArg(params.path)} iflag=skip_bytes,count_bytes skip=${Math.max(0, Math.trunc(params.offset))} count=${Math.max(0, Math.trunc(params.length))} status=none`,
       );
       if (result.code !== 0) throw new Error(result.stderr.trim() || "ssh read failed");
-      return new Uint8Array(result.stdout.buffer, result.stdout.byteOffset, result.stdout.byteLength);
+      return new Uint8Array(
+        result.stdout.buffer,
+        result.stdout.byteOffset,
+        result.stdout.byteLength,
+      );
     },
     readBinaryPreview: (): Promise<FileBinaryPreview> => unsupported("readBinaryPreview"),
     async listWorkspaceFilesLength() {
@@ -119,7 +163,8 @@ export function createSshFileService(spec: SshRemoteSpec): IFileService {
     async readWorkspaceFileSearchIgnore() {
       return { content: "", source: "template" as const };
     },
-    applyWorkspaceFileSearchIgnoreTransform: () => unsupported("applyWorkspaceFileSearchIgnoreTransform"),
+    applyWorkspaceFileSearchIgnoreTransform: () =>
+      unsupported("applyWorkspaceFileSearchIgnoreTransform"),
     writeWorkspaceFileSearchIgnore: () => unsupported("writeWorkspaceFileSearchIgnore"),
     async readAgentSystemPrompt(params) {
       // SSH 上的 Agent 仍跑在本机，全局 SYSTEM.md 不在远端。全局只走本机 file service。

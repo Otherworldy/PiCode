@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { posix } from "node:path";
 import {
   quotePosixArg,
@@ -6,7 +5,7 @@ import {
   type AgentSystemPromptKind,
   remotePosixPath,
   runSsh,
-  sshDestinationArgs,
+  spawnSsh,
   type SshRemoteSpec,
 } from "@zcode/shared/node";
 
@@ -27,6 +26,11 @@ export function readProcessSshRemoteSpec(workspacePath: string): SshRemoteSpec |
     return undefined;
   }
   if (!parsed.host || !parsed.username || !parsed.remotePath) return undefined;
+  // env 是跨进程边界，凭据只允许是文件路径。脏值只丢字段，不能让整个 spec
+  // 失效——否则远程工作区会静默退化成本地目录，工具开始改本机文件。
+  if (typeof parsed.passwordFile !== "string" || parsed.passwordFile.length === 0) {
+    delete parsed.passwordFile;
+  }
   // Pi 在 Windows 上会把 /root/... resolve 成 C:\root\...。两边都指远端根才算同一个工作区。
   const mapped = remotePosixPath(workspacePath, parsed.remotePath);
   if (!samePath(parsed.remotePath, workspacePath) && !samePath(parsed.remotePath, mapped)) {
@@ -138,26 +142,27 @@ export function sshCodingToolOptions(spec: SshRemoteSpec) {
     },
     bash: {
       operations: {
-        exec: (command: string, cwd: string, options: {
-          onData: (data: Buffer) => void;
-          signal?: AbortSignal;
-          timeout?: number;
-        }) =>
-          new Promise<{ exitCode: number | null }>((resolve, reject) => {
-            const remoteCwd = pathOf(cwd);
-            const remoteCommand = rewriteRemoteCommand(command, spec.remotePath);
-            const child = spawn(
-              "ssh",
-              [
-                ...sshDestinationArgs(spec),
-                `cd ${quotePosixArg(remoteCwd)} && ${remoteCommand}`,
-              ],
-              { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
-            );
-            // Pi 的 timeout 单位是秒。当成毫秒会在 SSH 握手前把进程杀掉，退出码是 null。
-            const timeoutMs =
-              options.timeout && options.timeout > 0 ? options.timeout * 1000 : undefined;
-            let timedOut = false;
+        exec: async (
+          command: string,
+          cwd: string,
+          options: {
+            onData: (data: Buffer) => void;
+            signal?: AbortSignal;
+            timeout?: number;
+          },
+        ): Promise<{ exitCode: number | null }> => {
+          const remoteCwd = pathOf(cwd);
+          const remoteCommand = rewriteRemoteCommand(command, spec.remotePath);
+          const child = await spawnSsh(
+            spec,
+            `cd ${quotePosixArg(remoteCwd)} && ${remoteCommand}`,
+            ["ignore", "pipe", "pipe"],
+          );
+          // Pi 的 timeout 单位是秒。当成毫秒会在 SSH 握手前把进程杀掉，退出码是 null。
+          const timeoutMs =
+            options.timeout && options.timeout > 0 ? options.timeout * 1000 : undefined;
+          let timedOut = false;
+          return await new Promise<{ exitCode: number | null }>((resolve, reject) => {
             const timer = timeoutMs
               ? setTimeout(() => {
                   timedOut = true;
@@ -166,6 +171,8 @@ export function sshCodingToolOptions(spec: SshRemoteSpec) {
               : undefined;
             const onAbort = () => child.kill();
             options.signal?.addEventListener("abort", onAbort, { once: true });
+            // 已经 abort 的 signal 不会再回调；spawnSsh 的 await 窗口内点停止必须在这里补杀。
+            if (options.signal?.aborted) child.kill();
             const done = (error?: Error, code?: number | null) => {
               if (timer) clearTimeout(timer);
               options.signal?.removeEventListener("abort", onAbort);
@@ -177,7 +184,8 @@ export function sshCodingToolOptions(spec: SshRemoteSpec) {
             child.stderr?.on("data", (chunk: Buffer) => options.onData(chunk));
             child.on("error", (error) => done(error));
             child.on("close", (code) => done(undefined, code));
-          }),
+          });
+        },
       },
     },
     ls: {

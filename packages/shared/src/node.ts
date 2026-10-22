@@ -5,16 +5,21 @@
  */
 export { acquireFileLock } from "./node/atomicFileLock.js";
 export {
+  buildSshAskpassScript,
   forgetSshWorkspaceTarget,
   parseFindEntries,
   quotePosixArg,
   rememberSshWorkspaceTarget,
   remotePosixPath,
   runSsh,
+  spawnSsh,
   sshDestinationArgs,
+  sshPasswordSecretPath,
   sshSpecFromConnectTarget,
   sshWorkspaceSpawnEnv,
+  writeSshPasswordSecret,
   type SshRemoteSpec,
+  type SshSecretTarget,
 } from "./node/sshRemote.js";
 export {
   GEN_UI_OUTPUT_ROOT_ENV,

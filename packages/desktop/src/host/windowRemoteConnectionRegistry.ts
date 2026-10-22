@@ -696,6 +696,16 @@ export function createWindowRemoteConnectionRegistry<TServices, TCapabilities = 
       const session = sessionsById.get(remoteSessionId);
       return session ? toSessionSnapshot(session) : null;
     },
+    /**
+     * Host 内部使用的未脱敏 target。
+     *
+     * snapshot/descriptor 会把 password/privateKeyPassphrase 脱掉（凭据不下发
+     * renderer/手机），但 SSH 凭据编排还要在 Host 内重建 agent 侧 spec，
+     * 因此单独开一个只在本进程内使用的读取入口，禁止透传到 attachment。
+     */
+    getSessionTarget(remoteSessionId: string): RemoteTarget | null {
+      return sessionsById.get(remoteSessionId)?.target ?? null;
+    },
     listSessions(): WindowRemoteLogicalSessionSnapshot[] {
       return Array.from(sessionsById.values(), toSessionSnapshot);
     },

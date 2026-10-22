@@ -14,12 +14,14 @@
  * 3. 后续远端 connect / scoped attachment 都由同一 Host 处理
  */
 import { createHostDatabaseStartup } from "./hostDatabaseStartup.js";
-import { createSshFileService } from "./sshWorkspaceFileService.js";
+import { createSshFileService, resolveRemoteStartDirectory } from "./sshWorkspaceFileService.js";
 import {
   forgetSshWorkspaceTarget,
   rememberSshWorkspaceTarget,
   sshSpecFromConnectTarget,
+  writeSshPasswordSecret,
 } from "@zcode/shared/node";
+import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { createPluginSandboxRegistrationBridge } from "./pluginSandbox/index.js";
 import {
@@ -67,6 +69,7 @@ import {
   buildTaskChangeSummary,
   createHostApiNetworkTransport,
   createSettingServiceWithMigrations,
+  getAppConfigDir,
   OffPeakModelUnavailableError,
   OffPeakPermanentDispatchError,
   type HostApiNetworkTransport,
@@ -2496,7 +2499,9 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
   if (msg.type === HostMessageTypes.SessionMessageDeliveryResult) {
     const zcodeTaskService = activeServices?.getOptional(IZCodeTaskService);
     if (!zcodeTaskService) {
-      logger.warn("session message delivery result received before PiCode task service initialized");
+      logger.warn(
+        "session message delivery result received before PiCode task service initialized",
+      );
       return;
     }
     void zcodeTaskService.sendSessionMessageDeliveryResult(msg.result).catch((error) => {
@@ -2564,25 +2569,24 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
     const workspacePath = msg.workspacePath ?? "/";
     const workspaceIdentity =
       msg.workspaceIdentity ?? buildRemoteWorkspaceIdentity(workspacePath, msg.target);
-    if (msg.target.kind === "ssh") {
-      rememberSshWorkspaceTarget(
-        workspaceIdentity,
-        sshSpecFromConnectTarget(msg.target, workspacePath),
-      );
-    }
+    const sshTarget = msg.target.kind === "ssh" ? msg.target : undefined;
     logger.info(
       `connecting window-scoped remote source, requestId=${msg.requestId}, target=${formatRemoteTargetForLog(msg.target)}`,
     );
     void remoteConnectionProgressContext
-      .run(msg.requestId, () =>
-        windowRemoteConnectionRegistry.connect({
+      .run(msg.requestId, async () => {
+        // 密码先落到 0600 私有文件，spec/env/子进程只带路径；写入失败直接算连接失败。
+        if (sshTarget) {
+          await rememberSshWorkspaceTargetFromTarget(workspaceIdentity, sshTarget, workspacePath);
+        }
+        return windowRemoteConnectionRegistry.connect({
           requestId: msg.requestId,
           target: msg.target,
           remoteAssets: msg.remoteAssets,
           workspacePath,
           workspaceIdentity,
-        }),
-      )
+        });
+      })
       .then(async (descriptor) => {
         const replacedOfflineSessions = windowRemoteConnectionRegistry
           .listSessions()
@@ -2675,10 +2679,14 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
         msg.remoteSessionId,
         current.generation,
       );
-      if (current.target.kind === "ssh") {
-        rememberSshWorkspaceTarget(
+      // snapshot 已脱敏（没有 password），这里必须用 Host 内的原始 target，
+      // 否则 bind 会用一份无凭据的 spec 覆盖 connect 时写好的 agent 侧 spec。
+      const currentTarget = windowRemoteConnectionRegistry.getSessionTarget(msg.remoteSessionId);
+      if (currentTarget?.kind === "ssh") {
+        await rememberSshWorkspaceTargetFromTarget(
           msg.workspaceIdentity,
-          sshSpecFromConnectTarget(current.target, msg.workspacePath),
+          currentTarget,
+          msg.workspacePath,
         );
       }
     }
@@ -2954,18 +2962,45 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
   }
 });
 
-function createSshLocalConnectionHandle(target: Extract<RemoteTarget, { kind: "ssh" }>): WindowRemoteConnectionHandle<
-  ServiceCollection,
-  HostRemoteConnectionCapabilities
-> {
+/** SSH 密码只落到 0600 私有文件，spec 与 agent spawn env 只下发路径。 */
+function resolveSshPasswordSecretDirectory(): string {
+  return join(getAppConfigDir(), "ssh-secrets");
+}
+
+async function rememberSshWorkspaceTargetFromTarget(
+  workspaceIdentity: string,
+  target: Extract<RemoteTarget, { kind: "ssh" }>,
+  remotePath: string,
+): Promise<void> {
+  const passwordSecretDirectory = resolveSshPasswordSecretDirectory();
+  if (target.password) {
+    await writeSshPasswordSecret(passwordSecretDirectory, target, target.password);
+  }
+  rememberSshWorkspaceTarget(
+    workspaceIdentity,
+    sshSpecFromConnectTarget(target, remotePath, { passwordSecretDirectory }),
+  );
+}
+
+function createSshLocalConnectionHandle(
+  target: Extract<RemoteTarget, { kind: "ssh" }>,
+): WindowRemoteConnectionHandle<ServiceCollection, HostRemoteConnectionCapabilities> {
   if (!activeServices) throw new Error("Local Host services are not initialized.");
   // SSH 不再部署远端 zcode-server，因此也不会访问 PiCode CDN。
   // 模型和 agent 继续用本机服务；只有文件服务改走系统 ssh。
   const services = activeServices.fork();
-  services.register(IFileService, createSshFileService(sshSpecFromConnectTarget(target, "/")));
+  const sshSpec = sshSpecFromConnectTarget(target, "/", {
+    passwordSecretDirectory: resolveSshPasswordSecretDirectory(),
+  });
+  services.register(IFileService, createSshFileService(sshSpec));
   const localSystem = activeServices.get(ISystemService);
+  // 目录浏览器起始位置：探测远端 $HOME，失败回退常见开发目录。只探一次，失败也只退到 "/"。
+  let remoteStartDirectory: Promise<string> | undefined;
   services.register(ISystemService, {
-    info: async () => ({ ...(await localSystem.info()), homedir: "/home" }),
+    info: async () => ({
+      ...(await localSystem.info()),
+      homedir: await (remoteStartDirectory ??= resolveRemoteStartDirectory(sshSpec)),
+    }),
     listIntegratedTerminalShells: () => localSystem.listIntegratedTerminalShells(),
     probeIntranet: (request) => localSystem.probeIntranet(request),
   });
