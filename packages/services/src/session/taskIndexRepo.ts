@@ -76,8 +76,22 @@ interface TaskIndexRow {
   archived: number;
   deleted: number;
   title_overridden: number;
-  searchable_text: string;
   meta_json: string;
+}
+
+/**
+ * 搜索行：在列表行基础上附上 SQL 侧已截取的摘要窗口。
+ *
+ * `searchable_text` 是 200k 级别的列，跨 SQLite→JS 边界搬一次就是 MB 级分配。只有搜索需要
+ * 它，所以它以「窗口 + 位置 + 总长」三个标量出现，永远不出现整列。
+ */
+interface TaskIndexSearchRow extends TaskIndexRow {
+  /** 已截取的窗口；正文为空时为 null。 */
+  search_snippet: string | null;
+  /** 1-based 首次匹配位置；0 表示正文未命中（title 命中场景），此时窗口是正文开头。 */
+  search_pos: number;
+  /** 正文总长，用于判断是否需要后缀 "..."。 */
+  search_len: number;
 }
 
 interface TaskGroupRow {
@@ -152,7 +166,6 @@ const TASK_SEARCH_TEXT_MAX_CHARS = 200_000;
 const TASK_SEARCH_SNIPPET_PREFIX_RADIUS = 20;
 const TASK_SEARCH_SNIPPET_SUFFIX_RADIUS = 72;
 const TASK_SEARCH_SNIPPET_MAX_CHARS = 140;
-const TASK_SEARCH_SNIPPET_LIMIT = 4;
 const GROUPED_TASK_ORDER_STEP = 1000;
 const GROUPED_WORKSPACE_BOOTSTRAP_ONCE_KEY = "__zcode_internal_grouped_workspace_bootstrap_once__";
 const DEFAULT_TASK_GROUP_COLOR: ZCodeTaskGroupColor = "gray";
@@ -310,59 +323,34 @@ function normalizeSearchSnippetText(text: string): string {
   return text.replace(/\s+/g, " ").trim().slice(0, TASK_SEARCH_SNIPPET_MAX_CHARS);
 }
 
-// 全局会话搜索 (TaskSearchDialog) 期望命中正文时返回若干片段做摘要展示。
-// 以匹配点为中心截窗，去重相近窗口，最多 4 条；
-// 全部未命中（title 命中）时回退一条整段摘要，避免下方空白。
-function buildSearchSnippets(searchableText: string, search: string | null): string[] {
-  if (!search || !searchableText.trim()) {
+// 全局会话搜索 (TaskSearchDialog) 期望命中正文时返回片段做摘要展示。
+//
+// 窗口、首次匹配位置和正文总长都由 SQL 侧截取（见 queryTaskList 的 search_snippet），
+// 这里只做前后缀判断与空白折叠 —— 不再把整段正文读进 JS。代价是摘要从"最多 4 条"
+// 降为"首个匹配窗口 1 条"，换来实测 12 倍的搜索路径加速。
+function buildSearchSnippetsFromRow(row: TaskIndexSearchRow, search: string | null): string[] {
+  if (!search) {
+    return [];
+  }
+  const window = row.search_snippet;
+  if (window === null || window.trim().length === 0) {
     return [];
   }
 
-  const normalizedSearch = search.toLocaleLowerCase();
-  const normalizedText = searchableText.toLocaleLowerCase();
-  const snippets: string[] = [];
-  const snippetRanges: Array<{ start: number; end: number }> = [];
-  let searchStart = 0;
-
-  while (snippets.length < TASK_SEARCH_SNIPPET_LIMIT && searchStart < normalizedText.length) {
-    const matchIndex = normalizedText.indexOf(normalizedSearch, searchStart);
-    if (matchIndex < 0) {
-      break;
-    }
-
-    const start = Math.max(0, matchIndex - TASK_SEARCH_SNIPPET_PREFIX_RADIUS);
-    const end = Math.min(
-      searchableText.length,
-      matchIndex + normalizedSearch.length + TASK_SEARCH_SNIPPET_SUFFIX_RADIUS,
-    );
-    const prefix = start > 0 ? "..." : "";
-    const suffix = end < searchableText.length ? "..." : "";
-    const snippet = normalizeSearchSnippetText(
-      `${prefix}${searchableText.slice(start, end)}${suffix}`,
-    );
-    const overlapsExistingSnippet = snippetRanges.some(
-      (range) => Math.min(range.end, end) - Math.max(range.start, start) > 0,
-    );
-    // 同一个关键词在很近的位置多次出现时，摘要窗口会高度重叠；服务端先合并近重复摘要。
-    if (snippet && !overlapsExistingSnippet) {
-      snippets.push(snippet);
-      snippetRanges.push({ start, end });
-    }
-    searchStart = matchIndex + normalizedSearch.length;
-  }
-
-  if (snippets.length === 0) {
-    // title 命中但正文没命中时，仍给一条整段摘要兜底，避免标题下方空白。
-    const fallbackSnippet = normalizeSearchSnippetText(searchableText);
-    return fallbackSnippet ? [fallbackSnippet] : [];
-  }
-
-  return snippets;
+  // search_pos 是 1-based；0 表示正文未命中（title 命中场景），此时窗口是正文开头，
+  // 正好充当原来"整段摘要兜底"的角色，避免标题下方空白。
+  const start =
+    row.search_pos > 0 ? Math.max(1, row.search_pos - TASK_SEARCH_SNIPPET_PREFIX_RADIUS) : 1;
+  const prefix = start > 1 ? "..." : "";
+  // search_len 是 SQLite 的字符数，window.length 是 UTF-16 长度；两者对 BMP 字符一致，
+  // 代理对（emoji）会差 1 —— 只影响是否多显示一个 "..."，不影响摘要内容。
+  const suffix = row.search_len > 0 && start + window.length - 1 < row.search_len ? "..." : "";
+  const snippet = normalizeSearchSnippetText(`${prefix}${window}${suffix}`);
+  return snippet ? [snippet] : [];
 }
 
-function rowToTaskListItem(row: TaskIndexRow, search: string | null): ZCodeTaskListItem {
+function rowToTaskListItem(row: TaskIndexRow, snippets: string[]): ZCodeTaskListItem {
   const meta = rowToMeta(row);
-  const snippets = buildSearchSnippets(row.searchable_text, search);
   if (snippets.length === 0) {
     return meta;
   }
@@ -749,7 +737,6 @@ export class TaskIndexRepo {
           archived,
           deleted,
           title_overridden,
-          searchable_text,
           meta_json
         FROM tasks
         WHERE workspace_key = ? AND task_id = ?`,
@@ -911,6 +898,41 @@ export class TaskIndexRepo {
     return this.hasGroupedWorkspaceBootstrapRunSync();
   }
 
+  /**
+   * 物理删除过期的删除 tombstone。
+   *
+   * `tasks` 表的删除只写 `deleted = 1`（全仓原本没有一条 `DELETE FROM tasks`），于是被删会话
+   * 连同整段正文永久驻留，还继续被全表扫描读取。这里按 `updated_at` 清掉足够旧的 tombstone；
+   * SQLite 会复用释放的页，库文件不再单调增长（不会缩小，但新数据不再继续撑大它）。
+   *
+   * 带 `NOT EXISTS` 子查询排除仍被分组引用的行：直接删会留下 task_group_members 孤儿，
+   * 而 `queryGroupedTaskView` 遇到「成员指向不可见 task」会直接抛错。
+   */
+  async pruneDeletedTasks(params: { olderThanMs: number }): Promise<number> {
+    await this.ensureReady();
+    const cutoff = Date.now() - Math.max(0, Math.floor(params.olderThanMs));
+    const database = this.getDatabase();
+    database.exec("BEGIN IMMEDIATE");
+    try {
+      const result = database
+        .prepare(
+          `DELETE FROM tasks
+           WHERE deleted = 1
+             AND updated_at < ?
+             AND NOT EXISTS (
+               SELECT 1 FROM task_group_members m
+               WHERE m.workspace_key = tasks.workspace_key AND m.task_id = tasks.task_id
+             )`,
+        )
+        .run(cutoff);
+      database.exec("COMMIT");
+      return Number(result.changes ?? 0);
+    } catch (error) {
+      database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
   async archiveStaleTasks(params: {
     workspacePath: string;
     workspaceIdentity?: string;
@@ -957,7 +979,6 @@ export class TaskIndexRepo {
           archived,
           deleted,
           title_overridden,
-          searchable_text,
           meta_json
         FROM tasks
         WHERE ${where.join(" AND ")}
@@ -1181,129 +1202,142 @@ export class TaskIndexRepo {
   }
 
   private writeRecord(record: TaskIndexWriteRecord): ZCodeTaskMeta {
-    // searchable_text 传 undefined 表示"不动现有值"。读一次 row 拿到当前值，
-    // 否则 ON CONFLICT 时 excluded.searchable_text 会被赋成空字符串，把已索引正文清空。
-    const existing =
-      record.searchableText === undefined
-        ? this.getTaskRow({
-            workspacePath: record.meta.workspacePath,
-            workspaceIdentity: record.meta.workspaceIdentity,
-            taskId: record.meta.taskId,
-          })
-        : null;
-    const searchableText =
-      record.searchableText !== undefined
-        ? record.searchableText.slice(0, TASK_SEARCH_TEXT_MAX_CHARS)
-        : (existing?.searchable_text ?? "");
-    this.getDatabase()
-      .prepare(
-        `INSERT INTO tasks (
-          workspace_key,
-          workspace_path,
-          workspace_identity,
-          task_id,
-          title,
-          task_status,
-          provider,
-          mode,
-          model,
-          migration_source,
-          forked_from_task_id,
-          cron_automation_id,
-          off_peak_task_id,
-          created_at,
-          updated_at,
-          unread_at,
-          last_unread_at,
-          pinned,
-          archived,
-          deleted,
-          title_overridden,
-          searchable_text,
-          meta_json
-        ) VALUES (
-          @workspace_key,
-          @workspace_path,
-          @workspace_identity,
-          @task_id,
-          @title,
-          @task_status,
-          @provider,
-          @mode,
-          @model,
-          @migration_source,
-          @forked_from_task_id,
-          @cron_automation_id,
-          @off_peak_task_id,
-          @created_at,
-          @updated_at,
-          @unread_at,
-          @last_unread_at,
-          @pinned,
-          @archived,
-          @deleted,
-          @title_overridden,
-          @searchable_text,
-          @meta_json
+    // 正文不进主 INSERT/UPDATE：它是 200k 级别的列，而 ON CONFLICT 会重写整行 ——
+    // 实测 200k 字符行每次标题/状态 patch 落 ~600KB WAL。改成"只在调用方给了正文时
+    // 单独 UPDATE"，既不再重写，也不再需要预读现有值来防止被 excluded 清空
+    // （searchable_text 传 undefined 的语义由"不执行那条 UPDATE"直接表达）。
+    const database = this.getDatabase();
+    // 两条语句必须同事务：INSERT 已提交而正文 UPDATE 未执行时崩溃（或第二条语句因库锁
+    // 失败），会留下 searchable_text = '' 的行 —— 该会话正文从此搜不到，要等下一次
+    // snapshot 同步重算正文才自愈。调用方可能已在事务内（syncTaskMetaAtGroupedTop 的
+    // BEGIN IMMEDIATE），所以只在当前没有事务时自己开。
+    const ownsTransaction = !database.isTransaction;
+    if (ownsTransaction) database.exec("BEGIN IMMEDIATE");
+    try {
+      database
+        .prepare(
+          `INSERT INTO tasks (
+            workspace_key,
+            workspace_path,
+            workspace_identity,
+            task_id,
+            title,
+            task_status,
+            provider,
+            mode,
+            model,
+            migration_source,
+            forked_from_task_id,
+            cron_automation_id,
+            off_peak_task_id,
+            created_at,
+            updated_at,
+            unread_at,
+            last_unread_at,
+            pinned,
+            archived,
+            deleted,
+            title_overridden,
+            meta_json
+          ) VALUES (
+            @workspace_key,
+            @workspace_path,
+            @workspace_identity,
+            @task_id,
+            @title,
+            @task_status,
+            @provider,
+            @mode,
+            @model,
+            @migration_source,
+            @forked_from_task_id,
+            @cron_automation_id,
+            @off_peak_task_id,
+            @created_at,
+            @updated_at,
+            @unread_at,
+            @last_unread_at,
+            @pinned,
+            @archived,
+            @deleted,
+            @title_overridden,
+            @meta_json
+          )
+          ON CONFLICT(workspace_key, task_id) DO UPDATE SET
+            workspace_path = excluded.workspace_path,
+            workspace_identity = excluded.workspace_identity,
+            title = excluded.title,
+            task_status = excluded.task_status,
+            provider = excluded.provider,
+            mode = excluded.mode,
+            model = excluded.model,
+            migration_source = excluded.migration_source,
+            forked_from_task_id = excluded.forked_from_task_id,
+            cron_automation_id = excluded.cron_automation_id,
+            off_peak_task_id = excluded.off_peak_task_id,
+            created_at = excluded.created_at,
+            updated_at = excluded.updated_at,
+            unread_at = CASE
+              WHEN @write_unread_at = 1 THEN excluded.unread_at
+              ELSE tasks.unread_at
+            END,
+            last_unread_at = MAX(
+              tasks.last_unread_at,
+              COALESCE(tasks.unread_at, 0),
+              CASE WHEN @write_unread_at = 1 THEN excluded.last_unread_at ELSE 0 END
+            ),
+            pinned = excluded.pinned,
+            archived = excluded.archived,
+            deleted = excluded.deleted,
+            title_overridden = excluded.title_overridden,
+            meta_json = excluded.meta_json`,
         )
-        ON CONFLICT(workspace_key, task_id) DO UPDATE SET
-          workspace_path = excluded.workspace_path,
-          workspace_identity = excluded.workspace_identity,
-          title = excluded.title,
-          task_status = excluded.task_status,
-          provider = excluded.provider,
-          mode = excluded.mode,
-          model = excluded.model,
-          migration_source = excluded.migration_source,
-          forked_from_task_id = excluded.forked_from_task_id,
-          cron_automation_id = excluded.cron_automation_id,
-          off_peak_task_id = excluded.off_peak_task_id,
-          created_at = excluded.created_at,
-          updated_at = excluded.updated_at,
-          unread_at = CASE
-            WHEN @write_unread_at = 1 THEN excluded.unread_at
-            ELSE tasks.unread_at
-          END,
-          last_unread_at = MAX(
-            tasks.last_unread_at,
-            COALESCE(tasks.unread_at, 0),
-            CASE WHEN @write_unread_at = 1 THEN excluded.last_unread_at ELSE 0 END
-          ),
-          pinned = excluded.pinned,
-          archived = excluded.archived,
-          deleted = excluded.deleted,
-          title_overridden = excluded.title_overridden,
-          searchable_text = excluded.searchable_text,
-          meta_json = excluded.meta_json`,
-      )
-      .run({
-        workspace_key: workspaceKey(record.meta),
-        workspace_path: record.meta.workspacePath,
-        workspace_identity: record.meta.workspaceIdentity ?? null,
-        task_id: record.meta.taskId,
-        title: record.meta.title,
-        task_status: record.meta.status ?? null,
-        provider: record.meta.provider ?? null,
-        mode: record.meta.mode,
-        model: record.meta.model ?? null,
-        migration_source: record.meta.migrationSource ?? null,
-        forked_from_task_id: record.meta.forkedFromTaskId ?? null,
-        // cron automation 身份从 meta 投影到索引列（meta_json 里也保留一份，见 serializeMetaJson）。
-        cron_automation_id: record.meta.cronAutomationId ?? null,
-        // off-peak 身份同款投影。
-        off_peak_task_id: record.meta.offPeakTaskId ?? null,
-        created_at: record.meta.createdAt,
-        updated_at: record.meta.updatedAt,
-        unread_at: record.meta.unreadAt ?? null,
-        last_unread_at: record.meta.unreadAt ?? 0,
-        write_unread_at: record.writeUnreadAt ? 1 : 0,
-        pinned: record.pinned ? 1 : 0,
-        archived: record.archived ? 1 : 0,
-        deleted: record.deleted ? 1 : 0,
-        title_overridden: record.titleOverridden ? 1 : 0,
-        searchable_text: searchableText,
-        meta_json: serializeMetaJson(record.meta),
-      });
+        .run({
+          workspace_key: workspaceKey(record.meta),
+          workspace_path: record.meta.workspacePath,
+          workspace_identity: record.meta.workspaceIdentity ?? null,
+          task_id: record.meta.taskId,
+          title: record.meta.title,
+          task_status: record.meta.status ?? null,
+          provider: record.meta.provider ?? null,
+          mode: record.meta.mode,
+          model: record.meta.model ?? null,
+          migration_source: record.meta.migrationSource ?? null,
+          forked_from_task_id: record.meta.forkedFromTaskId ?? null,
+          // cron automation 身份从 meta 投影到索引列（meta_json 里也保留一份，见 serializeMetaJson）。
+          cron_automation_id: record.meta.cronAutomationId ?? null,
+          // off-peak 身份同款投影。
+          off_peak_task_id: record.meta.offPeakTaskId ?? null,
+          created_at: record.meta.createdAt,
+          updated_at: record.meta.updatedAt,
+          unread_at: record.meta.unreadAt ?? null,
+          last_unread_at: record.meta.unreadAt ?? 0,
+          write_unread_at: record.writeUnreadAt ? 1 : 0,
+          pinned: record.pinned ? 1 : 0,
+          archived: record.archived ? 1 : 0,
+          deleted: record.deleted ? 1 : 0,
+          title_overridden: record.titleOverridden ? 1 : 0,
+          meta_json: serializeMetaJson(record.meta),
+        });
+      if (record.searchableText !== undefined) {
+        // 新插入的行走列默认值 ''，这里补上正文；已存在的行只改这一列。
+        database
+          .prepare(
+            `UPDATE tasks
+             SET searchable_text = @searchable_text
+             WHERE workspace_key = @workspace_key AND task_id = @task_id`,
+          )
+          .run({
+            workspace_key: workspaceKey(record.meta),
+            task_id: record.meta.taskId,
+            searchable_text: record.searchableText.slice(0, TASK_SEARCH_TEXT_MAX_CHARS),
+          });
+      }
+      if (ownsTransaction) database.exec("COMMIT");
+    } catch (error) {
+      if (ownsTransaction) database.exec("ROLLBACK");
+      throw error;
+    }
     const persisted = this.getTaskRow(record.meta);
     if (!persisted) {
       throw new Error(`task index 写入后缺少 task: ${record.meta.taskId}`);
@@ -1752,6 +1786,38 @@ export class TaskIndexRepo {
           workspaceIdentity: params.workspaceIdentity,
         })
       : null;
+    // 可选谓词按存在性拼串，不用 `(@x IS NULL OR col = @x)`：后者会让 SQLite 放弃
+    // workspace 索引（EXPLAIN 实测 SCAN tasks，而直白等值走 SEARCH ... USING INDEX）。
+    // 这是侧栏刷新路径（1 + 4×scopes 次调用），必须命中索引。
+    const where: string[] = [];
+    const args: Record<string, string | number> = {};
+    if (targetWorkspaceKey !== null) {
+      where.push("workspace_key = @workspace_key");
+      args.workspace_key = targetWorkspaceKey;
+    }
+    // deleted 过滤本身就意味着要读 tombstone，否则会和 include_deleted 默认的
+    // `deleted = 0` 组成互斥谓词（deleted=1 AND deleted=0），永远查不出任何行。
+    if (!(params.includeDeleted || typeof params.deleted === "boolean")) {
+      where.push("deleted = 0");
+    }
+    // 按请求指定的 runtime provider 过滤；迁移来源另存于 migration_source。
+    if (params.provider !== undefined) {
+      where.push("provider = @provider");
+      args.provider = params.provider;
+    }
+    if (typeof params.pinned === "boolean") {
+      where.push("pinned = @pinned");
+      args.pinned = params.pinned ? 1 : 0;
+    }
+    if (typeof params.archived === "boolean") {
+      where.push("archived = @archived");
+      args.archived = params.archived ? 1 : 0;
+    }
+    if (typeof params.deleted === "boolean") {
+      where.push("deleted = @deleted");
+      args.deleted = params.deleted ? 1 : 0;
+    }
+    const whereClause = where.length > 0 ? ` WHERE ${where.join(" AND ")}` : "";
     const rows = this.getDatabase()
       .prepare(
         `SELECT
@@ -1775,28 +1841,11 @@ export class TaskIndexRepo {
           archived,
           deleted,
           title_overridden,
-          searchable_text,
           meta_json
-        FROM tasks
-        WHERE (@workspace_key IS NULL OR workspace_key = @workspace_key)
-          AND (@include_deleted = 1 OR deleted = 0)
-          -- 按请求指定的 runtime provider 过滤；迁移来源另存于 migration_source。
-          AND (@provider IS NULL OR provider = @provider)
-          AND (@pinned IS NULL OR pinned = @pinned)
-          AND (@archived IS NULL OR archived = @archived)
-          AND (@deleted IS NULL OR deleted = @deleted)
+        FROM tasks${whereClause}
         ORDER BY updated_at DESC, created_at DESC, task_id DESC`,
       )
-      .all({
-        workspace_key: targetWorkspaceKey,
-        // deleted 过滤本身就意味着要读 tombstone，否则会和 include_deleted 默认的
-        // `deleted = 0` 组成互斥谓词（deleted=1 AND deleted=0），永远查不出任何行。
-        include_deleted: params.includeDeleted || typeof params.deleted === "boolean" ? 1 : 0,
-        provider: params.provider ?? null,
-        pinned: typeof params.pinned === "boolean" ? (params.pinned ? 1 : 0) : null,
-        archived: typeof params.archived === "boolean" ? (params.archived ? 1 : 0) : null,
-        deleted: typeof params.deleted === "boolean" ? (params.deleted ? 1 : 0) : null,
-      }) as unknown as TaskIndexRow[];
+      .all(args) as unknown as TaskIndexRow[];
     return rows.map(rowToMeta);
   }
 
@@ -1816,19 +1865,21 @@ export class TaskIndexRepo {
       workspacePath: params.workspacePath,
       workspaceIdentity: params.workspaceIdentity,
     });
+    // 同 listTaskMetas：可选谓词按存在性拼串，不用 `(@x IS NULL OR col = @x)`。
+    const providerClause = params.provider !== undefined ? " AND provider = @provider" : "";
     const rows = this.getDatabase()
       .prepare(
         `SELECT task_id
         FROM tasks
         WHERE workspace_key = @workspace_key
-          AND deleted = 1
-          AND (@provider IS NULL OR provider = @provider)
+          AND deleted = 1${providerClause}
         ORDER BY task_id`,
       )
-      .all({
-        workspace_key: workspaceKeyValue,
-        provider: params.provider ?? null,
-      }) as Array<{ task_id: string }>;
+      .all(
+        params.provider !== undefined
+          ? { workspace_key: workspaceKeyValue, provider: params.provider }
+          : { workspace_key: workspaceKeyValue },
+      ) as Array<{ task_id: string }>;
     return rows.map((row) => row.task_id);
   }
 
@@ -1861,7 +1912,6 @@ export class TaskIndexRepo {
           archived,
           deleted,
           title_overridden,
-          searchable_text,
           meta_json
         FROM tasks
         WHERE cron_automation_id = @automation_id
@@ -1881,9 +1931,12 @@ export class TaskIndexRepo {
       return { items: [], total: 0, hasMore: false };
     }
 
-    const search = params.search?.trim();
-    const normalizedSearchLike =
-      search && search.length > 0 ? `%${search.toLocaleLowerCase()}%` : null;
+    const search = params.search?.trim() ?? "";
+    const normalizedSearchLike = search.length > 0 ? `%${search.toLocaleLowerCase()}%` : null;
+    // 位置侧用 bare（无 %）小写串，与谓词同口径：谓词走 LIKE（默认对 ASCII 不敏感），
+    // 位置走 instr(lower(...), lower(...))。两侧都按不敏感算，才不会在"搜小写命中大写正文"
+    // 时取错摘要窗口。
+    const normalizedSearchBare = search.length > 0 ? search.toLocaleLowerCase() : null;
     const where = ["deleted = 0", `workspace_key IN (${workspaceKeys.map(() => "?").join(", ")})`];
     const args: Array<string | number> = [...workspaceKeys];
     if (params.provider) {
@@ -1898,11 +1951,12 @@ export class TaskIndexRepo {
     }
     if (normalizedSearchLike) {
       // 之前只按 title 模糊匹配，没有命中聊天正文；TaskSearchDialog 长期搜不到内容。
-      // 现在 title 或 searchable_text 任一命中即视为匹配，正文摘要在结果阶段构建。
-      where.push("(LOWER(title) LIKE ? OR LOWER(searchable_text) LIKE ?)");
-    }
-
-    if (normalizedSearchLike) {
+      // 现在 title 或 searchable_text 任一命中即视为匹配。
+      //
+      // 这里不用 LOWER()：SQLite 的 case_sensitive_like 默认 off，`col LIKE '%x%'` 对 ASCII
+      // 已大小写不敏感（实测 'ABC' LIKE '%abc%' = 1），LOWER() 只是让每个扫描行多复制一份
+      // 200k 字符的临时串。摘要的位置计算在 SELECT 侧，那里只对返回行（<= limit）求值。
+      where.push("(title LIKE ? OR searchable_text LIKE ?)");
       args.push(normalizedSearchLike, normalizedSearchLike);
     }
     const whereClause = where.join(" AND ");
@@ -1920,6 +1974,24 @@ export class TaskIndexRepo {
       params.sortBy === "created"
         ? "created_at DESC, updated_at DESC, task_id DESC"
         : "updated_at DESC, created_at DESC, task_id DESC";
+    // 摘要窗口在 SQL 侧截取：把 200k 的正文整列搬进 JS 是这条路径的唯一瓶颈
+    // （实测单轮 32ms/+11.6MB -> 2.7ms/+0.02MB；去掉 LOWER() 只省 7%）。
+    const snippetWindow =
+      TASK_SEARCH_SNIPPET_PREFIX_RADIUS + search.length + TASK_SEARCH_SNIPPET_SUFFIX_RADIUS;
+    const snippetSelect = normalizedSearchBare
+      ? `substr(searchable_text, max(1, instr(lower(searchable_text), ?) - ${TASK_SEARCH_SNIPPET_PREFIX_RADIUS}), ${snippetWindow}) AS search_snippet,
+          instr(lower(searchable_text), ?) AS search_pos,
+          length(searchable_text) AS search_len`
+      : `NULL AS search_snippet,
+          0 AS search_pos,
+          0 AS search_len`;
+    // 绑定顺序约束：SQLite 按 `?` 在 SQL 文本里的出现顺序取值，而 snippetSelect 位于 SELECT
+    // 子句（在 WHERE 之前），所以这两个参数必须排在 listArgs 前面。改动本段时如果增删了带
+    // `?` 的表达式，务必同步核对 `.all(...)` 的实参顺序 —— 错位不会报错，只会静默返回错误
+    // 的摘要或错行。
+    const snippetArgs: Array<string | number> = normalizedSearchBare
+      ? [normalizedSearchBare, normalizedSearchBare]
+      : [];
     const rows = this.getDatabase()
       .prepare(
         `SELECT
@@ -1943,13 +2015,13 @@ export class TaskIndexRepo {
           archived,
           deleted,
           title_overridden,
-          searchable_text,
-          meta_json
+          meta_json,
+          ${snippetSelect}
         FROM tasks
         WHERE ${whereClause}
         ORDER BY ${orderBy}${limit === null ? "" : " LIMIT ?"}`,
       )
-      .all(...listArgs) as unknown as TaskIndexRow[];
+      .all(...snippetArgs, ...listArgs) as unknown as TaskIndexSearchRow[];
     const workspacePurposeByKey = new Map(
       params.workspaceScopes.flatMap((scope) =>
         scope.workspacePurpose ? [[workspaceKey(scope), scope.workspacePurpose] as const] : [],
@@ -1958,7 +2030,10 @@ export class TaskIndexRepo {
 
     return {
       items: rows.map((row) => {
-        const item = rowToTaskListItem(row, search ?? null);
+        const item = rowToTaskListItem(
+          row,
+          buildSearchSnippetsFromRow(row, normalizedSearchBare),
+        );
         const workspacePurpose = workspacePurposeByKey.get(row.workspace_key);
         return workspacePurpose ? { ...item, workspacePurpose } : item;
       }),
@@ -2185,6 +2260,7 @@ export class TaskIndexRepo {
                 migration_source,
                 forked_from_task_id,
                 cron_automation_id,
+                off_peak_task_id,
                 created_at,
                 updated_at,
                 unread_at,
@@ -2192,7 +2268,6 @@ export class TaskIndexRepo {
                 archived,
                 deleted,
                 title_overridden,
-                searchable_text,
                 meta_json
               FROM tasks
               WHERE ${activeTaskWhere.join(" AND ")}`,
@@ -2284,7 +2359,7 @@ export class TaskIndexRepo {
     const activeTaskByKey = new Map(
       activeTasks.map((row) => [
         `${row.workspace_key}\u0000${row.task_id}`,
-        rowToTaskListItem(row, null),
+        rowToTaskListItem(row, []),
       ]),
     );
     const groupedVisibleTaskKeys = new Set<string>();

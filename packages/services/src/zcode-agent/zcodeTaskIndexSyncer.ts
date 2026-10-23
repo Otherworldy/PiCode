@@ -53,6 +53,8 @@ const logger = createServiceLogger("zcode-task-index-syncer");
 /** v4 订阅 connectionId 作用域：与 renderer 侧栏共 topic 不同代际（重订阅替换）。 */
 const TASK_INDEX_SUBSCRIBER_SCOPE = "task-index";
 const MAX_PENDING_TOPIC_FRAMES = 1_024;
+/** 同时保留 ingest 状态的 workspace 数上限；远高于实际并发打开数，只作为内存边界。 */
+const MAX_WORKSPACE_INGESTS = 128;
 const MAX_PENDING_TOPIC_BYTES = 32 * 1024 * 1024;
 const INITIAL_BASELINE_SEED_BATCH_SIZE = 64;
 const PROVIDER_NOT_READY_RETRY_MS = 5_000;
@@ -491,6 +493,14 @@ export function createZCodeTaskIndexSyncer(
     reason: ZCodeWorkspaceTaskListChanged["reason"],
     options?: Pick<ZCodeWorkspaceTaskListChanged, "unreadSignal">,
   ): void {
+    // 自愈：ingest 状态可能被有界淘汰掉。任务列表广播是「这个 workspace 仍有消费者」的最强信号，
+    // 在这里补一次 ensure（已有则 O(1) 返回），避免被淘汰的 workspace 静默停更。
+    if (target.workspacePath) {
+      ensureWorkspaceSubscription({
+        workspacePath: target.workspacePath,
+        workspaceIdentity: target.workspaceIdentity,
+      });
+    }
     // 排查日志（左侧列表随输入框操作刷新）：确认哪些操作在发 task list 广播、reason 是什么。
     logger.debug(
       undefined,
@@ -1688,6 +1698,37 @@ export function createZCodeTaskIndexSyncer(
         resubscribeWorkspaceAfterRuntimeRestart(event.workspaceKey),
       );
 
+  /**
+   * 释放单个 workspace 的 ingest 状态。
+   *
+   * workspaceIngests 按 workspaceKey 只增不减：state 持有该 workspace 的 summaries 全表、
+   * 两个 frame assembler、两个重试 timer 与两条活跃订阅。用户关闭/切换 workspace 后它们会继续
+   * 接收并处理帧。这里做成可复用函数，供 disposeAll 与超限淘汰共用。
+   */
+  function disposeWorkspaceIngestState(state: WorkspaceIngestState): void {
+    state.indexSubscriptionGeneration += 1;
+    state.configSubscriptionGeneration += 1;
+    state.indexRecoveryGeneration += 1;
+    state.configRecoveryGeneration += 1;
+    if (state.indexRetryTimer) clearTimeout(state.indexRetryTimer);
+    if (state.configRetryTimer) clearTimeout(state.configRetryTimer);
+    state.indexRetryTimer = null;
+    state.configRetryTimer = null;
+    discardIndexRecovery(state);
+    discardConfigRecovery(state);
+    clearPendingState(state);
+    clearActiveSubscriptions(state);
+    for (const disposable of state.disposables) {
+      try {
+        disposable.dispose();
+      } catch {
+        // 忽略 dispose 异常，确保所有订阅都尝试释放
+      }
+    }
+    state.disposables.length = 0;
+    state.summaries.clear();
+  }
+
   function ensureWorkspaceSubscription(target: ZCodeAgentWorkspaceTarget): void {
     if (disposed) {
       return;
@@ -1737,6 +1778,16 @@ export function createZCodeTaskIndexSyncer(
     };
     // 占位先写入 Map，避免订阅建立期间的并发调用重复订阅。
     workspaceIngests.set(key, state);
+    // 有界：state 持有 summaries 全表与两条活跃订阅，无上限时随「打开过的 workspace 数」增长。
+    // 上限远高于实际并发打开数；被淘汰的 workspace 下次有事件时会重新 ensure 并重建订阅。
+    while (workspaceIngests.size > MAX_WORKSPACE_INGESTS) {
+      const oldestKey = workspaceIngests.keys().next();
+      if (oldestKey.done) break;
+      if (oldestKey.value === key) break;
+      const evicted = workspaceIngests.get(oldestKey.value);
+      workspaceIngests.delete(oldestKey.value);
+      if (evicted) disposeWorkspaceIngestState(evicted);
+    }
     // lifecycle 可用时，缺 runtime 的 workspace 只保留 dormant 占位；被动 observer
     // 不得启动 CLI。旧 host 没有 lifecycle 时沿用显式 ensure 的兼容行为。
     if (!hasRuntimeLifecycle || state.runtimeGeneration !== null) {
@@ -1866,25 +1917,7 @@ export function createZCodeTaskIndexSyncer(
     disposeAll(): void {
       disposed = true;
       for (const state of workspaceIngests.values()) {
-        state.indexSubscriptionGeneration += 1;
-        state.configSubscriptionGeneration += 1;
-        state.indexRecoveryGeneration += 1;
-        state.configRecoveryGeneration += 1;
-        if (state.indexRetryTimer) clearTimeout(state.indexRetryTimer);
-        if (state.configRetryTimer) clearTimeout(state.configRetryTimer);
-        state.indexRetryTimer = null;
-        state.configRetryTimer = null;
-        discardIndexRecovery(state);
-        discardConfigRecovery(state);
-        clearPendingState(state);
-        clearActiveSubscriptions(state);
-        for (const disposable of state.disposables) {
-          try {
-            disposable.dispose();
-          } catch {
-            // 忽略 dispose 异常，确保所有订阅都尝试释放
-          }
-        }
+        disposeWorkspaceIngestState(state);
       }
       workspaceIngests.clear();
       for (const emitter of workspaceEmitters.values()) {

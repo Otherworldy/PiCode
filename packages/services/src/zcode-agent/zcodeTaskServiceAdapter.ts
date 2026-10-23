@@ -1037,21 +1037,74 @@ export function createZCodeTaskServiceAdapter(
 
   function getTaskEmitter(params: TaskTarget): Emitter<ZCodeStreamEvent> {
     const key = taskKey(params);
-    let emitter = taskEmitters.get(key);
-    if (!emitter) {
-      emitter = new Emitter<ZCodeStreamEvent>();
-      taskEmitters.set(key, emitter);
+    const existing = taskEmitters.get(key);
+    if (existing) {
+      return existing;
     }
-    return emitter;
+    // 与 getPluginOperationProgressEmitter 同一模式：最后一个订阅者离开时自回收。
+    // 任务级 emitter 按 taskKey 只增不减会让 host 内存随「打开过的任务数」增长。
+    let created: Emitter<ZCodeStreamEvent>;
+    created = new Emitter<ZCodeStreamEvent>({
+      onDidRemoveLastListener: () => {
+        if (taskEmitters.get(key) !== created) return;
+        taskEmitters.delete(key);
+        created.dispose();
+      },
+    });
+    taskEmitters.set(key, created);
+    return created;
   }
 
   function getGlobalTaskEmitter(taskId: string): Emitter<ZCodeStreamEvent> {
-    let emitter = globalTaskEmitters.get(taskId);
-    if (!emitter) {
-      emitter = new Emitter<ZCodeStreamEvent>();
-      globalTaskEmitters.set(taskId, emitter);
+    const existing = globalTaskEmitters.get(taskId);
+    if (existing) {
+      return existing;
     }
-    return emitter;
+    let created: Emitter<ZCodeStreamEvent>;
+    created = new Emitter<ZCodeStreamEvent>({
+      onDidRemoveLastListener: () => {
+        if (globalTaskEmitters.get(taskId) !== created) return;
+        globalTaskEmitters.delete(taskId);
+        created.dispose();
+      },
+    });
+    globalTaskEmitters.set(taskId, created);
+    return created;
+  }
+
+  /**
+   * 任务已删除：per-task 表按 taskKey 只增不减，删除是唯一确定的回收点。
+   *
+   * 只清理「任务消失后确定无用」的表。不能靠 LRU 淘汰——taskTargets 缺失会让 getTaskTarget
+   * 抛 ZCODE_SESSION_TARGET_NOT_FOUND。
+   *
+   * 刻意不删 overlays：调用方在删除流程里刚写入 { deleted: true }（以及 archived/pinned/title/
+   * unreadAt），删掉会让 UI 丢失这些状态、已删任务可能重新出现在列表里。overlays 的回收需要
+   * 「索引确认该 task 已彻底移除」的信号，不在删除当口。
+   */
+  function forgetTaskState(params: {
+    workspacePath: string;
+    workspaceIdentity?: string;
+    taskId: string;
+  }): void {
+    const key = taskKey(params);
+    taskTargets.delete(params.taskId);
+    apiRetryByTaskKey.delete(key);
+    toolProjectionMemoryByTaskKey.delete(key);
+    backgroundTaskControlsByTaskKey.delete(key);
+    runtimeCommands.delete(key);
+    activePromptInputIds.delete(key);
+    liveToolProjectionsByTaskKey.delete(key);
+    const taskEmitter = taskEmitters.get(key);
+    if (taskEmitter) {
+      taskEmitters.delete(key);
+      taskEmitter.dispose();
+    }
+    const globalEmitter = globalTaskEmitters.get(params.taskId);
+    if (globalEmitter) {
+      globalTaskEmitters.delete(params.taskId);
+      globalEmitter.dispose();
+    }
   }
 
   function emitTaskEvent(params: TaskTarget, event: ZCodeStreamEvent): void {
@@ -1106,12 +1159,39 @@ export function createZCodeTaskServiceAdapter(
     }
   }
 
+  /** tombstone 保留期：超过这个时间的已删除会话可以物理清理。 */
+  const DELETED_TASK_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+  /** 进程内节流：清理一天最多跑一次（它是全表条件删除，不必跟着侧栏刷新跑）。 */
+  const DELETED_TASK_PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+  let lastDeletedTaskPruneAt = 0;
+
+  /**
+   * 与自动归档**独立**：归档是否启用不影响 tombstone 清理。
+   * fire-and-forget，失败只记 warn —— 它不该拖慢侧栏刷新，也不该让列表读失败。
+   */
+  function maybePruneDeletedTasks(): void {
+    const now = Date.now();
+    if (now - lastDeletedTaskPruneAt < DELETED_TASK_PRUNE_INTERVAL_MS) return;
+    lastDeletedTaskPruneAt = now;
+    void taskIndexRepo
+      .pruneDeletedTasks({ olderThanMs: DELETED_TASK_RETENTION_MS })
+      .then((removed) => {
+        if (removed > 0) logger.info(undefined, `清理已删除 task tombstone 数量=${removed}`);
+      })
+      .catch((error: unknown) => {
+        // 下一轮（24h 后）会重试；这里失败不能影响列表读。
+        lastDeletedTaskPruneAt = 0;
+        logger.warn(undefined, "清理 task tombstone 失败", error);
+      });
+  }
+
   async function runWorkspaceTaskAutoArchive(
     scopes: Array<{ workspacePath: string; workspaceIdentity?: string }>,
   ): Promise<void> {
     if (scopes.length === 0) {
       return;
     }
+    maybePruneDeletedTasks();
     const config = await readTaskAutoArchiveConfig();
     if (!config) {
       return;
@@ -1745,6 +1825,16 @@ export function createZCodeTaskServiceAdapter(
     taskEmitters.clear();
     globalTaskEmitters.clear();
     runtimeCommandDrains.clear();
+    // 下面这些 per-task / per-turn 表此前只增不减，host 释放时必须一起清掉，否则 dispose 后仍驻留。
+    taskTargets.clear();
+    overlays.clear();
+    apiRetryByTaskKey.clear();
+    toolProjectionMemoryByTaskKey.clear();
+    backgroundTaskControlsByTaskKey.clear();
+    runtimeCommands.clear();
+    activePromptInputIds.clear();
+    liveToolProjectionsByTaskKey.clear();
+    streamedTurnKeys.clear();
   }
 
   async function disposeZCodeAgentServiceAndWait(): Promise<void> {
@@ -2870,6 +2960,7 @@ export function createZCodeTaskServiceAdapter(
       // 会话文件已经删掉。task_deleted 仍要换代 tombstone，否则只存在于 tasks-index 的行会留在列表里。
       // 同时携带 meta，让桌面/远控的重复订阅能按同一事件去重 membership bump。
       emitWorkspaceTaskListChanged(params, meta, "task_deleted");
+      forgetTaskState(params);
     },
 
     async deleteArchivedTask(params): Promise<boolean> {
@@ -2884,6 +2975,7 @@ export function createZCodeTaskServiceAdapter(
       // 先持久化成功再写 overlay；否则失败项会被内存 deleted 标记提前隐藏。
       setOverlay(params, { deleted: true });
       emitWorkspaceTaskListChanged(params, meta, "task_deleted");
+      forgetTaskState(params);
       return true;
     },
 
@@ -2920,6 +3012,13 @@ export function createZCodeTaskServiceAdapter(
         // 根因：循环调用单条接口会逐项广播，驱动 Host 与 UI 各自全量重读。
         // 批次完成只发一次 workspace 事件，仍使所有观察端换代 deleted membership，防止任务复活。
         emitWorkspaceTaskListChanged(params, undefined, "task_deleted");
+        for (const taskId of result.deletedTaskIds) {
+          forgetTaskState({
+            workspacePath: params.workspacePath,
+            workspaceIdentity: params.workspaceIdentity,
+            taskId,
+          });
+        }
       }
       logger.info(undefined, "[ArchivedTaskDeletion] batch completed", {
         workspaceKey: resolveWorkspaceKey(params),
