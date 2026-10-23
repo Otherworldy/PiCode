@@ -1,5 +1,9 @@
 /* eslint-disable max-lines -- plugin 同步需要集中维护候选扫描、归档安全、远端判重和配置写入，拆分会增加远端同步回归面。 */
-import { ensureAppDataDir } from "@zcode/shared/node";
+import {
+  ensureAppDataDir,
+  updateJsonConfigFile,
+  userCliConfigFilePath,
+} from "@zcode/shared/node";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import {
@@ -11,7 +15,6 @@ import {
   realpath,
   rename,
   rm,
-  writeFile,
 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
@@ -72,7 +75,7 @@ interface MarketplaceSourceMirrorEntry {
 
 const INLINE_PLUGIN_MARKETPLACE = "inline";
 const DEFAULT_MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
-const USER_CONFIG_FILE_MODE = 0o600;
+
 const MARKETPLACE_SOURCE_ROOT_DIRECTORY = "marketplace-sources";
 const MIRRORED_MARKETPLACE_PLUGIN_ROOT = "plugins";
 const PLUGIN_MANIFEST_RELATIVE_PATHS = [
@@ -218,7 +221,7 @@ function resolveUserHomeDir(): string {
 }
 
 function getUserZcodeConfigPath(): string {
-  return join(ensureAppDataDir(resolveUserHomeDir()), "cli", "config.json");
+  return userCliConfigFilePath(resolveUserHomeDir());
 }
 
 function getUserZcodePluginRoot(): string {
@@ -909,30 +912,34 @@ async function addPluginDirToUserConfig(
   enabledOverride: boolean | undefined,
 ): Promise<void> {
   const filePath = getUserZcodeConfigPath();
-  const parsed = await readJsonFileOrEmpty(filePath);
-  const plugins = isRecord(parsed.plugins) ? parsed.plugins : {};
-  const resolvedPluginPath = resolve(pluginPath);
-  const dirs = readStringArray(plugins.dirs);
-  const nextDirs = dirs.map((item) => resolve(item)).includes(resolvedPluginPath)
-    ? dirs
-    : [...dirs, resolvedPluginPath];
-  const enabledPlugins = isRecord(plugins.enabledPlugins) ? plugins.enabledPlugins : {};
-  await writeJsonFileAtomic(filePath, {
-    ...parsed,
-    plugins: {
-      ...plugins,
-      dirs: nextDirs,
-      ...(enabledOverride !== undefined
-        ? {
-            enabledPlugins: {
-              ...enabledPlugins,
-              [pluginId]: enabledOverride,
-            },
-          }
-        : Object.keys(enabledPlugins).length > 0
-          ? { enabledPlugins }
-          : {}),
-    },
+  // 与 skillsService / commandsService / settingsSyncService 抢同一把文件锁：这四家都写
+  // `<appData>/cli/config.json`，其中 `plugins.*` 子树与 settingsSyncService 直接重叠。
+  // 原来是「锁外读整份 → temp/rename 覆盖」，会把别人刚写入的 skills / command / mcp 抹掉。
+  await updateJsonConfigFile(filePath, (parsed) => {
+    const plugins = isRecord(parsed.plugins) ? parsed.plugins : {};
+    const resolvedPluginPath = resolve(pluginPath);
+    const dirs = readStringArray(plugins.dirs);
+    const nextDirs = dirs.map((item) => resolve(item)).includes(resolvedPluginPath)
+      ? dirs
+      : [...dirs, resolvedPluginPath];
+    const enabledPlugins = isRecord(plugins.enabledPlugins) ? plugins.enabledPlugins : {};
+    return {
+      ...parsed,
+      plugins: {
+        ...plugins,
+        dirs: nextDirs,
+        ...(enabledOverride !== undefined
+          ? {
+              enabledPlugins: {
+                ...enabledPlugins,
+                [pluginId]: enabledOverride,
+              },
+            }
+          : Object.keys(enabledPlugins).length > 0
+            ? { enabledPlugins }
+            : {}),
+      },
+    };
   });
 }
 
@@ -1103,19 +1110,6 @@ async function readJsonFileOrEmpty(filePath: string): Promise<Record<string, unk
     throw new Error(`invalid json object: ${filePath}`);
   }
   return parsed;
-}
-
-async function writeJsonFileAtomic(
-  filePath: string,
-  value: Record<string, unknown>,
-): Promise<void> {
-  await mkdir(dirname(filePath), { recursive: true });
-  const tempPath = join(dirname(filePath), `.tmp-${basename(filePath)}-${randomUUID()}`);
-  await writeFile(tempPath, `${JSON.stringify(value, null, 2)}\n`, {
-    encoding: "utf-8",
-    mode: USER_CONFIG_FILE_MODE,
-  });
-  await rename(tempPath, filePath);
 }
 
 function readStringArray(value: unknown): string[] {

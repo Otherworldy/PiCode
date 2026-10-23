@@ -1,5 +1,9 @@
 /* eslint-disable max-lines -- skill 发现 + 校验 + 状态 + 通用目录管理在同一服务里聚合，分层后跳转成本更高 */
-import { ensureAppDataDir } from "@zcode/shared/node";
+import {
+  ensureAppDataDir,
+  updateJsonConfigFile,
+  userCliConfigFilePath,
+} from "@zcode/shared/node";
 import {
   access,
   appendFile,
@@ -9,7 +13,6 @@ import {
   rm,
   readFile,
   readdir,
-  writeFile,
 } from "node:fs/promises";
 import { existsSync, type Dirent } from "node:fs";
 import { createHash } from "node:crypto";
@@ -50,8 +53,10 @@ interface ParsedFrontmatter {
 
 const SKILL_META_FILE_NAME = "_meta.json";
 const SKILL_SETTINGS_DIR = join(ensureAppDataDir(resolveUserHomeDir()), "v2");
-const SKILL_CLI_SETTINGS_DIR = join(ensureAppDataDir(resolveUserHomeDir()), "cli");
-const SKILL_CLI_CONFIG_FILE = join(SKILL_CLI_SETTINGS_DIR, "config.json");
+// 路径不能存成模块级常量：`ensureAppDataDir` 的 `.zcode -> .PiCode` 迁移若在早期因目录被
+// 占用失败会返回 legacy 路径，固化后本进程会一直写旧目录，与其它服务重新解析出的新路径
+// 形成两个文件、两把锁（见 docs/specs/cli-config-single-owner.md）。
+const skillCliConfigFilePath = (): string => userCliConfigFilePath(resolveUserHomeDir());
 const GIT_MARKER = ".git";
 const HOME_PREFIX = "~/";
 const ZCODE_OFFICIAL_PLUGIN_MARKETPLACE = "zcode-plugins-official";
@@ -530,7 +535,7 @@ function normalizeSkillConfigPath(path: string): string {
 
 async function readCliConfigFile(): Promise<Record<string, unknown>> {
   try {
-    const raw = await readFile(SKILL_CLI_CONFIG_FILE, "utf-8");
+    const raw = await readFile(skillCliConfigFilePath(), "utf-8");
     const parsed = JSON.parse(raw) as unknown;
     return isObjectRecord(parsed) ? parsed : {};
   } catch {
@@ -558,28 +563,31 @@ async function readSkillEnabledMap(): Promise<Record<string, boolean>> {
 }
 
 async function writeSkillEnabledMap(next: Record<string, boolean>): Promise<void> {
-  const config = await readCliConfigFile();
-  const skillsConfig = isObjectRecord(config.skills) ? config.skills : {};
-  for (const [path, enable] of Object.entries(next).sort(([left], [right]) =>
-    left.localeCompare(right),
-  )) {
-    // 技能开关之前分散在 workspace/provider/context 状态文件，导致同一技能在不同入口表现不一致。
-    // 现在只按 SKILL.md 路径写入 CLI config 的 skills 字段，避免额外迁移或旧文件副作用。
-    const normalizedPath = normalizeSkillConfigPath(path);
-    if (enable) {
-      // 开启态是默认值，不应落盘成 `{ enable: true }`；删除 override 才能跟随插件/默认配置变化。
-      delete skillsConfig[normalizedPath];
-    } else {
-      skillsConfig[normalizedPath] = { enable };
+  // 与 commandsService / settingsSyncService / pluginSyncService 抢同一把文件锁：四方都写
+  // `<appData>/cli/config.json`，原来是各自「读全量 → 改自己那几个 key → 覆盖写」，跨服务丢更新
+  // 且读者会读到半截 JSON（见 docs/specs/cli-config-single-owner.md）。
+  await updateJsonConfigFile(skillCliConfigFilePath(), (config) => {
+    const skillsConfig = isObjectRecord(config.skills) ? { ...config.skills } : {};
+    for (const [path, enable] of Object.entries(next).sort(([left], [right]) =>
+      left.localeCompare(right),
+    )) {
+      // 技能开关之前分散在 workspace/provider/context 状态文件，导致同一技能在不同入口表现不一致。
+      // 现在只按 SKILL.md 路径写入 CLI config 的 skills 字段，避免额外迁移或旧文件副作用。
+      const normalizedPath = normalizeSkillConfigPath(path);
+      if (enable) {
+        // 开启态是默认值，不应落盘成 `{ enable: true }`；删除 override 才能跟随插件/默认配置变化。
+        delete skillsConfig[normalizedPath];
+      } else {
+        skillsConfig[normalizedPath] = { enable };
+      }
     }
-  }
-  if (Object.keys(skillsConfig).length > 0) {
-    config.skills = skillsConfig;
-  } else {
-    delete config.skills;
-  }
-  await mkdir(SKILL_CLI_SETTINGS_DIR, { recursive: true });
-  await writeFile(SKILL_CLI_CONFIG_FILE, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
+    if (Object.keys(skillsConfig).length > 0) {
+      config.skills = skillsConfig;
+    } else {
+      delete config.skills;
+    }
+    return config;
+  });
 }
 
 interface SkillRootDescriptor {

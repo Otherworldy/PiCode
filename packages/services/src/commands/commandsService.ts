@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- commandsService 需要集中处理目录来源优先级、读写和命令解析，拆分会削弱读取顺序的一致性 */
-import { ensureAppDataDir } from "@zcode/shared/node";
+import { updateJsonConfigFile, userCliConfigFilePath } from "@zcode/shared/node";
 import { access, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
@@ -81,7 +81,7 @@ function getUserCommandsRoot(agentSource?: CommandAgentSource): string {
 }
 
 function getUserCliConfigPath(): string {
-  return join(ensureAppDataDir(resolveUserHomeDir()), "cli", "config.json");
+  return userCliConfigFilePath(resolveUserHomeDir());
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -98,10 +98,13 @@ async function readUserCliConfig(): Promise<Record<string, unknown>> {
   }
 }
 
-async function writeUserCliConfig(config: Record<string, unknown>): Promise<void> {
-  const filePath = getUserCliConfigPath();
-  await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
+// 与 skillsService / settingsSyncService / pluginSyncService 抢同一把文件锁：四方都写
+// `<appData>/cli/config.json`，原来是各自「读全量 → 改自己那几个 key → 覆盖写」，跨服务丢更新
+// 且读者会读到半截 JSON（见 docs/specs/cli-config-single-owner.md）。
+async function updateUserCliConfig(
+  build: (config: Record<string, unknown>) => Record<string, unknown> | null,
+): Promise<boolean> {
+  return updateJsonConfigFile(getUserCliConfigPath(), build);
 }
 
 function readCommandEnabledOverrides(config: Record<string, unknown>): Map<string, boolean> {
@@ -592,7 +595,7 @@ export function createCommandsService(_options?: CommandsServiceOptions): IComma
       descriptor.format,
     );
     await writeFile(filePath, content, "utf-8");
-    await writeUserCliConfig(setCommandEnabledOverride(await readUserCliConfig(), filePath, true));
+    await updateUserCliConfig((config) => setCommandEnabledOverride(config, filePath, true));
 
     const parsed = CommandFileParser.parseCommandFile(content, filePath, descriptor.format);
     if (!parsed) {
@@ -667,19 +670,21 @@ export function createCommandsService(_options?: CommandsServiceOptions): IComma
     await mkdir(dirname(newFilePath), { recursive: true });
     await writeFile(newFilePath, content, "utf-8");
 
+    const previousFilePath = params.oldFilePath;
     if (
-      params.oldFilePath &&
-      params.oldFilePath !== newFilePath &&
-      enabledOverrides.has(params.oldFilePath)
+      previousFilePath &&
+      previousFilePath !== newFilePath &&
+      enabledOverrides.has(previousFilePath)
     ) {
       // 禁用状态按命令文件路径存放；编辑命令改名会换文件路径，必须迁移 override，
       // 否则用户刚禁用的命令会因为改名重新启用。
-      const migratedConfig = setCommandEnabledOverride(
-        setCommandEnabledOverride(await readUserCliConfig(), params.oldFilePath, true),
-        newFilePath,
-        enabledOverrides.get(params.oldFilePath) ?? true,
+      await updateUserCliConfig((config) =>
+        setCommandEnabledOverride(
+          setCommandEnabledOverride(config, previousFilePath, true),
+          newFilePath,
+          enabledOverrides.get(previousFilePath) ?? true,
+        ),
       );
-      await writeUserCliConfig(migratedConfig);
     }
 
     const parsed = CommandFileParser.parseCommandFile(content, newFilePath, descriptor.format);
@@ -720,18 +725,13 @@ export function createCommandsService(_options?: CommandsServiceOptions): IComma
         throw error;
       }
     }
-    await writeUserCliConfig(
-      setCommandEnabledOverride(await readUserCliConfig(), params.filePath, true),
-    );
+    await updateUserCliConfig((config) => setCommandEnabledOverride(config, params.filePath, true));
   }
 
   async function setCommandEnabled(params: CommandSetEnabledParams): Promise<void> {
-    const nextConfig = setCommandEnabledOverride(
-      await readUserCliConfig(),
-      params.filePath,
-      params.enabled,
+    await updateUserCliConfig((config) =>
+      setCommandEnabledOverride(config, params.filePath, params.enabled),
     );
-    await writeUserCliConfig(nextConfig);
   }
 
   async function getPrimaryUserCommandsDirectory(params?: {

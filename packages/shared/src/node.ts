@@ -73,6 +73,11 @@ export {
   type SharedFileLockOptions,
 } from "./node/privateFilePersistence.js";
 export {
+  updateJsonConfigFile,
+  userCliConfigFilePath,
+  type JsonConfigBuilder,
+} from "./node/userCliConfigFile.js";
+export {
   createNodeSelfResourceSampler,
   NODE_SELF_RESOURCE_SAMPLE_INTERVAL_MS,
   type NodeSelfResourceSampler,

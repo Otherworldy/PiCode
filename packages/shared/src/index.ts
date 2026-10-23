@@ -151,6 +151,11 @@ export {
   createOpenInEditorRemoteTarget,
 } from "./platform.js";
 export type {
+  BrowserViewSurfaceScaleMode,
+  DesktopZoomState,
+  WindowControlsOverlayMetrics,
+} from "./platform.js";
+export type {
   ArmsCustomEventPayload,
   ConfigureFinalArmsCustomEventE2ERequest,
   FinalArmsCustomEventE2EEntry,
@@ -228,6 +233,7 @@ export type {
   RemoteServiceSession,
   SSHConfigAliasOption,
   TaskNotificationPayload,
+  WindowControlsOverlayReadyPayload,
   WSLDistro,
   ZCodeStdioTapDevState,
 } from "./platform.js";
@@ -305,6 +311,7 @@ export {
 } from "./subagent-markdown-selection.js";
 export * from "./memoryDiagnostics.js";
 export * from "./database-startup.js";
+export * from "./progressWatchdog.js";
 export * from "./processResourceTelemetry.js";
 export * from "./execution-state.js";
 

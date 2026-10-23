@@ -1,5 +1,9 @@
 /* eslint-disable max-lines -- settings-sync 需要集中维护外部 skills/commands/plugins/MCP 扫描、去重和导入状态机，后续按资源类别拆分 */
-import { ensureAppDataDir } from "@zcode/shared/node";
+import {
+  ensureAppDataDir,
+  updateJsonConfigFile,
+  userCliConfigFilePath,
+} from "@zcode/shared/node";
 import type {
   McpServerConfig,
   SettingsSyncAgent,
@@ -31,7 +35,6 @@ import {
   readFile,
   readdir,
   symlink,
-  writeFile,
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
@@ -447,7 +450,7 @@ function getUserZcodePluginRoot(): string {
 }
 
 function getUserZcodeCliConfigPath(): string {
-  return join(ensureAppDataDir(resolveUserHomeDir()), "cli", "config.json");
+  return userCliConfigFilePath(resolveUserHomeDir());
 }
 
 function getWorkspaceZcodeConfigPath(workspacePath: string): string {
@@ -1110,18 +1113,21 @@ async function addMcpServerToZcodeConfig(
   name: string,
   config: McpServerConfig,
 ): Promise<void> {
-  const parsed = await readJsonFileOrEmpty(filePath);
-  const currentMcp = isRecord(parsed.mcp) ? parsed.mcp : {};
-  const servers = readZcodeMcpServers(parsed);
-  await writeJsonFile(filePath, {
-    ...parsed,
-    mcp: {
-      ...currentMcp,
-      servers: {
-        ...servers,
-        [name]: config,
+  // 与 skillsService / commandsService / pluginSyncService 抢同一把文件锁（global scope 下是
+  // 同一个 `<appData>/cli/config.json`），见 docs/specs/cli-config-single-owner.md。
+  await updateJsonConfigFile(filePath, (parsed) => {
+    const currentMcp = isRecord(parsed.mcp) ? parsed.mcp : {};
+    const servers = readZcodeMcpServers(parsed);
+    return {
+      ...parsed,
+      mcp: {
+        ...currentMcp,
+        servers: {
+          ...servers,
+          [name]: config,
+        },
       },
-    },
+    };
   });
 }
 
@@ -1131,25 +1137,22 @@ function readStringArray(value: unknown): string[] {
     : [];
 }
 
-async function writeJsonFile(filePath: string, value: Record<string, unknown>): Promise<void> {
-  await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf-8");
-}
-
 async function addPluginDirToConfig(filePath: string, pluginPath: string): Promise<void> {
-  const parsed = await readJsonFileOrEmpty(filePath);
-  const plugins = isRecord(parsed.plugins) ? parsed.plugins : {};
-  const dirs = readStringArray(plugins.dirs);
   const resolvedPluginPath = resolve(pluginPath);
-  if (dirs.map((item) => resolve(item)).includes(resolvedPluginPath)) {
-    return;
-  }
-  await writeJsonFile(filePath, {
-    ...parsed,
-    plugins: {
-      ...plugins,
-      dirs: [...dirs, resolvedPluginPath],
-    },
+  await updateJsonConfigFile(filePath, (parsed) => {
+    const plugins = isRecord(parsed.plugins) ? parsed.plugins : {};
+    const dirs = readStringArray(plugins.dirs);
+    if (dirs.map((item) => resolve(item)).includes(resolvedPluginPath)) {
+      // 已登记：返回 null 表示不落盘，避免为一次幂等检查重写整份配置。
+      return null;
+    }
+    return {
+      ...parsed,
+      plugins: {
+        ...plugins,
+        dirs: [...dirs, resolvedPluginPath],
+      },
+    };
   });
 }
 
