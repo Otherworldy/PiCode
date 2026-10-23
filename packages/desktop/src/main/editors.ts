@@ -14,8 +14,9 @@ import {
   rmSync,
   statSync,
 } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
+import { promisify } from "node:util";
 import { join, win32 as pathWin32 } from "node:path";
 import { app, nativeImage } from "electron";
 import type { EditorInfo } from "@zcode/shared";
@@ -225,18 +226,26 @@ function createWindowsEditorDef(
   };
 }
 
-function resolveWindowsCommandPaths(command: string): string[] {
+const execFileAsync = promisify(execFile);
+
+/**
+ * 用 `where.exe` 解析命令的真实路径。
+ *
+ * 原来是 execFileSync：单次最长阻塞 UI 线程 1s（PATH 里有不可达 UNC 路径时 where.exe 会卡在
+ * SMB 解析上），而 ui 侧有 5 个挂载点会在首屏并发调用编辑器探测。改成异步后主线程不再等子进程。
+ */
+async function resolveWindowsCommandPaths(command: string): Promise<string[]> {
   if (process.platform !== "win32") {
     return [];
   }
 
   try {
-    const output = execFileSync("where.exe", [command], {
+    const { stdout } = await execFileAsync("where.exe", [command], {
       encoding: "utf8",
       timeout: 1000,
       windowsHide: true,
     });
-    return output
+    return stdout
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter((line) => line.length > 0 && existsSync(line));
@@ -245,10 +254,13 @@ function resolveWindowsCommandPaths(command: string): string[] {
   }
 }
 
-function deriveWindowsAppPathsFromCommand(command: string, appNames: string[]): string[] {
+async function deriveWindowsAppPathsFromCommand(
+  command: string,
+  appNames: string[],
+): Promise<string[]> {
   const candidates: string[] = [];
 
-  for (const commandPath of resolveWindowsCommandPaths(command)) {
+  for (const commandPath of await resolveWindowsCommandPaths(command)) {
     const commandDir = pathWin32.dirname(commandPath);
     for (const appRoot of uniquePaths([commandDir, pathWin32.dirname(commandDir)])) {
       for (const appName of appNames) {
@@ -268,61 +280,76 @@ const WINDOWS_EDITOR_DEFS: EditorDef[] = [
   { id: "explorer", name: "资源管理器", appPath: WINDOWS_EXPLORER_PATH, command: null },
 ];
 
-const WINDOWS_ADDITIONAL_EDITOR_DEFS: EditorDef[] = [
-  createWindowsEditorDef(
-    "vscode",
-    "VS Code",
-    [
-      windowsLocalProgramCandidate("Microsoft VS Code", "Code.exe"),
-      ...windowsProgramFilesCandidates("Microsoft VS Code", "Code.exe"),
-    ],
-    "code",
-    ["Code.exe"],
-  ),
-  createWindowsEditorDef(
-    "vscode-insiders",
-    "VS Code Insiders",
-    [
-      windowsLocalProgramCandidate("Microsoft VS Code Insiders", "Code - Insiders.exe"),
-      ...windowsProgramFilesCandidates("Microsoft VS Code Insiders", "Code - Insiders.exe"),
-    ],
-    "code-insiders",
-    ["Code - Insiders.exe"],
-  ),
-  createWindowsEditorDef(
-    "cursor",
-    "Cursor",
-    [
-      windowsLocalProgramCandidate("Cursor", "Cursor.exe"),
-      ...windowsProgramFilesCandidates("Cursor", "Cursor.exe"),
-    ],
-    "cursor",
-    ["Cursor.exe"],
-  ),
-  createWindowsEditorDef("trae", "Trae", [
-    windowsLocalProgramCandidate("Trae", "Trae.exe"),
-    windowsLocalProgramCandidate("Trae CN", "Trae.exe"),
-    windowsLocalProgramCandidate("Trae CN", "Trae CN.exe"),
-    ...windowsProgramFilesCandidates("Trae", "Trae.exe"),
-    ...windowsProgramFilesCandidates("Trae CN", "Trae.exe"),
-    ...windowsProgramFilesCandidates("Trae CN", "Trae CN.exe"),
-  ]),
-  createWindowsEditorDef("idea", "IntelliJ IDEA", [
-    ...findWindowsJetBrainsExecutableCandidates("IntelliJ IDEA", "idea64.exe"),
-  ]),
-  createWindowsEditorDef("webstorm", "WebStorm", [
-    ...findWindowsJetBrainsExecutableCandidates("WebStorm", "webstorm64.exe"),
-  ]),
-  createWindowsEditorDef("pycharm", "PyCharm", [
-    ...findWindowsJetBrainsExecutableCandidates("PyCharm", "pycharm64.exe"),
-  ]),
-  createWindowsEditorDef("goland", "GoLand", [
-    ...findWindowsJetBrainsExecutableCandidates("GoLand", "goland64.exe"),
-  ]),
-  createWindowsEditorDef("clion", "CLion", [
-    ...findWindowsJetBrainsExecutableCandidates("CLion", "clion64.exe"),
-  ]),
-];
+function createWindowsAdditionalEditorDefs(): EditorDef[] {
+  return [
+    createWindowsEditorDef(
+      "vscode",
+      "VS Code",
+      [
+        windowsLocalProgramCandidate("Microsoft VS Code", "Code.exe"),
+        ...windowsProgramFilesCandidates("Microsoft VS Code", "Code.exe"),
+      ],
+      "code",
+      ["Code.exe"],
+    ),
+    createWindowsEditorDef(
+      "vscode-insiders",
+      "VS Code Insiders",
+      [
+        windowsLocalProgramCandidate("Microsoft VS Code Insiders", "Code - Insiders.exe"),
+        ...windowsProgramFilesCandidates("Microsoft VS Code Insiders", "Code - Insiders.exe"),
+      ],
+      "code-insiders",
+      ["Code - Insiders.exe"],
+    ),
+    createWindowsEditorDef(
+      "cursor",
+      "Cursor",
+      [
+        windowsLocalProgramCandidate("Cursor", "Cursor.exe"),
+        ...windowsProgramFilesCandidates("Cursor", "Cursor.exe"),
+      ],
+      "cursor",
+      ["Cursor.exe"],
+    ),
+    createWindowsEditorDef("trae", "Trae", [
+      windowsLocalProgramCandidate("Trae", "Trae.exe"),
+      windowsLocalProgramCandidate("Trae CN", "Trae.exe"),
+      windowsLocalProgramCandidate("Trae CN", "Trae CN.exe"),
+      ...windowsProgramFilesCandidates("Trae", "Trae.exe"),
+      ...windowsProgramFilesCandidates("Trae CN", "Trae.exe"),
+      ...windowsProgramFilesCandidates("Trae CN", "Trae CN.exe"),
+    ]),
+    createWindowsEditorDef("idea", "IntelliJ IDEA", [
+      ...findWindowsJetBrainsExecutableCandidates("IntelliJ IDEA", "idea64.exe"),
+    ]),
+    createWindowsEditorDef("webstorm", "WebStorm", [
+      ...findWindowsJetBrainsExecutableCandidates("WebStorm", "webstorm64.exe"),
+    ]),
+    createWindowsEditorDef("pycharm", "PyCharm", [
+      ...findWindowsJetBrainsExecutableCandidates("PyCharm", "pycharm64.exe"),
+    ]),
+    createWindowsEditorDef("goland", "GoLand", [
+      ...findWindowsJetBrainsExecutableCandidates("GoLand", "goland64.exe"),
+    ]),
+    createWindowsEditorDef("clion", "CLion", [
+      ...findWindowsJetBrainsExecutableCandidates("CLion", "clion64.exe"),
+    ]),
+  ];
+}
+
+let cachedWindowsAdditionalEditorDefs: EditorDef[] | null = null;
+
+/**
+ * JetBrains 候选要在 Program Files / LOCALAPPDATA 下 readdirSync。
+ *
+ * 这段原来写在模块顶层常量里，等于主进程只要 import 这个模块就同步遍历
+ * 5 个产品 × 3 个根目录 —— 启动路径上的固定阻塞。挪到首次使用时才扫，并缓存结果。
+ */
+function getWindowsAdditionalEditorDefs(): EditorDef[] {
+  cachedWindowsAdditionalEditorDefs ??= createWindowsAdditionalEditorDefs();
+  return cachedWindowsAdditionalEditorDefs;
+}
 
 export function getEditorDefsForCurrentPlatform(): EditorDef[] {
   if (process.platform === "darwin") {
@@ -330,23 +357,23 @@ export function getEditorDefsForCurrentPlatform(): EditorDef[] {
   }
 
   if (process.platform === "win32") {
-    return [...WINDOWS_EDITOR_DEFS, ...WINDOWS_ADDITIONAL_EDITOR_DEFS];
+    return [...WINDOWS_EDITOR_DEFS, ...getWindowsAdditionalEditorDefs()];
   }
 
   return [];
 }
 
 /** 缓存检测结果，避免重复 IO */
-export function resolveEditorDefAppPath(def: EditorDef): string | null {
+export async function resolveEditorDefAppPath(def: EditorDef): Promise<string | null> {
   const commandAppPaths =
     def.command && def.windowsCommandAppNames?.length
-      ? deriveWindowsAppPathsFromCommand(def.command, def.windowsCommandAppNames)
+      ? await deriveWindowsAppPathsFromCommand(def.command, def.windowsCommandAppNames)
       : [];
   const commandPaths =
     process.platform === "win32" && def.windowsCommandAppNames?.length
       ? []
       : def.command
-        ? resolveWindowsCommandPaths(def.command)
+        ? await resolveWindowsCommandPaths(def.command)
         : [];
   const candidatePaths = uniquePaths([
     def.appPath,
@@ -358,6 +385,15 @@ export function resolveEditorDefAppPath(def: EditorDef): string | null {
 }
 
 let cachedEditors: EditorInfo[] | null = null;
+/**
+ * 探测进行中的 promise。
+ *
+ * 缓存只在全部 await 结束后才赋值，挡不住并发：ui 侧有 5 个互不相关的挂载点
+ * （OpenSplitButton / message / PreviewPane / useInstalledFileTreeEditors /
+ * WorkspaceEditorButtonGroup）会在首屏同时调用 getInstalledEditors，
+ * 没有这层去重就会各自完整跑一遍 where.exe 探测。
+ */
+let inFlightEditors: Promise<EditorInfo[]> | null = null;
 let cachedIcnsModule: typeof import("@fiahfy/icns") | null | undefined;
 
 function getIcnsModule(): typeof import("@fiahfy/icns") | null {
@@ -380,14 +416,15 @@ function getIcnsModule(): typeof import("@fiahfy/icns") | null {
   return cachedIcnsModule;
 }
 
-function readAppBundleInfoPlist(appPath: string): AppBundleInfoPlist | null {
+async function readAppBundleInfoPlist(appPath: string): Promise<AppBundleInfoPlist | null> {
   try {
     const infoPlistPath = join(appPath, "Contents", "Info.plist");
-    const raw = execFileSync("plutil", ["-convert", "json", "-o", "-", infoPlistPath], {
+    // 同步的 plutil 会在主线程上等最多 3s；图标解析本来就在 async 链路里，改成异步不改变语义。
+    const { stdout } = await execFileAsync("plutil", ["-convert", "json", "-o", "-", infoPlistPath], {
       encoding: "utf8",
       timeout: 3000,
     });
-    return JSON.parse(raw) as AppBundleInfoPlist;
+    return JSON.parse(stdout) as AppBundleInfoPlist;
   } catch (error) {
     logger.warn("[editors] 读取 Info.plist 失败，图标将回退到 file icon", {
       appPath,
@@ -397,8 +434,8 @@ function readAppBundleInfoPlist(appPath: string): AppBundleInfoPlist | null {
   }
 }
 
-function resolveAppIconPath(appPath: string): ResolvedAppIconPath {
-  const plist = readAppBundleInfoPlist(appPath);
+async function resolveAppIconPath(appPath: string): Promise<ResolvedAppIconPath> {
+  const plist = await readAppBundleInfoPlist(appPath);
   if (!plist) {
     return {
       candidateIconNames: [],
@@ -420,6 +457,8 @@ function resolveAppIconPath(appPath: string): ResolvedAppIconPath {
   );
 
   if (iconNames.length === 0) {
+    // plist 里完全没有图标字段：与「声明了图标但文件缺失」是两种不同的诊断，
+    // 合并成一个 reason 会让日志把「没声明」误报成「文件缺失」。
     return {
       candidateIconNames: [],
       path: null,
@@ -521,18 +560,18 @@ function loadNativeImageFromIcnsViaPackage(
   }
 }
 
-function loadNativeImageFromIcnsViaSips(
+async function loadNativeImageFromIcnsViaSips(
   editorId: string,
   appPath: string,
   icnsPath: string,
-): Electron.NativeImage | null {
+): Promise<Electron.NativeImage | null> {
   const tempRootDir = join(getZCodeDataRootDir(), "editor-icon");
   mkdirSync(tempRootDir, { recursive: true });
   const tempDirPath = mkdtempSync(join(tempRootDir, "icon-"));
   const tempPngPath = join(tempDirPath, "icon.png");
 
   try {
-    execFileSync("sips", ["-s", "format", "png", icnsPath, "--out", tempPngPath], {
+    await execFileAsync("sips", ["-s", "format", "png", icnsPath, "--out", tempPngPath], {
       encoding: "utf8",
       timeout: 5000,
     });
@@ -565,17 +604,17 @@ function loadNativeImageFromIcnsViaSips(
   }
 }
 
-function loadNativeImageFromIcns(
+async function loadNativeImageFromIcns(
   editorId: string,
   appPath: string,
   icnsPath: string,
-): Electron.NativeImage | null {
+): Promise<Electron.NativeImage | null> {
   // Electron 的 nativeImage 不适合直接读取 .icns，
   // 这里优先用 npm 包解析出 PNG icon，减少每个图标都起系统子进程的成本；
   // 只有遇到老格式或包解析不到的 case，才回退到 macOS 的 sips。
   return (
     loadNativeImageFromIcnsViaPackage(editorId, appPath, icnsPath) ??
-    loadNativeImageFromIcnsViaSips(editorId, appPath, icnsPath)
+    (await loadNativeImageFromIcnsViaSips(editorId, appPath, icnsPath))
   );
 }
 
@@ -584,7 +623,7 @@ function loadNativeImageFromIcns(
  * 然后把 .icns 转成 PNG，再生成可用于菜单的真实图标。
  * 如果解析不到真实图标，再 fallback 到 Electron 的 app.getFileIcon。
  */
-export function getAppIconDataUrl(editorId: string, appPath: string): Promise<string | null> {
+export async function getAppIconDataUrl(editorId: string, appPath: string): Promise<string | null> {
   if (process.platform !== "darwin") {
     return app
       .getFileIcon(appPath, { size: "normal" })
@@ -599,13 +638,13 @@ export function getAppIconDataUrl(editorId: string, appPath: string): Promise<st
       });
   }
   // Step 1: 尝试从 .icns 文件加载真实 app 图标
-  const resolvedIcon = resolveAppIconPath(appPath);
+  const resolvedIcon = await resolveAppIconPath(appPath);
   if (resolvedIcon.path) {
-    const icon = loadNativeImageFromIcns(editorId, appPath, resolvedIcon.path);
+    const icon = await loadNativeImageFromIcns(editorId, appPath, resolvedIcon.path);
     if (icon && !icon.isEmpty()) {
       // 缩放到合适大小（32x32 用于菜单显示）
       const resized = icon.resize({ width: 32, height: 32 });
-      return Promise.resolve(`data:image/png;base64,${resized.toPNG().toString("base64")}`);
+      return `data:image/png;base64,${resized.toPNG().toString("base64")}`;
     }
   } else {
     logger.info("[editors] 未解析到真实 app 图标，图标将回退到 file icon", {
@@ -638,13 +677,32 @@ export async function getInstalledEditors(): Promise<EditorInfo[]> {
   if (cachedEditors) {
     return cachedEditors;
   }
+  if (inFlightEditors) {
+    return inFlightEditors;
+  }
 
-  const installed = getEditorDefsForCurrentPlatform()
-    .map((def) => {
-      const appPath = resolveEditorDefAppPath(def);
+  const pending = loadInstalledEditors();
+  inFlightEditors = pending;
+  try {
+    return await pending;
+  } finally {
+    if (inFlightEditors === pending) {
+      inFlightEditors = null;
+    }
+  }
+}
+
+async function loadInstalledEditors(): Promise<EditorInfo[]> {
+  const defs = getEditorDefsForCurrentPlatform();
+  const resolved = await Promise.all(
+    defs.map(async (def) => {
+      const appPath = await resolveEditorDefAppPath(def);
       return appPath ? { def, appPath } : null;
-    })
-    .filter((entry): entry is { def: EditorDef; appPath: string } => entry !== null);
+    }),
+  );
+  const installed = resolved.filter(
+    (entry): entry is { def: EditorDef; appPath: string } => entry !== null,
+  );
 
   const results = await Promise.all(
     installed.map(async ({ def, appPath }) => {

@@ -55,6 +55,21 @@ import { registerDesktopSaveFileIpcHandler } from "./desktopSaveFile.js";
 import { registerDesktopPrintToPdfIpcHandler } from "./desktopPrintToPdf.js";
 import { registerCuaPipActiveSessionIpc } from "./desktopCuaPipIpc.js";
 
+/**
+ * 把 schema 校验过的 patch 归一成持久化视图（Partial<AppSettings>）。
+ *
+ * 两者唯一的差异是 providerFamilyDomain：patch 允许空串表示「清空该设置」，而 AppSettings
+ * 的持久值不允许空串。main 的即时同步逻辑不消费该字段，这里把空串归一成缺省。
+ */
+function toAppSettingsPatch(
+  patch: import("zod").infer<typeof appSettingsPatchSchema>,
+): Partial<import("@zcode/shared").AppSettings> {
+  const { providerFamilyDomain, ...rest } = patch;
+  return providerFamilyDomain === undefined || providerFamilyDomain === ""
+    ? rest
+    : { ...rest, providerFamilyDomain };
+}
+
 export function registerPlatformIpcHandlers(options: {
   fetchHelpConfig?: () => Promise<unknown>;
   logger: {
@@ -79,7 +94,9 @@ export function registerPlatformIpcHandlers(options: {
   getDesktopSessionActivity: () => {
     runningAgentSessionCount: number;
   };
-  syncAppSettings: (patch: unknown) => void;
+  // 调用点传的是 appSettingsPatchSchema 校验后的结果；声明成 Partial<AppSettings> 而不是 unknown，
+  // 否则 main 的真实实现会因参数逆变无法赋值。
+  syncAppSettings: (patch: Partial<import("@zcode/shared").AppSettings>) => void;
   getDesktopPetSettings?: () => import("@zcode/shared").DesktopPetPersistedSettings;
   getDesktopPetDownloadStatus?: () => import("@zcode/shared").DesktopPetDownloadStatus;
   listDesktopPetInstalledPacks?: () => import("@zcode/shared").DesktopPetInstalledPack[];
@@ -350,7 +367,7 @@ export function registerPlatformIpcHandlers(options: {
       return;
     }
 
-    options.syncAppSettings(result.data);
+    options.syncAppSettings(toAppSettingsPatch(result.data));
   });
 
   // 快捷键录制态：renderer 设置页进入/退出录制时通知。macOS 系统菜单会先于 renderer

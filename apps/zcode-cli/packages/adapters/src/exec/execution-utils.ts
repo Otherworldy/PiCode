@@ -9,7 +9,15 @@ const MS_PER_MINUTE = 60 * MS_PER_SECOND;
 const MS_PER_HOUR = 60 * MS_PER_MINUTE;
 export const DEFAULT_INLINE_OUTPUT_BYTES = 10 * 1024 * 1024;
 export const DEFAULT_MAX_PERSISTED_OUTPUT_BYTES = 50 * 1024 * 1024;
-export const BASH_RUNTIME_OUTPUT_LIMIT_BYTES = 5 * 1024 * 1024 * 1024;
+/**
+ * 单条 bash 命令允许落到磁盘的输出上限。
+ *
+ * 子进程直接持有输出文件的 fd，Node 侧只能靠文件大小事后发现超限，所以「检测到」总是晚于
+ * 「已经写入」。原来这里是 5 GiB：`yes` / `cat` 大文件 / 死循环打印可以无阻拦地写满磁盘，
+ * 而模型侧只看得到 30 KB 尾巴，问题完全不可见。512 MiB 仍然远超任何合理的命令输出，
+ * 又把最坏情况压低一个量级。
+ */
+export const BASH_RUNTIME_OUTPUT_LIMIT_BYTES = 512 * 1024 * 1024;
 export const IO_DRAIN_TIMEOUT_MS = 1_000;
 export const FORCE_EXIT_AFTER_KILL_MS = 5_000;
 export const DEFAULT_PROGRESS_THRESHOLD_MS = 2_000;

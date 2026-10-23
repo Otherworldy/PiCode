@@ -1,12 +1,14 @@
 import { subscribeBashOutputProgress } from "./bash-progress-poller.js";
 import { buildBashOutputPreview } from "./bash-output-preview.js";
-import { constants } from "node:fs";
+import { constants, watch, type FSWatcher } from "node:fs";
 import { lstat, mkdir, open, rm, stat, statfs, type FileHandle } from "node:fs/promises";
 import { dirname } from "node:path";
 import { decodeExecutionOutputBuffer } from "./outputEncoding.js";
 import type { ExecutionStreamResult, ExecutionOutputPreview } from "@zcode/contracts";
 
 const OUTPUT_WATCH_INTERVAL_MS = 5_000;
+/** 文件变化触发一次 stat 的合并窗口。 */
+const OUTPUT_WATCH_DEBOUNCE_MS = 250;
 const OUTPUT_FILE_MODE = 0o600;
 const PROGRESS_TAIL_MAX_BYTES = 4096;
 
@@ -16,6 +18,8 @@ export class BashFileOutput {
   private created = false;
   private prepared = false;
   private watchTimer?: NodeJS.Timeout;
+  private outputWatcher?: FSWatcher;
+  private pendingLimitCheck?: NodeJS.Timeout;
   private unsubscribeProgress?: () => void;
   private progressDelay?: NodeJS.Timeout;
 
@@ -64,16 +68,17 @@ export class BashFileOutput {
 
   watchLimit(maxBytes: number, onLimit: () => void): void {
     this.stopWatching();
+    const self = this;
     let checking = false;
-    const timer = setInterval(() => {
+    const check = (): void => {
       if (checking) return;
       checking = true;
-      void stat(this.path)
+      void stat(self.path)
         .then(
           (file) => {
             // stat 可以在 exit 或后台移交之后才返回；旧观察器不能终止新状态。
-            if (this.watchTimer !== timer || file.size <= maxBytes) return;
-            this.stopWatching();
+            if (self.watchTimer !== timer || file.size <= maxBytes) return;
+            self.stopWatching();
             onLimit();
           },
           () => undefined,
@@ -81,13 +86,34 @@ export class BashFileOutput {
         .finally(() => {
           checking = false;
         });
-    }, OUTPUT_WATCH_INTERVAL_MS);
+    };
+    const timer = setInterval(check, OUTPUT_WATCH_INTERVAL_MS);
+    // 子进程直接持有输出文件的 fd，Node 侧没有写入流可计数 —— 唯一的信号是文件大小。
+    // 纯 5 秒轮询意味着「超过上限之后」还能继续写最多 5 秒的量；文件变化事件把发现延迟
+    // 压到 debounce 窗口，轮询只作为网络盘等不触发 watch 的场景的兜底。
+    const scheduleCheck = () => {
+      if (self.pendingLimitCheck) return;
+      self.pendingLimitCheck = setTimeout(() => {
+        self.pendingLimitCheck = undefined;
+        check();
+      }, OUTPUT_WATCH_DEBOUNCE_MS);
+      self.pendingLimitCheck.unref();
+    };
+    const watcher = watch(this.path, scheduleCheck);
+    // watch 失败（权限、文件已被删除）不能影响命令执行，轮询兜底仍然有效。
+    watcher.on("error", () => undefined);
+    watcher.unref();
     timer.unref();
     this.watchTimer = timer;
+    this.outputWatcher = watcher;
   }
 
   stopWatching(): void {
     if (this.watchTimer) clearInterval(this.watchTimer);
+    if (this.pendingLimitCheck) clearTimeout(this.pendingLimitCheck);
+    this.outputWatcher?.close();
+    this.outputWatcher = undefined;
+    this.pendingLimitCheck = undefined;
     this.unsubscribeProgress?.();
     if (this.progressDelay) clearTimeout(this.progressDelay);
     this.watchTimer = undefined;

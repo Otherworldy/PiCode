@@ -6,6 +6,9 @@ import { WORKSPACE_FILE_SEARCH_DISPLAY_CAP } from "@zcode/shared/workspaceFileSe
 import { getMentionGroupLimitForQuery } from "@/mentions/mentionSearch.js";
 import type { MentionCategoryResult, MentionItem } from "@/mentions/mentionTypes.js";
 
+/** 输入到搜索请求之间的静默期。 */
+const MENTION_QUERY_DEBOUNCE_MS = 200;
+
 function mapWorkspaceFileToMentionItem(entry: WorkspaceFileEntry): MentionItem {
   return {
     id: `file:${entry.relativePath}`,
@@ -26,10 +29,6 @@ function mapWorkspaceFileToMentionItem(entry: WorkspaceFileEntry): MentionItem {
   };
 }
 
-function normalizeRefreshQuery(query: string): string {
-  return query.trim().toLowerCase();
-}
-
 export function useFileMentionProvider(
   workspacePath: string,
   workspaceIdentity: string | undefined,
@@ -46,7 +45,8 @@ export function useFileMentionProvider(
   const scope = useMemo(
     () => ({
       error: null as Error | null,
-      lastMissQuery: null as string | null,
+      /** 本次打开面板是否已做过一次强制重建索引。 */
+      refreshed: false,
     }),
     [fileService, workspacePath, workspaceIdentity, enabled],
   );
@@ -63,38 +63,52 @@ export function useFileMentionProvider(
     // 错误态等待面板/工作区/连接生命周期重置，避免 query 变化触发失败重试循环。
     if (!enabled || scope.error) return;
     let active = true;
-    setResult({ scope, query, limit, entries: [], loading: true, error: null });
-    const params = { rootPath: workspacePath, workspaceIdentity, query, limit };
-    const search = async () => {
-      try {
-        let entries = await fileService.searchWorkspaceFiles(params);
-        if (!active) return;
-        const normalizedQuery = normalizeRefreshQuery(query);
-        if (entries.length === 0 && normalizedQuery && scope.lastMissQuery !== normalizedQuery) {
-          scope.lastMissQuery = normalizedQuery;
-          // 无命中补扫必须绕过 Host TTL，否则外部新文件在缓存有效期内永远不可见。
-          entries = await fileService.searchWorkspaceFiles({ ...params, refresh: true });
+    // 输入驱动的搜索必须节流：useDeferredValue 只解决渲染优先级，不节流请求。
+    const timer = window.setTimeout(() => {
+      // 面板打开后的第一次搜索强制重建索引：面板关闭期间新建的文件要能立刻被 @ 看到。
+      // 之后只用 TTL 内缓存 —— 未命中绝不能再触发全量 DFS（37 万文件工作区实测 21.8s，
+      // 且 refresh 会绕过 Host 侧 in-flight 去重，等于每个按键一轮全仓 readdir）。
+      //
+      // 标记必须在真正发出请求时才写：React StrictMode 会 mount → unmount → mount，
+      // 若在 effect 同步体里置位，第一次的请求被 cleanup 取消、第二次反而认为「已刷新过」，
+      // 开发模式下首屏永远拿不到强制刷新。
+      const refresh = !scope.refreshed;
+      setResult({ scope, query, limit, entries: [], loading: true, error: null });
+      void (async () => {
+        try {
+          const entries = await fileService.searchWorkspaceFiles({
+            rootPath: workspacePath,
+            workspaceIdentity,
+            query,
+            limit,
+            ...(refresh ? { refresh: true } : {}),
+          });
           if (!active) return;
+          // 只在成功后才算「这次面板已刷新过」：失败的 refresh 不能让后续输入失去补扫机会。
+          if (refresh) scope.refreshed = true;
+          setResult({ scope, query, limit, entries, loading: false, error: null });
+        } catch (error) {
+          if (!active) return;
+          scope.error = error instanceof Error ? error : new Error(String(error));
+          setResult({ scope, query, limit, entries: [], loading: false, error: scope.error });
         }
-        setResult({ scope, query, limit, entries, loading: false, error: null });
-      } catch (error) {
-        if (!active) return;
-        scope.error = error instanceof Error ? error : new Error(String(error));
-        setResult({ scope, query, limit, entries: [], loading: false, error: scope.error });
-      }
-    };
-    void search();
+      })();
+    }, MENTION_QUERY_DEBOUNCE_MS);
     // 查询、工作区、连接或面板生命周期变化都使已发出的异步响应失效。
     return () => {
       active = false;
+      window.clearTimeout(timer);
     };
   }, [enabled, fileService, workspacePath, workspaceIdentity, query, limit, scope]);
 
   const current =
     enabled && result?.scope === scope && result.query === query && result.limit === limit;
+  // stale-while-revalidate：query 变了但新结果还没到时继续显示上一轮结果。
+  // 否则每个按键后的 debounce 窗口里 items 会清空一次，面板闪成空白。
+  const sameScope = enabled && result?.scope === scope && result.limit === limit;
   const items = useMemo(
-    () => (current ? result.entries.map(mapWorkspaceFileToMentionItem) : []),
-    [current, result],
+    () => (sameScope ? result.entries.map(mapWorkspaceFileToMentionItem) : []),
+    [sameScope, result],
   );
   return {
     items,

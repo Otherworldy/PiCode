@@ -19,6 +19,19 @@ import {
 const FAST_PATH_MAX_BYTES = 10 * 1024 * 1024;
 const ENCODING_SAMPLE_BYTES = 4096;
 
+/**
+ * 单行保留上限。
+ *
+ * 流式读取为了报告 totalLines 必须扫完整个文件，而当前行是在 `carry` 里累积的 —— 一个没有
+ * 换行的 2 GB 文件（minified JSON、单行日志）会让 carry 长到 GB 级，进程直接 OOM。
+ * 这里按行字符数设界，超限按契约报 `too_large`（Node adapter 的 range read 选择失败而不是
+ * 静默截断，因为静默截断会让模型以为什么都没丢）。
+ *
+ * 8M 字符是刻意宽松的值：minified bundle、内联 sourcemap 的单行经常有数 MB，卡太紧会把
+ * 「原来能读」的文件变成直接失败。真正要挡的是「一个文件只有一行且那行有 GB 级」。
+ */
+const MAX_RETAINED_LINE_CHARS = 8 * 1024 * 1024;
+
 export async function readTextFileRangeFromNode(
   request: FileSystemReadTextRangeRequest,
   info: Stats,
@@ -115,6 +128,13 @@ async function readRangeStreaming(
       const text = decoder.write(buffer);
       const parts = `${carry}${text}`.split("\n");
       carry = parts.pop() ?? "";
+      if (carry.length > MAX_RETAINED_LINE_CHARS) {
+        throw createFileSystemError({
+          code: "too_large",
+          path: request.path,
+          message: `Line ${lineIndex + 1} exceeds the ${MAX_RETAINED_LINE_CHARS}-character line limit. Read a narrower range or use search instead.`,
+        });
+      }
       for (const part of parts) {
         const normalized = normalizeCompletedLine(part);
         if (part.endsWith("\r")) crlfCount += 1;

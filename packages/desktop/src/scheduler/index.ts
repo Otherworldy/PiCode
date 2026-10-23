@@ -243,6 +243,16 @@ async function handleOffPeakClaimed(task: ZCodeOffPeakTask, now: number): Promis
     await offPeakRepo.releaseClaim(task.offPeakTaskId, { now });
     return;
   }
+  // 旧记录可能缺完整 Selection（见 ZCodeOffPeakTask.modelSelection 注释）：这类任务 schedulable=0，
+  // 本不应被 claim。真出现时释放认领并告警，绝不把 undefined 的 Selection 派发给 main。
+  if (!task.modelSelection) {
+    await offPeakRepo.releaseClaim(task.offPeakTaskId, {
+      now,
+      error: "model_selection_missing",
+    });
+    log("warn", `off-peak task skipped: modelSelection missing task=${task.offPeakTaskId}`);
+    return;
+  }
   offPeakInFlight.add(task.offPeakTaskId);
   const request: SchedulerToMainMessage = {
     type: "offpeak-dispatch-request",

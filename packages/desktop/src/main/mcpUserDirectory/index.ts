@@ -16,7 +16,13 @@ import type {
   SaveCliMcpToUserDirectoryRequest,
 } from "@zcode/shared";
 import type { McpConfigKeyName } from "./types.js";
-import { ensurePiMcpFiles, piProjectMcpFile, piUserMcpFile, toPiStoredMcpServer } from "@zcode/shared/node";
+import {
+  ensurePiMcpFiles,
+  piProjectMcpFile,
+  piUserMcpFile,
+  toPiStoredMcpServer,
+  withFileLock,
+} from "@zcode/shared/node";
 import { isRecord, readJsonObject, writeTextAtomic } from "./utils.js";
 import { migrateLegacyCommonMcp } from "./legacy.js";
 
@@ -270,25 +276,29 @@ async function writeServerEnabledToFile(
   const scope: Exclude<McpScope, "common"> = location.scope === "project" ? "workspace" : "user";
   const workspacePath = scope === "workspace" ? location.projectPath : undefined;
   const filePath = buildDirectoryConfigPath(descriptor, scope, workspacePath);
-  const current = (await readJsonObject(filePath)) ?? {};
-  const serverMap = readServerMapFromJson(current, descriptor.configKeyName);
-  const currentServer = serverMap[name];
-  if (!isRecord(currentServer)) {
-    return;
-  }
+  // 与 Host 的 mcpSyncService 抢同一把文件锁（同一路径 → 同一 .lock）：这里是 main 进程里
+  // 另一套「读整份 → 改一条 → 整体覆盖」实现，无锁时与 Host 的写入互相覆盖。
+  await withFileLock(filePath, async () => {
+    const current = (await readJsonObject(filePath)) ?? {};
+    const serverMap = readServerMapFromJson(current, descriptor.configKeyName);
+    const currentServer = serverMap[name];
+    if (!isRecord(currentServer)) {
+      return;
+    }
 
-  // MCP 自身已有 mcp.servers/mcpServers 结构；禁用状态写在 server 配置对象内，
-  // 避免把目录路径写到 mcp 顶层后和真实 MCP 配置混在一起。
-  const nextServerMap = {
-    ...serverMap,
-    [name]: setServerEnabled(currentServer, enabled),
-  };
-  let next = writeServerMapToJson(current, descriptor.configKeyName, nextServerMap);
-  const legacyCleanup = removeLegacyMcpEnabledOverride(next, location, name);
-  if (legacyCleanup.changed) {
-    next = legacyCleanup.config;
-  }
-  await writeTextAtomic(filePath, `${JSON.stringify(next, null, 2)}\n`);
+    // MCP 自身已有 mcp.servers/mcpServers 结构；禁用状态写在 server 配置对象内，
+    // 避免把目录路径写到 mcp 顶层后和真实 MCP 配置混在一起。
+    const nextServerMap = {
+      ...serverMap,
+      [name]: setServerEnabled(currentServer, enabled),
+    };
+    let next = writeServerMapToJson(current, descriptor.configKeyName, nextServerMap);
+    const legacyCleanup = removeLegacyMcpEnabledOverride(next, location, name);
+    if (legacyCleanup.changed) {
+      next = legacyCleanup.config;
+    }
+    await writeTextAtomic(filePath, `${JSON.stringify(next, null, 2)}\n`);
+  });
 }
 
 async function readDirectoryServersFromFile(
@@ -381,13 +391,15 @@ async function writeZCodeServersToFile(
   workspacePath?: string,
 ): Promise<void> {
   const filePath = buildDirectoryConfigPath(ZCODE_MCP_DESCRIPTOR, scope, workspacePath);
-  const current = (await readJsonObject(filePath)) ?? {};
-  const next = writeServerMapToJson(
-    current,
-    ZCODE_MCP_DESCRIPTOR.configKeyName,
-    normalizePiServers(servers),
-  );
-  await writeTextAtomic(filePath, `${JSON.stringify(next, null, 2)}\n`);
+  await withFileLock(filePath, async () => {
+    const current = (await readJsonObject(filePath)) ?? {};
+    const next = writeServerMapToJson(
+      current,
+      ZCODE_MCP_DESCRIPTOR.configKeyName,
+      normalizePiServers(servers),
+    );
+    await writeTextAtomic(filePath, `${JSON.stringify(next, null, 2)}\n`);
+  });
 }
 
 export async function loadCliMcpFromUserDirectory(

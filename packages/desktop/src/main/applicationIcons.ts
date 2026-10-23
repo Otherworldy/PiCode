@@ -74,6 +74,7 @@ async function buildApplicationPathIndex(
   const worker = async () => {
     while (cursor < appPaths.length) {
       const appPath = appPaths[cursor++];
+      if (appPath === undefined) return;
       const remainingMs = deadline - dependencies.now();
       if (remainingMs <= 0) return;
       try {

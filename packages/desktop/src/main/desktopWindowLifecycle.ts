@@ -31,7 +31,9 @@ export function createWindow(options: {
   spawnHostProcess: (
     win: BrowserWindow,
     label: string,
-    initMessage: HostInitMessage,
+    // zcodeBuiltinProviderConfigFilePath 由 main 的 spawnHostProcess 包装层注入（main 才知道
+    // Electron 安装布局），这里传的是不含该字段的部分消息。
+    initMessage: Omit<HostInitMessage, "zcodeBuiltinProviderConfigFilePath">,
   ) => ElectronUtilityProcess;
   disposeHostProcess: (
     child: ElectronUtilityProcess,

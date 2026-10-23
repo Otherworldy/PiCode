@@ -68,7 +68,8 @@ export {
 } from "./bash-metadata.js";
 
 const MAX_INLINE_OUTPUT_BYTES = 30_000;
-const MAX_RUNTIME_PERSISTED_OUTPUT_BYTES = 5 * 1024 * 1024 * 1024;
+/** 与 adapters 的 `BASH_RUNTIME_OUTPUT_LIMIT_BYTES` 同源：单条命令的落盘上限。 */
+const MAX_RUNTIME_PERSISTED_OUTPUT_BYTES = 512 * 1024 * 1024;
 const BASH_PROVIDER_DESCRIPTION = createBashProviderDescription({
   defaultTimeoutMs: DEFAULT_BASH_TIMEOUT_POLICY.defaultTimeoutMs,
   maxTimeoutMs: DEFAULT_BASH_TIMEOUT_POLICY.maxTimeoutMs,
