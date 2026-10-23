@@ -111,6 +111,9 @@ const POINTER_SCROLL_ALIGNMENTS: readonly ScrollAlignment[] = [
   { block: "nearest", inline: "nearest" },
 ];
 
+/** 轮换对齐的默认值（center）；索引越界时兜底到它，避免 undefined 传进 scroll 参数。 */
+const DEFAULT_POINTER_SCROLL_ALIGNMENT: ScrollAlignment = { block: "center", inline: "center" };
+
 type ActionProbeExecution =
   | { kind: "done"; value: ActionProbe }
   | { kind: "timeout" }
@@ -318,8 +321,10 @@ class IabPlaywrightLocatorSession {
             needsStable: needsPointer,
             scrollAlignment:
               action.force === true
-                ? POINTER_SCROLL_ALIGNMENTS[0]
-                : POINTER_SCROLL_ALIGNMENTS[pointerAttempt % POINTER_SCROLL_ALIGNMENTS.length],
+                ? DEFAULT_POINTER_SCROLL_ALIGNMENT
+                : (POINTER_SCROLL_ALIGNMENTS[
+                    pointerAttempt % POINTER_SCROLL_ALIGNMENTS.length
+                  ] ?? DEFAULT_POINTER_SCROLL_ALIGNMENT),
           },
           remaining,
         );

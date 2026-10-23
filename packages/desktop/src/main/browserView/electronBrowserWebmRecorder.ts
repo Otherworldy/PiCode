@@ -17,6 +17,15 @@ import type {
 } from "./browserVideoRecorder.js";
 
 const RECORDER_PORT_CHANNEL = "zcode-browser-video-recorder:port";
+/**
+ * 录制窗口的固定 partition。
+ *
+ * Electron 的 Session 永不回收（没有销毁 API，生命周期等于进程）。原来每次录制用
+ * `zcode-browser-video-recorder-${randomUUID()}`，于是每录一次就永久留下一个
+ * ElectronBrowserContext 及其 URLCache / blob 存储 —— 录制命令可以反复调用，这是本仓
+ * 唯一无法靠 tab suspend 回收的进程内存。改用固定 partition，使用前清掉上次的状态。
+ */
+const BROWSER_VIDEO_RECORDER_PARTITION = "zcode-browser-video-recorder";
 const RECORDER_START_TIMEOUT_MS = 15_000;
 const RECORDER_STOP_TIMEOUT_MS = 15_000;
 
@@ -283,7 +292,9 @@ export async function createElectronBrowserWebmRecorder(
     `.${randomUUID()}-browser-video-recorder.html`,
   );
 
-  const recorderSession = session.fromPartition(`zcode-browser-video-recorder-${randomUUID()}`);
+  const recorderSession = session.fromPartition(BROWSER_VIDEO_RECORDER_PARTITION);
+  // 复用同一个 partition 就必须自己隔离上一次录制的缓存/存储，否则媒体源会把旧数据带进来。
+  await recorderSession.clearStorageData().catch(() => undefined);
   const recorderWindow = new BrowserWindow({
     show: false,
     width: Math.max(1, input.viewport.width),
@@ -373,13 +384,12 @@ export async function createElectronBrowserWebmRecorder(
     if (!closed) fail(recorderError(`recorder renderer exited: ${details.reason ?? "unknown"}`));
   };
   recorderWindow.webContents.on("render-process-gone", onRendererGone);
+  // Electron 41 的 console-message 首参已经是 details 对象（旧版是 (event, level, message, line, sourceId)），
+  // 原来取第二个参数会把 number 当 details，日志里的 level/message 永远是 unknown/空。
   const onConsoleMessage = (
-    _event: unknown,
-    details: { level?: string; message?: string },
+    details: Electron.Event<Electron.WebContentsConsoleMessageEventParams>,
   ): void => {
-    debug?.(
-      `[browser-recording] recorder console level=${details.level ?? "unknown"} message=${details.message ?? ""}`,
-    );
+    debug?.(`[browser-recording] recorder console level=${details.level} message=${details.message}`);
   };
   recorderWindow.webContents.on("console-message", onConsoleMessage);
 

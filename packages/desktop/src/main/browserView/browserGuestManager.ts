@@ -101,6 +101,8 @@ interface GuestWebContents {
       event: "will-download",
       listener: (event: unknown, item: GuestDownloadItem, contents: GuestWebContents) => void,
     ): void;
+    /** 仅用于内存诊断：共享 Session 上残留的监听器数量。 */
+    listenerCount?(event: "will-download"): number;
   };
 }
 
@@ -126,6 +128,11 @@ interface InternalExecutionContext extends BrowserGuestExecutionContext {
 }
 
 type TabLifecycle = "active" | "deliverable" | "handoff" | "closed";
+
+/** 经函数参数取 lifecycle：避免调用点已收窄的联合类型把 "closed" 判成不可达。 */
+function isTabClosed(lifecycle: TabLifecycle): boolean {
+  return lifecycle === "closed";
+}
 type GuestBindingLifecycle = "detached" | "attached" | "detaching" | "destroyed";
 type GuestRecoveryReason = BrowserGuestAttachRejectReason | "guest-destroyed" | "attach-timeout";
 
@@ -254,6 +261,8 @@ const HIDDEN_WINDOW_CAPTURE_DEADLINE_MS = 5_000;
 // detach 走超时路径）。达到上限后同 tab 截图快速失败并提示重开 tab，旧 capture
 // 真实落定后名额自动回收。
 const MAX_ABANDONED_SCREENSHOT_CAPTURES = 3;
+/** 已关闭 tab 的 tombstone 上限：迟到消息只在秒级内出现，不需要保留全部历史 tabId。 */
+const CLOSED_TAB_TOMBSTONE_LIMIT = 256;
 /** teardown 等待 CDP 在途命令收敛的上限；超时后仍会尝试 native detach。 */
 const DEFAULT_GUEST_CDP_TEARDOWN_TIMEOUT_MS = 1_000;
 // CDP 命令流空闲释放阈值：覆盖实测崩溃窗口（turn 内命令间隙 0.4~9s）的同时，
@@ -443,7 +452,25 @@ export class BrowserGuestManager {
     return ids;
   }
   /** close 后只保留 opaque id tombstone，拒绝迟到的 renderer attach，不保留 owner/guest。 */
+  /**
+   * 已关闭 tab 的 tombstone，用于拦截迟到的 attach/消息重建刚关掉的 tab。
+   * 迟到消息只在秒级内出现，所以只需要保留最近若干个；无上限时条目数随关 tab 次数
+   * 单调增长（tabId 是 UUID，disposeAll 在生产代码里没有调用方）。
+   */
   private readonly closedTabIds = new Set<string>();
+
+  /** 记录 tombstone 并按最近关闭顺序淘汰最旧条目。 */
+  private rememberClosedTabId(tabId: string): void {
+    this.closedTabIds.delete(tabId);
+    this.closedTabIds.add(tabId);
+    while (this.closedTabIds.size > CLOSED_TAB_TOMBSTONE_LIMIT) {
+      const oldest = this.closedTabIds.values().next();
+      if (oldest.done) {
+        break;
+      }
+      this.closedTabIds.delete(oldest.value);
+    }
+  }
   private readonly activeTabByScope = new Map<string, string>();
   private readonly defaultTabByScope = new Map<string, string>();
   private readonly waiters = new Map<string, PendingWaiter[]>();
@@ -467,6 +494,14 @@ export class BrowserGuestManager {
   private readonly downloadWaiters = new Map<string, DownloadWaiter[]>();
   private readonly sessionNames = new Map<string, string>();
   private readonly visibilityByScope = new Map<string, boolean>();
+  /**
+   * 最近一次 `setupDownloadTracking` 用到的 Session。
+   *
+   * 所有内置浏览器 tab 共用同一 partition，因此这里只有一个对象；记录它是为了让
+   * `collectMemoryDiagnostics` 能读到 `will-download` 的 listener 数 —— 本轮修的泄漏
+   * 就在这个共享 Session 上，不暴露计数就只能靠人肉复现。
+   */
+  private downloadSession: GuestWebContents["session"];
   private readonly naturalViewportByWindow = new Map<number, BrowserViewportSize>();
   private readonly residencyCoordinator: BrowserTabResidencyCoordinator;
   private readonly suspendAckWaiters = new Map<string, () => void>();
@@ -732,15 +767,20 @@ export class BrowserGuestManager {
       `[browser-use] attachGuest tabId=${tabId} windowId=${tab.owner.windowId} cdp=${cdpAttached}`,
     );
 
-    guest.once("destroyed", () => {
-      const current = this.tabs.get(tabId);
-      if (current?.guest === guest) {
-        this.detachGuest(current);
-        this.requestGuestRebind(current, "guest-destroyed");
-      }
-    });
-    // 放在其余接线之前：后面几个 setup 在 guest 已销毁时可能同步抛错并跳过剩余接线，
-    // 而这是唯一能关闭 UAF 窗口的监听，不该被别的接线牵连。
+    // renderer 会重复上报同一个 guest（切 tab / scope 变化都会重报），而这个监听必须只在
+    // 首次接线时注册一次 —— 它不随 `isSameGuest` 门内那几个 setup 一起清理，重复注册会在
+    // guest 上按 attach 次数累积（回调虽然靠 `current?.guest === guest` 收敛成 no-op）。
+    if (!isSameGuest) {
+      guest.once("destroyed", () => {
+        const current = this.tabs.get(tabId);
+        if (current?.guest === guest) {
+          this.detachGuest(current);
+          this.requestGuestRebind(current, "guest-destroyed");
+        }
+      });
+    }
+    // 其余接线放在 destroyed 之后：后面几个 setup 在 guest 已销毁时可能同步抛错并跳过剩余
+    // 接线，而关闭 UAF 窗口的监听不该被别的接线牵连。
     if (!isSameGuest) this.setupCdpCrashGuard(tab, guest);
     if (!isSameGuest) this.setupDialogTracking(tab, guest);
     if (!isSameGuest) this.setupDownloadTracking(tab, guest);
@@ -868,7 +908,7 @@ export class BrowserGuestManager {
     // 跨 window/workspace 越权关闭他人 tab 仍然被拒绝。
     const existing = this.tabs.get(payload.tabId);
     if (!existing || existing.lifecycle === "closed") {
-      this.closedTabIds.add(payload.tabId);
+      this.rememberClosedTabId(payload.tabId);
       return;
     }
     // close 是收敛意图：remoteSessionId 的防重连语义只属于 attach（见 attachGuest 的
@@ -1951,7 +1991,8 @@ export class BrowserGuestManager {
    */
   private isInFlightScreenshotAlive(tracked: InFlightScreenshot): boolean {
     const running = this.runningRequests.get(tracked.requestId);
-    return Boolean(running) && !running.controller.signal.aborted;
+    // 不能用 Boolean(running) 收窄：TS 不会把 Boolean() 当类型守卫。
+    return running !== undefined && !running.controller.signal.aborted;
   }
 
   private createRecordingEntry(
@@ -2220,6 +2261,9 @@ export class BrowserGuestManager {
           throw new Error(`recording action timed out: ${result.reason}`);
         return;
       }
+      // type / waitFor 的 selector 是必填项，上面的 locator 分支必然已返回；
+      // 走到这里只可能是「无 selector 的 click」。显式收窄让后面的 x/y 访问成立。
+      if (action.type !== "click") return;
       if (typeof action.x !== "number" || typeof action.y !== "number") {
         throw new Error("recording click requires selector or (x,y)");
       }
@@ -2626,7 +2670,8 @@ export class BrowserGuestManager {
       // 如果 destroyed/mismatch 已经发起过重绑，沿用该请求，避免同一 tab 重复创建 webview。
       if (!tab.rebindRequested) this.onOpenTabRequested?.(tab.tabId, tab.owner);
       // 某些测试/旧 renderer 会在 Ready 回调内同步 attach；不能在 attach 已成功后再注册 waiter。
-      if (tab.guest && !safeBool(() => tab.guest.isDestroyed(), true)) return tab.guest;
+      const attachedGuest = tab.guest;
+      if (attachedGuest && !safeBool(() => attachedGuest.isDestroyed(), true)) return attachedGuest;
       const guest = await this.waitForGuest(tab.tabId);
       if (guest && !safeBool(() => guest.isDestroyed(), true)) return guest;
       if (attempt === 0 && !tab.hasAttachedGuest && !tab.attachFailure) return null;
@@ -2783,7 +2828,11 @@ export class BrowserGuestManager {
       title: tab.cachedTitle,
       viewport: await this.readTabViewport(tab),
       ...(this.effectiveActiveTabId(tab.owner) === tab.tabId ? { active: true } : {}),
-      ...(tab.lifecycle !== "active" ? { lifecycle: tab.lifecycle } : {}),
+      // closed 不在 BrowserTabSummary.lifecycle 的枚举内：closed tab 不进 summary 列表，
+      // 这里同时排除 closed，避免把协议外的值推给 renderer。
+      ...(tab.lifecycle !== "active" && tab.lifecycle !== "closed"
+        ? { lifecycle: tab.lifecycle }
+        : {}),
     };
   }
 
@@ -3082,7 +3131,7 @@ export class BrowserGuestManager {
     if (tab.lifecycle === "closed") return;
     this.abortRecordings((entry) => entry.tabId === tab.tabId, "tab closed");
     tab.lifecycle = "closed";
-    this.closedTabIds.add(tab.tabId);
+    this.rememberClosedTabId(tab.tabId);
     // tab 已不可再执行命令；不必为一个可能永久不回包的旧 CDP capture 保留 manager 引用。
     this.inFlightScreenshots.delete(tab.tabId);
     this.abandonedScreenshotCaptures.delete(tab.tabId);
@@ -3350,7 +3399,12 @@ export class BrowserGuestManager {
 
   private setupDownloadTracking(tab: ManagedTab, guest: GuestWebContents): void {
     tab.downloadCleanup?.();
-    if (!guest.session) return;
+    // Session 按 partition 共享（所有内置浏览器 tab 共用同一 partition），生命周期与进程一致，
+    // 不随 guest 销毁。清理闭包必须捕获 Session 本体：靠 guest.session 反查会在 guest 销毁后
+    // 抛 "Object has been destroyed"，从而让调用方误以为清理不可能成功。
+    const session = guest.session;
+    if (!session) return;
+    this.downloadSession = session;
     const listener = (_event: unknown, item: GuestDownloadItem, contents: GuestWebContents) => {
       if (contents !== guest || tab.guest !== guest || tab.lifecycle === "closed") return;
       const downloadId = `iab-download:${randomUUID()}`;
@@ -3377,8 +3431,8 @@ export class BrowserGuestManager {
         this.queuedDownloads.set(tab.tabId, queued);
       }
     };
-    guest.session.on("will-download", listener);
-    tab.downloadCleanup = () => guest.session?.removeListener("will-download", listener);
+    session.on("will-download", listener);
+    tab.downloadCleanup = () => session.removeListener("will-download", listener);
   }
 
   private waitForDownload(
@@ -3853,8 +3907,10 @@ export class BrowserGuestManager {
   ): Promise<GuestWebContents | null> {
     if (tab.lifecycle === "closed" || tab.guest !== guest) return null;
     const restored = await this.restoreGuestState(tab, guest);
-    if (!restored || tab.lifecycle === "closed" || tab.guest !== guest) {
-      if (tab.lifecycle !== "closed" && tab.guest === guest) {
+    // restoreGuestState 是 await：期间 tab 可能被关闭，必须重新判定。TS 的控制流收窄不跨
+    // await 失效，直接把 tab.lifecycle 与 "closed" 比较会被判为无重叠，故经函数参数重取。
+    if (!restored || isTabClosed(tab.lifecycle) || tab.guest !== guest) {
+      if (!isTabClosed(tab.lifecycle) && tab.guest === guest) {
         this.warn(`browser tab guest rebind restore failed tabId=${tab.tabId}`);
       }
       return null;
@@ -4225,9 +4281,29 @@ export class BrowserGuestManager {
     return tab.pendingCdpCommands === 0;
   }
 
-  /** 内存诊断计数器；只读 size。 */
+  /**
+   * 内存诊断计数器；只读 size。
+   *
+   * tab 级 Map 全部暴露：下载队列/请求/录制/等待者/会话名/可见性此前都不可见，泄漏在线上
+   * 既发现不了也无法回归验证（见 docs/specs/download-tracking-lifecycle.md）。
+   */
   collectMemoryDiagnostics(): Record<string, number> {
-    return { tabs: this.tabs.size, closedTabIds: this.closedTabIds.size };
+    return {
+      tabs: this.tabs.size,
+      closedTabIds: this.closedTabIds.size,
+      downloads: this.downloads.size,
+      queuedDownloads: this.queuedDownloads.size,
+      downloadWaiters: this.downloadWaiters.size,
+      waiters: this.waiters.size,
+      runningRequests: this.runningRequests.size,
+      recordings: this.recordings.size,
+      inFlightScreenshots: this.inFlightScreenshots.size,
+      sessionNames: this.sessionNames.size,
+      visibilityByScope: this.visibilityByScope.size,
+      // 本轮修复的对象：共享 Session 上的 will-download 监听器数。稳定值应等于当前
+      // attached 的 browser tab 数，不随 tab suspend/restore 增长。
+      willDownloadListeners: this.downloadSession?.listenerCount?.("will-download") ?? 0,
+    };
   }
 
   private detachGuest(tab: ManagedTab): void {
@@ -4239,17 +4315,16 @@ export class BrowserGuestManager {
     }
     this.pendingDialogs.delete(tab.tabId);
     try {
-      // Electron 会在 renderer 卸载 <webview> 时先销毁 guest；此时 listener 已随对象释放，
-      // 再调用 session.removeListener 只会产生无意义的 "Object has been destroyed" 日志。
-      if (!guestDestroyed) tab.downloadCleanup?.();
+      // listener 挂在按 partition 共享的 Session 上，不随 guest 销毁，必须无条件移除。
+      // 原先按 guestDestroyed 跳过，跳过之后 downloadCleanup 立即被置空 —— 监听器永久残留
+      // 在共享 Session 上，且此后没有任何句柄能移除它（每次 tab suspend/restore 各累积一条）。
+      tab.downloadCleanup?.();
     } catch (error) {
-      // guest renderer 被 Chromium 杀死后，旧 session 的 removeListener 也会抛
-      // "Object has been destroyed"；清理失败不能阻断替代 guest 的 CDP 重新绑定。
-      this.log?.(
-        `[browser-use] detachGuest download cleanup failed tabId=${tab.tabId} error=${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
+      // 防御分支：闭包持有 Session 本体，而 Session 的寿命等于进程，正常不该抛。真抛出来
+      // 说明「清理闭包不碰 guest」这条约定被打破了（例如有人改回 guest.session.removeListener），
+      // 此时 finally 仍会置空句柄 —— listener 会留在共享 Session 上，正是本轮修的那个 bug
+      // 被原样复现。所以必须留 warn 级痕迹，不能用 debug（生产不落盘）。
+      this.warn(`detachGuest download cleanup failed tabId=${tab.tabId}`, error);
     } finally {
       tab.downloadCleanup = undefined;
     }

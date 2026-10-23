@@ -20,10 +20,33 @@ function serializeRuntimeCall(fn: (...args: any[]) => unknown, ...args: unknown[
   return `(${fn.toString()})(${args.map((arg) => JSON.stringify(arg)).join(",")})`;
 }
 
+// 下面两个 runtime 函数由 serializeRuntimeCall 序列化后在页面上下文执行，真实运行环境是浏览器，
+// 因此合法使用 DOM。main 工程不带 dom lib（避免整个主进程误用 window/document），这里只声明
+// 实际用到的成员；本文件是模块，declare 不会泄漏到全局。
+type BrowserRuntimeElement = {
+  id: string;
+  tagName: string;
+  outerHTML: string;
+  innerText?: string;
+  value?: string;
+  style: { cssText: string };
+  getAttribute(name: string): string | null;
+  matches(selector: string): boolean;
+  getBoundingClientRect(): { x: number; y: number; width: number; height: number };
+  append(child: BrowserRuntimeElement): void;
+  remove(): void;
+};
+declare const document: {
+  elementsFromPoint(x: number, y: number): BrowserRuntimeElement[];
+  getElementById(id: string): BrowserRuntimeElement | null;
+  createElement(tag: string): BrowserRuntimeElement;
+  documentElement: BrowserRuntimeElement;
+};
+declare const CSS: { escape?: (value: string) => string } | undefined;
+
 function elementInfoRuntime(options: { x: number; y: number; includeNonInteractable?: boolean }) {
-  const cssEscape = (value: string) =>
-    globalThis.CSS?.escape?.(value) ?? value.replace(/[^\w-]/g, "\\$&");
-  const candidatesFor = (element: Element) => {
+  const cssEscape = (value: string) => CSS?.escape?.(value) ?? value.replace(/[^\w-]/g, "\\$&");
+  const candidatesFor = (element: BrowserRuntimeElement) => {
     const values: string[] = [];
     if (element.id) values.push(`#${cssEscape(element.id)}`);
     const testId = element.getAttribute("data-testid");
@@ -33,7 +56,7 @@ function elementInfoRuntime(options: { x: number; y: number; includeNonInteracta
     values.push(element.tagName.toLowerCase());
     return [...new Set(values)];
   };
-  const role = (element: Element) =>
+  const role = (element: BrowserRuntimeElement) =>
     element.getAttribute("role") ??
     (element.matches("button,input[type=button],input[type=submit]")
       ? "button"
@@ -42,7 +65,7 @@ function elementInfoRuntime(options: { x: number; y: number; includeNonInteracta
         : element.matches("input:not([type]),input[type=text],textarea")
           ? "textbox"
           : null);
-  const interactable = (element: Element) =>
+  const interactable = (element: BrowserRuntimeElement) =>
     Boolean(role(element) || element.matches("input,select,textarea,[tabindex],[contenteditable]"));
   return document
     .elementsFromPoint(options.x, options.y)
@@ -50,8 +73,7 @@ function elementInfoRuntime(options: { x: number; y: number; includeNonInteracta
     .map((element) => {
       const rect = element.getBoundingClientRect();
       const candidates = candidatesFor(element);
-      const visibleText =
-        (element as HTMLElement).innerText?.trim() || (element as HTMLInputElement).value || null;
+      const visibleText = element.innerText?.trim() || element.value || null;
       const ariaName = element.getAttribute("aria-label") || visibleText;
       return {
         tagName: element.tagName.toLowerCase(),
