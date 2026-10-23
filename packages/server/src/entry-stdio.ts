@@ -89,10 +89,6 @@ async function main() {
 
 function waitForAck(): Promise<HelloAckMessage> {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      reject(new Error("Handshake timeout: no hello-ack received within 10s"));
-    }, 10_000);
-
     let buffer = "";
     const onData = (chunk: Buffer) => {
       buffer += chunk.toString("utf-8");
@@ -122,6 +118,14 @@ function waitForAck(): Promise<HelloAckMessage> {
         }
       }
     };
+
+    // 超时分支也要摘监听并复位 buffer：原来只在解析成功时 removeListener，握手失败后
+    // 这段死代码会继续把 stdin 流量吞进无界字符串（还会和后续 RPC 抢数据）。
+    const timeout = setTimeout(() => {
+      process.stdin.removeListener("data", onData);
+      buffer = "";
+      reject(new Error("Handshake timeout: no hello-ack received within 10s"));
+    }, 10_000);
 
     process.stdin.on("data", onData);
   });

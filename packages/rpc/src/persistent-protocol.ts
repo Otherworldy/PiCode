@@ -18,6 +18,7 @@ import { Emitter, DisposableStore } from "./foundation.js";
 import {
   ChunkStream,
   HEADER_SIZE,
+  MAX_FRAME_BYTES,
   ProtocolMessage,
   ProtocolMessageType,
   writeProtocolMessage,
@@ -71,6 +72,14 @@ export class PersistentProtocol implements IMessagePassingProtocol, ConnectionFl
   private unackBytes = 0;
   private saturated = false;
   private overflowed = false;
+  /**
+   * 帧长非法只处理一次。
+   *
+   * 触发路径会同时做三件事：摘 onData、fire onSocketClose、关 socket。但关 socket 是异步的，
+   * 在它真正 close 之前可能还有 chunk 到达；对端持续发坏帧时没有这个护栏就会反复 fire
+   * onSocketClose，每次从 attempt 0 重连，退避形同虚设。
+   */
+  private frameLimitFired = false;
 
   // 心跳
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
@@ -151,6 +160,10 @@ export class PersistentProtocol implements IMessagePassingProtocol, ConnectionFl
     this.disposables = new DisposableStore();
     this.chunkStream = new ChunkStream();
     this.socket = newSocket;
+    // 新 socket 就是新会话。不复位的话，一次帧长非法会把 overflowed 永久打上，
+    // 之后真正的重放缓冲越界会被 abandonSession 的幂等检查静默吃掉。
+    this.overflowed = false;
+    this.frameLimitFired = false;
     this.bindSocket();
 
     // 重放未确认的消息
@@ -178,6 +191,25 @@ export class PersistentProtocol implements IMessagePassingProtocol, ConnectionFl
       const id = header.readUInt32BE(1);
       const ack = header.readUInt32BE(5);
       const length = header.readUInt32BE(9);
+
+      if (length > MAX_FRAME_BYTES) {
+        // 帧边界已不可信，不能继续解析。走 abandonSession 而不是静默丢弃：
+        // 这条会话不可能无损续传，对端要能感知到并重新订阅。
+        //
+        // 这里刻意不调 dispose()：RemoteAgentConnection 的重连订阅挂在 onSocketClose
+        // 上（rpc/remote.ts），dispose() 会把它一起拆掉，连接就永久哑掉、pending 永不 settle。
+        this.chunkStream.clear();
+        if (this.frameLimitFired) {
+          return;
+        }
+        this.frameLimitFired = true;
+        // 先摘掉 onData：socket.close() 是异步的，不摘的话关闭前到达的 chunk 会再次进这里。
+        this.disposables.dispose();
+        this.abandonSession();
+        this._onSocketClose.fire();
+        this.socket.dispose();
+        return;
+      }
 
       const totalFrameLength = HEADER_SIZE + length;
       if (this.chunkStream.byteLength < totalFrameLength) {
@@ -245,6 +277,12 @@ export class PersistentProtocol implements IMessagePassingProtocol, ConnectionFl
     this.writeMessage(
       new ProtocolMessage(ProtocolMessageType.Disconnect, 0, this.incomingAckId, VSBuffer.alloc(0)),
     );
+    // 放弃会话的语义就是「重放缓冲已不可续传」。不清的话这些条目会带着原 queuedAt 一起
+    // 重放到新连接上：ackCheck 一看到超过宽限窗就再次 abandonSession，反而把刚恢复的
+    // 新会话发一帧 Disconnect。
+    this.outgoingUnackMsg = [];
+    this.unackBytes = 0;
+    this.saturated = false;
     this._onClose.fire();
   }
 

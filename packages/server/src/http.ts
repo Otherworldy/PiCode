@@ -69,13 +69,43 @@ function wrapWebSocket(ws: WebSocket): ISocket {
       ws.close();
     },
     drain() {
-      return Promise.resolve();
+      // 真 drain：bufferedAmount 降到阈值以下才算「可以继续写」。
+      //
+      // 这里**不能**等 bufferedamountlow —— ws 的 WebSocket 没有这个事件（也没有
+      // bufferedAmountLowThreshold 属性），只在底层 net socket 上有 'drain'，而 net 的
+      // drain 只表示内核缓冲排空，不代表 ws 自己的发送队列已空。用 ws.bufferedAmount
+      // 轮询是唯一可靠的口径；16ms 间隔与浏览器侧的节奏保持一致。
+      if (ws.readyState !== ws.OPEN || ws.bufferedAmount <= WS_DRAIN_THRESHOLD_BYTES) {
+        return Promise.resolve();
+      }
+      return new Promise<void>((resolve) => {
+        const startedAt = Date.now();
+        const tick = () => {
+          if (
+            ws.readyState !== ws.OPEN ||
+            ws.bufferedAmount <= WS_DRAIN_THRESHOLD_BYTES ||
+            Date.now() - startedAt >= WS_DRAIN_MAX_WAIT_MS
+          ) {
+            // 兜底：宁可超时后继续写，也不能让流控把连接卡死。
+            resolve();
+            return;
+          }
+          setTimeout(tick, WS_DRAIN_POLL_INTERVAL_MS).unref?.();
+        };
+        setTimeout(tick, WS_DRAIN_POLL_INTERVAL_MS).unref?.();
+      });
     },
     dispose() {
       ws.close();
     },
   };
 }
+
+/** drain 的低水位：低于它就认为写队列已经排空。 */
+const WS_DRAIN_THRESHOLD_BYTES = 65536;
+/** drain 的最长等待：超过就放行，避免慢客户端把发送方永久挂住。 */
+const WS_DRAIN_MAX_WAIT_MS = 1_000;
+const WS_DRAIN_POLL_INTERVAL_MS = 16;
 
 const log = (...args: unknown[]) =>
   console.log(formatLogPrefix("zcode-server:http", process.pid), ...args);
@@ -121,8 +151,47 @@ function setupChannelServer(
   });
 }
 
+/** 一次远程连接从握手完成到浏览器接管 WS 的最长等待。 */
+const REMOTE_CONNECTION_PENDING_TTL_MS = 60_000;
+
+interface PendingRemoteConnection {
+  connection: RemoteConnection;
+  timer: NodeJS.Timeout;
+}
+
 /** 存储 web 模式下的远程连接，key 为随机 ID */
-const remoteConnections = new Map<string, RemoteConnection>();
+const remoteConnections = new Map<string, PendingRemoteConnection>();
+
+/**
+ * 暂存一条已建立、但浏览器还没接管的远程连接。
+ *
+ * 必须有 TTL。这里的 value 背后是一条 ssh / wsl / docker 远端 zcode-server 子进程，而消费
+ * 它的 `GET /ws/remote/:id` 建立在「用户随后会打开页面」这个乐观假设上。刷新页面、双击、
+ * 导航被中断、探针重复调用都会让假设落空 —— 没有 TTL 就是每个废弃请求泄漏一个孤儿子进程
+ * 加一条管道 fd，而 web server 是常驻的。
+ */
+function retainRemoteConnection(id: string, connection: RemoteConnection): void {
+  const timer = setTimeout(() => {
+    // 已被 WS 接管（表项换人或已删）时什么都不做。
+    if (remoteConnections.get(id)?.connection !== connection) return;
+    remoteConnections.delete(id);
+    void connection.disposeAndWait().catch((error: unknown) => {
+      log("[remote] pending connection dispose failed", String(error));
+    });
+  }, REMOTE_CONNECTION_PENDING_TTL_MS);
+  // 兜底定时器不能拖住进程退出。
+  timer.unref?.();
+  remoteConnections.set(id, { connection, timer });
+}
+
+/** 取走一条待接管的连接；返回后 TTL 不再生效，所有权归调用方。 */
+function takeRemoteConnection(id: string): RemoteConnection | undefined {
+  const pending = remoteConnections.get(id);
+  if (!pending) return undefined;
+  clearTimeout(pending.timer);
+  remoteConnections.delete(id);
+  return pending.connection;
+}
 
 function generateId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -355,7 +424,7 @@ export function createHttpServer(
       const backend = await createRemoteBackend(body);
       const connection = await connectRemote(backend);
       const id = generateId();
-      remoteConnections.set(id, connection);
+      retainRemoteConnection(id, connection);
 
       return c.json({ id });
     } catch (err: unknown) {
@@ -369,19 +438,21 @@ export function createHttpServer(
     "/ws/remote/:id",
     upgradeWebSocket((c) => {
       const id = c.req.param("id");
+      // 接管后的所有权：WS 关闭时必须 dispose，否则关一个标签页就留下一条远端
+      // ssh/wsl/docker 子进程与它的管道，直到 web server 退出。
+      let owned: RemoteConnection | undefined;
       return {
         onOpen(_event, ws) {
           if (!id) {
             ws.close(4000, "Missing remote connection id");
             return;
           }
-          const connection = remoteConnections.get(id);
+          const connection = takeRemoteConnection(id);
           if (!connection) {
             ws.close(4004, "Remote connection not found");
             return;
           }
-          // 一个连接只给一个 WS 客户端使用，取出后从 Map 移除
-          remoteConnections.delete(id);
+          owned = connection;
 
           // 将远程 services 包装为 ServiceCollection，复用 exposeOnChannelServer 统一注册
           const remoteServices = new ServiceCollection()
@@ -391,6 +462,14 @@ export function createHttpServer(
             .register(ITerminalService, connection.services.terminalService);
 
           setupChannelServer(ws.raw as WebSocket, remoteServices, "web-remote-replayable");
+        },
+        onClose() {
+          const connection = owned;
+          owned = undefined;
+          if (!connection) return;
+          void connection.disposeAndWait().catch((error: unknown) => {
+            log("[remote] connection dispose failed", String(error));
+          });
         },
       };
     }),

@@ -9,6 +9,11 @@ import {
 import type { IServiceAccessor } from "@zcode/services";
 import { RemoteServiceAccess } from "./remoteServiceAccess.js";
 
+/** drain 的低水位：低于它就认为写队列已经排空。 */
+const WS_DRAIN_THRESHOLD_BYTES = 65536;
+const WS_DRAIN_MAX_WAIT_MS = 1_000;
+const WS_DRAIN_POLL_INTERVAL_MS = 16;
+
 export interface WebSocketConnectionCloseEvent {
   code: number;
   reason: string;
@@ -51,7 +56,26 @@ function wrapBrowserWebSocket(ws: WebSocket): ISocket {
       ws.close();
     },
     drain() {
-      return Promise.resolve();
+      // 浏览器 WebSocket 没有 bufferedamountlow 事件，只能轮询 bufferedAmount。
+      // 连接已关、队列已排空、或等待超过上限时立刻 resolve——流控不能把发送方卡死。
+      if (ws.readyState !== WebSocket.OPEN || ws.bufferedAmount <= WS_DRAIN_THRESHOLD_BYTES) {
+        return Promise.resolve();
+      }
+      return new Promise<void>((resolve) => {
+        const startedAt = Date.now();
+        const tick = () => {
+          if (
+            ws.readyState !== WebSocket.OPEN ||
+            ws.bufferedAmount <= WS_DRAIN_THRESHOLD_BYTES ||
+            Date.now() - startedAt >= WS_DRAIN_MAX_WAIT_MS
+          ) {
+            resolve();
+            return;
+          }
+          setTimeout(tick, WS_DRAIN_POLL_INTERVAL_MS);
+        };
+        setTimeout(tick, WS_DRAIN_POLL_INTERVAL_MS);
+      });
     },
     dispose() {
       ws.close();

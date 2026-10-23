@@ -105,6 +105,11 @@ export class IPCServer<TContext = string>
   readonly onDidRemoveConnection = this._onDidRemoveConnection.event;
 
   private readonly disposables = new DisposableStore();
+  /**
+   * 连接级 disposables。每条连接的清理必须跟着连接走：塞进 this.disposables 会随
+   * connect/disconnect 次数单调增长，且闭包持有 protocol / ChannelServer / ChannelClient 整个对象图。
+   */
+  private readonly connectionDisposables = new Set<DisposableStore>();
 
   get connections(): Connection<TContext>[] {
     return [...this._connections];
@@ -113,10 +118,13 @@ export class IPCServer<TContext = string>
   constructor(onDidClientConnect: Event<ClientConnectionEvent>) {
     this.disposables.add(
       onDidClientConnect(({ protocol, onDidClientDisconnect }) => {
+        const connectionDisposables = new DisposableStore();
+        this.connectionDisposables.add(connectionDisposables);
+        let connection: Connection<TContext> | null = null;
+
         // 等待客户端发来的第一条消息：ctx（客户端身份标识）
         const onFirstMessage = Event.once(protocol.onMessage);
-
-        this.disposables.add(
+        connectionDisposables.add(
           onFirstMessage((msg) => {
             const reader = new BufferReader(msg);
             const ctx = deserialize(reader) as TContext;
@@ -128,19 +136,24 @@ export class IPCServer<TContext = string>
             // 把已注册的 channel 推送给新连接
             this.channels.forEach((channel, name) => channelServer.registerChannel(name, channel));
 
-            const connection: Connection<TContext> = { channelServer, channelClient, ctx };
+            connection = { channelServer, channelClient, ctx };
             this._connections.add(connection);
             this._onDidAddConnection.fire(connection);
+          }),
+        );
 
-            // 客户端断开时清理
-            this.disposables.add(
-              onDidClientDisconnect(() => {
-                channelServer.dispose();
-                channelClient.dispose();
-                this._connections.delete(connection);
-                this._onDidRemoveConnection.fire(connection);
-              }),
-            );
+        // 断开时清理：连接可能还没发第一条消息（connection 为 null），此时只需释放订阅本身。
+        connectionDisposables.add(
+          onDidClientDisconnect(() => {
+            const current = connection;
+            if (current) {
+              current.channelServer.dispose();
+              current.channelClient.dispose();
+              this._connections.delete(current);
+              this._onDidRemoveConnection.fire(current);
+            }
+            this.connectionDisposables.delete(connectionDisposables);
+            connectionDisposables.dispose();
           }),
         );
       }),
@@ -255,6 +268,10 @@ export class IPCServer<TContext = string>
 
   dispose(): void {
     this.disposables.dispose();
+    for (const store of this.connectionDisposables) {
+      store.dispose();
+    }
+    this.connectionDisposables.clear();
     for (const connection of this._connections) {
       connection.channelClient.dispose();
       connection.channelServer.dispose();

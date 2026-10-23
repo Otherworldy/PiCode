@@ -1,4 +1,4 @@
-import { spawn, execFile } from "node:child_process";
+import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import type { DockerConnectOptions } from "@zcode/shared";
@@ -45,6 +45,19 @@ export class DockerBackend implements IRemoteBackend {
   private readonly dockerCommand = resolveDockerCommand();
   private readonly options: DockerConnectOptions;
   private resolvedInfoPromise: Promise<ResolvedDockerInfo> | null = null;
+  /**
+   * 本 backend 自己 spawn 的 docker 子进程。
+   *
+   * 原来 docker 侧完全不跟踪，`dispose()` 是空实现：容器内的 `sh -lc` 若忽略 stdin EOF
+   * （或连接半开），`docker.exe` 与它的管道会永久驻留 —— 一天重连几次就累积几个孤儿进程 +
+   * 4 个 fd 各一个。wsl-backend 早就有这套 `ownedChildren` 收口，这里补齐。
+   */
+  private readonly ownedChildren = new Map<
+    ChildProcess,
+    { closed: Promise<void>; resolveClosed: () => void }
+  >();
+  private disposeInFlight: Promise<void> | null = null;
+  private disposed = false;
 
   constructor(options: DockerConnectOptions) {
     this.options = options;
@@ -180,6 +193,7 @@ export class DockerBackend implements IRemoteBackend {
         },
       );
 
+      this.trackOwnedChild(child);
       child.once("error", reject);
       child.once("spawn", () => {
         const stdin = child.stdin;
@@ -234,10 +248,6 @@ export class DockerBackend implements IRemoteBackend {
     return normalizeDockerOutput(
       await this.execSimple(`cat ${quotePosixShellArg(resolvedRemotePath)}`),
     );
-  }
-
-  dispose(): void {
-    // Docker backend 的命令都是一次性子进程，没有常驻连接需要显式清理。
   }
 
   private async ensureAvailable(): Promise<void> {
@@ -330,7 +340,7 @@ export class DockerBackend implements IRemoteBackend {
   private async execDirect(commandArgs: string[]): Promise<string> {
     const container = await this.resolveContainer();
     return new Promise((resolve, reject) => {
-      execFile(
+      const child = execFile(
         this.dockerCommand,
         buildDockerExecArgs(container.name, commandArgs),
         {
@@ -347,6 +357,82 @@ export class DockerBackend implements IRemoteBackend {
           resolve(normalizeDockerOutput(stdout));
         },
       );
+      this.trackOwnedChild(child);
     });
+  }
+
+  dispose(): void {
+    // 与 wsl-backend 同构：先同步关闭本 backend 子进程的 stdin，宽限期后只 kill 已证明归属
+    // 的 child（绝不 terminate 容器本身）。容器内的进程靠 stdin EOF 自行退出。
+    void this.disposeAndWait();
+  }
+
+  disposeAndWait(options?: {
+    graceTimeoutMs?: number;
+    killWaitTimeoutMs?: number;
+  }): Promise<void> {
+    if (this.disposeInFlight) {
+      return this.disposeInFlight;
+    }
+    this.disposed = true;
+    const graceTimeoutMs = Math.max(options?.graceTimeoutMs ?? 300, 0);
+    const killWaitTimeoutMs = Math.max(options?.killWaitTimeoutMs ?? 250, 0);
+    const children = Array.from(this.ownedChildren.entries());
+    for (const [child] of children) {
+      this.endOwnedChildInput(child);
+    }
+    this.disposeInFlight = Promise.all(
+      children.map(async ([child, state]) => {
+        if (await this.waitForOwnedChildClose(state.closed, graceTimeoutMs)) {
+          return;
+        }
+        if (this.ownedChildren.has(child)) {
+          child.kill();
+        }
+        await this.waitForOwnedChildClose(state.closed, killWaitTimeoutMs);
+      }),
+    ).then(() => undefined);
+    return this.disposeInFlight;
+  }
+
+  private trackOwnedChild(child: ChildProcess): void {
+    let resolveClosed!: () => void;
+    const closed = new Promise<void>((resolve) => {
+      resolveClosed = resolve;
+    });
+    const finish = () => {
+      const state = this.ownedChildren.get(child);
+      if (!state) return;
+      this.ownedChildren.delete(child);
+      state.resolveClosed();
+    };
+    this.ownedChildren.set(child, { closed, resolveClosed });
+    child.once("error", finish);
+    child.once("exit", finish);
+    child.once("close", finish);
+  }
+
+  private endOwnedChildInput(child: ChildProcess): void {
+    if (!child.stdin || child.stdin.writableEnded) {
+      return;
+    }
+    try {
+      child.stdin.end();
+    } catch {
+      // stdin 已异常关闭时继续进入本 child 的 kill fallback。
+    }
+  }
+
+  private async waitForOwnedChildClose(closed: Promise<void>, timeoutMs: number): Promise<boolean> {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<boolean>((resolve) => {
+      timeout = setTimeout(() => resolve(false), timeoutMs);
+      timeout.unref?.();
+    });
+    try {
+      return await Promise.race([closed.then(() => true), timedOut]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
   }
 }

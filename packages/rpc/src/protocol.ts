@@ -95,6 +95,12 @@ export class ChunkStream {
     this.totalLength += chunk.byteLength;
   }
 
+  /** 丢弃全部缓冲。帧长非法时用：帧边界已不可信，继续解析只会得到垃圾帧。 */
+  clear(): void {
+    this.chunks = [];
+    this.totalLength = 0;
+  }
+
   /**
    * 预览前 byteCount 字节，但不消费底层缓冲。
    *
@@ -206,6 +212,15 @@ export enum ProtocolMessageType {
 
 export const HEADER_SIZE = 13; // 1 + 4 + 4 + 4
 
+/**
+ * 单帧 body 上限。
+ *
+ * rpc 层承载的最大合法载荷是文件预览的 25MiB base64（fileService 的硬上限）与几 MB 的截图 PNG，
+ * 这里留到 64MiB。不设上限时，对端只需发一个 length=0xFFFFFFFF 的帧头，ChunkStream 就会
+ * 无界增长到 OOM——Web 远控的 WebSocket 直接 new SocketProtocol，这条路径可从网络触发。
+ */
+export const MAX_FRAME_BYTES = 64 * 1024 * 1024;
+
 export class ProtocolMessage {
   constructor(
     public readonly type: ProtocolMessageType,
@@ -239,6 +254,7 @@ export class SocketProtocol implements IMessagePassingProtocol {
 
   private readonly chunkStream = new ChunkStream();
   private readonly disposables = new DisposableStore();
+  private disposed = false;
 
   constructor(private socket: ISocket) {
     this.disposables.add(
@@ -254,6 +270,12 @@ export class SocketProtocol implements IMessagePassingProtocol {
   }
 
   private writeMessage(msg: ProtocolMessage): void {
+    // dispose 之后不能再写。wrapStdioStream 的 dispose 只 end() stdin、且 stdin 上没有
+    // error 监听，write-after-end 会变成 uncaughtException（host 侧直接 process.exit(1)）。
+    // ws 类实现有 readyState 守卫，但这条守卫必须由协议层统一兜住。
+    if (this.disposed) {
+      return;
+    }
     this.socket.write(writeProtocolMessage(msg));
   }
 
@@ -268,6 +290,18 @@ export class SocketProtocol implements IMessagePassingProtocol {
       const _id = header.readUInt32BE(1);
       const _ack = header.readUInt32BE(5);
       const length = header.readUInt32BE(9);
+
+      if (length > MAX_FRAME_BYTES) {
+        // 这里不能 throw：readMessages 跑在 socket 的 onData 回调里，抛出去会变成
+        // uncaughtException，而 host 对它的处理是 process.exit(1)——单帧损坏会带走
+        // 整个 host 的所有会话。
+        this.chunkStream.clear();
+        this.dispose();
+        // 只摘自己的监听，上层不知道连接已失效：SocketServer 依赖 socket.onClose 清理
+        // ChannelServer 和连接登记。不关底层 socket 的话，这条连接会一直挂着不释放。
+        this.socket.dispose();
+        return;
+      }
 
       const totalFrameLength = HEADER_SIZE + length;
       if (this.chunkStream.byteLength < totalFrameLength) {
@@ -301,6 +335,7 @@ export class SocketProtocol implements IMessagePassingProtocol {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.disposables.dispose();
     this._onMessage.dispose();
   }

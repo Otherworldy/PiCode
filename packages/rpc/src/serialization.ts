@@ -68,7 +68,19 @@ function readIntVQL(reader: IReader): number {
   let value = 0;
   for (let n = 0; ; n += 7) {
     const next = reader.read(1);
-    value |= (next.buffer[0] & 0b01111111) << n;
+    if (next.byteLength !== 1) {
+      // 越界读原本会返回空 Buffer，next.buffer[0] 是 undefined，位运算后静默变成 0。
+      // 那会让「长度字段被截断」伪装成一个合法的小长度，把损坏数据当正常内容解析。
+      throw new Error("RPC 反序列化越界：长度字段被截断");
+    }
+    if (n > 28) {
+      // 编码侧 writeInt32VQL 按 32 位无符号处理，最多 5 字节（n = 0/7/14/21/28）。
+      throw new Error("RPC 反序列化拒绝超长 VQL：超过 32 位");
+    }
+    // 按 32 位有符号回绕拼装：负 int32（如 -1）走同一个 5 字节编码，读回来仍是负数，
+    // 编码/解码保持对称。损坏帧的防御交给调用方——数组长度等「不可能为负」的字段
+    // 自行检查 `length < 0`，不能靠这里改成无符号来兜（那会把 -1 变成 4294967295）。
+    value = (value | ((next.buffer[0] & 0b01111111) << n)) | 0;
     if (!(next.buffer[0] & 0b10000000)) {
       return value;
     }
@@ -190,20 +202,51 @@ export function serialize(writer: IWriter, data: any): void {
 /**
  * 从 reader 反序列化数据
  */
+/**
+ * 单个数组的元素个数上限。
+ *
+ * 与帧长上限是两道独立的闸：帧可以很小却声明一个极大的元素个数，越界读不报错时
+ * `for (i < length) result.push(undefined)` 会空转数亿次。1e7 远大于任何合法载荷
+ * （文件列表是最大的数组，量级在 1e5），又足够小到不会长时间空转。
+ */
+const MAX_DESERIALIZE_ARRAY_LENGTH = 10_000_000;
+
+/**
+ * 读满指定字节数，不足则抛错。
+ *
+ * `BufferReader.read` 越界时按 clamp 返回短 buffer，于是 `[0x01][len=100]"abc"`
+ * 会安静地解出一个短字符串 —— 损坏的帧被当成合法但被裁剪的数据。
+ */
+function readExact(reader: IReader, bytes: number): VSBuffer {
+  const result = reader.read(bytes);
+  if (result.byteLength !== bytes) {
+    throw new Error(`RPC 反序列化越界：期望 ${bytes} 字节，实际 ${result.byteLength}`);
+  }
+  return result;
+}
+
 export function deserialize(reader: IReader): any {
-  const type = reader.read(1).readUInt8(0);
+  const typeBuffer = reader.read(1);
+  if (typeBuffer.byteLength !== 1) {
+    // 数组循环里一旦下标越界，下一次 deserialize 就会走到这里抛错，而不是继续 push undefined。
+    throw new Error("RPC 反序列化越界：数据被截断");
+  }
+  const type = typeBuffer.readUInt8(0);
 
   switch (type) {
     case DataType.Undefined:
       return undefined;
     case DataType.String:
-      return reader.read(readIntVQL(reader)).toString();
+      return readExact(reader, readIntVQL(reader)).toString();
     case DataType.Buffer:
-      return reader.read(readIntVQL(reader)).buffer;
+      return readExact(reader, readIntVQL(reader)).buffer;
     case DataType.VSBuffer:
-      return reader.read(readIntVQL(reader));
+      return readExact(reader, readIntVQL(reader));
     case DataType.Array: {
       const length = readIntVQL(reader);
+      if (length < 0 || length > MAX_DESERIALIZE_ARRAY_LENGTH) {
+        throw new Error(`RPC 反序列化拒绝非法数组长度：length=${length}`);
+      }
       const result: any[] = [];
       for (let i = 0; i < length; i++) {
         result.push(deserialize(reader));
@@ -211,7 +254,10 @@ export function deserialize(reader: IReader): any {
       return result;
     }
     case DataType.Object:
-      return JSON.parse(reader.read(readIntVQL(reader)).toString(), decodeRpcJsonValue);
+      return JSON.parse(
+        readExact(reader, readIntVQL(reader)).toString(),
+        decodeRpcJsonValue,
+      );
     case DataType.Int:
       return readIntVQL(reader);
   }

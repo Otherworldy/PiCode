@@ -77,7 +77,26 @@ function wrapWebSocket(ws: WebSocket): ISocket {
       ws.close();
     },
     drain() {
-      return Promise.resolve();
+      // 与 packages/server 的 ws 包装保持一致：按 bufferedAmount 轮询判定，
+      // 不伪造「已经排空」的信号。
+      if (ws.readyState !== ws.OPEN || ws.bufferedAmount <= 65536) {
+        return Promise.resolve();
+      }
+      return new Promise<void>((resolve) => {
+        const startedAt = Date.now();
+        const tick = () => {
+          if (
+            ws.readyState !== ws.OPEN ||
+            ws.bufferedAmount <= 65536 ||
+            Date.now() - startedAt >= 1_000
+          ) {
+            resolve();
+            return;
+          }
+          setTimeout(tick, 16);
+        };
+        setTimeout(tick, 16);
+      });
     },
     dispose() {
       ws.close();

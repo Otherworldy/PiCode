@@ -55,10 +55,10 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
   }
 
   private send(header: any, body: any = undefined): void {
-    const writer = new BufferWriter();
-    serialize(writer, header);
-    serialize(writer, body);
     try {
+      const writer = new BufferWriter();
+      serialize(writer, header);
+      serialize(writer, body);
       this.protocol.send(writer.buffer);
     } catch {
       /* noop */
@@ -66,35 +66,65 @@ export class ChannelServer<TContext = string> implements IChannelServer<TContext
   }
 
   private onRawMessage(message: VSBuffer): void {
-    const reader = new BufferReader(message);
-    const header = deserialize(reader);
-    const body = deserialize(reader);
-    const type = header[0] as RequestType;
+    let requestId: number | undefined;
+    try {
+      const reader = new BufferReader(message);
+      const header = deserialize(reader);
+      const body = deserialize(reader);
+      const type = header[0] as RequestType;
+      if (typeof header[1] === "number") {
+        requestId = header[1];
+      }
 
-    switch (type) {
-      case RequestType.Promise:
-        this.onPromise({
-          type,
-          id: header[1],
-          channelName: header[2],
-          name: header[3],
-          arg: body,
-        });
-        return;
-      case RequestType.EventListen:
-        this.onEventListen({
-          type,
-          id: header[1],
-          channelName: header[2],
-          name: header[3],
-          arg: body,
-        });
-        return;
-      case RequestType.PromiseCancel:
-      case RequestType.EventDispose:
-        this.disposeActiveRequest(header[1]);
-        return;
+      switch (type) {
+        case RequestType.Promise:
+          this.onPromise({
+            type,
+            id: header[1],
+            channelName: header[2],
+            name: header[3],
+            arg: body,
+          });
+          return;
+        case RequestType.EventListen:
+          this.onEventListen({
+            type,
+            id: header[1],
+            channelName: header[2],
+            name: header[3],
+            arg: body,
+          });
+          return;
+        case RequestType.PromiseCancel:
+        case RequestType.EventDispose:
+          this.disposeActiveRequest(header[1]);
+          return;
+      }
+    } catch (error) {
+      this.handleRequestFailure(requestId, error);
     }
+  }
+
+  /**
+   * RPC 服务端的异常边界：单帧处理失败不能冒泡到协议层 onMessage 回调之外。
+   * 冒泡会被 host 的 uncaughtException 处理器接走并 process.exit(1)，同一窗口下所有会话一起挂。
+   * 能识别请求 id 时回 PromiseError，让客户端 promise 正常 reject；识别不了（帧损坏）就丢弃。
+   */
+  private handleRequestFailure(requestId: number | undefined, error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[rpc] request ${requestId ?? "<unknown>"} failed: ${message}`, error);
+    if (requestId === undefined) {
+      return;
+    }
+    this.sendResponse({
+      id: requestId,
+      data: {
+        message,
+        name: error instanceof Error ? error.name : "RPCError",
+        stack: error instanceof Error ? error.stack?.split("\n") : undefined,
+      },
+      type: ResponseType.PromiseError,
+    });
   }
 
   private onPromise(request: {

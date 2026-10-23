@@ -53,6 +53,8 @@ import {
   IZCodeTaskService,
   IZCodeSessionService,
   ICuaPipSessionService,
+  ITerminalService,
+  IFileWatcherService,
   createZCodeAgentConnectionScope,
   type ZCodeAgentV4ClientMode,
   collectServiceMemoryDiagnostics,
@@ -1983,6 +1985,113 @@ function createControllerRoutedTaskService(
   });
 }
 
+/**
+ * 按 RPC 连接回收 terminal / fileWatcher 资源。
+ *
+ * 这两个 service 是 host 级单例，资源（pty 进程、fs.watch 句柄）只由调用方显式释放。
+ * renderer 刷新、渲染进程崩溃或窗口关闭不会走 UI 的 unmount 路径，host 侧会留下无人认领的
+ * pty 与 watcher 直到 app 退出（terminalService 的内存诊断注释记录了这个只增不减的现象）。
+ *
+ * 这里按连接包装服务：记录本连接创建的 id，连接 dispose 时批量释放。包装只作用于本次
+ * attachment，同一 host 内其他窗口的资源不受影响。详见 docs/specs/rpc-connection-resource-ownership.md。
+ */
+function scopeConnectionOwnedResources(params: {
+  services: ServiceCollection;
+  overrides: Map<string, unknown>;
+}): { dispose: () => void } {
+  const { services, overrides } = params;
+  const terminalIds = new Set<string>();
+  const watcherIds = new Set<string>();
+  // create/watch 是 await：连接可能在等待期间销毁。dispose 之后返回的 id 必须就地释放，
+  // 不能登记进一个再也不会被 drain 的 Set（那正是这次要修的泄漏）。
+  let disposed = false;
+
+  const releaseTerminal = (id: string): void => {
+    void terminal?.dispose({ id }).catch((error: unknown) => {
+      logger.warn(`[host] failed to release terminal on connection close id=${id}`, error);
+    });
+  };
+  const releaseWatcher = (id: string): void => {
+    void fileWatcher?.unwatch({ id }).catch((error: unknown) => {
+      logger.warn(`[host] failed to release file watcher on connection close id=${id}`, error);
+    });
+  };
+
+  const terminal = services.getOptional(ITerminalService);
+  if (terminal) {
+    overrides.set(
+      ITerminalService.channelName,
+      new Proxy(terminal, {
+        get(target, property, receiver) {
+          if (property === "create") {
+            return async (createParams: Parameters<ITerminalService["create"]>[0]) => {
+              const created = await target.create(createParams);
+              if (disposed) {
+                releaseTerminal(created.id);
+              } else {
+                terminalIds.add(created.id);
+              }
+              return created;
+            };
+          }
+          if (property === "dispose") {
+            return async (disposeParams: { id: string }) => {
+              terminalIds.delete(disposeParams.id);
+              return target.dispose(disposeParams);
+            };
+          }
+          const value = Reflect.get(target, property, receiver) as unknown;
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      }),
+    );
+  }
+
+  const fileWatcher = services.getOptional(IFileWatcherService);
+  if (fileWatcher) {
+    overrides.set(
+      IFileWatcherService.channelName,
+      new Proxy(fileWatcher, {
+        get(target, property, receiver) {
+          if (property === "watch") {
+            return async (watchParams: Parameters<IFileWatcherService["watch"]>[0]) => {
+              const created = await target.watch(watchParams);
+              if (disposed) {
+                releaseWatcher(created.id);
+              } else {
+                watcherIds.add(created.id);
+              }
+              return created;
+            };
+          }
+          if (property === "unwatch") {
+            return async (unwatchParams: { id: string }) => {
+              watcherIds.delete(unwatchParams.id);
+              return target.unwatch(unwatchParams);
+            };
+          }
+          const value = Reflect.get(target, property, receiver) as unknown;
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      }),
+    );
+  }
+
+  return {
+    dispose() {
+      disposed = true;
+      for (const id of terminalIds) {
+        releaseTerminal(id);
+      }
+      terminalIds.clear();
+      for (const id of watcherIds) {
+        releaseWatcher(id);
+      }
+      watcherIds.clear();
+    },
+  };
+}
+
 function exposeServicesOnMessagePort(
   port: Electron.MessagePortMain,
   services: ServiceCollection,
@@ -2043,6 +2152,9 @@ function exposeServicesOnMessagePort(
       ),
     );
   }
+  // 必须在 exposeOnChannelServer 之前接线：pty 与 fs.watch 是 host 级单例，只有本连接
+  // 自己知道哪些 id 是它创建的。
+  const connectionOwnedResources = scopeConnectionOwnedResources({ services, overrides });
   services.exposeOnChannelServer(server, overrides);
   let disposed = false;
   let flowUpdateChain = Promise.resolve();
@@ -2078,6 +2190,9 @@ function exposeServicesOnMessagePort(
       void forwardFlowState("closed")
         .catch(() => {})
         .then(() => connectionScope?.dispose());
+      // 连接销毁前释放本连接创建的 pty 与 watcher；顺序无所谓，但必须在 rawServer.dispose()
+      // 之前读登记表（dispose 之后不会再有新 id 进来）。
+      connectionOwnedResources.dispose();
       rawServer.dispose();
       protocol.disconnect();
     },
