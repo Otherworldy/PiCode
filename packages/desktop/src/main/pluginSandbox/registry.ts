@@ -1,4 +1,4 @@
-import type { PluginSandboxHandle } from "@zcode/shared/mcp-apps";
+import { MCP_APPS_HTML_MAX_BYTES, type PluginSandboxHandle } from "@zcode/shared/mcp-apps";
 import { randomUUID } from "node:crypto";
 import type {
   PluginSandboxRecord,
@@ -13,6 +13,14 @@ import {
 import { buildPluginSandboxCsp } from "./csp.js";
 
 const DEFAULT_TTL_MS = 6 * 60 * 60 * 1000;
+/**
+ * 单份 MCP App HTML 的注册上限 —— 直接复用 Host 侧的 `MCP_APPS_HTML_MAX_BYTES`。
+ *
+ * 不能另立一个更小的常量：Host 的 pluginUiBridgeService 已用 16 MiB 放行并把 html 交过来，
+ * 下游再按 4 MiB 拒绝就形成「上游说通过、沙箱说超限」的带宽冲突（官方 pdf-server 示例的
+ * 单文件页面就有 4.3 MB）。
+ */
+const MAX_SANDBOX_HTML_BYTES = MCP_APPS_HTML_MAX_BYTES;
 const DEFAULT_MAX_ENTRIES = 64;
 /** 与 HTML transient activation 一致：一次输入事件给 5 秒窗口，一次性消费。 */
 export const PLUGIN_SANDBOX_USER_GESTURE_TTL_MS = 5_000;
@@ -132,6 +140,11 @@ export function createPluginSandboxRegistry(
         (input.pluginId || input.serverName || input.permissions?.length)
       )
         throw new Error("Invalid Gen UI capabilities");
+      if (Buffer.byteLength(input.html, "utf8") > MAX_SANDBOX_HTML_BYTES) {
+        throw new Error(
+          `MCP App HTML exceeds ${MAX_SANDBOX_HTML_BYTES} bytes; register a smaller resource`,
+        );
+      }
       const observedAt = now();
       pruneExpired(observedAt);
       const key = idempotencyKey(input);

@@ -27,6 +27,11 @@ export interface PluginSandboxPermissionGate {
     requestingOrigin?: string;
     mediaType?: string;
   }): boolean;
+  /**
+   * 丢弃全部同意记录。清除浏览器数据时调用：用户点这个按钮的预期是「回到未授权」，
+   * 重装同名插件不该静默继承上一版的摄像头/麦克风许可。
+   */
+  resetConsent(): void;
 }
 
 const EMPTY: ReadonlySet<McpAppsResourcePermission> = new Set();
@@ -77,6 +82,10 @@ export function createPluginSandboxPermissionGate(deps: {
   };
 
   return {
+    resetConsent() {
+      consented.clear();
+      inflight.clear();
+    },
     async request({ permission, requestingUrl, mediaTypes, guestUrl, isCurrent }) {
       const record = recordFor(requestingUrl, guestUrl);
       const requested = resolvePluginSandboxRequestedPermissions(permission, { mediaTypes });
@@ -115,7 +124,11 @@ export function createPluginSandboxPermissionGate(deps: {
               });
               return allowed;
             })
-            .finally(() => inflight.delete(key));
+            // 身份比较：resetConsent() 清表之后同 key 可能已经有新的 flight，
+            // 旧 flight 结束不能把新条目删掉（否则同一权限会弹第二次框）。
+            .finally(() => {
+              if (inflight.get(key) === flight) inflight.delete(key);
+            });
           inflight.set(key, flight);
         }
         if (!(await flight)) return false;

@@ -34,9 +34,20 @@ interface PendingConnect {
   webContentsId: number;
   win: BrowserWindow;
   remoteUsageTelemetryEligible: boolean;
+  /** 连接建立的整体超时；每个删除点都必须清掉，否则会残留 2 分钟。 */
+  timeout?: ReturnType<typeof setTimeout>;
   resolve: (sessionId: string) => void;
   reject: (error: Error) => void;
 }
+
+/**
+ * 建立远程连接的整体上限。
+ *
+ * 原来的 pending 只在 Host 退出 / 窗口关闭 / 应用退出时才会 reject：Host 活着但不回复
+ * （ssh/wsl 握手卡住、远端资产准备挂起、或回复因 requestId 串号被静默丢弃）时
+ * `await connectRemote()` 永久 pending，连接 UI 停在「正在连接」。
+ */
+const REMOTE_CONNECT_TIMEOUT_MS = 120_000;
 
 interface RemoteAttachmentRoute {
   webContentsId: number;
@@ -66,23 +77,6 @@ interface PendingProviderProvisioningExecution {
   readonly reject: (error: Error) => void;
 }
 
-function normalizeServerRemoteUrlForComparison(url: string): string {
-  try {
-    const parsed = new URL(url.trim());
-    if (parsed.protocol === "ws:") parsed.protocol = "http:";
-    if (parsed.protocol === "wss:") parsed.protocol = "https:";
-    parsed.hash = "";
-    parsed.search = "";
-    const normalizedPath = parsed.pathname.replace(/\/+$/g, "");
-    parsed.pathname = normalizedPath.endsWith("/ws")
-      ? normalizedPath.slice(0, -"/ws".length) || "/"
-      : normalizedPath || "/";
-    return parsed.toString().replace(/\/$/g, "");
-  } catch {
-    return url.trim().replace(/\/+$/g, "");
-  }
-}
-
 function isSameRemoteTarget(left: RemoteTarget, right: RemoteTarget): boolean {
   if (left.kind !== right.kind) return false;
   switch (left.kind) {
@@ -102,12 +96,6 @@ function isSameRemoteTarget(left: RemoteTarget, right: RemoteTarget): boolean {
       );
     case "docker":
       return right.kind === "docker" && left.container === right.container;
-    case "server":
-      return (
-        right.kind === "server" &&
-        normalizeServerRemoteUrlForComparison(left.url) ===
-          normalizeServerRemoteUrlForComparison(right.url)
-      );
   }
 }
 
@@ -119,8 +107,6 @@ function buildRemoteTargetTelemetryKey(target: RemoteTarget): string {
       return `wsl:${target.distro?.trim() || "default"}\0${target.user?.trim() ?? ""}`;
     case "docker":
       return `docker:${target.container}`;
-    case "server":
-      return `server:${normalizeServerRemoteUrlForComparison(target.url)}`;
   }
 }
 
@@ -396,6 +382,7 @@ export function createRemoteWorkspaceSessionManager(options: {
       });
       return;
     }
+    if (pending.timeout) clearTimeout(pending.timeout);
     pendingByRequestKey.delete(key);
     const route: RemoteAttachmentRoute = {
       webContentsId,
@@ -626,6 +613,7 @@ export function createRemoteWorkspaceSessionManager(options: {
         const key = requestKey(webContentsId, parsed.data.requestId);
         const pending = pendingByRequestKey.get(key);
         if (!pending) return;
+        if (pending.timeout) clearTimeout(pending.timeout);
         pendingByRequestKey.delete(key);
         emitConnectionLog(pending.win, {
           requestId: parsed.data.requestId,
@@ -648,6 +636,7 @@ export function createRemoteWorkspaceSessionManager(options: {
       }
       for (const [key, pending] of Array.from(pendingByRequestKey)) {
         if (pending.webContentsId === webContentsId) {
+          if (pending.timeout) clearTimeout(pending.timeout);
           pendingByRequestKey.delete(key);
           pending.reject(error);
         }
@@ -700,11 +689,26 @@ export function createRemoteWorkspaceSessionManager(options: {
       message: `正在通过窗口 Host 连接 ${resolvedTarget.kind} workspace`,
     });
     return new Promise<string>((resolve, reject) => {
+      // Host 活着但不回复时必须有出路：这里只覆盖「连接建立」本身，
+      // 与既有 attachment 就绪超时（pendingRendererAttachment）是两段独立预算。
+      const connectTimer = setTimeout(() => {
+        const pending = pendingByRequestKey.get(key);
+        if (!pending) return;
+        pendingByRequestKey.delete(key);
+        emitConnectionLog(pending.win, {
+          requestId: resolvedRequestId,
+          level: "error",
+          message: "远程连接超时，已放弃本次连接",
+        });
+        pending.reject(new Error(`远程连接超时（${REMOTE_CONNECT_TIMEOUT_MS}ms）`));
+      }, REMOTE_CONNECT_TIMEOUT_MS);
+      connectTimer.unref?.();
       pendingByRequestKey.set(key, {
         requestId: resolvedRequestId,
         webContentsId: win.webContents.id,
         win,
         remoteUsageTelemetryEligible: lifecycle?.remoteUsageTelemetryEligible ?? false,
+        timeout: connectTimer,
         resolve,
         reject,
       });
@@ -833,6 +837,7 @@ export function createRemoteWorkspaceSessionManager(options: {
     }
     for (const [key, pending] of Array.from(pendingByRequestKey)) {
       if (pending.webContentsId !== webContentsId) continue;
+      if (pending.timeout) clearTimeout(pending.timeout);
       pendingByRequestKey.delete(key);
       pending.reject(new Error("窗口已关闭，远程连接已取消"));
     }

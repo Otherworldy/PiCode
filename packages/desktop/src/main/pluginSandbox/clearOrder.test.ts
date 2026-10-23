@@ -91,7 +91,21 @@ async function fixture() {
   };
 }
 
+/**
+ * 清除结束后再调 registerFromHost 时，是否仍被 "being cleared" 闸门挡住。
+ * 不是 "being cleared" 的其它错误（provenance 校验、electron mock）都算闸门已复位。
+ */
+function registerBlockedByClearing(host: { registerFromHost(input: never): unknown }): boolean {
+  try {
+    host.registerFromHost({} as never);
+    return false;
+  } catch (error) {
+    return String(error).includes("being cleared");
+  }
+}
+
 describe("MCP App browser data clearing order", () => {
+
   it("waits for the document to stop and the guest to close, while registration stays sealed", async () => {
     const f = await fixture();
     const clearing = f.host.clearBrowserData();
@@ -117,7 +131,8 @@ describe("MCP App browser data clearing order", () => {
       "cache",
     ]);
     expect(f.guest.listenerCount("will-prevent-unload")).toBe(0);
-    expect(() => f.host.registerFromHost({} as never)).toThrow("being cleared");
+    // 清除结束后闸门必须复位：否则点一次「清除数据」就让插件永久黑屏直到重启。
+    expect(registerBlockedByClearing(f.host)).toBe(false);
   });
 
   it("joins an in-flight dispose instead of losing the still-running guest", async () => {
@@ -151,7 +166,8 @@ describe("MCP App browser data clearing order", () => {
     expect(state.storage.clearStorageData).not.toHaveBeenCalled();
     expect(state.storage.clearCache).not.toHaveBeenCalled();
     expect(f.guest.listenerCount("will-prevent-unload")).toBe(0);
-    expect(() => f.host.registerFromHost({} as never)).toThrow("being cleared");
+    // 失败路径也走 finally：失败的是一次清除，不是这个 host 后续所有的注册。
+    expect(registerBlockedByClearing(f.host)).toBe(false);
   });
 
   it("accepts navigation aborted by actual webview removal", async () => {

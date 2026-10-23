@@ -9,7 +9,9 @@ function fixture(kind: "gen-ui" | "mcp-app", html = fragment, missing = false) {
   const instance = { runtimeId: "a", generation: 1, token: "one", appIdentity: "a".repeat(64) };
   const handle = registry.register({
     instance,
-    contentKind: kind,
+    // contentKind 缺省即 mcp-app（见 registry 的 input.contentKind ?? "mcp-app"），
+    // 协议类型也只声明了 "gen-ui"，所以只在 gen-ui 时显式传。
+    ...(kind === "gen-ui" ? { contentKind: kind } : {}),
     ownerWebContentsId: 1,
     workspacePath: "/repo",
     sessionId: "s",

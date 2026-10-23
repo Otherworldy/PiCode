@@ -55,6 +55,9 @@ export function requestHostResourceUsage(
   return new Promise((resolve) => {
     const requestId = randomUUID();
     const timer = setTimeout(() => {
+      // 必须走 finish()：只 resolve 不摘 requestIdByHost，会让 :54 的 latch 永久命中，
+      // 这个 Host 从此直接返回旧值、再也不发新请求（只有 Host 退出才复位）。
+      finish();
       resolve(lastHostResults.get(label) ?? []);
     }, timeoutMs);
     const finish = () => {

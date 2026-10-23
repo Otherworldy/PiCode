@@ -67,7 +67,10 @@ export interface PluginSandboxMessagePort {
 }
 
 export interface AttachPluginSandboxGuestInput {
-  guest: Pick<WebContents, "on" | "once" | "setWindowOpenHandler" | "postMessage" | "isDestroyed">;
+  guest: Pick<
+    WebContents,
+    "on" | "once" | "off" | "setWindowOpenHandler" | "postMessage" | "isDestroyed"
+  >;
   hostWebContents: Pick<WebContents, "postMessage" | "isDestroyed">;
   registry: PluginSandboxRegistryPort;
   sandboxId: string;
@@ -105,23 +108,42 @@ export function attachPluginSandboxGuest(input: AttachPluginSandboxGuestInput): 
     pinned = false;
     input.registry.unpin(input.sandboxId);
   };
-  input.guest.once("destroyed", unpin);
+  /**
+   * 所有在 guest 上注册的监听都要能被移除。
+   *
+   * 原实现只 `once("destroyed", unpin)`，其余 7 个 `on` 依赖 guest 自身被销毁来释放。
+   * 但 `attachPluginSandboxGuest` 的 detach 会在页面重挂载时被调用（host 的 detachByKey），
+   * 而 `guests` Map 若因 `destroyed` 事件丢失而残留旧 WebContents，这些 handler 会继续跑：
+   * `input-event` 每次鼠标/键盘都写 registry，`console-message` 每次日志都转发。
+   */
+  const detachHandlers: Array<() => void> = [];
+  const listen = (event: string, handler: (...args: never[]) => void): void => {
+    input.guest.on(event as never, handler as never);
+    detachHandlers.push(() => input.guest.off(event as never, handler as never));
+  };
+  const listenOnce = (event: string, handler: (...args: never[]) => void): void => {
+    input.guest.once(event as never, handler as never);
+    detachHandlers.push(() => input.guest.off(event as never, handler as never));
+  };
+  // 说明：`listen`/`listenOnce` 故意用 `never[]` 接住 Electron 的事件重载 —— 调用处每个
+  // handler 都显式标注了参数类型，这里只做「注册 + 记录 detach」的转发。
+  listenOnce("destroyed", unpin);
 
   input.guest.setWindowOpenHandler(() => ({ action: "deny" }));
-  input.guest.on("will-navigate", (event, url) => {
+  listen("will-navigate", (event: { preventDefault(): void }, url: string) => {
     if (!isAllowedNavigation(url, allowedOrigins)) {
       event.preventDefault();
       input.logger?.warn(`[plugin-sandbox] blocked navigation ${url}`);
     }
   });
-  input.guest.on("will-frame-navigate", (event) => {
-    const details = event as unknown as { url?: string; isMainFrame?: boolean };
+  listen("will-frame-navigate", (rawEvent: { preventDefault(): void }) => {
+    const details = rawEvent as unknown as { url?: string; isMainFrame?: boolean };
     if (details.url && !isAllowedNavigation(details.url, allowedOrigins)) {
-      event.preventDefault();
+      rawEvent.preventDefault();
     }
   });
   // guest 控制台转到 main 日志：沙箱内 CSP 拒绝、脚本报错否则无处可见。
-  input.guest.on("console-message", (event: unknown, ...legacy: unknown[]) => {
+  listen("console-message", (event: unknown, ...legacy: unknown[]) => {
     const detail = event as { level?: unknown; message?: unknown } | undefined;
     const level = detail?.level ?? legacy[0];
     const message = detail?.message ?? legacy[1];
@@ -132,7 +154,7 @@ export function attachPluginSandboxGuest(input: AttachPluginSandboxGuestInput): 
     else input.logger?.info?.(line);
   });
   // 任一 frame 加载失败都记 warn（含错误码与 URL）：插件页面空白时据此区分被拦截、404 与网络错误。
-  input.guest.on(
+  listen(
     "did-fail-load",
     (
       _event,
@@ -146,7 +168,7 @@ export function attachPluginSandboxGuest(input: AttachPluginSandboxGuestInput): 
       );
     },
   );
-  input.guest.on(
+  listen(
     "did-frame-navigate",
     (
       _event,
@@ -161,7 +183,7 @@ export function attachPluginSandboxGuest(input: AttachPluginSandboxGuestInput): 
       );
     },
   );
-  input.guest.on("input-event", (_event, inputEvent) => {
+  listen("input-event", (_event: unknown, inputEvent: { type: string }) => {
     if (
       inputEvent.type === "mouseDown" ||
       inputEvent.type === "keyDown" ||
@@ -171,7 +193,9 @@ export function attachPluginSandboxGuest(input: AttachPluginSandboxGuestInput): 
     }
   });
   // 页面主动重载不能继承上一文档的浏览器授权或 MessagePort。
-  input.guest.on("did-start-navigation", (event) => {
+  listen(
+    "did-start-navigation",
+    (event: { isSameDocument: boolean; isMainFrame: boolean }) => {
     if (
       !event.isSameDocument &&
       ((initialized && event.isMainFrame) || (pluginLoaded && !event.isMainFrame))
@@ -179,7 +203,7 @@ export function attachPluginSandboxGuest(input: AttachPluginSandboxGuestInput): 
       input.registry.dispose(record.sandboxId, record.initId);
     }
   });
-  input.guest.once("dom-ready", () => {
+  listenOnce("dom-ready", () => {
     const current = input.registry.get(input.sandboxId);
     if (!current || input.guest.isDestroyed() || input.hostWebContents.isDestroyed()) return;
     initialized = true;
@@ -200,6 +224,8 @@ export function attachPluginSandboxGuest(input: AttachPluginSandboxGuestInput): 
 
   return () => {
     unpin();
+    for (const detach of detachHandlers) detach();
+    detachHandlers.length = 0;
     for (const port of openPorts) port.close();
     openPorts.length = 0;
   };

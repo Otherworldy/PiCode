@@ -96,6 +96,11 @@ export function installPluginSandboxHost(input: {
       await destroyed;
     });
     stopping.set(guest, stopped);
+    // 失败的 stopped promise 会一直留在这里：下一次 clearBrowserData 通过 stopping.get 拿到
+    // 同一个 rejected promise，于是「清除所有数据」从此每次必失败，直到重启应用。
+    void stopped.catch(() => {
+      if (stopping.get(guest) === stopped) stopping.delete(guest);
+    });
     return stopped;
   };
   // partition 持久且按可信 App 身份隔离：dispose 关闭 guest 和端口，
@@ -160,25 +165,44 @@ export function installPluginSandboxHost(input: {
 
   const host: PluginSandboxHost = {
     async clearBrowserData() {
+      // clearing 是「清除进行中」的锁，不是「已经清过数据」的标记。
+      // 原来只在开头置 true、从不复位：点一次清除数据之后所有 registerFromHost 都抛
+      // "MCP App browser data is being cleared"，插件 UI 永久黑屏直到重启。
       clearing = true;
-      for (const owner of watchedOwners) registry.disposeOwner(owner);
-      await Promise.all([...guests.values()].map(stopGuest));
-      guests.clear();
-      const names = await readdir(join(app.getPath("sessionData"), "Partitions")).catch(
-        (error: NodeJS.ErrnoException) => {
-          if (error.code === "ENOENT") return [];
-          throw error;
-        },
-      );
-      for (const name of names)
-        if (/^plugin-sandbox-v[12]-[a-f0-9]+$/.test(name)) partitions.add(`persist:${name}`);
-      await Promise.all(
-        [...partitions].map(async (partition) => {
-          const session = electronSession.fromPartition(partition);
-          await session.clearStorageData();
-          await session.clearCache();
-        }),
-      );
+      try {
+        for (const owner of watchedOwners) registry.disposeOwner(owner);
+        const stopResults = await Promise.allSettled([...guests.values()].map(stopGuest));
+        // 无论停止是否成功，登记都必须清掉：残留条目会让下一次清除直接命中同一个
+        // rejected promise（见 stopGuest 的失败清理），或者在重新挂载时被身份比较挡住。
+        guests.clear();
+        // 清除数据的语义是回到未授权状态：权限确认框要在下次挂载时重新出现。
+        permissions.resetConsent();
+        const stopFailure = stopResults.find(
+          (result): result is PromiseRejectedResult => result.status === "rejected",
+        );
+        if (stopFailure) {
+          // 保持既有语义：有文档停不下来就报告失败（调用方会跳过删数据目录与重启），
+          // 但上面的状态收尾已经完成，重试不会卡在同一个 promise 上。
+          throw stopFailure.reason;
+        }
+        const names = await readdir(join(app.getPath("sessionData"), "Partitions")).catch(
+          (error: NodeJS.ErrnoException) => {
+            if (error.code === "ENOENT") return [];
+            throw error;
+          },
+        );
+        for (const name of names)
+          if (/^plugin-sandbox-v[12]-[a-f0-9]+$/.test(name)) partitions.add(`persist:${name}`);
+        await Promise.all(
+          [...partitions].map(async (partition) => {
+            const session = electronSession.fromPartition(partition);
+            await session.clearStorageData();
+            await session.clearCache();
+          }),
+        );
+      } finally {
+        clearing = false;
+      }
     },
     registerFromHost(registerInput) {
       if (clearing) throw new Error("MCP App browser data is being cleared");
