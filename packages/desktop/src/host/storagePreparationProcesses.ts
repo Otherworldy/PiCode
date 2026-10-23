@@ -4,6 +4,8 @@ import { Worker } from "node:worker_threads";
 import { createInterface } from "node:readline";
 import { z } from "zod";
 import {
+  STORAGE_STARTUP_STALL_TIMEOUT_MS,
+  createProgressWatchdog,
   databaseStartupErrorCodeSchema,
   databaseMigrationFactsSchema,
   type DatabaseMigrationFacts,
@@ -70,35 +72,65 @@ export function prepareHostStorage(
     let done = false;
     let failure: unknown;
     let firstState = false;
-    const firstStateTimer = setTimeout(() => {
-      failure = statusError("startup_status_timeout");
+    let settled = false;
+    // terminate() 抢占不了 worker 里阻塞中的**同步原生调用**（node:sqlite 的 exec/prepare
+    // 都是），所以超时/中止不能走「terminate 后等 exit」—— 那条路径可能永不到来，Promise
+    // 照样永挂、coordinator.running 照样永真。这里直接结算，代价是可能出现「已 reject 但
+    // worker 还没退出、仍持锁」的短窗口（见 docs/specs/startup-stall-watchdog.md）。
+    const settleWith = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      failure = error;
+      // 清理也要在这里做：exit 永不到来正是直接结算要覆盖的场景，只靠 exit 处理器
+      // 清理的话 watchdog 会再触发一次、abort 监听会残留（3 次 attempt 共用同一 signal）。
+      watchdog.dispose();
+      signal.removeEventListener("abort", abort);
       void worker.terminate();
-    }, 30_000);
-    const abort = () => {
-      failure = statusError("transport_closed");
-      void worker.terminate();
+      reject(error);
     };
+    const watchdog = createProgressWatchdog({
+      firstFrameTimeoutMs: 30_000,
+      stallTimeoutMs: STORAGE_STARTUP_STALL_TIMEOUT_MS,
+      // 等锁期间下层有自己的 60 分钟锁预算，而 waiting_for_lock 只上报一次、之后零帧。
+      pausesStall: (phase) => phase === "waiting_for_lock",
+      // 保留首因：worker 已经报过 io_error / lock_timeout 时，别让超时把它盖成
+      // startup_status_timeout。
+      onTimeout: () => settleWith(failure ?? statusError("startup_status_timeout")),
+    });
+    const abort = () => settleWith(statusError("transport_closed"));
     signal.addEventListener("abort", abort, { once: true });
     worker.on("message", (raw: unknown) => {
+      if (settled) return;
       const result = workerMessageSchema.safeParse(raw);
       if (!result.success) {
-        failure = statusError("transport_closed");
-        void worker.terminate();
+        settleWith(statusError("transport_closed"));
         return;
       }
       firstState = true;
-      clearTimeout(firstStateTimer);
       const message = result.data;
-      if (message.type === "progress") report(message.phase, message.migration);
-      else if (message.type === "done") done = true;
-      else failure = statusError(message.errorCode, message, "tasks-index");
+      if (message.type === "progress") {
+        watchdog.noteFrame(message.phase);
+        report(message.phase, message.migration);
+      } else if (message.type === "done") {
+        watchdog.noteFrame("done");
+        done = true;
+      } else {
+        failure ??= statusError(message.errorCode, message, "tasks-index");
+        // failed 也是「有进展」，必须重新武装看门狗：如果上一帧是 paused 的
+        // waiting_for_lock，这里不续期的话整条链就再没有任何定时器 —— worker 发出 failed
+        // 后卡在同步原生调用里会重新变成永不 settle。
+        watchdog.noteFrame(message.type);
+      }
     });
     worker.once("error", (error) => {
-      failure = error;
+      // 不再只记 failure：error 之后不保证还有 exit，只靠看门狗兜会晚 180s 才暴露。
+      settleWith(error);
     });
     worker.once("exit", (code) => {
-      clearTimeout(firstStateTimer);
+      watchdog.dispose();
       signal.removeEventListener("abort", abort);
+      if (settled) return;
+      settled = true;
       if (done && code === 0 && !failure && firstState) resolve();
       else reject(failure ?? statusError("transport_closed"));
     });
@@ -141,19 +173,21 @@ export function shouldRetrySessionStorageWorker(error: unknown): boolean {
 function annotateStorageWorkerFailure(
   error: unknown,
   details: {
-    exitCode: number;
+    /** 缺失表示这次失败不是由退出引起（看门狗超时 / abort），worker 可能仍在跑。 */
+    exitCode?: number;
     beforePath: boolean;
     diagnostic: string;
   },
 ): unknown {
   const failure = error instanceof Error ? error : statusError("transport_closed");
   const summary = details.diagnostic.split("\n")[0] ?? "";
-  const suffix = summary ? `exit ${details.exitCode}: ${summary}` : `exit ${details.exitCode}`;
+  const exitLabel = details.exitCode === undefined ? "no exit" : `exit ${details.exitCode}`;
+  const suffix = summary ? `${exitLabel}: ${summary}` : exitLabel;
 
   if (!failure.message.includes(suffix)) failure.message = `${failure.message} (${suffix})`;
   return Object.assign(failure, {
     storageWorkerBeforePath: details.beforePath,
-    storageWorkerExitCode: details.exitCode,
+    ...(details.exitCode === undefined ? {} : { storageWorkerExitCode: details.exitCode }),
     ...(details.diagnostic ? { storageWorkerDiagnostic: details.diagnostic } : {}),
   });
 }
@@ -250,14 +284,29 @@ function runSessionStorageWorker(
     const terminate = () => {
       void child.terminate();
     };
-    const abort = () => {
-      failure ??= statusError("transport_closed");
+    // 同 prepareHostStorage：terminate() 抢占不了阻塞中的同步原生调用，必须直接结算，
+    // 否则本轮 attempt 永不结束、重试预算也不会推进。
+    const settleWith = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      failure = error;
+      watchdog.dispose();
+      options.signal.removeEventListener("abort", abort);
       terminate();
+      reject(
+        annotateStorageWorkerFailure(error, {
+          beforePath: !pathReceived,
+          diagnostic: redactStorageWorkerDiagnostic(stderr),
+        }),
+      );
     };
-    const firstStateTimer = setTimeout(() => {
-      failure = statusError("startup_status_timeout");
-      terminate();
-    }, 30_000);
+    const abort = () => settleWith(statusError("transport_closed"));
+    const watchdog = createProgressWatchdog({
+      firstFrameTimeoutMs: 30_000,
+      stallTimeoutMs: STORAGE_STARTUP_STALL_TIMEOUT_MS,
+      pausesStall: (phase) => phase === "waiting_for_lock",
+      onTimeout: () => settleWith(failure ?? statusError("startup_status_timeout")),
+    });
     options.signal.addEventListener("abort", abort, { once: true });
     // stdout 只有有界控制帧。stderr 只留一份截断诊断，避免把本机路径推进启动状态。
     child.stderr.on("data", (chunk: Buffer | string) => {
@@ -265,16 +314,16 @@ function runSessionStorageWorker(
       stderr += typeof chunk === "string" ? chunk : chunk.toString("utf8");
     });
     input.on("error", (error) => {
-      failure ??= error;
-      terminate();
+      settleWith(error);
     });
     lines.on("line", (line) => {
       if (settled) return;
       try {
         if (line.length > 65536) throw statusError("transport_closed");
         const frame = zcodeStoragePreparationFrameSchema.parse(JSON.parse(line));
-        clearTimeout(firstStateTimer);
         if (frame.method === "startup/storagePath") {
+          // 进度帧一律续期；等锁阶段由 pausesStall 暂停。
+          watchdog.noteFrame("checking");
           if (pathReceived) throw statusError("transport_closed");
           pathReceived = true;
           void (async () => {
@@ -295,34 +344,42 @@ function runSessionStorageWorker(
             terminate();
           });
         } else if (frame.method === "startup/storagePrepared") {
+          watchdog.noteFrame("ready");
           prepared = pathReceived;
           input.end();
-        } else if (frame.params.phase === "failed")
+        } else if (frame.params.phase === "failed") {
           failure ??= statusError(
             frame.params.errorCode ?? "sql_failed",
             frame.params,
             frame.params.databaseId,
           );
-        else
+          // 同 prepareHostStorage：failed 帧必须重新武装看门狗，否则上一帧若是 paused 的
+          // waiting_for_lock，这里就是整条链最后一个定时器出口。
+          watchdog.noteFrame(frame.params.phase);
+        } else {
+          watchdog.noteFrame(frame.params.phase);
           options.report(frame.params.phase, {
             databaseId: frame.params.databaseId,
             migration: frame.params.migration,
           });
+        }
       } catch (error) {
         failure ??= error;
         terminate();
       }
     });
     child.once("error", (error) => {
-      failure ??= error;
+      settleWith(error);
     });
     child.once("exit", (code) => {
-      settled = true;
-      clearTimeout(firstStateTimer);
+      watchdog.dispose();
       options.signal.removeEventListener("abort", abort);
+      const alreadySettled = settled;
+      settled = true;
       // 退出事件可能先于最后一行 stdout。等一个 turn，避免把已经写出的失败帧看成失联。
       setImmediate(() => {
         lines.close();
+        if (alreadySettled) return;
         if (code === 0 && prepared && !failure) {
           if (preparedPath) options.preparedPaths?.add(preparedPath);
           resolve();

@@ -641,9 +641,10 @@ export class ZCodeAgentProcessManager {
         return;
       }
       // 自定义 Agent 的旧启动请求可能先结清，再继续数据库准备；无在飞 RPC 不代表迁移空闲。
+      // 但已经失败的启动不算「还在等」—— 否则卡死的进程永远不会被回收。
       if (
         managed.client.pendingOperationRequestCount > 0 ||
-        managed.client.storageStartup.isWaiting
+        (managed.client.storageStartup.isWaiting && !managed.client.storageStartup.failed)
       ) {
         return;
       }
@@ -1121,9 +1122,12 @@ export class ZCodeAgentProcessManager {
     this.ownedProcesses.add(managed);
     const publishStorage = () => {
       if (this.processesByWorkspaceKey.get(workspaceKey) !== managed) return;
-      if (client.storageStartup.isWaiting) this.clearIdleTimer(managed);
-      else if (
-        client.storageStartup.snapshot?.phase === "ready" &&
+      // isWaiting 在 terminalError 存在时也为 true，但那表示已经放弃这次启动：
+      // 此时不能再把它当作「不该回收进程」的判据。
+      if (client.storageStartup.isWaiting && !client.storageStartup.failed) {
+        this.clearIdleTimer(managed);
+      } else if (
+        (client.storageStartup.failed || client.storageStartup.snapshot?.phase === "ready") &&
         client.pendingOperationRequestCount === 0
       ) {
         this.scheduleIdleReclaim(workspaceKey, managed);

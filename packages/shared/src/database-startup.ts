@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+/**
+ * 存储启动/准备阶段的「无进展」上限：两个状态帧之间的最大间隔。
+ *
+ * phase 帧只在阶段变化时发送（迁移不逐行上报），所以这个值必须明显大于最慢的单阶段迁移，
+ * 不能用请求超时（30s 量级）代替。超过它视为「进程活着但不再推进」，由看门狗失败掉这次启动。
+ */
+export const STORAGE_STARTUP_STALL_TIMEOUT_MS = 180_000;
+
 export const databaseStartupErrorCodeSchema = z.enum([
   "storage_full",
   "permission_denied",

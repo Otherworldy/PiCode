@@ -115,8 +115,17 @@ export class ZCodeProtocolClient implements IDisposable {
     options?: ZCodeProtocolClientOptions,
   ) {
     this.storageStartup = new ZCodeStorageStartupGate(options?.requireStorageStartup ?? false);
+    // 看门狗在**本进程**里失败 gate 时不经过 handleMessage 的 failed 分支：那批在飞请求的
+    // timeout 已在首帧被清掉、且不会 resumeTimeout()。只让 wait() 抛错不够 —— 它们在
+    // pending 表里永远不结算，pendingOperationRequestCount 恒 >0，idle 回收随之永久关闭。
+    // requireStorageStartup=false（自定义/旧部署命令）走的就是这条路径。
+    const storageFailureSubscription = this.storageStartup.onDidChange((state) => {
+      if (state.phase !== "failed") return;
+      this.rejectAll(new Error(`SQLite startup failed: ${state.errorCode ?? "sql_failed"}`));
+    });
     this.requestTimeoutMs = options?.requestTimeoutMs ?? DEFAULT_ZCODE_PROTOCOL_REQUEST_TIMEOUT_MS;
     this.disposables.push(
+      storageFailureSubscription,
       transport.onMessage((message) => this.handleMessage(message)),
       transport.onClose((event) => {
         this.storageStartup.dispose();
