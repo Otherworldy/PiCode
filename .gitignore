@@ -77,3 +77,9 @@ designs/
 
 # 桌面宠物开发态本地运行生成数据（下载缓存、player.html、sidecar settings 等）
 packages/desktop/pets/
+
+# pi-host 的 tsc 产物：由 build-desktop-agent-cli 生成，仓库只跟踪 .ts 源文件。
+apps/zcode-cli/packages/pi-host/src/*.js
+apps/zcode-cli/packages/pi-host/src/*.js.map
+apps/zcode-cli/packages/pi-host/src/*.d.ts
+apps/zcode-cli/packages/pi-host/src/*.d.ts.map

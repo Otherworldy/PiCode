@@ -17,14 +17,6 @@ import {
   type AppSettings,
   type DesktopCommandId,
   type Locale,
-  resolveRuntimeZCodeEndpointOrigin,
-  ZCODE_ENV,
-  buildZCodeEndpointUrls,
-  getCommunityUrlFromConfigs,
-  getFeedbackUrlFromConfig,
-  resolveHelpAppConfig,
-  normalizeZCodeEndpointOrigin,
-  resolveZCodeEndpointOrigin,
 } from "@zcode/shared";
 import type { MessageBoxOptions } from "electron";
 import { app, BrowserWindow, dialog, session, shell } from "electron";

@@ -38,17 +38,7 @@ import type {
   PluginSandboxRegisterRequestPayload,
   PluginSandboxRegisterResultPayload,
 } from "@zcode/shared/mcp-apps";
-import type { UtilityProcess as ElectronUtilityProcess, MessagePortMain } from "electron";
-import {
-  app,
-  BrowserWindow,
-  utilityProcess as electronUtilityProcess,
-  MessageChannelMain,
-} from "electron";
-import { randomUUID } from "node:crypto";
-import { join } from "node:path";
 import { BroadcastHub } from "./broadcastHub.js";
-import { bindDatabaseStartupRelay } from "./databaseStartupRelay.js";
 import { getMainLaunchPartialMarks } from "./desktopLaunchMarks.js";
 import { ingestHostNetworkObservations } from "./desktopNetworkTelemetry.js";
 import {

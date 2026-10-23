@@ -5,6 +5,7 @@
  * 运行：在仓库根目录执行
  *   node packages/desktop/scripts/browser-perf-probe.mjs
  */
+/* eslint-disable max-lines -- 探针按命令线性展开，拆分会打断阅读路径。 */
 import { spawn } from "node:child_process";
 import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";

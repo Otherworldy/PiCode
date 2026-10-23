@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- 关于页各分区共享同一份版本/环境快照，拆文件会把状态外置成 props 传递。 */
 import { useEffect, useState } from "react";
 import {
   AlertCircle,

@@ -27,7 +27,7 @@ function fakeWindow(hostname: string, bridge?: { close: () => void }): FakeWindo
 }
 
 function useWindow(win: FakeWindow): void {
-  (globalThis as { window?: FakeWindow }).window = win;
+  (globalThis as unknown as { window?: FakeWindow }).window = win;
 }
 
 test("loopback close notifies the host and does not blank the guest", () => {
