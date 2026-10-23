@@ -59,8 +59,23 @@ export function createPluginUiAppTools(deps: {
   let lastRefreshAt = 0;
   let cancelRefreshTimer: (() => void) | null = null;
   let epoch = 0;
-  const started = new Set<string>();
+  // 信箱去重集合：只增不减会让长命的 App 页面随工具调用历史线性增长。
+  // 去重的语义只需覆盖「可能被重放/重复投递的窗口」，512 条足够。
+  const started: string[] = [];
+  const startedKeys = new Set<string>();
+  const STARTED_MAX_ENTRIES = 512;
   const calls = new Map<string, AbortController>();
+
+  function rememberStarted(callId: string): void {
+    if (startedKeys.has(callId)) return;
+    startedKeys.add(callId);
+    started.push(callId);
+    while (started.length > STARTED_MAX_ENTRIES) {
+      const oldest = started.shift();
+      if (oldest === undefined) return;
+      startedKeys.delete(oldest);
+    }
+  }
 
   const instanceParams = (generation: number) => ({
     ...deps.pluginScope(),
@@ -184,7 +199,8 @@ export function createPluginUiAppTools(deps: {
       cancelRefreshTimer?.();
       cancelRefreshTimer = null;
       pendingRefresh = false;
-      started.clear();
+      started.length = 0;
+      startedKeys.clear();
       unregister();
     },
     onInitialized(active, capabilities, isCurrent) {
@@ -205,12 +221,12 @@ export function createPluginUiAppTools(deps: {
       }
       if (call.cancelled) {
         calls.get(call.callId)?.abort();
-        started.add(call.callId);
+        rememberStarted(call.callId);
         return;
       }
       // 信箱按 callId 去重：投影重放 / 重复投递不会让页面执行两次。
-      if (started.has(call.callId)) return;
-      started.add(call.callId);
+      if (startedKeys.has(call.callId)) return;
+      rememberStarted(call.callId);
       const cancel = new AbortController();
       calls.set(call.callId, cancel);
       deps.onBusyChange?.();

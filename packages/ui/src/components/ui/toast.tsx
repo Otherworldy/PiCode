@@ -200,11 +200,24 @@ export function AnchoredToastStack({
     };
     syncPosition();
 
+    // syncPosition 里有 getBoundingClientRect（强制布局）和 setState。它同时挂在
+    // document.body 的 MutationObserver、capture 阶段的 scroll 和 resize 上 —— 前两者在
+    // 流式回答期间是每个 DOM 变更 / 每次滚动都触发，必须合并到一帧一次，否则一个 anchored
+    // toast 就能让整条时间线的渲染持续掉帧。
+    let rafId: number | null = null;
+    const scheduleSync = () => {
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        syncPosition();
+      });
+    };
+
     const mutationObserver =
-      typeof MutationObserver === "undefined" ? null : new MutationObserver(syncPosition);
+      typeof MutationObserver === "undefined" ? null : new MutationObserver(scheduleSync);
     mutationObserver?.observe(document.body, { childList: true, subtree: true });
-    window.addEventListener("resize", syncPosition);
-    document.addEventListener("scroll", syncPosition, {
+    window.addEventListener("resize", scheduleSync);
+    document.addEventListener("scroll", scheduleSync, {
       capture: true,
       passive: true,
     });
@@ -212,8 +225,9 @@ export function AnchoredToastStack({
     return () => {
       resizeObserver?.disconnect();
       mutationObserver?.disconnect();
-      window.removeEventListener("resize", syncPosition);
-      document.removeEventListener("scroll", syncPosition, true);
+      window.removeEventListener("resize", scheduleSync);
+      document.removeEventListener("scroll", scheduleSync, true);
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
     };
   }, [anchorId]);
 

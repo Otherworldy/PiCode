@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- 权限/引导/澄清三类弹窗共享同一套交互态与焦点恢复逻辑，拆分会复制状态机。 */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { ZCodeElicitationRequest, ZCodePermissionOption, ZCodeProvider } from "@zcode/shared";
 import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";

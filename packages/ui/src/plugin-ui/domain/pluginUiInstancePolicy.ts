@@ -57,9 +57,13 @@ export function deriveLogicalUiInstances(
   options: { autoExpandTurns?: number } = {},
 ): PluginUiInstanceDerivation {
   // domain 不用 Map / Set（模块边界约束），全部用数组与普通对象。
+  // 去重用无原型对象：turnOrder.includes 是 O(rows × turns)，而本函数每个流式 chunk 都会跑一次。
   const turnOrder: string[] = [];
+  const seenTurnIds = Object.create(null) as Record<string, true>;
   for (const row of rows) {
-    if (!turnOrder.includes(row.turnId)) turnOrder.push(row.turnId);
+    if (seenTurnIds[row.turnId] === true) continue;
+    seenTurnIds[row.turnId] = true;
+    turnOrder.push(row.turnId);
   }
   const recentTurns = turnOrder.slice(-(options.autoExpandTurns ?? PLUGIN_UI_AUTO_EXPAND_TURNS));
   const groupKeys: string[] = [];

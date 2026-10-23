@@ -18,6 +18,11 @@ interface BuildTaskContextUsageUpdateParams {
   latestUserPrompt?: string | null;
 }
 
+/**
+ * 已经上报过 usage 的任务键。key 由 workspace + taskId 组成，随打开过的任务增长，
+ * 原来没有删除点 —— 对齐同目录 planUsageArmsTelemetry 的容量淘汰写法。
+ */
+const MAX_TASK_CONTEXT_USAGE_KEYS = 2000;
 const taskContextUsageUpdateKeys = new Set<string>();
 
 function buildTaskUsageKey(params: TaskUsageKeyParams): string {
@@ -33,6 +38,11 @@ export function recordTaskContextUsageUpdate(params: TaskContextUsageUpdateParam
     return;
   }
   taskContextUsageUpdateKeys.add(buildTaskUsageKey(params));
+  while (taskContextUsageUpdateKeys.size > MAX_TASK_CONTEXT_USAGE_KEYS) {
+    const oldest = taskContextUsageUpdateKeys.values().next().value;
+    if (oldest === undefined) break;
+    taskContextUsageUpdateKeys.delete(oldest);
+  }
 }
 
 function isContextCompressionPrompt(prompt: string | null | undefined): boolean {

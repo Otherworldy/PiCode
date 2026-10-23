@@ -25,6 +25,15 @@ interface HostInitLike {
 }
 
 const DEFAULT_SEEN_EVENT_LIMIT = 1000;
+/**
+ * 请求-应答超时。
+ *
+ * main 侧的 `taskRealtimeBus` 对 owner command 有 `OWNER_COMMAND_TIMEOUT_MS`，但 Host 侧这两个
+ * pending 表原来没有 —— 唯一的 reject 来源是 `dispose()`。而 main 在「收到来自未知 host 的
+ * 分派」时是直接 `return` 不回包（`publish from unknown host`），宿主被替换/注销的窗口里
+ * `acquireTaskRunLease` 会永久挂住，连带 `sendPrompt` 永不返回。
+ */
+const BRIDGE_REQUEST_TIMEOUT_MS = 30_000;
 
 export function createTaskRealtimeBridgeForHostInit(
   message: HostInitLike,
@@ -162,7 +171,21 @@ function createTaskRealtimeBridge(params: {
       }
       const leaseRequestId = createUuid();
       return new Promise((resolve, reject) => {
-        pendingLeaseRequests.set(leaseRequestId, { resolve, reject });
+        const timer = setTimeout(() => {
+          if (!pendingLeaseRequests.delete(leaseRequestId)) return;
+          reject(new Error("task run lease request timed out"));
+        }, BRIDGE_REQUEST_TIMEOUT_MS);
+        timer.unref?.();
+        pendingLeaseRequests.set(leaseRequestId, {
+          resolve: (result) => {
+            clearTimeout(timer);
+            resolve(result);
+          },
+          reject: (error) => {
+            clearTimeout(timer);
+            reject(error);
+          },
+        });
         params.parentPort.postMessage({
           type: HostResponseTypes.TaskRunLeaseAcquire,
           request: {
@@ -197,7 +220,21 @@ function createTaskRealtimeBridge(params: {
       }
       const commandRequestId = createUuid();
       return new Promise((resolve, reject) => {
-        pendingOwnerCommands.set(commandRequestId, { resolve, reject });
+        const timer = setTimeout(() => {
+          if (!pendingOwnerCommands.delete(commandRequestId)) return;
+          reject(new Error("task owner command timed out"));
+        }, BRIDGE_REQUEST_TIMEOUT_MS);
+        timer.unref?.();
+        pendingOwnerCommands.set(commandRequestId, {
+          resolve: (result) => {
+            clearTimeout(timer);
+            resolve(result);
+          },
+          reject: (error) => {
+            clearTimeout(timer);
+            reject(error);
+          },
+        });
         params.parentPort.postMessage({
           type: HostResponseTypes.TaskOwnerCommandRequest,
           command: {

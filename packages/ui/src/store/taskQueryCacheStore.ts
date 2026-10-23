@@ -83,6 +83,34 @@ interface TaskQueryCacheState {
 
 type CachedTaskListItem = ZCodeTaskListItem & { searchSnippets?: string[] };
 
+/**
+ * query cache 的 key 含 search 与 limit：任务列表搜索框每敲一个键就会多一份完整结果集
+ * （含逐任务搜索片段），无淘汰时 renderer 内存随搜索次数单调增长。
+ * 按 fetchedAt 保留最近 N 个 key；被淘汰的 key 再次被需要时走一次重新查询。
+ */
+const TASK_QUERY_CACHE_MAX_KEYS = 32;
+
+function trimTaskQueryResults(
+  results: Record<TaskListCacheKey, CachedTaskListResult>,
+): Record<TaskListCacheKey, CachedTaskListResult> {
+  const keys = Object.keys(results) as TaskListCacheKey[];
+  if (keys.length <= TASK_QUERY_CACHE_MAX_KEYS) {
+    return results;
+  }
+  const keptKeys = keys
+    .slice()
+    .sort((left, right) => (results[right]?.fetchedAt ?? 0) - (results[left]?.fetchedAt ?? 0))
+    .slice(0, TASK_QUERY_CACHE_MAX_KEYS);
+  const trimmed: Record<string, CachedTaskListResult> = {};
+  for (const key of keptKeys) {
+    const entry = results[key];
+    if (entry) {
+      trimmed[key] = entry;
+    }
+  }
+  return trimmed as Record<TaskListCacheKey, CachedTaskListResult>;
+}
+
 function buildCachedTaskListResult(params: {
   descriptor: TaskListCacheDescriptor;
   taskKeys: TaskEntityKey[];
@@ -168,6 +196,36 @@ function sortTaskKeysByDescriptor(params: {
 // 内容没变时如果照样换引用，taskMetaByEntityKey 和派生 items memo 会整列表换新，
 // 所有列表行无效重渲染。这里做逐字段等价判断，等价则保留旧引用。
 // 嵌套字段（lastError/target 等）用 JSON 比较；task meta 是小对象，代价可接受。
+/**
+ * 结构化相等比较。
+ *
+ * 原来这里用 `JSON.stringify(left) !== JSON.stringify(right)` 比较两个对象字段 —— 每次比较
+ * 都要把两侧序列化成字符串再丢掉，而这条路径在流式期间每次列表 republish 都会走。逐字段
+ * 递归比较没有分配，语义等价（只支持 JSON 形状：对象、数组、基本值）。
+ */
+function structuredEqual(left: unknown, right: unknown, depth = 0): boolean {
+  if (left === right) return true;
+  if (left === null || right === null) return false;
+  if (typeof left !== "object" || typeof right !== "object") return false;
+  // 超过深度用序列化兜底：深层结构在缓存项里很罕见，而且不能因为深度限制把不相等判成相等。
+  if (depth > 8) return JSON.stringify(left) === JSON.stringify(right);
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    for (let index = 0; index < left.length; index += 1)
+      if (!structuredEqual(left[index], right[index], depth + 1)) return false;
+    return true;
+  }
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const leftKeys = Object.keys(leftRecord);
+  if (leftKeys.length !== Object.keys(rightRecord).length) return false;
+  for (const key of leftKeys) {
+    if (!Object.hasOwn(rightRecord, key)) return false;
+    if (!structuredEqual(leftRecord[key], rightRecord[key], depth + 1)) return false;
+  }
+  return true;
+}
+
 function areCachedTaskListItemsEquivalent(
   left: CachedTaskListItem,
   right: CachedTaskListItem,
@@ -193,7 +251,7 @@ function areCachedTaskListItemsEquivalent(
       typeof rightValue === "object" &&
       rightValue !== null
     ) {
-      if (JSON.stringify(leftValue) !== JSON.stringify(rightValue)) {
+      if (!structuredEqual(leftValue, rightValue)) {
         return false;
       }
       continue;
@@ -299,10 +357,11 @@ function isQueryResultEquivalent(params: {
     return false;
   }
   return (
-    JSON.stringify(previous.searchSnippetsByTaskKey ?? null) ===
-      JSON.stringify(params.searchSnippetsByTaskKey ?? null) &&
-    JSON.stringify(previous.searchSnippetListsByTaskKey ?? null) ===
-      JSON.stringify(params.searchSnippetListsByTaskKey ?? null)
+    structuredEqual(previous.searchSnippetsByTaskKey ?? null, params.searchSnippetsByTaskKey ?? null) &&
+    structuredEqual(
+      previous.searchSnippetListsByTaskKey ?? null,
+      params.searchSnippetListsByTaskKey ?? null,
+    )
   );
 }
 
@@ -460,10 +519,10 @@ export const useTaskQueryCacheStore = create<TaskQueryCacheState>()((set) => ({
       }
 
       return {
-        resultsByQueryKey: {
+        resultsByQueryKey: trimTaskQueryResults({
           ...state.resultsByQueryKey,
           [queryKey]: buildCachedTaskListResult(resultParams),
-        },
+        }),
         taskMetaByEntityKey: taskMetaChanged ? nextTaskMetaByEntityKey : state.taskMetaByEntityKey,
         taskUnreadOverlayByEntityKey: taskUnreadOverlayChanged
           ? nextTaskUnreadOverlayByEntityKey
@@ -591,7 +650,9 @@ export const useTaskQueryCacheStore = create<TaskQueryCacheState>()((set) => ({
       }
 
       return {
-        resultsByQueryKey: resultsChanged ? nextResultsByQueryKey : state.resultsByQueryKey,
+        resultsByQueryKey: resultsChanged
+          ? trimTaskQueryResults(nextResultsByQueryKey)
+          : state.resultsByQueryKey,
         taskMetaByEntityKey: taskMetaChanged ? nextTaskMetaByEntityKey : state.taskMetaByEntityKey,
         taskUnreadOverlayByEntityKey: taskUnreadOverlayChanged
           ? nextTaskUnreadOverlayByEntityKey

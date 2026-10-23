@@ -595,14 +595,40 @@ export function CodeViewer({
       });
     };
 
-    function schedulePatch() {
+    // 流式代码块每帧都在长高，全量 querySelectorAll + 遍历所有 shadow root 是 O(行数)，
+    // 叠在 diff 渲染上就是掉帧。这里只处理 MutationRecord 里新增的子树 —— 已处理过的节点
+    // 不会再次出现在 addedNodes，改 label 也不需要重复扫。
+    const patchSubtree = (node: Node) => {
+      if (node.nodeType !== 1) return;
+      const element = node as HTMLElement;
+      patchCodeCommentUtilityButtons(element, labels.addCommentTooltip);
+      if (element.shadowRoot) {
+        observeRoot(element.shadowRoot);
+        patchCodeCommentUtilityButtons(element.shadowRoot, labels.addCommentTooltip);
+      }
+      walkShadowRoots(element, (shadowRoot) => {
+        observeRoot(shadowRoot);
+        patchCodeCommentUtilityButtons(shadowRoot, labels.addCommentTooltip);
+      });
+    };
+
+    const pendingPatchNodes = new Set<Node>();
+    function schedulePatch(records?: MutationRecord[]) {
+      if (records) {
+        for (const record of records) {
+          for (const node of record.addedNodes) pendingPatchNodes.add(node);
+        }
+      }
       if (animationFrame) {
         return;
       }
 
       animationFrame = window.requestAnimationFrame(() => {
         animationFrame = 0;
-        patch();
+        const nodes = [...pendingPatchNodes];
+        pendingPatchNodes.clear();
+        // 没有新增节点的批次（纯属性/文本变化）不需要补 label。
+        for (const node of nodes) patchSubtree(node);
       });
     }
 

@@ -57,12 +57,68 @@ const highlighterCache = new Map<
   string,
   Promise<HighlighterGeneric<BundledLanguage, BundledTheme>>
 >();
-const tokensCache = new Map<string, TokenizedCode>();
+
+/**
+ * tokensCache 有界：长会话会不断出现新代码块，key 含完整正文，无淘汰时渲染进程内存随会话线性增长。
+ * 三重上限：条数（含大块正文时的对象数量）、总字符（正文体量）、单条（超大块不值得缓存）。
+ * 淘汰按 Map 插入序做 LRU：命中时移到末尾，超限时从最旧开始删。
+ */
+const TOKENS_CACHE_MAX_ENTRIES = 200;
+const TOKENS_CACHE_MAX_TOTAL_CHARS = 8 * 1024 * 1024;
+const TOKENS_CACHE_MAX_ENTRY_CHARS = 200 * 1024;
+const HIGHLIGHTER_CACHE_MAX_ENTRIES = 64;
+
+interface TokensCacheEntry {
+  tokenized: TokenizedCode;
+  chars: number;
+}
+
+const tokensCache = new Map<string, TokensCacheEntry>();
+let tokensCacheTotalChars = 0;
 const subscribers = new Map<string, Set<(result: TokenizedCode) => void>>();
-// 内存诊断计数器：tokensCache 目前无淘汰，是审计里
-// renderer 最可疑的增长点，先把条数落到日志里。
+
+const readTokensCache = (cacheKey: string): TokenizedCode | undefined => {
+  const entry = tokensCache.get(cacheKey);
+  if (!entry) {
+    return undefined;
+  }
+  // 命中即移到末尾，维持 LRU 顺序。
+  tokensCache.delete(cacheKey);
+  tokensCache.set(cacheKey, entry);
+  return entry.tokenized;
+};
+
+const writeTokensCache = (cacheKey: string, tokenized: TokenizedCode, chars: number): void => {
+  if (chars > TOKENS_CACHE_MAX_ENTRY_CHARS) {
+    return;
+  }
+  const existing = tokensCache.get(cacheKey);
+  if (existing) {
+    tokensCacheTotalChars -= existing.chars;
+    tokensCache.delete(cacheKey);
+  }
+  tokensCache.set(cacheKey, { tokenized, chars });
+  tokensCacheTotalChars += chars;
+  while (
+    tokensCache.size > TOKENS_CACHE_MAX_ENTRIES ||
+    tokensCacheTotalChars > TOKENS_CACHE_MAX_TOTAL_CHARS
+  ) {
+    const oldestKey = tokensCache.keys().next();
+    if (oldestKey.done) {
+      break;
+    }
+    const evicted = tokensCache.get(oldestKey.value);
+    tokensCache.delete(oldestKey.value);
+    if (evicted) {
+      tokensCacheTotalChars -= evicted.chars;
+    }
+  }
+};
+
+// 内存诊断计数器：确认缓存增长已被上限约束住。
 uiMemoryDiagnosticsRegistry.register("shiki", () => ({
   tokensCache: tokensCache.size,
+  tokensCacheChars: tokensCacheTotalChars,
   highlighters: highlighterCache.size,
 }));
 
@@ -99,6 +155,14 @@ const getHighlighter = (
   });
 
   highlighterCache.set(cacheKey, highlighterPromise);
+  // 语言×主题组合天然有界，但误用（动态 language）会把 grammar 实例堆住，这里加一道闸。
+  while (highlighterCache.size > HIGHLIGHTER_CACHE_MAX_ENTRIES) {
+    const oldestKey = highlighterCache.keys().next();
+    if (oldestKey.done) {
+      break;
+    }
+    highlighterCache.delete(oldestKey.value);
+  }
   return highlighterPromise;
 };
 
@@ -136,7 +200,7 @@ export const highlightCode = (
   const resolvedLanguage = normalizeCodeLanguage(language);
   const tokensCacheKey = getCodeTokensCacheKey(code, resolvedLanguage, resolvedTheme);
 
-  const cached = tokensCache.get(tokensCacheKey);
+  const cached = readTokensCache(tokensCacheKey);
   if (cached) {
     // 缓存命中时也需要通知 effect，但不能同步触发 setState。
     // 历史消息恢复时大量代码块会在同一次提交后挂载；同步 callback 会把 cache-hit 变成嵌套更新，
@@ -173,7 +237,7 @@ export const highlightCode = (
         tokens: result.tokens,
       };
 
-      tokensCache.set(tokensCacheKey, tokenized);
+      writeTokensCache(tokensCacheKey, tokenized, code.length);
 
       const subs = subscribers.get(tokensCacheKey);
       if (subs) {

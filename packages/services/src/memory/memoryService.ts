@@ -109,6 +109,73 @@ function compareProjectMemoryFiles(
   return left.name.localeCompare(right.name, "en");
 }
 
+const MEMORY_SCAN_CONCURRENCY = 8;
+
+/** 读取一个 workspace 的 Memory 目录快照；目录消失时返回 null（调用方跳过）。 */
+async function readWorkspaceCatalog(
+  projectsRoot: string,
+  workspaceId: string,
+): Promise<ProjectMemoryWorkspaceSummary | null> {
+  const workspaceRoot = join(projectsRoot, workspaceId);
+  const memoryRoot = join(workspaceRoot, PROJECT_MEMORY_DIRECTORY_NAME);
+  if (!(await isPlainDirectory(workspaceRoot)) || !(await isPlainDirectory(memoryRoot))) {
+    return null;
+  }
+
+  let memoryEntries;
+  try {
+    memoryEntries = await readdir(memoryRoot, { withFileTypes: true });
+  } catch (error) {
+    // 目录检查后 Memory Agent 仍可能删除目录；catalog 快照只跳过已消失的 workspace。
+    if (isNotFoundError(error)) return null;
+    throw error;
+  }
+
+  const candidates = memoryEntries.filter(
+    (entry) => entry.isFile() && !entry.isSymbolicLink() && isProjectMemoryFileName(entry.name),
+  );
+  // 内层同样分批：单个 workspace 的 .md 可能很多，全量 Promise.all 会把
+  // 「workspace 并发 8」放大成 8 × N 个并发 syscall。
+  const summaries: Array<ProjectMemoryFileSummary | null> = [];
+  for (let offset = 0; offset < candidates.length; offset += MEMORY_SCAN_CONCURRENCY) {
+    const batch = candidates.slice(offset, offset + MEMORY_SCAN_CONCURRENCY);
+    summaries.push(
+      ...(await Promise.all(
+        batch.map(async (memoryEntry) => {
+          const filePath = join(memoryRoot, memoryEntry.name);
+          let fileMetadata;
+          try {
+            fileMetadata = await lstat(filePath);
+          } catch (error) {
+            // readdir 后事实文件可能被并发删除；它不再属于本次只读快照。
+            if (isNotFoundError(error)) return null;
+            throw error;
+          }
+          if (!fileMetadata.isFile() || fileMetadata.isSymbolicLink()) return null;
+          const summary: ProjectMemoryFileSummary = {
+            name: memoryEntry.name,
+            path: filePath,
+            kind: memoryEntry.name === PROJECT_MEMORY_INDEX_FILE_NAME ? "index" : "item",
+            size: fileMetadata.size,
+            updatedAt: fileMetadata.mtimeMs,
+          };
+          return summary;
+        }),
+      )),
+    );
+  }
+  const files = summaries.filter((summary): summary is ProjectMemoryFileSummary => summary !== null);
+  if (files.length === 0) return null;
+
+  files.sort(compareProjectMemoryFiles);
+  return {
+    id: workspaceId,
+    label: resolveWorkspaceLabel(workspaceId),
+    updatedAt: Math.max(...files.map((file) => file.updatedAt)),
+    files,
+  };
+}
+
 export function createMemoryService(): IMemoryService {
   async function listProjectMemories(): Promise<ProjectMemoryWorkspaceSummary[]> {
     let projectsRoot: string;
@@ -123,75 +190,22 @@ export function createMemoryService(): IMemoryService {
       throw error;
     }
 
-    const workspaces: ProjectMemoryWorkspaceSummary[] = [];
-    for (const projectEntry of projectEntries) {
-      if (!projectEntry.isDirectory() || projectEntry.isSymbolicLink()) {
-        continue;
-      }
-
-      const workspaceId = projectEntry.name;
-      const workspaceRoot = join(projectsRoot, workspaceId);
-      const memoryRoot = join(workspaceRoot, PROJECT_MEMORY_DIRECTORY_NAME);
-      if (!(await isPlainDirectory(workspaceRoot)) || !(await isPlainDirectory(memoryRoot))) {
-        continue;
-      }
-
-      let memoryEntries;
-      try {
-        memoryEntries = await readdir(memoryRoot, { withFileTypes: true });
-      } catch (error) {
-        // 目录检查后 Memory Agent 仍可能删除目录；catalog 快照只跳过已消失的 workspace。
-        if (isNotFoundError(error)) {
-          continue;
-        }
-        throw error;
-      }
-      const files: ProjectMemoryFileSummary[] = [];
-      for (const memoryEntry of memoryEntries) {
-        if (
-          !memoryEntry.isFile() ||
-          memoryEntry.isSymbolicLink() ||
-          !isProjectMemoryFileName(memoryEntry.name)
-        ) {
-          continue;
-        }
-
-        const filePath = join(memoryRoot, memoryEntry.name);
-        let fileMetadata;
-        try {
-          fileMetadata = await lstat(filePath);
-        } catch (error) {
-          // readdir 后事实文件可能被并发删除；它不再属于本次只读快照。
-          if (isNotFoundError(error)) {
-            continue;
-          }
-          throw error;
-        }
-        if (!fileMetadata.isFile() || fileMetadata.isSymbolicLink()) {
-          continue;
-        }
-        files.push({
-          name: memoryEntry.name,
-          path: filePath,
-          kind: memoryEntry.name === PROJECT_MEMORY_INDEX_FILE_NAME ? "index" : "item",
-          size: fileMetadata.size,
-          updatedAt: fileMetadata.mtimeMs,
-        });
-      }
-
-      if (files.length === 0) {
-        continue;
-      }
-
-      files.sort(compareProjectMemoryFiles);
-      workspaces.push({
-        id: workspaceId,
-        label: resolveWorkspaceLabel(workspaceId),
-        updatedAt: Math.max(...files.map((file) => file.updatedAt)),
-        files,
-      });
+    // 原来是「每 workspace 串行 lstat ×2 + readdir + 每个文件串行 lstat」：
+    // 50 个 workspace × 10 个文件 ≈ 600 次串行 syscall，冷启动要几百毫秒。
+    // 改成小批并发，顺序不变（结果按目录名收集后统一排序）。
+    const workspaceIds = projectEntries
+      .filter((entry) => entry.isDirectory() && !entry.isSymbolicLink())
+      .map((entry) => entry.name);
+    const collected: ProjectMemoryWorkspaceSummary[] = [];
+    for (let offset = 0; offset < workspaceIds.length; offset += MEMORY_SCAN_CONCURRENCY) {
+      const batch = workspaceIds.slice(offset, offset + MEMORY_SCAN_CONCURRENCY);
+      const results = await Promise.all(
+        batch.map((workspaceId) => readWorkspaceCatalog(projectsRoot, workspaceId)),
+      );
+      for (const result of results) if (result) collected.push(result);
     }
 
+    const workspaces = collected;
     workspaces.sort(
       (left, right) => right.updatedAt - left.updatedAt || left.id.localeCompare(right.id, "en"),
     );

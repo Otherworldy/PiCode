@@ -19,6 +19,7 @@ import type {
   SettingsDirectorySource,
 } from "@zcode/shared";
 import type { IMcpSyncService } from "./mcpSync.js";
+import { withFileLock } from "@zcode/shared/node";
 import { ensurePiMcpFiles, piProjectMcpFile, piUserMcpFile, toPiStoredMcpServer } from "@zcode/shared/node";
 import { checkRemoteSyncDirectoryWriteAccess } from "../remote-sync/remoteSyncWriteAccess.js";
 
@@ -264,40 +265,57 @@ async function saveMcpToUserDirectory(payload: SaveCliMcpToUserDirectoryRequest)
     if (typeof payload.enabled !== "boolean") {
       throw new Error("Missing enabled value for MCP set-enabled action");
     }
+    // 收窄后的值必须在闭包外落到局部常量：闭包里再用 payload.enabled 会丢掉类型收窄。
+    const enabled = payload.enabled;
     const scope: Exclude<McpScope, "common"> = payload.projectPath ? "workspace" : "user";
     const location =
       payload.location ??
       buildDirectoryMcpLocation(ZCODE_MCP_DESCRIPTOR, scope, payload.projectPath);
-    await writeServerEnabledToFile(
-      findDescriptorByLocation(location),
-      location,
-      payload.name,
-      payload.enabled,
+    const descriptor = findDescriptorByLocation(location);
+    // 开关 server 走的也是「读整份配置 → 改一条 → 整体覆盖」，必须和 upsert/delete 抢同一把锁：
+    // 这恰恰是 UI 上最常做的操作，放在锁外等于什么都没修。
+    await withFileLock(
+      buildDirectoryConfigPath(
+        descriptor,
+        location.scope === "project" ? "workspace" : "user",
+        location.scope === "project" ? location.projectPath : undefined,
+      ),
+      async () => {
+        await writeServerEnabledToFile(descriptor, location, payload.name, enabled);
+        await cleanupLegacyMcpEnabledOverride(location, payload.name);
+      },
     );
-    await cleanupLegacyMcpEnabledOverride(location, payload.name);
     return;
   }
 
   const scope: Exclude<McpScope, "common"> = payload.projectPath ? "workspace" : "user";
-  const existingServers = await readDirectoryServersFromFile(
-    ZCODE_MCP_DESCRIPTOR,
-    scope,
-    payload.projectPath,
-  );
-  const nextServers = Object.fromEntries(
-    existingServers.map((server) => [server.name, server.config as Record<string, unknown>]),
-  );
+  // 这是一次「读整份配置 → 改一条 → 整体覆盖」。没有锁时，连续开关两个 server、或者
+  // 用户操作与 importMcpServers 并发，后写者会把先写者的改动整体抹掉，而且无报错、无提示
+  // （UI 刷新后又变回旧值）。锁路径与实际写入文件一致。
+  await withFileLock(
+    buildDirectoryConfigPath(ZCODE_MCP_DESCRIPTOR, scope, payload.projectPath),
+    async () => {
+      const existingServers = await readDirectoryServersFromFile(
+        ZCODE_MCP_DESCRIPTOR,
+        scope,
+        payload.projectPath,
+      );
+      const nextServers = Object.fromEntries(
+        existingServers.map((server) => [server.name, server.config as Record<string, unknown>]),
+      );
 
-  if (payload.action === "upsert") {
-    if (!payload.config) {
-      throw new Error("Missing MCP config for upsert action");
-    }
-    nextServers[payload.name] = payload.config as Record<string, unknown>;
-  } else {
-    delete nextServers[payload.name];
-  }
+      if (payload.action === "upsert") {
+        if (!payload.config) {
+          throw new Error("Missing MCP config for upsert action");
+        }
+        nextServers[payload.name] = payload.config as Record<string, unknown>;
+      } else {
+        delete nextServers[payload.name];
+      }
 
-  await writeZCodeServersToFile(scope, normalizePiServers(nextServers), payload.projectPath);
+      await writeZCodeServersToFile(scope, normalizePiServers(nextServers), payload.projectPath);
+    },
+  );
 }
 
 function sortMcpRecords(records: UserMcpRecord[]): UserMcpRecord[] {
@@ -596,7 +614,15 @@ async function importMcpServers(params: {
   localWorkspacePath?: string;
   remoteWorkspacePath?: string;
 }): Promise<McpSyncImportResult> {
+  // 与 saveMcpToUserDirectory 共用同一把锁（同一份文件）：两者都是整份覆盖写。
   const targetPath = getUserZcodeMcpConfigPath();
+  return withFileLock(targetPath, () => importMcpServersLocked(targetPath, params));
+}
+
+async function importMcpServersLocked(
+  targetPath: string,
+  params: Parameters<typeof importMcpServers>[0],
+): Promise<McpSyncImportResult> {
   const current = (await readJsonObject(targetPath)) ?? {};
   const targetServers = readServerMapFromJson(current, ZCODE_MCP_DESCRIPTOR.configKeyName);
   const existingByName = await collectEffectiveUserMcpRecordByName();

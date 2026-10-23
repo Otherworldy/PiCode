@@ -214,6 +214,20 @@ export function useComposerAttachments(
   const controllersRef = useRef(new Map<string, AbortController>());
   const completeTimersRef = useRef(new Map<string, number>());
   const retryTimersRef = useRef(new Map<string, number>());
+
+  // 卸载时清空所有待触发的定时器与进行中的上传：retry 定时器会在组件消失后继续
+  // enqueueUpload（携带已废弃的附件路径），controller 不 abort 会让请求挂到超时。
+  useEffect(
+    () => () => {
+      for (const timer of completeTimersRef.current.values()) window.clearTimeout(timer);
+      completeTimersRef.current.clear();
+      for (const timer of retryTimersRef.current.values()) window.clearTimeout(timer);
+      retryTimersRef.current.clear();
+      for (const controller of controllersRef.current.values()) controller.abort();
+      controllersRef.current.clear();
+    },
+    [],
+  );
   const pumpQueueRef = useRef<() => void>(() => {});
   const attachments = useComposerAttachmentUploadStore(
     (state) => state.scopes[scopeKey] ?? EMPTY_COMPOSER_ATTACHMENTS,

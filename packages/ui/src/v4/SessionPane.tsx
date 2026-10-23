@@ -675,9 +675,13 @@ export function SessionPane({
     enabled: shareSelectionPanelVisible,
     onDismiss: dismissShareSelectionPanel,
   });
+  // 只在局部分享激活时构建 render units。此前的 memo 只依赖 rows.window，
+  // 而 snapshot 每个流式帧都换引用，导致不分享时也在每帧全量遍历整个会话。
+  // 用 shareActive 而非 shareSelectionPanelVisible：进入 configuration 阶段后选择面板已隐藏，
+  // 但下游 effect 仍按 shareActive 同步可选行，此时返回空数组会清空用户已勾选的草稿。
   const shareRenderUnits = useMemo(
-    () => buildConversationTurnRenderUnits(snapshot?.rows.window ?? []),
-    [snapshot?.rows.window],
+    () => (shareActive ? buildConversationTurnRenderUnits(snapshot?.rows.window ?? []) : []),
+    [shareActive, snapshot?.rows.window],
   );
   const shareItems = useMemo(
     () =>

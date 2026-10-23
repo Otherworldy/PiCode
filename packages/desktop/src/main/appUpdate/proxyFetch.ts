@@ -7,6 +7,11 @@ export interface UpdateNetworkSettings {
   httpProxyCaCertPath?: string;
 }
 
+/**
+ * 按 (proxy, ca) 缓存的 undici agent。key 由用户设置决定，domain 很小 —— 但每个旧 agent
+ * 持有连接池与 socket，用户改几次代理就会留下一串不释放的池。
+ */
+const MAX_PROXY_AGENTS = 4;
 const proxyAgents = new Map<string, ProxyAgent>();
 
 export function normalizeUpdateProxy(value: string | undefined): string | undefined {
@@ -48,9 +53,12 @@ export function createUpdateFetch(settings: UpdateNetworkSettings): typeof fetch
     // Node 自带的 fetch 不走 Electron session，设置页代理只配在 Chromium 上。
     // 更新检查和安装包下载必须显式走这份代理，否则国内直连 GitHub 会很慢。
     const dispatcher = proxyAgent(proxy, settings.httpProxyCaCertPath);
+    // init.headers 来自 Node 全局 fetch（undici-types 声明），与 undici 包的 HeadersInit 不是同一套
+    // 类型（两个 Headers 类互不兼容）；用 Headers 归一成普通记录再交给 undici。
+    const headers = init?.headers ? Object.fromEntries(new Headers(init.headers)) : undefined;
     return (await undiciFetch(url, {
       method: init?.method,
-      headers: init?.headers,
+      headers,
       body: init?.body as never,
       signal: init?.signal ?? undefined,
       redirect: init?.redirect,
@@ -69,6 +77,14 @@ function proxyAgent(proxy: string, caCertPath: string | undefined): ProxyAgent {
     ...(ca ? { requestTls: { ca } } : {}),
   });
   proxyAgents.set(key, agent);
+  // 超额时关掉最旧的 agent：只从表里删掉而不 close，它的连接池会一直占着 socket。
+  while (proxyAgents.size > MAX_PROXY_AGENTS) {
+    const oldestKey = proxyAgents.keys().next().value;
+    if (oldestKey === undefined) break;
+    const stale = proxyAgents.get(oldestKey);
+    proxyAgents.delete(oldestKey);
+    void stale?.close().catch(() => undefined);
+  }
   return agent;
 }
 

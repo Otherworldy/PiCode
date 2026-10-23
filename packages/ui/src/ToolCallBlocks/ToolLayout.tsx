@@ -13,8 +13,27 @@ import {
 import { ToolSummaryRow, type ToolSummaryAction } from "@/ToolCallBlocks/ToolSummaryRow.js";
 import { uiMemoryDiagnosticsRegistry } from "@/lib/memoryDiagnostics.js";
 
+/**
+ * 工具行展开状态按 persistOpenKey 记录。key 随工具行增长且跨会话保留，无上限时条目数等于
+ * 用户交互过的工具行总数，renderer 内存单调增长。
+ * 写入时按 Map 插入序淘汰最旧条目（值只是 boolean，成本在 key 数量）。
+ */
+const TOOL_LAYOUT_OPEN_STATE_MAX_ENTRIES = 2000;
 const toolLayoutOpenState = new Map<string, boolean>();
-// 内存诊断计数器：该表按 toolId 只增不减，先落日志。
+
+const rememberToolLayoutOpenState = (key: string, open: boolean): void => {
+  // delete + set 让本次写入落到 Map 末尾，保持「最近写入」顺序。
+  toolLayoutOpenState.delete(key);
+  toolLayoutOpenState.set(key, open);
+  while (toolLayoutOpenState.size > TOOL_LAYOUT_OPEN_STATE_MAX_ENTRIES) {
+    const oldestKey = toolLayoutOpenState.keys().next();
+    if (oldestKey.done) {
+      break;
+    }
+    toolLayoutOpenState.delete(oldestKey.value);
+  }
+};
+
 uiMemoryDiagnosticsRegistry.register("toolLayout", () => ({ openState: toolLayoutOpenState.size }));
 const TOOL_CONTENT_COLLAPSE_UNMOUNT_DELAY_MS = 300;
 const TOOL_CONTENT_SHELL_CLASSNAME = "text-popover-foreground outline-none";
@@ -159,7 +178,7 @@ function ToolLayoutComponent({
       return;
     }
 
-    toolLayoutOpenState.set(resolvedPersistOpenKey, true);
+    rememberToolLayoutOpenState(resolvedPersistOpenKey, true);
     setShouldRenderContent(true);
     setIsOpen(true);
     hasAutoOpenedRef.current = true;
@@ -173,7 +192,7 @@ function ToolLayoutComponent({
     // 聊天流里会迅速变得很长，也和“运行中自动展开、完成后回到摘要”这套交互不一致。
     // 这里只在 running -> completed 的边沿自动收起一次，不影响用户后续手动再次展开查看细节。
     if (autoCollapseOnComplete && !isRunning && wasRunning) {
-      toolLayoutOpenState.set(resolvedPersistOpenKey, false);
+      rememberToolLayoutOpenState(resolvedPersistOpenKey, false);
       setIsOpen(false);
     }
   }, [autoCollapseOnComplete, isRunning, resolvedPersistOpenKey]);
@@ -308,7 +327,7 @@ function ToolLayoutComponent({
         if (hasSummaryAction || forceOpen) {
           return;
         }
-        toolLayoutOpenState.set(resolvedPersistOpenKey, open);
+        rememberToolLayoutOpenState(resolvedPersistOpenKey, open);
         if (open) {
           setShouldRenderContent(true);
         }

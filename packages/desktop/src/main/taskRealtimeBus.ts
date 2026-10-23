@@ -57,6 +57,46 @@ interface TaskRunLease {
   updatedAt: number;
 }
 
+/**
+ * 估算一个值的 JSON 编码长度，不生成字符串。
+ *
+ * 只用于「这一批是不是过大」的判断，精度无需严格。原来这里调用
+ * `JSON.stringify(event).length` 生成完整 JS 字符串（1 字符 2 字节）只为读长度再丢弃，
+ * 而紧接着 postMessage 还要编码一次 —— 每秒每 run 一次 MB 级分配，全落在 Electron main。
+ */
+function estimateJsonBytes(value: unknown, depth = 0): number {
+  // 深度用尽时给一个非零常量：未知结构（工具调用的 raw 载荷是 `unknown`）里可能藏着大字段，
+  // 返回 0 会让它们整体不计入预算。
+  if (depth > 6) return 8;
+  if (typeof value === "string") return value.length;
+  if (typeof value === "number" || typeof value === "boolean") return 8;
+  if (value === null || value === undefined) return 4;
+  if (Array.isArray(value)) {
+    let total = 2;
+    for (const item of value) total += estimateJsonBytes(item, depth + 1) + 1;
+    return total;
+  }
+  if (typeof value === "object") {
+    let total = 2;
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      total += key.length + 4 + estimateJsonBytes(item, depth + 1);
+    }
+    return total;
+  }
+  return 0;
+}
+
+/** 已入队 replay 事件的估算字节数；shift 时据此扣减，避免整表重算（原来是 O(n²)）。 */
+const replayEventByteEstimates = new WeakMap<TaskStreamMirrorBatchEvent, number>();
+
+function dropOldestReplay(batch: PendingStreamBatch): void {
+  const dropped = batch.replay.shift();
+  if (!dropped) return;
+  const size = replayEventByteEstimates.get(dropped) ?? 0;
+  replayEventByteEstimates.delete(dropped);
+  batch.replayBytes = Math.max(0, batch.replayBytes - size);
+}
+
 interface PendingStreamBatch {
   batchKey: string;
   workspaceKey: string;
@@ -72,6 +112,8 @@ interface PendingStreamBatch {
   nextOpSeq: number;
   pendingOps: TaskStreamMirrorPublishOp[];
   replay: TaskStreamMirrorBatchEvent[];
+  /** replay 窗口的估算字节数，随 push/shift 增量维护。 */
+  replayBytes: number;
   replayUnavailable: boolean;
   timer: ReturnType<typeof setTimeout> | null;
   replayInitializedHostIds: Set<string>;
@@ -366,6 +408,7 @@ export class TaskRealtimeBus {
       return;
     }
     this.flushBatch(this.getBatchKey(target.workspaceKey, target.taskId, target.runId), true);
+    this.dropBatch(this.getBatchKey(target.workspaceKey, target.taskId, target.runId));
     this.leases.delete(key);
     this.logger.info("[task-realtime] task run lease released", {
       hostId,
@@ -382,6 +425,7 @@ export class TaskRealtimeBus {
         continue;
       }
       this.flushBatch(this.getBatchKey(lease.workspaceKey, lease.taskId, lease.runId), true);
+      this.dropBatch(this.getBatchKey(lease.workspaceKey, lease.taskId, lease.runId));
       this.leases.delete(key);
       released.push(lease);
     }
@@ -405,6 +449,7 @@ export class TaskRealtimeBus {
     if (this.isTerminalOrImmediateOp(op)) {
       this.flushBatch(batchKey, true);
       if (op.kind === "stream_event" && this.isTerminalEventType(op.event.type)) {
+        this.dropBatch(batchKey);
         this.leases.delete(this.getLeaseKey(target.workspaceKey, target.taskId));
       }
       return;
@@ -442,6 +487,7 @@ export class TaskRealtimeBus {
       nextOpSeq: 1,
       pendingOps: [],
       replay: [],
+      replayBytes: 0,
       replayUnavailable: false,
       timer: null,
       replayInitializedHostIds: new Set<string>(),
@@ -464,12 +510,34 @@ export class TaskRealtimeBus {
     this.flushBatch(this.getBatchKey(event.workspaceKey, event.taskId, event.traceId), true);
   }
 
-  private flushBatch(batchKey: string, force: boolean): void {
+  /**
+   * 释放一条 mirror 批次。
+   *
+   * flushBatch 只在收到终态 stream 事件时删批次；run 被用户中止、agent 崩溃、host exit 都
+   * 不会有终态事件，批次（含最多 STREAM_MIRROR_MAX_REPLAY_BATCHES 条 replay 正文）会一直留在
+   * streamBatches 里，随中断次数线性增长。lease 释放即表示这条 run 在 main 侧已收口，这里显式回收。
+   * 幂等：终态路径已删过时直接返回。
+   */
+  private dropBatch(batchKey: string): void {
     const batch = this.streamBatches.get(batchKey);
-    if (!batch || batch.pendingOps.length === 0) {
+    if (!batch) {
       return;
     }
-    if (!force && batch.pendingOps.length === 0) {
+    if (batch.timer) {
+      clearTimeout(batch.timer);
+      batch.timer = null;
+    }
+    batch.pendingOps = [];
+    batch.replay = [];
+    batch.replayBytes = 0;
+    this.streamBatches.delete(batchKey);
+  }
+
+  private flushBatch(batchKey: string, force: boolean): void {
+    const batch = this.streamBatches.get(batchKey);
+    // pendingOps 为空时直接返回：此时没有正文要发，也没有 timer 需要重排。
+    // force 只用于「lease 释放/终态」这类必须立刻 flush 的调用点，不改变这个前置条件。
+    if (!batch || batch.pendingOps.length === 0) {
       return;
     }
     if (batch.timer) {
@@ -503,7 +571,7 @@ export class TaskRealtimeBus {
         (op) => op.kind === "stream_event" && this.isTerminalEventType(op.event.type),
       ),
     };
-    if (JSON.stringify(event).length > STREAM_MIRROR_MAX_BATCH_BYTES) {
+    if (estimateJsonBytes(event) > STREAM_MIRROR_MAX_BATCH_BYTES) {
       // 单次 mirror batch 过大时，RPC/base64/JSON 会在链路上多次复制，导致 host 堆内存打满。
       // owner 仍依赖 mirror seq 流渲染主动发送端，所以这里对 owner 做小批次分片；observer
       // 不消费正文流，只收到 snapshot invalidation/remoteGenerating 状态。
@@ -527,6 +595,7 @@ export class TaskRealtimeBus {
     // 这里只给 owner 发送连续小批次；observer 和 late subscriber 统一走快照补齐，避免大 payload 扩散。
     batch.replayUnavailable = true;
     batch.replay = [];
+    batch.replayBytes = 0;
     for (const chunk of this.splitOversizedBatchForOwner(batch, event)) {
       this.deliverStreamBatchToHost(batch.ownerHostId, batch, chunk, "relay_owner");
     }
@@ -591,14 +660,9 @@ export class TaskRealtimeBus {
     const coalesced: TaskStreamMirrorPublishOp[] = [];
     for (const op of ops) {
       const previous = coalesced[coalesced.length - 1];
-      if (this.canMergeTextChunk(previous, op)) {
-        coalesced[coalesced.length - 1] = {
-          kind: "stream_event",
-          event: {
-            ...previous.event,
-            content: previous.event.content + op.event.content,
-          },
-        };
+      const mergedTextChunk = this.mergeTextChunk(previous, op);
+      if (mergedTextChunk) {
+        coalesced[coalesced.length - 1] = mergedTextChunk;
         continue;
       }
       if (
@@ -647,29 +711,32 @@ export class TaskRealtimeBus {
     return splitOps;
   }
 
-  private canMergeTextChunk(
+  /**
+   * previous 与 op 可合并成一个文本 chunk 时，返回合并后的 op；否则返回 null。
+   * 不用布尔类型守卫：守卫只能收窄一个参数，op 侧仍会是宽联合，读 op.event.content 无法成立。
+   */
+  private mergeTextChunk(
     previous: TaskStreamMirrorPublishOp | undefined,
     op: TaskStreamMirrorPublishOp,
-  ): previous is Extract<TaskStreamMirrorPublishOp, { kind: "stream_event" }> & {
-    event: {
-      type: "agent_message_chunk" | "agent_thought_chunk";
-      taskId: string;
-      traceId: string;
-      content: string;
+  ): Extract<TaskStreamMirrorPublishOp, { kind: "stream_event" }> | null {
+    if (previous?.kind !== "stream_event" || op.kind !== "stream_event") return null;
+    const prevEvent = previous.event;
+    const nextEvent = op.event;
+    if (nextEvent.type !== "agent_message_chunk" && nextEvent.type !== "agent_thought_chunk") {
+      return null;
+    }
+    if (prevEvent.type !== nextEvent.type) return null;
+    if (prevEvent.taskId !== nextEvent.taskId || prevEvent.traceId !== nextEvent.traceId) {
+      return null;
+    }
+    if (!("content" in prevEvent) || !("content" in nextEvent)) return null;
+    if (typeof prevEvent.content !== "string" || typeof nextEvent.content !== "string") {
+      return null;
+    }
+    return {
+      kind: "stream_event",
+      event: { ...prevEvent, content: prevEvent.content + nextEvent.content },
     };
-  } {
-    return (
-      previous?.kind === "stream_event" &&
-      op.kind === "stream_event" &&
-      (op.event.type === "agent_message_chunk" || op.event.type === "agent_thought_chunk") &&
-      previous.event.type === op.event.type &&
-      previous.event.taskId === op.event.taskId &&
-      previous.event.traceId === op.event.traceId &&
-      "content" in previous.event &&
-      "content" in op.event &&
-      typeof previous.event.content === "string" &&
-      typeof op.event.content === "string"
-    );
   }
 
   private isRedundantStateEvent(type: string): boolean {
@@ -730,16 +797,15 @@ export class TaskRealtimeBus {
     // 无上限 replay 在长任务中会线性占用主进程内存。
     // 这里恢复批次数+字节数双阈值，超限后由 replayVisibleRunsToHost 触发 stream_mirror_gap 并走快照补齐。
     batch.replay.push(event);
+    const size = estimateJsonBytes(event);
+    replayEventByteEstimates.set(event, size);
+    batch.replayBytes += size;
     while (batch.replay.length > STREAM_MIRROR_MAX_REPLAY_BATCHES) {
-      batch.replay.shift();
+      dropOldestReplay(batch);
     }
-    while (this.replayBytes(batch.replay) > STREAM_MIRROR_MAX_REPLAY_BYTES) {
-      batch.replay.shift();
+    while (batch.replayBytes > STREAM_MIRROR_MAX_REPLAY_BYTES && batch.replay.length > 0) {
+      dropOldestReplay(batch);
     }
-  }
-
-  private replayBytes(replay: TaskStreamMirrorBatchEvent[]): number {
-    return replay.reduce((total, replayEvent) => total + JSON.stringify(replayEvent).length, 0);
   }
 
   private replayVisibleRunsToHost(hostId: string, workspaceKeys: Iterable<string>): void {

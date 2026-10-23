@@ -1,9 +1,30 @@
 // 会话执行目录。列表和项目身份仍是父仓库；这里只记 worktree 副本路径。
 // ponytail: 进程内表。重启后由 sessions-index 的 workingDirectory（jsonl cwd）回填。
 
+// 三张表都是「进程内缓存」语义（重启由 sessions-index 回填），缓存必须有界：
+// 每个会话/工作区一条，长期使用只增不减。
+const MAX_SESSION_WORKTREES = 512;
+const MAX_DRAFT_WORKTREES = 64;
+
 const bySession = new Map<string, string>();
 const draftByWorkspace = new Map<string, string>();
 const draftEpoch = new Map<string, number>();
+
+/** Map 迭代器允许在遍历中删除当前元素；按插入顺序淘汰最旧的。 */
+function evictOldest<K, V>(map: Map<K, V>, maxEntries: number): void {
+  while (map.size > maxEntries) {
+    const oldest = map.keys().next().value;
+    if (oldest === undefined) return;
+    map.delete(oldest);
+  }
+}
+
+/** 写入并刷新顺序。`Map.set` 对已存在的 key 不改位置，只按插入顺序淘汰会优先踢掉长期活跃的会话。 */
+function touch<K, V>(map: Map<K, V>, key: K, value: V, maxEntries: number): void {
+  map.delete(key);
+  map.set(key, value);
+  evictOldest(map, maxEntries);
+}
 const listeners = new Set<() => void>();
 
 function emit(): void {
@@ -18,14 +39,14 @@ export function subscribeSessionWorktrees(listener: () => void): () => void {
 }
 
 export function bindDraftWorktree(workspaceKey: string, worktreePath: string): void {
-  draftByWorkspace.set(workspaceKey, worktreePath);
-  draftEpoch.set(workspaceKey, (draftEpoch.get(workspaceKey) ?? 0) + 1);
+  touch(draftByWorkspace, workspaceKey, worktreePath, MAX_DRAFT_WORKTREES);
+  touch(draftEpoch, workspaceKey, (draftEpoch.get(workspaceKey) ?? 0) + 1, MAX_DRAFT_WORKTREES);
   emit();
 }
 
 export function bindSessionWorktree(sessionId: string, worktreePath: string): void {
   if (bySession.get(sessionId) === worktreePath) return;
-  bySession.set(sessionId, worktreePath);
+  touch(bySession, sessionId, worktreePath, MAX_SESSION_WORKTREES);
   emit();
 }
 

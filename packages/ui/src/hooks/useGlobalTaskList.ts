@@ -52,32 +52,45 @@ export function useGlobalTaskList(params: {
     controllerRegistry?.getRevision ?? zeroRevision,
     controllerRegistry?.getRevision ?? zeroRevision,
   );
-  const workspaceSignature = JSON.stringify(
-    params.workspaceTabs
-      .map(
-        (tab) => [tab.workspaceIdentity?.trim() || tab.workspacePath, tab.workspacePath] as const,
-      )
-      .sort(
-        ([leftKey, leftPath], [rightKey, rightPath]) =>
-          leftKey.localeCompare(rightKey) || leftPath.localeCompare(rightPath),
-      ),
+  // 这两份签名在渲染体里每次都算（2 次 map + 2 次 localeCompare 排序 + 2 次 JSON 编码）。
+  // useMemo 按 tabs 引用失效；路径不含 \u0000/\u0001，拼成字符串比 JSON.stringify 便宜。
+  const workspaceSignature = useMemo(
+    () =>
+      params.workspaceTabs
+        .map(
+          (tab) => [tab.workspaceIdentity?.trim() || tab.workspacePath, tab.workspacePath] as const,
+        )
+        .sort(
+          ([leftKey, leftPath], [rightKey, rightPath]) =>
+            leftKey.localeCompare(rightKey) || leftPath.localeCompare(rightPath),
+        )
+        .map(([key, path]) => `${key.length}:${key}${path.length}:${path}`)
+        .join(""),
+    [params.workspaceTabs],
   );
-  const workspaceSourceGenerationSignature = JSON.stringify(
-    params.workspaceTabs
-      .map(
-        (tab) =>
-          [
-            tab.workspaceIdentity?.trim() || tab.workspacePath,
-            tab.workspacePath,
-            tab.remoteSessionId?.trim() || null,
-          ] as const,
-      )
-      .sort(
-        ([leftKey, leftPath, leftSession], [rightKey, rightPath, rightSession]) =>
-          leftKey.localeCompare(rightKey) ||
-          leftPath.localeCompare(rightPath) ||
-          (leftSession ?? "").localeCompare(rightSession ?? ""),
-      ),
+  const workspaceSourceGenerationSignature = useMemo(
+    () =>
+      params.workspaceTabs
+        .map(
+          (tab) =>
+            [
+              tab.workspaceIdentity?.trim() || tab.workspacePath,
+              tab.workspacePath,
+              tab.remoteSessionId?.trim() || null,
+            ] as const,
+        )
+        .sort(
+          ([leftKey, leftPath, leftSession], [rightKey, rightPath, rightSession]) =>
+            leftKey.localeCompare(rightKey) ||
+            leftPath.localeCompare(rightPath) ||
+            (leftSession ?? "").localeCompare(rightSession ?? ""),
+        )
+        .map(([key, path, session]) => {
+          const sessionKey = session ?? "";
+          return `${key.length}:${key}${path.length}:${path}${sessionKey.length}:${sessionKey}`;
+        })
+        .join(""),
+    [params.workspaceTabs],
   );
   const workspaceScopes = useMemo(
     () => buildWorkspaceScopes(params.workspaceTabs),
@@ -85,22 +98,22 @@ export function useGlobalTaskList(params: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [workspaceSignature],
   );
+  // 这个 selector 在每次 store 更新时都会跑（包括每个流式 token）。原来做 sort + JSON.stringify
+  // 是为了得到一个可比较的稳定签名 —— 用拼接代替，避免每次分配嵌套数组与 JSON 字符串。
   const taskListVersionSignature = useZCodeSessionStore((state) =>
-    JSON.stringify(
-      params.workspaceTabs
-        .map((tab) => {
-          const workspace = selectWorkspaceZCodeState(
-            state,
-            tab.workspacePath,
-            tab.workspaceIdentity,
-          );
-          return [
-            tab.workspaceIdentity?.trim() || tab.workspacePath,
-            workspace.taskListVersion,
-          ] as const;
-        })
-        .sort(([left], [right]) => left.localeCompare(right)),
-    ),
+    params.workspaceTabs
+      .map((tab) => {
+        const workspace = selectWorkspaceZCodeState(
+          state,
+          tab.workspacePath,
+          tab.workspaceIdentity,
+        );
+        const key = tab.workspaceIdentity?.trim() || tab.workspacePath;
+        const version = String(workspace.taskListVersion);
+        return `${key.length}:${key}${version.length}:${version}`;
+      })
+      .sort()
+      .join("\u0001"),
   );
   const [items, setItems] = useState<GlobalTaskListItem[]>([]);
   const itemsRef = useRef<GlobalTaskListItem[]>(items);

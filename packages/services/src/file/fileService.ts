@@ -13,7 +13,10 @@ import type {
 import { getMediaPreviewFormat } from "@zcode/shared";
 import { packWorkspaceFileEntries } from "@zcode/shared/workspaceFileEntriesCodec";
 import type { IFileService, WorkspaceFileSearchParams } from "./file.js";
-import { WORKSPACE_FILE_SEARCH_DISPLAY_CAP } from "@zcode/shared/workspaceFileSearch";
+import {
+  WORKSPACE_FILE_SEARCH_DISPLAY_CAP,
+  type WorkspaceFileSearchCandidate,
+} from "@zcode/shared/workspaceFileSearch";
 import { buildHostFileSearchCandidates, searchHostFileCandidates } from "./workspaceFileSearch.js";
 import {
   defaultWorkspaceFileSearchFilter,
@@ -222,7 +225,6 @@ interface WorkspaceFileIndex {
   at: number;
   signature: string;
   packed: string;
-  candidates?: ReturnType<typeof buildHostFileSearchCandidates>;
 }
 
 async function statWorkspaceFileSearchIgnoreFingerprint(rootPath: string): Promise<string> {
@@ -242,6 +244,81 @@ export function createFileService(options: CreateFileServiceOptions = {}): IFile
   // 索引归服务实例；不同 Host/注入过滤器不能通过模块全局缓存复用同路径结果。
   const workspaceFileListCache = new Map<string, WorkspaceFileIndex>();
   const pendingFileExistenceChecks = new Map<string, Promise<boolean>>();
+
+  /**
+   * @ 搜索候选表只保留最近一个 workspace（不是每份 index 一份）。
+   *
+   * candidates 是 packed 的展开形式：37 万文件约 25MB packed，展开成 8 字段对象后是 100-200MB。
+   * 它原来挂在 WorkspaceFileIndex 上（`index.candidates ??= ...`），而 index 缓存有 4 个槽位、
+   * TTL 清理只在下次 ensure 时才跑——用户搜完关掉面板就不再调用，这 4 份能留到进程结束。
+   * 单槽把常驻上限压到 1 份；放在闭包里与 index 缓存同一生命周期，避免多实例互相踢槽。
+   */
+  let hostFileSearchCandidatesCache: {
+    index: WorkspaceFileIndex;
+    candidates: WorkspaceFileSearchCandidate[];
+  } | null = null;
+  /** 同一 index 的并发搜索只展开一次，否则连点刷新会并行建出多份 100-200MB 候选表。 */
+  let inFlightHostFileSearchCandidates: {
+    index: WorkspaceFileIndex;
+    promise: Promise<WorkspaceFileSearchCandidate[]>;
+  } | null = null;
+
+  /** index 是否仍是索引缓存里的活条目。展开候选要几百毫秒，期间可能被 TTL/容量淘汰。 */
+  const isLiveWorkspaceFileIndex = (index: WorkspaceFileIndex): boolean => {
+    for (const candidate of workspaceFileListCache.values()) {
+      if (candidate === index) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const forgetHostFileSearchCandidates = (index: WorkspaceFileIndex): void => {
+    if (hostFileSearchCandidatesCache?.index === index) {
+      hostFileSearchCandidatesCache = null;
+    }
+    if (inFlightHostFileSearchCandidates?.index === index) {
+      inFlightHostFileSearchCandidates = null;
+    }
+  };
+
+  const getHostFileSearchCandidates = async (
+    index: WorkspaceFileIndex,
+    rootPath: string,
+  ): Promise<WorkspaceFileSearchCandidate[]> => {
+    if (hostFileSearchCandidatesCache?.index === index) {
+      return hostFileSearchCandidatesCache.candidates;
+    }
+    if (inFlightHostFileSearchCandidates?.index === index) {
+      return inFlightHostFileSearchCandidates.promise;
+    }
+    const entry: {
+      index: WorkspaceFileIndex;
+      promise: Promise<WorkspaceFileSearchCandidate[]>;
+    } = {
+      index,
+      promise: Promise.resolve([]),
+    };
+    entry.promise = (async () => {
+      const candidates = await buildHostFileSearchCandidates(index.packed, rootPath);
+      // 展开期间该 index 可能已被 TTL/容量淘汰。此时写回会让一份 100-200MB 的候选表
+      // 挂在一个已废弃的 index 上，直到下次搜索才释放——正是这次要消除的滞留。
+      if (isLiveWorkspaceFileIndex(index)) {
+        hostFileSearchCandidatesCache = { index, candidates };
+      }
+      return candidates;
+    })();
+    inFlightHostFileSearchCandidates = entry;
+    try {
+      return await entry.promise;
+    } finally {
+      // 用 entry 身份而不是 index 比较：forget 之后同一 index 可能已经起了新的一轮展开，
+      // 按 index 清会误删别人的条目，导致第三次并行展开（每次都是 100-200MB）。
+      if (inFlightHostFileSearchCandidates === entry) {
+        inFlightHostFileSearchCandidates = null;
+      }
+    }
+  };
 
   const checkFileExists = async (path: string): Promise<boolean> => {
     const cached = fileExistenceCache.get(path);
@@ -284,8 +361,10 @@ export function createFileService(options: CreateFileServiceOptions = {}): IFile
     const ignoreRules = await loadWorkspaceFileSearchIgnoreRules(rootPath, workspaceIgnoreLogger);
     const cacheSignature = `${rootPath}\n${await statWorkspaceFileSearchIgnoreFingerprint(rootPath)}`;
     for (const [key, value] of workspaceFileListCache) {
-      if (Date.now() - value.at >= WORKSPACE_FILE_LIST_CACHE_TTL_MS)
+      if (Date.now() - value.at >= WORKSPACE_FILE_LIST_CACHE_TTL_MS) {
         workspaceFileListCache.delete(key);
+        forgetHostFileSearchCandidates(value);
+      }
     }
     const inFlight = workspaceFileListScanning.get(workspaceKey);
     // 刷新中的同作用域查询等待新索引，不能先命中旧缓存而遗漏刚创建的文件。
@@ -369,7 +448,11 @@ export function createFileService(options: CreateFileServiceOptions = {}): IFile
         while (workspaceFileListCache.size > WORKSPACE_FILE_LIST_CACHE_MAX_ENTRIES) {
           const oldest = workspaceFileListCache.keys().next().value;
           if (oldest === undefined) break;
+          const evicted = workspaceFileListCache.get(oldest);
           workspaceFileListCache.delete(oldest);
+          if (evicted) {
+            forgetHostFileSearchCandidates(evicted);
+          }
         }
       }
       return index;
@@ -613,8 +696,8 @@ export function createFileService(options: CreateFileServiceOptions = {}): IFile
         params.workspaceIdentity,
         params.refresh,
       );
-      index.candidates ??= buildHostFileSearchCandidates(index.packed, params.rootPath);
-      return searchHostFileCandidates(await index.candidates, params.query, limit);
+      const candidates = await getHostFileSearchCandidates(index, params.rootPath);
+      return searchHostFileCandidates(candidates, params.query, limit);
     },
     async listWorkspaceFilesLength(params: { rootPath: string }): Promise<number> {
       const { packed } = await ensureWorkspaceFileIndex(params.rootPath);

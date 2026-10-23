@@ -5,7 +5,11 @@
 // task-realtime.ts 保留旧协议兼容接口；本文件集中定义对应的运行时 schema。
 
 import { z } from "zod";
-import type { ZCodeTaskMigrationSource, ZCodeTaskMode } from "./zcode-task-types-core.js";
+import type {
+  TaskStreamMirrorableEvent,
+  ZCodeTaskMigrationSource,
+  ZCodeTaskMode,
+} from "./zcode-task-types-core.js";
 import { zcodeAgentProviderSchema } from "./zcode-agent-policy.js";
 import { zcodePermissionResponseSchema } from "./zcode-protocol-legacy-types.js";
 // merge 冲突解决：两侧分别在相邻行新增独立 import（本分支 hook trust review
@@ -211,13 +215,17 @@ const zcodePromptAttachmentSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
 ]);
+// 信封校验：只保证 type/taskId/traceId 存在，正文由 agent 侧按 TaskStreamMirrorableEvent 保证。
+// passthrough 的推断类型是 { [x: string]: unknown; ... } 的宽松索引签名，与严格事件联合不兼容；
+// 不在这里复制 20+ 种事件的完整 schema（会把校验成本压到 main 热路径），而是把输出类型桥接到
+// 手写联合，让下游消费方拿到精确类型。
 const taskStreamMirrorableEventSchema = z
   .object({
     type: nonEmptyString,
     taskId: nonEmptyString,
     traceId: nonEmptyString,
   })
-  .passthrough();
+  .passthrough() as unknown as z.ZodType<TaskStreamMirrorableEvent>;
 const taskStreamMirrorUserMessagePublishOpSchema = z
   .object({
     kind: z.literal("user_message"),

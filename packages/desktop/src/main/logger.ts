@@ -1,4 +1,4 @@
-import { mkdirSync, appendFileSync } from "node:fs";
+import { mkdirSync, createWriteStream, type WriteStream } from "node:fs";
 import { join } from "node:path";
 import { formatTimestamp } from "@zcode/shared";
 import { cleanupExpiredLogFiles, LOG_RETENTION_DAYS } from "./logRetention.js";
@@ -70,14 +70,57 @@ function formatDate(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+/**
+ * 当前打开的日志文件流。
+ *
+ * 这里原来每行 `mkdirSync` + `appendFileSync`，而 `rpc/logging-middleware` 给每个 RPC 调用
+ * 都打一条日志 —— 等于「renderer 每次 RPC」都在主进程 UI 线程上做两次同步文件操作。
+ * 换成持久的 WriteStream 后，写入变成一次内存写 + 异步 flush。
+ */
+let activeLogStream: { filePath: string; stream: WriteStream } | null = null;
+/**
+ * 落盘失败后的静默窗口。
+ *
+ * 流出错后复位单槽会让下一行重新 open 文件。持续 ENOSPC / 权限丢失 / 杀软锁文件时，
+ * 那就是「每行一次 mkdirSync + createWriteStream」。原来的 appendFileSync 失败也是每行一次
+ * open，但那条路径不会反复建目录和分配流对象。这里加一个短窗口，失败后 5s 内只写 console。
+ */
+const LOG_WRITE_RETRY_DELAY_MS = 5_000;
+let logWriteBlockedUntil = 0;
+
+function getLogStream(logDir: string, filePath: string): WriteStream | null {
+  if (Date.now() < logWriteBlockedUntil) {
+    return null;
+  }
+  if (activeLogStream?.filePath === filePath) {
+    return activeLogStream.stream;
+  }
+  // 只在切换日志文件（跨日或日志目录变化）时建目录，正常写入路径零调用。
+  mkdirSync(logDir, { recursive: true });
+  const stream = createWriteStream(filePath, { flags: "a" });
+  stream.on("error", () => {
+    // 日志写入失败不应影响应用运行，与原 appendFileSync 的 try/catch 等价。
+    // 但要复位单槽：留着一个已 destroyed 的流，当天剩余日志会全部静默丢失
+    // （原来的 appendFileSync 每次重新 open，一次 ENOSPC/EACCES 之后能自愈）。
+    if (activeLogStream?.stream === stream) {
+      activeLogStream = null;
+    }
+    logWriteBlockedUntil = Date.now() + LOG_WRITE_RETRY_DELAY_MS;
+  });
+  const previous = activeLogStream?.stream;
+  activeLogStream = { filePath, stream };
+  previous?.end();
+  return stream;
+}
+
 function write(level: LogLevel, source: string, ...args: unknown[]) {
   const now = new Date();
   const ts = formatTimestamp(now);
   const pid = process.pid;
   const message = args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ");
-  const line = `[${ts}] [${level}] [pid:${pid}] [${source}] ${message}\n`;
+  const line = `[${ts}] [${level}] [pid:${pid}] [${source}] ${message}
+`;
   const logDir = getLogDir();
-  mkdirSync(logDir, { recursive: true });
   const filePath = join(logDir, `${formatDate(now)}.log`);
 
   // 同时保留 console 输出，方便开发调试；console 也加时间戳和 PID，与文件格式对齐
@@ -85,7 +128,7 @@ function write(level: LogLevel, source: string, ...args: unknown[]) {
 
   try {
     maybeThrowInjectedFsFault({ operation: "appendFile", path: filePath });
-    appendFileSync(filePath, line);
+    getLogStream(logDir, filePath)?.write(line);
   } catch {
     // 日志写入失败不应影响应用运行
   }

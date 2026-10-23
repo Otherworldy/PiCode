@@ -80,6 +80,11 @@ interface Slot {
   stickyReady: CuaPermissionStatus | null;
 }
 
+/**
+ * 每个访问过的 workspace 一个槽位，原来没有删除点；槽位还持有 retryTimer，
+ * 泄漏时连带一个活的 setTimeout。
+ */
+const MAX_STATUS_SLOTS = 64;
 const slots = new Map<string, Slot>();
 const listeners = new Set<() => void>();
 
@@ -116,6 +121,13 @@ function ensureSlot(key: string): Slot {
     stickyReady: null,
   };
   slots.set(key, created);
+  while (slots.size > MAX_STATUS_SLOTS) {
+    const oldest = slots.keys().next().value;
+    if (oldest === undefined) break;
+    const evicted = slots.get(oldest);
+    if (evicted) clearTransientRetry(evicted);
+    slots.delete(oldest);
+  }
   return created;
 }
 
@@ -282,6 +294,9 @@ export function fetchCuaPermissionStatus(params: FetchCuaPermissionStatusParams)
       // 保留 lastKnown 展示；由下方的退避重试收敛。
     })
     .finally(() => {
+      // 槽位可能已被 ensureSlot 的容量淘汰删掉：此时 slot 是孤儿对象，继续写它会给孤儿槽
+      // 重新排重试定时器，并把结果打到一个没人看的 snapshot 上。
+      if (slots.get(key) !== slot) return;
       slot.inFlight = false;
       if (slot.rerunRequested) {
         // 刷新发生在查询过程中：旧结果可能来自重启前的 Helper，不发布，只补一次新查询。

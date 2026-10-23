@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { copyFile, mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { copyFile, mkdir, open, readdir, readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -339,6 +339,53 @@ function assertBranchSummaryIdle(projector: PiToV4Projector): void {
   throw Object.assign(new Error("Wait for the branch summary to finish"), {
     reasonCode: "guard.sessionTreeBusy",
   });
+}
+
+/**
+ * 单文件读取上限。超过这个大小的会话只解析前 16MB：`readPiJsonl` 的 summary 是聚合结果，
+ * 截断会让最后活动时间/最后一条预览略微失真，但换来的是「列一次会话不会被一个巨大的
+ * jsonl 拖垮」。真正的完整性由打开会话时的全量读取负责。
+ */
+const MAX_SUMMARY_READ_BYTES = 1024 * 1024;
+const SUMMARY_READ_CONCURRENCY = 4;
+
+interface SessionFileHead {
+  content: string;
+  /** 文件比读取上限大：`lastActivityAt` 需要外部修正。 */
+  truncated: boolean;
+  mtimeMs: number;
+}
+
+/**
+ * 读取文件前 maxBytes 字节。
+ *
+ * 读不出来（不存在/无权限）返回 null，与原实现的 `catch(() => "")` 等价。
+ * 用循环读而不是单次 `handle.read`：POSIX 允许短读，单次调用会静默少读一截。
+ */
+async function readFileHead(path: string, maxBytes: number): Promise<SessionFileHead | null> {
+  const handle = await open(path, "r").catch(() => undefined);
+  if (!handle) return null;
+  try {
+    const info = await handle.stat().catch(() => undefined);
+    if (!info || info.size === 0) return null;
+    const length = Math.min(info.size, maxBytes);
+    const buffer = Buffer.alloc(length);
+    let filled = 0;
+    while (filled < length) {
+      const { bytesRead } = await handle.read(buffer, filled, length - filled, filled);
+      if (bytesRead === 0) break;
+      filled += bytesRead;
+    }
+    return {
+      content: buffer.toString("utf8", 0, filled),
+      truncated: info.size > maxBytes,
+      mtimeMs: info.mtimeMs,
+    };
+  } catch {
+    return null;
+  } finally {
+    await handle.close().catch(() => undefined);
+  }
 }
 
 export class HostSessionRegistry {
@@ -728,33 +775,55 @@ export class HostSessionRegistry {
       return [];
     }
     const summaries: PiStoredSummary[] = [];
-    for (const file of files) {
-      if (!file.endsWith(".jsonl")) continue;
-      const sessionFile = join(dir, file);
-      const content = await readFile(sessionFile, "utf8").catch(() => "");
-      const summary = readPiJsonl(content).summary;
-      if (!summary) continue;
-      const stem = fileStem(file);
-      const headerId = summary.sessionId;
-      // Pi 分叉文件名是 timestamp_id。用整段文件名当会话 id 会和活会话的 header id 不是同一行。
-      const sessionId =
-        headerId && (idFrom === "header" || stem.endsWith(`_${headerId}`)) ? headerId : stem;
-      const parentSessionId = sessionIdFromParentReference(summary.parentSession);
-      summaries.push({
-        sessionId,
-        sessionFile,
-        title: summary.title,
-        createdAt: summary.createdAt,
-        lastActivityAt: summary.lastActivityAt,
-        ...(summary.lastAssistantPreview
-          ? { lastAssistantPreview: summary.lastAssistantPreview }
-          : {}),
-        ...(summary.cwd ? { cwd: summary.cwd } : {}),
-        // 自引用是脏数据（旧版本把 id 写进了路径字段），不能当成一条边。
-        ...(parentSessionId && parentSessionId !== sessionId ? { parentSessionId } : {}),
-      });
+    const targets = files.filter((file) => file.endsWith(".jsonl"));
+    // 原来逐个 await 全量 readFile：2000 个会话 × 平均 500KB 就是列一次读 1GB、解析 1GB，
+    // 峰值同时挂着 content 与 summaries。现在改成小批并发 + 单文件读取上限。
+    for (let offset = 0; offset < targets.length; offset += SUMMARY_READ_CONCURRENCY) {
+      const batch = targets.slice(offset, offset + SUMMARY_READ_CONCURRENCY);
+      const results = await Promise.all(
+        batch.map((file) => this.readStoredSummary(dir, file, idFrom)),
+      );
+      for (const summary of results) if (summary) summaries.push(summary);
     }
     return summaries;
+  }
+
+  /** 读一个 jsonl 的 summary；内存峰值被 `MAX_SUMMARY_READ_BYTES` 限制在单文件级别。 */
+  private async readStoredSummary(
+    dir: string,
+    file: string,
+    idFrom: "file" | "header",
+  ): Promise<PiStoredSummary | null> {
+    const sessionFile = join(dir, file);
+    const head = await readFileHead(sessionFile, MAX_SUMMARY_READ_BYTES);
+    if (!head) return null;
+    const summary = readPiJsonl(head.content).summary;
+    if (!summary) return null;
+    // 截断后 summary 的 lastActivityAt 只能看到文件前 1MB 的最后一条消息。jsonl 是 append-only
+    // 的，mtime 就是真实的最后活动时间 —— 不修正的话「大而活跃」的会话会在侧栏里被排到很久
+    // 不用的会话下面（打开会话后走全量读才会自愈）。
+    const lastActivityAt = head.truncated
+      ? Math.max(summary.lastActivityAt, head.mtimeMs)
+      : summary.lastActivityAt;
+    const stem = fileStem(file);
+    const headerId = summary.sessionId;
+    // Pi 分叉文件名是 timestamp_id。用整段文件名当会话 id 会和活会话的 header id 不是同一行。
+    const sessionId =
+      headerId && (idFrom === "header" || stem.endsWith(`_${headerId}`)) ? headerId : stem;
+    const parentSessionId = sessionIdFromParentReference(summary.parentSession);
+    return {
+      sessionId,
+      sessionFile,
+      title: summary.title,
+      createdAt: summary.createdAt,
+      lastActivityAt,
+      ...(summary.lastAssistantPreview
+        ? { lastAssistantPreview: summary.lastAssistantPreview }
+        : {}),
+      ...(summary.cwd ? { cwd: summary.cwd } : {}),
+      // 自引用是脏数据（旧版本把 id 写进了路径字段），不能当成一条边。
+      ...(parentSessionId && parentSessionId !== sessionId ? { parentSessionId } : {}),
+    };
   }
 
   private async findInRoot(

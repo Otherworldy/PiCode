@@ -34,6 +34,48 @@ export function createHostLogRelay(
 ) {
   let hasStructuredLog = false;
   const rawLogs: RawStreamLog[] = [];
+  /**
+   * 兜底日志的容量与刷新节奏。
+   *
+   * 原来 rawLogs 只在 host 进程退出时（desktopHostProcess 的唯一一处 flushRawLogs）回放，
+   * 于是 host 存活期间每条裸 stdout/stderr 都留在内存里：既是无界增长，又意味着崩溃时这批
+   * 日志反而全部丢失 —— 恰好在最需要它的时候。
+   */
+  const MAX_RAW_LOGS = 2000;
+  const RAW_LOG_FLUSH_DELAY_MS = 200;
+  let rawFlushTimer: NodeJS.Timeout | undefined;
+
+  function flushRawLogsNow(): void {
+    if (hasStructuredLog) {
+      rawLogs.length = 0;
+      return;
+    }
+    for (const rawLog of rawLogs) emitRawLog(rawLog);
+    rawLogs.length = 0;
+  }
+
+  function scheduleRawFlush(): void {
+    if (rawFlushTimer !== undefined || hasStructuredLog) return;
+    rawFlushTimer = setTimeout(() => {
+      rawFlushTimer = undefined;
+      flushRawLogsNow();
+    }, RAW_LOG_FLUSH_DELAY_MS);
+    rawFlushTimer.unref?.();
+  }
+
+  function appendRawLog(rawLog: RawStreamLog): void {
+    rawLogs.push(rawLog);
+    // 到量立刻刷，不等定时器：高噪声 host（死循环打日志）不能靠 200ms 窗口兜住。
+    if (rawLogs.length >= MAX_RAW_LOGS) {
+      if (rawFlushTimer !== undefined) {
+        clearTimeout(rawFlushTimer);
+        rawFlushTimer = undefined;
+      }
+      flushRawLogsNow();
+      return;
+    }
+    scheduleRawFlush();
+  }
 
   function emitRawLog(rawLog: RawStreamLog): void {
     if (rawLog.kind === "stderr") {
@@ -70,7 +112,7 @@ export function createHostLogRelay(
         return;
       }
 
-      rawLogs.push({ kind: "stdout", message });
+      appendRawLog({ kind: "stdout", message });
     },
 
     onStderr(message: string): void {
@@ -78,12 +120,16 @@ export function createHostLogRelay(
         return;
       }
 
-      rawLogs.push({ kind: "stderr", message });
+      appendRawLog({ kind: "stderr", message });
     },
 
     onStructuredLog(entry: HostStructuredLog): void {
       hasStructuredLog = true;
       rawLogs.length = 0;
+      if (rawFlushTimer !== undefined) {
+        clearTimeout(rawFlushTimer);
+        rawFlushTimer = undefined;
+      }
       const structuredEntry = {
         ...entry,
         timestamp: new Date().toLocaleTimeString(undefined, {
@@ -98,15 +144,11 @@ export function createHostLogRelay(
     },
 
     flushRawLogs(): void {
-      if (hasStructuredLog) {
-        rawLogs.length = 0;
-        return;
+      if (rawFlushTimer !== undefined) {
+        clearTimeout(rawFlushTimer);
+        rawFlushTimer = undefined;
       }
-
-      for (const rawLog of rawLogs) {
-        emitRawLog(rawLog);
-      }
-      rawLogs.length = 0;
+      flushRawLogsNow();
     },
   };
 }

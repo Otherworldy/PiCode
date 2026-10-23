@@ -37,6 +37,33 @@ const activeUiToolCalls = new Map<string, AbortController>();
 const finishedUiToolCalls = new Set<string>();
 const uiToolCallKey = (sessionId: string, callId: string) => `${sessionId}\u0000${callId}`;
 
+/**
+ * 额度。同目录的 `samplingCalls.ts` 早就有 per-agent / per-session / MAX_OPERATIONS 三道限制，
+ * `uiCallTool` 一条都没有 —— 一个死循环或恶意插件页面可以让 CLI 进程内存无界增长
+ * （每个 callId 一条 + 每个在途调用一个 controller），同时打爆上游 MCP server。
+ */
+const UI_CALL_MAX_CONCURRENT_PER_INSTANCE = 4;
+const UI_CALL_MAX_PER_SESSION = 500;
+const UI_CALL_TIMEOUT_MS = 120_000;
+/** 终态账本容量：去重只需覆盖「可能被重发的窗口」，秒级 512 条足够。 */
+const UI_CALL_MAX_FINISHED_ENTRIES = 512;
+/** 会话计数表的容量上限：没走 closeSession 就消失的会话不该永久留一条。 */
+const UI_CALL_MAX_TRACKED_SESSIONS = 4096;
+
+const inFlightByInstance = new Map<string, number>();
+const callsBySession = new Map<string, number>();
+const instanceKeyFor = (sessionId: string, token: string) => `${sessionId}\u0000${token}`;
+
+/** 记录一个终态 key，超出容量按插入顺序淘汰最旧的。 */
+function rememberFinishedUiToolCall(key: string): void {
+  finishedUiToolCalls.add(key);
+  while (finishedUiToolCalls.size > UI_CALL_MAX_FINISHED_ENTRIES) {
+    const oldest = finishedUiToolCalls.values().next().value;
+    if (oldest === undefined) return;
+    finishedUiToolCalls.delete(oldest);
+  }
+}
+
 /** 供 session 关闭时清理：abort 该 session 全部进行中的 UI 调用。 */
 export function abortMcpUiToolCallsForSession(sessionId: string): number {
   for (const key of finishedUiToolCalls)
@@ -48,6 +75,9 @@ export function abortMcpUiToolCallsForSession(sessionId: string): number {
     activeUiToolCalls.delete(key);
     count += 1;
   }
+  for (const key of [...inFlightByInstance.keys()])
+    if (key.startsWith(`${sessionId}\u0000`)) inFlightByInstance.delete(key);
+  callsBySession.delete(sessionId);
   return count;
 }
 
@@ -87,10 +117,32 @@ export function createMcpUiHandlers(options: CreateMcpUiHandlersOptions = {}): M
       const key = uiToolCallKey(params.sessionId, `${params.instance.token}:${params.callId}`);
       if (activeUiToolCalls.has(key) || finishedUiToolCalls.has(key))
         throw new Error("Duplicate MCP App callId");
+      // 超限立即拒绝，不排队：恶意调用方只会把队列填满，排队把内存问题换成延迟问题。
+      const owner = instanceKeyFor(params.sessionId, params.instance.token);
+      const inFlight = inFlightByInstance.get(owner) ?? 0;
+      if (inFlight >= UI_CALL_MAX_CONCURRENT_PER_INSTANCE) {
+        throw new Error(
+          `MCP_UI_CALL_CONCURRENCY_EXCEEDED: ${params.toolName} already has ${inFlight} calls in flight`,
+        );
+      }
+      const sessionCalls = callsBySession.get(params.sessionId) ?? 0;
+      if (sessionCalls >= UI_CALL_MAX_PER_SESSION) {
+        throw new Error(
+          `MCP_UI_CALL_QUOTA_EXCEEDED: session reached ${UI_CALL_MAX_PER_SESSION} UI tool calls`,
+        );
+      }
       activeUiToolCalls.set(key, cancel);
+      inFlightByInstance.set(owner, inFlight + 1);
+      if (!callsBySession.has(params.sessionId) && callsBySession.size >= UI_CALL_MAX_TRACKED_SESSIONS) {
+        // 只淘汰最旧的会话计数（FIFO）；新会话的配额从零开始，不影响进行中的调用。
+        const oldest = callsBySession.keys().next().value;
+        if (oldest !== undefined) callsBySession.delete(oldest);
+      }
+      callsBySession.set(params.sessionId, sessionCalls + 1);
+      const timeout = AbortSignal.timeout(UI_CALL_TIMEOUT_MS);
       const signal = callOptions?.signal
-        ? AbortSignal.any([callOptions.signal, cancel.signal])
-        : cancel.signal;
+        ? AbortSignal.any([callOptions.signal, cancel.signal, timeout])
+        : AbortSignal.any([cancel.signal, timeout]);
       try {
         await assertMcpUiServerScope(access, params);
         // H03：归属之外还要看调用方资格——model-only 工具不给页面调，权限仍由现有宿主策略判断。
@@ -122,6 +174,12 @@ export function createMcpUiHandlers(options: CreateMcpUiHandlersOptions = {}): M
         });
         return result;
       } catch (error) {
+        if (timeout.aborted && !cancel.signal.aborted) {
+          // 工具的 signal 已 abort，所以上游会真的停下，而不只是宿主不再等。
+          throw new Error(
+            `MCP_UI_CALL_TIMEOUT: ${params.toolName} exceeded ${UI_CALL_TIMEOUT_MS}ms`,
+          );
+        }
         logger?.warn("MCP UI tool call failed", {
           event: "mcp.ui.tool.call",
           pluginId: params.pluginId,
@@ -133,9 +191,12 @@ export function createMcpUiHandlers(options: CreateMcpUiHandlersOptions = {}): M
         });
         throw error;
       } finally {
+        const remaining = (inFlightByInstance.get(owner) ?? 1) - 1;
+        if (remaining > 0) inFlightByInstance.set(owner, remaining);
+        else inFlightByInstance.delete(owner);
         if (activeUiToolCalls.get(key) === cancel) {
           activeUiToolCalls.delete(key);
-          finishedUiToolCalls.add(key);
+          rememberFinishedUiToolCall(key);
         }
       }
     },
@@ -147,11 +208,11 @@ export function createMcpUiHandlers(options: CreateMcpUiHandlersOptions = {}): M
       const key = uiToolCallKey(params.sessionId, `${params.instance.token}:${params.callId}`);
       const controller = activeUiToolCalls.get(key);
       if (!controller) {
-        finishedUiToolCalls.add(key);
+        rememberFinishedUiToolCall(key);
         return { cancelled: false };
       }
       controller.abort();
-      finishedUiToolCalls.add(key);
+      rememberFinishedUiToolCall(key);
       logger?.info("MCP UI tool call cancelled", {
         event: "mcp.ui.tool.cancel",
         pluginId: params.pluginId,

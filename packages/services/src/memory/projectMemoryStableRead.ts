@@ -39,7 +39,11 @@ export async function readProjectMemoryFileFromStableHandle(params: {
       throwPreviewLimitError(params.fileName);
     }
 
-    const content = await readBoundedFile(handle, PROJECT_MEMORY_PREVIEW_MAX_BYTES + 1);
+    const content = await readBoundedFile(
+      handle,
+      PROJECT_MEMORY_PREVIEW_MAX_BYTES + 1,
+      Number(openedStat.size),
+    );
     const finalStat = await handle.stat({ bigint: true });
     // 原子 rename 失败时写入会退化为同 inode 的原地覆盖，仅读取文件身份无法识别内容变化。
     if (!isSameFileSnapshot(openedStat, finalStat)) {
@@ -70,8 +74,22 @@ function isSameFileSnapshot(left: BigIntStats, right: BigIntStats): boolean {
   );
 }
 
-async function readBoundedFile(handle: FileHandle, maxBytes: number): Promise<Buffer> {
-  const buffer = Buffer.alloc(maxBytes);
+/**
+ * 读取最多 maxBytes 字节。
+ *
+ * `sizeHint` 用来按实际文件大小分配：`Buffer.alloc` 是**零填充**的，固定分配 5 MiB 时即使
+ * 目标是 2 KB 也要真写一遍 5 MiB（不能靠 GC 抵消）。
+ */
+async function readBoundedFile(
+  handle: FileHandle,
+  maxBytes: number,
+  sizeHint?: number,
+): Promise<Buffer> {
+  const capacity = Math.max(
+    1,
+    Math.min(maxBytes, sizeHint === undefined ? maxBytes : sizeHint + 1),
+  );
+  const buffer = Buffer.alloc(capacity);
   let offset = 0;
   while (offset < buffer.length) {
     const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, offset);

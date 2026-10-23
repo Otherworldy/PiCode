@@ -36,6 +36,44 @@ export function createGenUiStateStorage(root: string): GenUiStateStorage {
   const lastPublished = new Map<string, string>();
   const targets = new Map<string, GenUiStateTarget>();
   let disposed = false;
+  /**
+   * 同时保持打开的 scope 目录观察数上限。
+   *
+   * key 是 (workspaceKey, sessionId) 的哈希，也就是「用过 gen-ui 状态的会话各占一个」。
+   * 没有上限时长跑一天切过几百个会话就是几百个常驻目录句柄：Linux 上会逼近
+   * max_user_watches 让 fs.watch 直接 ENOSPC，Windows 上每个占一个目录句柄 + 线程池槽。
+   */
+  const MAX_WATCHED_SCOPES = 8;
+
+  /**
+   * 丢弃一个目录下的派生缓存。
+   *
+   * **不能清 `targets`**：`targets` 是「文件 → 属于哪个 target」的映射，而 `publishLatest`
+   * 依赖它，缺失时直接 return。一个 session 下可以有多张 gen-ui 卡片共用同一个目录，watcher
+   * 被淘汰后只要有一张卡片重新 observe，其余卡片就会变成「watcher 在场、事件到达、通知被静默
+   * 丢弃」。targets 条目本身很小，留着不影响内存目标。
+   */
+  function forgetDirectory(dir: string): void {
+    const prefix = `${dir}/`;
+    // Map 迭代器允许在遍历中删除当前元素。
+    for (const file of targets.keys()) {
+      if (!file.startsWith(prefix)) continue;
+      lastPublished.delete(file);
+      notifications.delete(file);
+    }
+  }
+
+  /** 按插入顺序淘汰最旧的 scope 目录（FIFO；这里不做「命中即刷新」的代价是不必要的重扫）。 */
+  function evictWatchScopes(): void {
+    while (watchers.size > MAX_WATCHED_SCOPES) {
+      const oldest = watchers.keys().next().value;
+      if (oldest === undefined) return;
+      watchers.get(oldest)?.close();
+      watchers.delete(oldest);
+      forgetDirectory(oldest);
+    }
+  }
+
   const directory = (scope: GenUiScope) => join(root, hash(buildGenUiScopeKey(scope)));
   const fileFor = (target: GenUiStateTarget) =>
     join(directory(target), `${hash(target.path)}.json`);
@@ -77,7 +115,14 @@ export function createGenUiStateStorage(root: string): GenUiStateStorage {
     await mkdir(dir, { recursive: true });
     if (disposed) throw new Error("Gen UI state storage is closed");
     targets.set(fileFor(target), target);
-    if (watchers.has(dir)) return;
+    const existingWatcher = watchers.get(dir);
+    if (existingWatcher) {
+      // 命中即刷新顺序，做成真正的 LRU：否则正在使用的 scope 会被新 scope 按 FIFO 淘汰
+      // （用户开着看板再连开几个用过 gen-ui 的会话就丢掉跟踪）。
+      watchers.delete(dir);
+      watchers.set(dir, existingWatcher);
+      return;
+    }
     const watcher = watch(dir, { persistent: false }, (_event, filename) => {
       if (!filename || !/^[a-f0-9]{64}\.json$/u.test(filename)) return;
       void publish(join(dir, filename)).catch((error: unknown) =>
@@ -88,6 +133,7 @@ export function createGenUiStateStorage(root: string): GenUiStateStorage {
       log.warn(undefined, "State watcher failed", { error: error.message }),
     );
     watchers.set(dir, watcher);
+    evictWatchScopes();
   }
   async function records(scope: GenUiScope) {
     const dir = directory(scope);

@@ -109,6 +109,13 @@ export class PiToV4Projector {
   private streamingToolId: string | null = null;
   private readonly toolRowId = new Map<string, number>();
   private readonly toolArgs = new Map<string, string>();
+  /**
+   * `leaf -> canonical id` 索引。
+   *
+   * `canonicalToolId` 原来在匹配不上时对 toolRowId / toolArgs 做全表扫描，而它被每个
+   * tool_execution_start/update/end 调用 —— 一次长会话的成本是 O(工具调用数²)。
+   */
+  private readonly toolLeafIndex = new Map<string, string>();
   private readonly rowIndexById = new Map<number, number>();
   private aborted = false;
   private stopRequested = false;
@@ -210,6 +217,7 @@ export class PiToV4Projector {
     this.pendingError = undefined;
     this.toolRowId.clear();
     this.toolArgs.clear();
+    this.toolLeafIndex.clear();
     this.aborted = false;
     this.branchSummaryRowId = null;
     this.openPlanReviewTurnId = null;
@@ -921,18 +929,19 @@ export class PiToV4Projector {
     if (this.toolRowId.has(toolCallId) || this.toolArgs.has(toolCallId)) return toolCallId;
     const leaf = toolCallId.slice(toolCallId.lastIndexOf("|") + 1);
     if (!leaf) return toolCallId;
-    for (const id of this.toolRowId.keys()) {
-      if (id === leaf || id.endsWith(`|${leaf}`) || toolCallId.endsWith(`|${id}`)) return id;
-    }
-    for (const id of this.toolArgs.keys()) {
-      if (id === leaf || id.endsWith(`|${leaf}`) || toolCallId.endsWith(`|${id}`)) return id;
-    }
-    return toolCallId;
+    return this.toolLeafIndex.get(leaf) ?? toolCallId;
+  }
+
+  /** 记住 id 的叶子段，供 `canonicalToolId` O(1) 匹配。 */
+  private rememberToolLeaf(id: string): void {
+    const leaf = id.slice(id.lastIndexOf("|") + 1);
+    if (leaf) this.toolLeafIndex.set(leaf, id);
   }
 
   private aliasToolId(toolCallId: string, canonicalId: string): void {
     const rowId = this.toolRowId.get(canonicalId);
     if (rowId != null) this.toolRowId.set(toolCallId, rowId);
+    this.rememberToolLeaf(canonicalId);
   }
 
   /** 执行事件的 args 可能比流式参数短。短的那份会把完整 edit 盖掉，底部就只剩最后一小段。 */
@@ -953,6 +962,7 @@ export class PiToV4Projector {
     const inputText = this.rememberArgs(id, event.args);
     const deltas = this.ensureToolRow(id, event.toolName, "running", inputText, true);
     this.aliasToolId(event.toolCallId, id);
+    this.rememberToolLeaf(id);
     return deltas;
   }
 
@@ -1030,6 +1040,9 @@ export class PiToV4Projector {
     };
     // 工具耗时只在两端都有可靠时间时累加：重放 jsonl 时 start/end 共用同一个
     // 落盘时间戳，相减为 0，历史会话的工具用时会偏低。宁可为 0 也不拿墙钟估。
+    // 终态之后不会再需要完整参数：row.inputText 已经持有它。留着等于每次工具调用
+    // （尤其 Write/Edit 的大文件）在会话里多存一份，且只随 reload 释放。
+    this.toolArgs.delete(id);
     const toolMs =
       row.startedAt === undefined
         ? 0
