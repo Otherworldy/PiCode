@@ -430,6 +430,13 @@ const SESSION_SUBSCRIBE_RETRY_BASE_DELAY_MS = 500;
 const SESSION_SUBSCRIBE_RETRY_MAX_DELAY_MS = 5_000;
 const SESSION_SUBSCRIBE_MAX_ATTEMPTS = 8;
 const MAX_TRACKED_SESSION_EVENT_IDS = 10_000;
+/** 同时保留 seq 状态的会话数上限；长期静默的会话先被淘汰。 */
+const MAX_TRACKED_SESSION_SEQUENCE_STATES = 64;
+/**
+ * traceId 映射的会话数上限。它的写入点比 seq 表多：listSessions 一次列会话就给每个 session
+ * 写一条，条目数等于 workspace 会话总数，不受 seq 表 LRU 约束。读侧缺失是降级（返回 undefined）。
+ */
+const MAX_TRACKED_SESSION_TRACE_IDS = 256;
 const SSH_REMOTE_WORKSPACE_IDENTITY_PREFIX = "remote:ssh:";
 const WSL_REMOTE_WORKSPACE_IDENTITY_PREFIX = "remote:wsl:";
 
@@ -771,6 +778,44 @@ function formatModelSelectionForLog(ref: ModelSelection | undefined): string | n
   const base = `${ref.providerId}/${ref.modelId}`;
   const reasoningLevel = ref.options?.reasoningLevel;
   return reasoningLevel ? `${base}${ZCODE_MODEL_REASONING_SEPARATOR}${reasoningLevel}` : base;
+}
+
+/**
+ * workspace 维度的 frame emitter 表。
+ *
+ * 这些表按 workspaceKey 只增不减：host 进程生命周期内切过的每个 remote/多工作区都会留 4 个
+ * 空 emitter。与 `sessionEmitters` 同一模式——最后一个订阅者离开时自回收。
+ *
+ * 前提是「只有订阅才建表」：fire 路径如果也走 getter，那些从未被订阅的 workspace 永远等不到
+ * `onDidRemoveLastListener`，回收就形同虚设。所以 fire 路径走 {@link fireWorkspaceFrame}。
+ */
+function getOrCreateWorkspaceEmitter<T>(
+  table: Map<string, Emitter<T>>,
+  key: string,
+): Emitter<T> {
+  const existing = table.get(key);
+  if (existing) {
+    return existing;
+  }
+  let created: Emitter<T>;
+  created = new Emitter<T>({
+    onDidRemoveLastListener: () => {
+      if (table.get(key) !== created) return;
+      table.delete(key);
+      created.dispose();
+    },
+  });
+  table.set(key, created);
+  return created;
+}
+
+/** 没有订阅者时直接丢弃：不为一条没人收的帧创建常驻条目。 */
+function fireWorkspaceFrame<T>(
+  table: Map<string, Emitter<T>>,
+  workspace: ZCodeAgentWorkspaceTarget,
+  frame: T,
+): void {
+  table.get(resolveWorkspaceKey(workspace))?.fire(frame);
 }
 
 function sessionEventKey(params: ZCodeAgentSessionTarget): string {
@@ -1219,6 +1264,19 @@ export function createZCodeAgentService(
   // 此缓存只去重已交付的账号快照，不表示 Worker 的 Registry 已应用该版本。
   const accountConfigReceivedRevisionByClient = new WeakMap<ZCodeProtocolClient, string>();
   const sessionTraceIdBySessionKey = new Map<string, TraceId>();
+
+  /** 写入 traceId 并按 LRU 维持上界；命中已有的 key 会移到末尾。 */
+  function rememberSessionTraceId(key: string, traceId: TraceId): void {
+    sessionTraceIdBySessionKey.delete(key);
+    sessionTraceIdBySessionKey.set(key, traceId);
+    while (sessionTraceIdBySessionKey.size > MAX_TRACKED_SESSION_TRACE_IDS) {
+      const oldestKey = sessionTraceIdBySessionKey.keys().next();
+      if (oldestKey.done) {
+        break;
+      }
+      sessionTraceIdBySessionKey.delete(oldestKey.value);
+    }
+  }
   const accountRequestAuthService = options?.accountRequestAuthService;
   const accountProviderConfigSource = options?.accountProviderConfigSource;
   const modelSelectionReadinessSource = options?.modelSelectionReadinessSource;
@@ -1556,7 +1614,16 @@ export function createZCodeAgentService(
     if (existing) {
       return existing;
     }
-    const created = new Emitter<ZCodeAgentServiceEvent>();
+    // 会话 emitter 按 sessionKey 只增不减会让 host 内存随「打开过的会话数」增长。
+    // 与 getPluginOperationProgressEmitter 同一模式：最后一个订阅者离开时自回收。
+    let created: Emitter<ZCodeAgentServiceEvent>;
+    created = new Emitter<ZCodeAgentServiceEvent>({
+      onDidRemoveLastListener: () => {
+        if (sessionEmitters.get(key) !== created) return;
+        sessionEmitters.delete(key);
+        created.dispose();
+      },
+    });
     sessionEmitters.set(key, created);
     return created;
   }
@@ -1577,45 +1644,19 @@ export function createZCodeAgentService(
   }
 
   function getConversationFrameEmitter(workspace: ZCodeAgentWorkspaceTarget) {
-    const key = resolveWorkspaceKey(workspace);
-    const existing = conversationFrameEmitters.get(key);
-    if (existing) {
-      return existing;
-    }
-    const created = new Emitter<ConversationTopicWireCandidate>();
-    conversationFrameEmitters.set(key, created);
-    return created;
+    return getOrCreateWorkspaceEmitter(conversationFrameEmitters, resolveWorkspaceKey(workspace));
   }
 
   function getConversationTelemetryFactEmitter(workspace: ZCodeAgentWorkspaceTarget) {
-    const key = resolveWorkspaceKey(workspace);
-    const existing = conversationTelemetryFactEmitters.get(key);
-    if (existing) return existing;
-    const created = new Emitter<ConversationTelemetryFact>();
-    conversationTelemetryFactEmitters.set(key, created);
-    return created;
+    return getOrCreateWorkspaceEmitter(conversationTelemetryFactEmitters, resolveWorkspaceKey(workspace));
   }
 
   function getSessionsIndexFrameEmitter(workspace: ZCodeAgentWorkspaceTarget) {
-    const key = resolveWorkspaceKey(workspace);
-    const existing = sessionsIndexFrameEmitters.get(key);
-    if (existing) {
-      return existing;
-    }
-    const created = new Emitter<SessionsIndexTopicWireCandidate>();
-    sessionsIndexFrameEmitters.set(key, created);
-    return created;
+    return getOrCreateWorkspaceEmitter(sessionsIndexFrameEmitters, resolveWorkspaceKey(workspace));
   }
 
   function getWorkspaceConfigFrameEmitter(workspace: ZCodeAgentWorkspaceTarget) {
-    const key = resolveWorkspaceKey(workspace);
-    const existing = workspaceConfigFrameEmitters.get(key);
-    if (existing) {
-      return existing;
-    }
-    const created = new Emitter<WorkspaceConfigTopicWireCandidate>();
-    workspaceConfigFrameEmitters.set(key, created);
-    return created;
+    return getOrCreateWorkspaceEmitter(workspaceConfigFrameEmitters, resolveWorkspaceKey(workspace));
   }
 
   /** v4 订阅 connectionId：同 host 进程内多个独立消费者（renderer/syncer）用 scope 后缀区分。 */
@@ -1790,6 +1831,9 @@ export function createZCodeAgentService(
     const key = sessionEventKey({ ...workspace, sessionId });
     const existing = sessionEventSequenceStates.get(key);
     if (existing) {
+      // 命中即移到末尾，让「最近有事件的会话」始终留在表里，淘汰的只会是长期静默的会话。
+      sessionEventSequenceStates.delete(key);
+      sessionEventSequenceStates.set(key, existing);
       return existing;
     }
     const created: SessionEventSequenceState = {
@@ -1800,6 +1844,17 @@ export function createZCodeAgentService(
       lastAssignedSeq: 0,
     };
     sessionEventSequenceStates.set(key, created);
+    // 每个状态最多保留 MAX_TRACKED_SESSION_EVENT_IDS 条 eventId，会话数不设上限时总量随
+    // 「打开过的会话数」线性增长。淘汰最久无事件的会话：它若重新活跃，seq 从 1 重新分配，
+    // 客户端按 eventId 去重仍生效，最坏只是多拉一次快照。
+    while (sessionEventSequenceStates.size > MAX_TRACKED_SESSION_SEQUENCE_STATES) {
+      const oldestKey = sessionEventSequenceStates.keys().next();
+      if (oldestKey.done) {
+        break;
+      }
+      sessionEventSequenceStates.delete(oldestKey.value);
+      sessionTraceIdBySessionKey.delete(oldestKey.value);
+    }
     return created;
   }
 
@@ -1841,10 +1896,56 @@ export function createZCodeAgentService(
     return rememberBoundedEventId(state.liveEventIds, state.liveEventIdOrder, event.eventId);
   }
 
+  /**
+   * agent 的 interaction 终结事件是这两张表唯一确定的回收点。
+   *
+   * 它们原本只在 invalidateWorkspaceClient（客户端失效）和 disposeAll 里清。但 UI 应答走的是
+   * V4 resolveInteraction，host 收不到那条 legacy 反向 RPC 的回包 —— 于是每授权一次就留一条，
+   * host 长跑期间单调增长。`permission.resolved` / `userInput.resolved` 正是 agent 侧宣告
+   * 「这个 requestId 已经不用再等我答复」的信号。
+   */
+  function forgetResolvedInteraction(
+    workspace: ZCodeAgentWorkspaceTarget,
+    event: ZCodeSessionEvent,
+  ): void {
+    if (event.type !== "permission.resolved" && event.type !== "userInput.resolved") {
+      return;
+    }
+    // 不能只按事件类型查一张表：CLI 侧的 elicitation（AskUserQuestion / plan approval）
+    // 终结时合成的是 permission.resolved，而那条记录的 requestId 属于 pendingUserInputs。
+    // 反过来 userInput.resolved 目前没有生产者，保留双查也让两侧语义一致。
+    const tables = [pendingPermissions, pendingUserInputs];
+    // payload 是 optional 且按事件类型联合，这里只关心可选的 requestId 字段。
+    const payload: unknown = event.payload;
+    const requestId =
+      typeof payload === "object" && payload !== null && "requestId" in payload
+        ? payload.requestId
+        : undefined;
+    const sessionPrefix = `${sessionEventKey({ ...workspace, sessionId: event.sessionId })}${"\u0000"}`;
+    if (typeof requestId === "string" && requestId.length > 0) {
+      for (const table of tables) {
+        table.delete(`${sessionPrefix}${requestId}`);
+      }
+      return;
+    }
+    // 没有 requestId（permission.resolved 的可选字段，例如每次工具权限被拒时都是这样）：
+    // 按会话清。这条事件已经终结该会话的授权流程，残留条目的读取方只有
+    // `wasPending` 去重闸门——误删的代价是 agent 重发同一 requestId 时多广播一次
+    // permission.request，不会让任何在等答复的请求失去通道（表没有「取出回包」的读者）。
+    for (const table of tables) {
+      for (const key of table.keys()) {
+        if (key.startsWith(sessionPrefix)) {
+          table.delete(key);
+        }
+      }
+    }
+  }
+
   function handleSessionEvent(
     workspace: ZCodeAgentWorkspaceTarget,
     event: ZCodeSessionEvent,
   ): void {
+    forgetResolvedInteraction(workspace, event);
     const normalizedEvent = normalizeSessionEventSeq(workspace, event);
     if (!shouldDeliverLiveSessionEvent(workspace, normalizedEvent)) {
       return;
@@ -2025,7 +2126,7 @@ export function createZCodeAgentService(
         if (message.method === V4_NOTIFICATIONS.conversationTelemetryFact) {
           const parsed = conversationTelemetryFactSchema.safeParse(message.params);
           if (parsed.success) {
-            getConversationTelemetryFactEmitter(workspace).fire(parsed.data);
+            fireWorkspaceFrame(conversationTelemetryFactEmitters, workspace, parsed.data);
           } else {
             // 严格丢弃未知字段，避免 CLI runtime 新字段未经审计穿透到 renderer reporter。
             logger.warn(undefined, "丢弃无效 v4 conversation telemetry fact", {
@@ -2075,7 +2176,7 @@ export function createZCodeAgentService(
           if (typeof topic === "string" && topic.startsWith("sessions-index/")) {
             const indexParsed = sessionsIndexTopicWireCandidateSchema.safeParse(message.params);
             if (indexParsed.success) {
-              getSessionsIndexFrameEmitter(workspace).fire(indexParsed.data);
+              fireWorkspaceFrame(sessionsIndexFrameEmitters, workspace, indexParsed.data);
             } else {
               logger.warn(undefined, "丢弃无效 v4 sessions-index frame", {
                 issues: indexParsed.error.issues.map((issue) => ({
@@ -2091,7 +2192,7 @@ export function createZCodeAgentService(
           if (typeof topic === "string" && topic.startsWith("workspace-config/")) {
             const configParsed = workspaceConfigTopicWireCandidateSchema.safeParse(message.params);
             if (configParsed.success) {
-              getWorkspaceConfigFrameEmitter(workspace).fire(configParsed.data);
+              fireWorkspaceFrame(workspaceConfigFrameEmitters, workspace, configParsed.data);
             } else {
               logger.warn(undefined, "丢弃无效 v4 workspace-config frame", {
                 issues: configParsed.error.issues.map((issue) => ({
@@ -2106,7 +2207,7 @@ export function createZCodeAgentService(
           }
           const parsed = conversationTopicWireCandidateSchema.safeParse(message.params);
           if (parsed.success) {
-            getConversationFrameEmitter(workspace).fire(parsed.data);
+            fireWorkspaceFrame(conversationFrameEmitters, workspace, parsed.data);
           } else {
             logger.warn(undefined, "丢弃无效 v4 conversation frame", {
               issues: parsed.error.issues.map((issue) => ({
@@ -2843,7 +2944,7 @@ export function createZCodeAgentService(
   ): TraceId | undefined {
     const traceId = snapshot.session.traceId as TraceId | undefined;
     if (traceId) {
-      sessionTraceIdBySessionKey.set(sessionEventKey(target), traceId);
+      rememberSessionTraceId(sessionEventKey(target), traceId);
     }
     return traceId;
   }
@@ -3624,7 +3725,7 @@ export function createZCodeAgentService(
       );
       for (const session of result.sessions) {
         if (session.traceId) {
-          sessionTraceIdBySessionKey.set(
+          rememberSessionTraceId(
             sessionEventKey({ ...params, sessionId: session.sessionId }),
             session.traceId as TraceId,
           );
@@ -4855,6 +4956,12 @@ export function createZCodeAgentService(
         },
         zcodeSessionDeleteResultSchema,
       );
+      if (result.deleted) {
+        // 会话已删：seq 状态与 traceId 映射不再有意义，随会话一起回收，不等 LRU 淘汰。
+        const key = sessionEventKey(params);
+        sessionEventSequenceStates.delete(key);
+        sessionTraceIdBySessionKey.delete(key);
+      }
       return result.deleted;
     },
 
