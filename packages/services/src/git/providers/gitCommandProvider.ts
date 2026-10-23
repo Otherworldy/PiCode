@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { StringDecoder } from "node:string_decoder";
 import { DEFAULT_GIT_COMMAND_TIMEOUT_MS, DEFAULT_GIT_OUTPUT_BYTES } from "../config.js";
 import {
   createGitEnvironmentProvider,
@@ -11,6 +12,12 @@ export interface GitCommandExecutionOptions {
   timeoutMs?: number;
   maxOutputBytes?: number;
   env?: NodeJS.ProcessEnv;
+  /**
+   * 写入子进程 stdin 的内容（UTF-8），写完立即 end。
+   *
+   * 目前只给 `hash-object --stdin-paths` 用：一次进程处理全部路径，替代逐文件 spawn。
+   */
+  stdin?: string;
 }
 
 export interface GitCommandExecutionResult {
@@ -85,10 +92,15 @@ function enqueueGitCommand<T>(cwd: string, job: () => Promise<T>): Promise<T> {
     () => undefined,
     () => undefined,
   );
-  gitCommandChains.set(
-    cwd,
-    settledPrevious.then(() => gate),
-  );
+  const chain = settledPrevious.then(() => gate);
+  gitCommandChains.set(cwd, chain);
+  // 队列排空后回收条目：cwd 是 workspace 路径，只增不减会让模块级 Map 随「打开过的
+  // workspace 数」永久增长。gate 只会 resolve，chain 不会 reject，finally 安全。
+  void chain.finally(() => {
+    if (gitCommandChains.get(cwd) === chain) {
+      gitCommandChains.delete(cwd);
+    }
+  });
   return settledPrevious.then(job).finally(release);
 }
 
@@ -157,6 +169,8 @@ export function createGitCommandProvider(options?: {
         return await new Promise<GitCommandExecutionResult>((resolve) => {
           let stdout = "";
           let stderr = "";
+          const stdoutDecoder = new StringDecoder("utf8");
+          const stderrDecoder = new StringDecoder("utf8");
           let stdoutBytes = 0;
           let stderrBytes = 0;
           let timedOut = false;
@@ -166,12 +180,20 @@ export function createGitCommandProvider(options?: {
           let outputTruncated = false;
           let settled = false;
 
+          const wantsStdin = command.stdin !== undefined;
           const child = spawn(binaryPath, command.args, {
             cwd: command.cwd,
             env,
-            stdio: ["ignore", "pipe", "pipe"],
+            stdio: [wantsStdin ? "pipe" : "ignore", "pipe", "pipe"],
             windowsHide: true,
           });
+          if (wantsStdin && child.stdin) {
+            // git 可能在写完之前就退出（路径读不了会直接 fatal），EPIPE 不能冒成未捕获的流错误。
+            child.stdin.on("error", () => {
+              /* 写失败由退出码和 stderr 体现 */
+            });
+            child.stdin.end(command.stdin, "utf8");
+          }
           const liveCommand: LiveGitCommand = {
             exited: false,
             killTree: () => {
@@ -183,12 +205,21 @@ export function createGitCommandProvider(options?: {
           // close 可能被超时清理摘掉。exit 才表示进程真的没了，队列才能再起下一个。
           child.once("exit", () => {
             liveCommand.exited = true;
+            // 只能在进程真的退出时回收条目。settle 也可能由超时/孤儿路径触发（进程还活着），
+            // 那时条目必须留下，下一条命令才能通过 previousGitCommandStillRunning 做 killTree
+            // 并快速失败，避免和遗留进程并发扫同一个仓库。
+            if (liveGitCommands.get(command.cwd) === liveCommand) {
+              liveGitCommands.delete(command.cwd);
+            }
           });
 
           function buildResult(
             exitCode: number | null,
             signal: NodeJS.Signals | null,
           ): GitCommandExecutionResult {
+            // 把解码器里残留的半个多字节字符吐出来，否则中文/emoji 输出的最后一个字符会丢。
+            stdout += stdoutDecoder.end();
+            stderr += stderrDecoder.end();
             const durationMs = Date.now() - startedAt;
             return {
               binaryPath,
@@ -278,7 +309,9 @@ export function createGitCommandProvider(options?: {
               return;
             }
 
-            const text = chunk.toString("utf-8");
+            // 逐 chunk 单独 toString 会把跨 chunk 边界的中文字符切成 U+FFFD；
+            // 用 StringDecoder 保留半个字符的尾部状态。
+            const text = target === "stdout" ? stdoutDecoder.write(chunk) : stderrDecoder.write(chunk);
             if (target === "stdout") {
               stdout += text;
               stdoutBytes += byteLength;

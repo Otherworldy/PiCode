@@ -18,6 +18,7 @@ import {
   buildCheckpointEnv,
   getCheckpointRefName,
   getWorkspacePathspec,
+  hashWorktreeBlobs,
   mergeCheckpointDiff,
   normalizeAffectedRepoPath,
   parseLsTree,
@@ -130,6 +131,7 @@ export function createGitCheckpointRepo(options?: {
     });
   }
 
+
   async function collectWorkspaceConflicts(params: {
     repoRoot: string;
     workspaceInRepoPath: string;
@@ -150,24 +152,36 @@ export function createGitCheckpointRepo(options?: {
     ensureGitCommandSucceeded("git ls-tree checkpoint paths", treeResult);
     const treeEntries = parseLsTree(treeResult.stdout);
 
-    const conflicts: GitCheckpointConflict[] = [];
+    // 用索引占位数组保持 affectedRepoPaths 的顺序：hash 冲突要等批量结果回来才能填，
+    // 先收「非 hash 冲突」再收「hash 冲突」会打乱上层展示的顺序。
+    const conflicts: Array<GitCheckpointConflict | null> = [];
+    const pendingHashes: Array<{
+      slot: number;
+      absolutePath: string;
+      expectedObjectId: string;
+      repoRelativePath: string;
+      workspaceRelativePath: string;
+    }> = [];
+
     for (const repoRelativePath of params.affectedRepoPaths) {
       const absolutePath = toAbsolutePath(params.repoRoot, repoRelativePath);
       const expectedEntry = treeEntries.get(repoRelativePath);
+      const workspaceRelativePath = toWorkspaceRelativeGitPath(
+        repoRelativePath,
+        params.workspaceInRepoPath,
+      );
 
       if (!expectedEntry) {
         // fromCheckpoint 里不存在该路径，说明按基线语义它本来就不该在磁盘上出现。
         // 如果现在却存在，就意味着用户或其它流程在 checkpoint 之后新增了该文件，属于覆盖风险。
         if (!(await pathExists(absolutePath))) {
+          conflicts.push(null);
           continue;
         }
         conflicts.push({
           path: absolutePath,
           repoRelativePath,
-          workspaceRelativePath: toWorkspaceRelativeGitPath(
-            repoRelativePath,
-            params.workspaceInRepoPath,
-          ),
+          workspaceRelativePath,
           reason: "unexpected-file-in-worktree",
         });
         continue;
@@ -182,10 +196,7 @@ export function createGitCheckpointRepo(options?: {
         conflicts.push({
           path: absolutePath,
           repoRelativePath,
-          workspaceRelativePath: toWorkspaceRelativeGitPath(
-            repoRelativePath,
-            params.workspaceInRepoPath,
-          ),
+          workspaceRelativePath,
           reason: "missing-in-worktree",
         });
         continue;
@@ -198,40 +209,49 @@ export function createGitCheckpointRepo(options?: {
         conflicts.push({
           path: absolutePath,
           repoRelativePath,
-          workspaceRelativePath: toWorkspaceRelativeGitPath(
-            repoRelativePath,
-            params.workspaceInRepoPath,
-          ),
+          workspaceRelativePath,
           reason: "type-mismatch",
         });
         continue;
       }
 
-      const hashResult = await commandProvider.run({
-        cwd: params.repoRoot,
-        args: ["hash-object", "--no-filters", absolutePath],
+      pendingHashes.push({
+        slot: conflicts.length,
+        absolutePath,
+        expectedObjectId: expectedEntry.objectId,
+        repoRelativePath,
+        workspaceRelativePath,
       });
-      ensureGitCommandSucceeded("git hash-object checkpoint verify", hashResult);
-      if (hashResult.stdout.trim() === expectedEntry.objectId) {
-        continue;
-      }
+      conflicts.push(null);
+    }
 
+    if (pendingHashes.length > 0) {
       // 这里不比较时间戳、大小等弱信号，而是直接比较 blob hash。
       // 只有内容完全一致，才视为“当前磁盘仍然停留在 fromCheckpoint 基线”。
-      conflicts.push({
-        path: absolutePath,
-        repoRelativePath,
-        workspaceRelativePath: toWorkspaceRelativeGitPath(
-          repoRelativePath,
-          params.workspaceInRepoPath,
-        ),
-        reason: "content-mismatch",
-      });
+      const hashes = await hashWorktreeBlobs(
+        commandProvider,
+        params.repoRoot,
+        pendingHashes.map((pending) => pending.absolutePath),
+      );
+      for (let i = 0; i < pendingHashes.length; i++) {
+        const pending = pendingHashes[i];
+        if (!pending || hashes[i] === pending.expectedObjectId) {
+          continue;
+        }
+        conflicts[pending.slot] = {
+          path: pending.absolutePath,
+          repoRelativePath: pending.repoRelativePath,
+          workspaceRelativePath: pending.workspaceRelativePath,
+          reason: "content-mismatch",
+        };
+      }
     }
 
     const deduped = new Map<string, GitCheckpointConflict>();
     for (const conflict of conflicts) {
-      deduped.set(conflict.repoRelativePath, conflict);
+      if (conflict) {
+        deduped.set(conflict.repoRelativePath, conflict);
+      }
     }
     return [...deduped.values()];
   }
