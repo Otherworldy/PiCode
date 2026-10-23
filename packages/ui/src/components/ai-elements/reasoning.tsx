@@ -439,12 +439,17 @@ export const ReasoningContent = memo(
         return;
       }
 
-      setScrollMaskState(
-        resolveVerticalScrollMaskState({
-          clientHeight: scrollNode.clientHeight,
-          scrollHeight: scrollNode.scrollHeight,
-          scrollTop: scrollNode.scrollTop,
-        }),
+      const next = resolveVerticalScrollMaskState({
+        clientHeight: scrollNode.clientHeight,
+        scrollHeight: scrollNode.scrollHeight,
+        scrollTop: scrollNode.scrollTop,
+      });
+      // 有溢出时 resolveVerticalScrollMaskState 返回的是新对象字面量，直接 setState 会让
+      // 每个 scroll 事件（60-120Hz）都重渲染整棵思考子树并重算 mask-image。
+      setScrollMaskState((previous) =>
+        previous.showTop === next.showTop && previous.showBottom === next.showBottom
+          ? previous
+          : next,
       );
     }, []);
     const scrollToReasoningBottom = useCallback(() => {

@@ -1,5 +1,5 @@
 import { AppWindow } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useOptionalPlatform } from "@/hooks/usePlatform.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import type { ToolCallBlockRenderContext } from "@/ToolCallBlocks/shared.js";
@@ -121,9 +121,20 @@ function CuaAppList({ items }: { items: CuaAppItem[] }) {
   const platform = useOptionalPlatform();
   const [icons, setIcons] = useState<Record<string, string>>({});
 
+  // 用「排序后的 bundleId 集合」当依赖签名，而不是 items 数组引用：流式中 toolCall 每次
+  // 换身份都会重建 items，但 id 集合通常不变。原来的依赖会让每次换身份都重新 invoke 一遍
+  // 全部图标 —— 响应是完整 base64 PNG，每次都是一次 structured clone + 一份新字符串。
+  const bundleIdSignature = useMemo(
+    () =>
+      [...new Set(items.flatMap((item) => (item.bundleId ? [item.bundleId] : [])))]
+        .sort()
+        .join("\u0000"),
+    [items],
+  );
+
   useEffect(() => {
     let active = true;
-    const bundleIds = [...new Set(items.flatMap((item) => (item.bundleId ? [item.bundleId] : [])))];
+    const bundleIds = bundleIdSignature ? bundleIdSignature.split("\u0000") : [];
     if (!platform?.getApplicationIcon || bundleIds.length === 0) return () => undefined;
     void Promise.all(
       bundleIds.map(async (bundleId) => {
@@ -141,7 +152,7 @@ function CuaAppList({ items }: { items: CuaAppItem[] }) {
     return () => {
       active = false;
     };
-  }, [items, platform]);
+  }, [bundleIdSignature, platform]);
 
   return (
     <div className="max-h-64 space-y-1 overflow-y-auto pr-1">

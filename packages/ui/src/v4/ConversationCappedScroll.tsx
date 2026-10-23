@@ -50,7 +50,7 @@ export function ConversationCappedScroll({
 
   /** 滚轮、按键、拖滚动条都算读者自己滚过。自动吸底不算。 */
   const markScrolled = useCallback(() => {
-    if (!scrolledOnce.current) scrolledOnce.current = true;
+    scrolledOnce.current = true;
   }, []);
 
   useEffect(() => {

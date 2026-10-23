@@ -418,7 +418,15 @@ function measureGroupedGroupPreviewWidth(
   return null;
 }
 
-function resolveStickyGroupedTaskGroupId(root: HTMLElement | null): string | null {
+/**
+ * `headerById` 由调用方建一次：header 节点只在 `view.nodes` 变化时重建，而本函数是每帧
+ * 执行的 —— 对每个分组各做一次 `querySelector` + `CSS.escape` 是纯浪费（50 个分组 = 每帧
+ * 50 次带字符串分配的 DOM 查询）。
+ */
+function resolveStickyGroupedTaskGroupId(
+  root: HTMLElement | null,
+  headerById: Map<string, HTMLElement>,
+): string | null {
   if (!root) {
     return null;
   }
@@ -433,9 +441,7 @@ function resolveStickyGroupedTaskGroupId(root: HTMLElement | null): string | nul
     if (element.getAttribute("data-group-collapsed") === "true") {
       continue;
     }
-    const header = groupId
-      ? root.querySelector<HTMLElement>(`[data-grouped-group-header-id="${CSS.escape(groupId)}"]`)
-      : null;
+    const header = groupId ? (headerById.get(groupId) ?? null) : null;
     if (!groupId || !header) {
       continue;
     }
@@ -812,10 +818,22 @@ export function WorkspaceGroupedTasksSection({
       setStickyGroupId(null);
       return undefined;
     }
+    // header 节点与 view.nodes 同寿命：在 effect 里建一次映射，滚动时只查 Map。
+    const headerById = new Map<string, HTMLElement>();
+    for (const element of rootElement.querySelectorAll<HTMLElement>(
+      "[data-grouped-group-item-id]",
+    )) {
+      const groupId = element.getAttribute("data-grouped-group-item-id");
+      if (!groupId) continue;
+      const header = rootElement.querySelector<HTMLElement>(
+        `[data-grouped-group-header-id="${CSS.escape(groupId)}"]`,
+      );
+      if (header) headerById.set(groupId, header);
+    }
     let animationFrame: number | null = null;
     const updateStickyGroup = () => {
       animationFrame = null;
-      setStickyGroupId(resolveStickyGroupedTaskGroupId(rootElement));
+      setStickyGroupId(resolveStickyGroupedTaskGroupId(rootElement, headerById));
     };
     const scheduleUpdate = () => {
       if (animationFrame !== null) {

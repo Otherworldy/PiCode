@@ -166,6 +166,9 @@ function getMarkdownTableRootInlineInsets(root: HTMLElement) {
   return { leftInset: legacyInset, rightInset: legacyInset };
 }
 
+/** rect 停止变化后继续跟踪布局动画的窗口。 */
+const RECT_WATCH_WINDOW_MS = 800;
+
 function readMarkdownTableObservedRect(
   element: HTMLElement | null,
 ): MarkdownTableObservedRect | null {
@@ -779,6 +782,10 @@ export function MarkdownTable({ className, children, node: _node, ...props }: Ma
         latestRootRect = nextRootRect;
         latestFrameRect = nextFrameRect;
         scheduleMeasure();
+        // 只有 rect 真的在动才续期：布局动画期间会持续变化，动画结束后窗口自然到期。
+        // 无条件续期会让流式期间「内容每帧长高 → ResizeObserver 每帧触发」变成永不退出
+        // 的每帧两次 getBoundingClientRect。
+        rectWatchUntil = performance.now() + RECT_WATCH_WINDOW_MS;
       }
 
       if (performance.now() < rectWatchUntil) {
@@ -787,8 +794,10 @@ export function MarkdownTable({ className, children, node: _node, ...props }: Ma
     };
     const scheduleMeasureAndWatchRect = () => {
       scheduleMeasure();
-      rectWatchUntil = performance.now() + 800;
-      if (rectWatchRafId === null) {
+      // 这里只负责「启动」观察窗口，不负责「续期」：续期由 watchRectChanges 在确认 rect
+      // 真的变化后完成。否则每次 ResizeObserver 回调都会把窗口推到 800ms 之外。
+      if (rectWatchRafId === null && performance.now() >= rectWatchUntil) {
+        rectWatchUntil = performance.now() + RECT_WATCH_WINDOW_MS;
         rectWatchRafId = requestAnimationFrame(watchRectChanges);
       }
     };
@@ -876,7 +885,10 @@ export function MarkdownTable({ className, children, node: _node, ...props }: Ma
     };
 
     updateEdgeShadowState();
-    viewport.addEventListener("scroll", updateEdgeShadowState, {
+    // scroll 是 60–120Hz 的事件源，updateEdgeShadowState 里有两次强制布局读
+    // （syncVirtualScrollMetrics + latestMeasureEdgeShadowState），必须和 resize 走同一个
+    // rAF 合并点。原来这里挂的是裸函数，等于每次滚动事件都做一遍完整测量。
+    viewport.addEventListener("scroll", debouncedUpdate, {
       passive: true,
     });
     viewport.addEventListener("wheel", handleWheel, { passive: false });
@@ -884,7 +896,7 @@ export function MarkdownTable({ className, children, node: _node, ...props }: Ma
     if (typeof ResizeObserver === "undefined") {
       window.addEventListener("resize", debouncedUpdate);
       return () => {
-        viewport.removeEventListener("scroll", updateEdgeShadowState);
+        viewport.removeEventListener("scroll", debouncedUpdate);
         viewport.removeEventListener("wheel", handleWheel);
         window.removeEventListener("resize", debouncedUpdate);
         if (rafId !== null) cancelAnimationFrame(rafId);
@@ -899,7 +911,7 @@ export function MarkdownTable({ className, children, node: _node, ...props }: Ma
     window.addEventListener("resize", debouncedUpdate);
 
     return () => {
-      viewport.removeEventListener("scroll", updateEdgeShadowState);
+      viewport.removeEventListener("scroll", debouncedUpdate);
       viewport.removeEventListener("wheel", handleWheel);
       resizeObserver.disconnect();
       window.removeEventListener("resize", debouncedUpdate);

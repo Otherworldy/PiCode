@@ -34,6 +34,8 @@ export interface MermaidBlockProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 const mermaidPlugin = createMermaidPlugin();
+/** 等代码稳定这么久再渲染 mermaid；流式中每个 delta 都重渲染代价太大。 */
+const MERMAID_CODE_SETTLE_MS = 250;
 let mermaidRenderQueue = Promise.resolve();
 const MERMAID_COLOR_CANVAS_SENTINEL = "#010203";
 
@@ -43,23 +45,39 @@ const MERMAID_COLOR_CANVAS_SENTINEL = "#010203";
 // 颜色归一化是增强能力，不能让 MessageResponse 的静态导入在这些环境中直接崩溃。
 const canCreateDomElements =
   typeof document !== "undefined" && typeof document.createElement === "function";
-const mermaidColorResolverEl: HTMLSpanElement | null = canCreateDomElements
-  ? document.createElement("span")
-  : null;
-const mermaidColorNormalizeCtx: CanvasRenderingContext2D | null = (() => {
+
+/**
+ * 颜色归一化用的 span / canvas 只在**真的渲染过 mermaid 主题色**时才创建。
+ *
+ * 原来放在模块顶层：任何窗口首屏都会建一个 span + 一个 `willReadFrequently` 的 2D canvas
+ * （后者强制 CPU 光栅路径，部分 GPU 驱动 / 远程桌面下 `getContext` 是 10-100ms 级同步调用），
+ * 而 `renderMermaid` 默认关闭 —— 绝大多数会话里这段初始化一次都用不到。
+ */
+let mermaidColorHelpers: {
+  el: HTMLSpanElement;
+  ctx: CanvasRenderingContext2D;
+} | null | undefined;
+
+function getMermaidColorHelpers(): { el: HTMLSpanElement; ctx: CanvasRenderingContext2D } | null {
+  if (mermaidColorHelpers !== undefined) return mermaidColorHelpers;
   if (!canCreateDomElements) {
+    mermaidColorHelpers = null;
     return null;
   }
 
+  const el = document.createElement("span");
   const canvas = document.createElement("canvas");
   canvas.width = 1;
   canvas.height = 1;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (ctx) {
-    ctx.globalCompositeOperation = "copy";
+  if (!ctx) {
+    mermaidColorHelpers = null;
+    return null;
   }
-  return ctx;
-})();
+  ctx.globalCompositeOperation = "copy";
+  mermaidColorHelpers = { el, ctx };
+  return mermaidColorHelpers;
+}
 
 function enqueueMermaidRender<T>(task: () => Promise<T>): Promise<T> {
   const run = mermaidRenderQueue.then(task, task);
@@ -81,36 +99,38 @@ function hashMermaidCode(code: string): string {
 }
 
 function normalizeCssColorForMermaid(raw: string, fallback: string): string {
-  if (!raw || !mermaidColorResolverEl || !mermaidColorNormalizeCtx || !document.body) {
+  const helpers = raw && document.body ? getMermaidColorHelpers() : null;
+  if (!raw || !helpers) {
     return raw || fallback;
   }
+  const { el, ctx } = helpers;
 
   try {
-    document.body.appendChild(mermaidColorResolverEl);
-    mermaidColorResolverEl.style.color = "";
-    mermaidColorResolverEl.style.color = raw;
-    const resolved = getComputedStyle(mermaidColorResolverEl).color;
+    document.body.appendChild(el);
+    el.style.color = "";
+    el.style.color = raw;
+    const resolved = getComputedStyle(el).color;
     if (!resolved) {
       return fallback;
     }
 
-    mermaidColorNormalizeCtx.clearRect(0, 0, 1, 1);
-    mermaidColorNormalizeCtx.fillStyle = MERMAID_COLOR_CANVAS_SENTINEL;
-    const sentinelFillStyle = mermaidColorNormalizeCtx.fillStyle;
-    mermaidColorNormalizeCtx.fillStyle = resolved;
+    ctx.clearRect(0, 0, 1, 1);
+    ctx.fillStyle = MERMAID_COLOR_CANVAS_SENTINEL;
+    const sentinelFillStyle = ctx.fillStyle;
+    ctx.fillStyle = resolved;
     // 如果 canvas 也不支持该颜色格式，fillStyle 会停在哨兵色，直接回退到 Mermaid 可解析的安全色。
-    if (mermaidColorNormalizeCtx.fillStyle === sentinelFillStyle) {
+    if (ctx.fillStyle === sentinelFillStyle) {
       return fallback;
     }
 
-    mermaidColorNormalizeCtx.fillRect(0, 0, 1, 1);
-    const [r = 0, g = 0, b = 0, a = 255] = mermaidColorNormalizeCtx.getImageData(0, 0, 1, 1).data;
+    ctx.fillRect(0, 0, 1, 1);
+    const [r = 0, g = 0, b = 0, a = 255] = ctx.getImageData(0, 0, 1, 1).data;
     const roundedAlpha = +(a / 255).toFixed(3);
     return roundedAlpha >= 1 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${roundedAlpha})`;
   } catch {
     return fallback;
   } finally {
-    mermaidColorResolverEl.remove();
+    el.remove();
   }
 }
 
@@ -265,32 +285,41 @@ export function MermaidBlock({
     onPreviewSvgChange?.(null);
     const renderId = `zcode-mermaid-${renderIdPrefix}-${hashMermaidCode(renderKey)}`;
 
-    void enqueueMermaidRender(async () => {
-      const renderer = mermaidPlugin.getMermaid(mermaidConfig);
-      return renderer.render(renderId, trimmedCode);
-    })
-      .then(({ svg }) => {
-        if (!cancelled) {
-          setRenderState({ status: "ready", svg });
-          onPreviewSvgChange?.(svg);
-        }
+    // 流式中每个 chunk 都改 trimmedCode：等代码稳定下来再渲染，否则每个 delta 都会跑一遍
+    // mermaid 布局，并把整段 SVG 通过 dangerouslySetInnerHTML 销毁重建一次。
+    const settleTimer = setTimeout(() => {
+      void renderMermaid();
+    }, MERMAID_CODE_SETTLE_MS);
+
+    function renderMermaid() {
+      return enqueueMermaidRender(async () => {
+        const renderer = mermaidPlugin.getMermaid(mermaidConfig);
+        return renderer.render(renderId, trimmedCode);
       })
-      .catch((error: unknown) => {
-        const message = normalizeMermaidRenderError(error);
-        logger.debug("[MermaidBlock] Mermaid 渲染失败", {
-          error: message,
-          codeLength: trimmedCode.length,
+        .then(({ svg }) => {
+          if (!cancelled) {
+            setRenderState({ status: "ready", svg });
+            onPreviewSvgChange?.(svg);
+          }
+        })
+        .catch((error: unknown) => {
+          const message = normalizeMermaidRenderError(error);
+          logger.debug("[MermaidBlock] Mermaid 渲染失败", {
+            error: message,
+            codeLength: trimmedCode.length,
+          });
+          if (!cancelled) {
+            // Mermaid 解析失败常见于模型流式输出未完成或用户粘贴了非标准语法。
+            // 退回纯文本能保留内容可读，避免用错误面板打断聊天阅读。
+            setRenderState({ status: "plaintext" });
+            onPreviewSvgChange?.(null);
+          }
         });
-        if (!cancelled) {
-          // Mermaid 解析失败常见于模型流式输出未完成或用户粘贴了非标准语法。
-          // 退回纯文本能保留内容可读，避免用错误面板打断聊天阅读。
-          setRenderState({ status: "plaintext" });
-          onPreviewSvgChange?.(null);
-        }
-      });
+    }
 
     return () => {
       cancelled = true;
+      clearTimeout(settleTimer);
       onPreviewSvgChange?.(null);
     };
   }, [intl, mermaidConfig, onPreviewSvgChange, renderIdPrefix, renderKey, trimmedCode]);

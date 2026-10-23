@@ -13,9 +13,13 @@ export function ExecuteOutput({ text, running }: { text: string; running: boolea
   useLayoutEffect(() => {
     if (running) hasStreamed.current = true;
     if (!hasStreamed.current || !following || !scroll.current) return;
-    scroll.current.scrollTop = scroll.current.scrollHeight;
+    const node = scroll.current;
+    // 一次读取算出上限，写回后不再回读：回读 scrollTop 会让刚被写脏的布局再 flush 一次，
+    // 每个流式 delta 就多一次强制 reflow。
+    const maxScrollTop = Math.max(0, node.scrollHeight - node.clientHeight);
+    node.scrollTop = maxScrollTop;
     // 程序吸底后记录浏览器实际位置，避免尾窗变短时把程序滚动误判为上滚。
-    previousTop.current = scroll.current.scrollTop;
+    previousTop.current = maxScrollTop;
   }, [display, following, running]);
 
   return (

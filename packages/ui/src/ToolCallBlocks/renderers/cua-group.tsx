@@ -59,14 +59,38 @@ function CuaGroupChildren({
       return;
     }
     shouldStickToBottomRef.current = isCuaGroupViewportAtBottom(viewport);
-    setScrollMaskState(
-      resolveVerticalScrollMaskState({
-        clientHeight: viewport.clientHeight,
-        scrollHeight: viewport.scrollHeight,
-        scrollTop: viewport.scrollTop,
-      }),
+    const next = resolveVerticalScrollMaskState({
+      clientHeight: viewport.clientHeight,
+      scrollHeight: viewport.scrollHeight,
+      scrollTop: viewport.scrollTop,
+    });
+    // 同 reasoning：值没变就复用旧对象，避免每个 scroll 事件都重算 mask-image 并重绘
+    // 被遮罩的截图列表。
+    setScrollMaskState((previous) =>
+      previous.showTop === next.showTop && previous.showBottom === next.showBottom
+        ? previous
+        : next,
     );
   }, []);
+  // scroll 事件频率可达 60-120Hz，而 updateScrollState 会读 3 个几何属性（强制布局）。
+  // 合并到每帧最多一次。
+  const scrollStateFrameRef = useRef<number | null>(null);
+  const scheduleScrollState = useCallback(() => {
+    if (scrollStateFrameRef.current !== null) return;
+    scrollStateFrameRef.current = window.requestAnimationFrame(() => {
+      scrollStateFrameRef.current = null;
+      updateScrollState();
+    });
+  }, [updateScrollState]);
+  useEffect(
+    () => () => {
+      if (scrollStateFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollStateFrameRef.current);
+        scrollStateFrameRef.current = null;
+      }
+    },
+    [],
+  );
   const scrollToBottom = useCallback(() => {
     if (!viewportRef.current) return;
     scrollCuaGroupToBottom(viewportRef.current);
@@ -107,7 +131,7 @@ function CuaGroupChildren({
       ref={viewportRef}
       className="max-h-72 overflow-y-auto overscroll-contain"
       data-cua-group-scroll-mask={scrollMaskData}
-      onScroll={updateScrollState}
+      onScroll={scheduleScrollState}
       style={getVerticalScrollMaskStyle(scrollMaskState)}
     >
       <div ref={contentRef} className="ml-2 space-y-2 border-border border-l pl-3.5">

@@ -9,7 +9,13 @@ import {
 } from "@zcode/shared";
 
 const ZCODE_CLIENT_CONFIG_API_PATH = "/api/v1/client/configs";
-const FORCE_UPDATE_CONFIG_REQUEST_TIMEOUT_MS = 10_000;
+/**
+ * 强制升级检查会串行阻塞首窗创建，所以这里必须 fail-open 得快一些。
+ *
+ * 离线 / 弱网 / 代理拦截 / DNS 挂起时无法确认最低版本，产品取舍是「按放行处理」而不是让
+ * 用户白屏等待 —— 10s 的等待时间在冷启动里是纯损失。
+ */
+const FORCE_UPDATE_CONFIG_REQUEST_TIMEOUT_MS = 3_000;
 const FORCE_UPDATE_CONFIG_MAX_RESPONSE_BYTES = 1024 * 1024;
 
 export interface ForceUpdateDialogText {

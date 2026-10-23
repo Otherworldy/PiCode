@@ -22,6 +22,9 @@ export function useEmbeddedBrowserWheelChain({
   useEffect(() => {
     if (!webview) return;
 
+    // 每个 effect 实例缓存一次画布查询：wheel 是高频事件（惯性滚动几十 Hz），
+    // querySelector 每次都要遍历 region 子树。节点被替换时 isConnected 变 false，下一次重查。
+    let cachedCanvas: HTMLElement | null = null;
     const handleGuestIpcMessage = (event: ElectronWebviewIpcMessageEvent): void => {
       if (!isResponsiveMode || event.channel !== EmbeddedBrowserWebviewChannels.WheelBoundary) {
         return;
@@ -32,9 +35,13 @@ export function useEmbeddedBrowserWheelChain({
       const deltaY = validatedDelta(payload?.deltaY);
       if (deltaX === 0 && deltaY === 0) return;
 
-      const responsiveCanvas = browserRegionRef.current?.querySelector<HTMLElement>(
-        '[data-responsive-browser-mode="active"]',
-      );
+      if (!cachedCanvas?.isConnected) {
+        cachedCanvas =
+          browserRegionRef.current?.querySelector<HTMLElement>(
+            '[data-responsive-browser-mode="active"]',
+          ) ?? null;
+      }
+      const responsiveCanvas = cachedCanvas;
       if (!responsiveCanvas) return;
       // Electron `<webview>` guest 的 wheel 不会冒泡到宿主 DOM；固定 preload
       // 仅在网页无法继续消费对应轴时发消息，在这里续接外层自由尺寸画布的滚动链。

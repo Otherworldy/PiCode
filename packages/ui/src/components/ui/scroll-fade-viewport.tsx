@@ -81,7 +81,11 @@ export function ScrollFadeViewport({ className, children, ref, ...props }: Compo
       window.removeEventListener("resize", scheduleUpdate);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [children]);
+    // 不能依赖 children：调用方（ExecuteOutput / BackgroundBashOutputSidePane）每传一次
+    // 都是新的 JSX 对象，流式时每个 delta 都会让本 effect 重跑一遍 —— 一次同步强制布局
+    // + 重建 ResizeObserver + 增删 scroll/resize 监听。尺寸变化由下方 ResizeObserver
+    // 覆盖，挂载一次足够。
+  }, []);
 
   return (
     <div

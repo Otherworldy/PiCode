@@ -1105,7 +1105,8 @@ export function ConversationShareReadonlyTimeline({
   artifactOpenAction,
   unsupportedRowCount = 0,
 }: ConversationShareReadonlyTimelineProps) {
-  const units = buildConversationTurnRenderUnits(rows);
+  // 只读时间线的 props 变化（主题、artifact 路径、父级 setState）不应触发整份会话重建。
+  const units = useMemo(() => buildConversationTurnRenderUnits(rows), [rows]);
   const openShareExternalUrl = useCallback((url: string) => {
     try {
       const parsed = new URL(url);
