@@ -7,6 +7,7 @@ import type {
   ZCodeProtocolResponse,
 } from "@zcode/shared";
 import { zcodeProtocolMessageSchema, zcodeProtocolMethods } from "@zcode/shared";
+import { StringDecoder } from "node:string_decoder";
 import type { Logger } from "@zcode/contracts";
 
 type ZCodeProtocolOutgoingMessage =
@@ -20,6 +21,26 @@ type ZCodeProtocolMessageHandler = (
 ) => Promise<ZCodeProtocolOutgoingMessage | undefined>;
 
 const PROTOCOL_EOF_DRAIN_MS = 100;
+
+/**
+ * 从一条已经 JSON.parse 成功、但 schema 校验失败的载荷里尽力取出请求 id。
+ *
+ * host 侧的 pending 表按 id 索引：回包 id 对不上就只能等超时，用户看到的是「无响应」而不是
+ * 「协议消息非法」。这里只接受字符串/数字，其它一律当作取不到。
+ */
+function extractRequestId(decoded: unknown): string | null {
+  if (typeof decoded !== "object" || decoded === null || !("id" in decoded)) {
+    return null;
+  }
+  const id = (decoded as { id?: unknown }).id;
+  if (typeof id === "string" && id.length > 0) {
+    return id;
+  }
+  if (typeof id === "number" && Number.isFinite(id)) {
+    return String(id);
+  }
+  return null;
+}
 // MCP App 的请求由实例凭证和 callId 隔离；若与普通命令一起等待完成，
 // uiCallTool 会挡住自己的 cancel/close，真实 stdio 链路将死锁。
 const MCP_APP_CONCURRENT_METHODS = new Set<string>([
@@ -80,6 +101,8 @@ interface ZCodeProtocolNdjsonConnectionOptions {
 
 export class ZCodeProtocolNdjsonConnection {
   private buffer = "";
+  /** 跨 chunk 保留多字节字符；toString("utf8") 会把边界上的字符切成 U+FFFD。 */
+  private readonly stdinDecoder = new StringDecoder("utf8");
   private processing: Promise<void> = Promise.resolve();
   private lastQueuedMessageStarted: Promise<void> = Promise.resolve();
   private readonly closedPromise: Promise<void>;
@@ -122,20 +145,32 @@ export class ZCodeProtocolNdjsonConnection {
 
   private readonly onData = (chunk: Buffer | string): void => {
     if (this.terminal || this.draining) return;
-    this.buffer += typeof chunk === "string" ? chunk : chunk.toString("utf8");
-    let newlineIndex = this.buffer.indexOf("\n");
-    while (newlineIndex >= 0) {
-      const line = this.buffer.slice(0, newlineIndex).trim();
-      this.buffer = this.buffer.slice(newlineIndex + 1);
-      if (line.length > 0) {
-        this.dispatchLine(line);
+    // 必须是 StringDecoder：toString("utf8") 会把落在 chunk 边界上的多字节字符切成 U+FFFD。
+    // stdin 默认没有 setEncoding，所以中文 prompt、中文路径、emoji 都会踩到这条。
+    this.buffer +=
+      typeof chunk === "string"
+        ? this.stdinDecoder.write(Buffer.from(chunk, "utf8"))
+        : this.stdinDecoder.write(chunk);
+    // 快路径：没有完整行就不切分。原实现每解析一行都从 buffer 头 indexOf，
+    // 单个大帧按 64KB 分片到达时会退化成 O(n²) 扫描。
+    if (!this.buffer.includes("\n")) {
+      return;
+    }
+    const segments = this.buffer.split("\n");
+    // 最后一段是不完整行，留到下次。
+    this.buffer = segments.pop() ?? "";
+    for (const line of segments) {
+      const trimmed = line.trim();
+      if (trimmed.length > 0) {
+        this.dispatchLine(trimmed);
       }
-      newlineIndex = this.buffer.indexOf("\n");
     }
   };
 
   private readonly onClose = (): void => {
     if (this.terminal || this.draining) return;
+    // 冲刷解码器尾部：最后一块可能停在一个多字节字符中途。
+    this.buffer += this.stdinDecoder.end();
     const trailing = this.buffer.trim();
     if (trailing.length > 0) {
       this.dispatchLine(trailing);
@@ -252,9 +287,14 @@ export class ZCodeProtocolNdjsonConnection {
 
     const parsed = zcodeProtocolMessageSchema.safeParse(decoded);
     if (!parsed.success) {
-      this.sendError("invalid-message", -32600, "Invalid PiCode Protocol message", {
-        issues: parsed.error.issues,
-      });
+      // 尽量带上真实请求 id：host 侧 pending 按 id 索引，用固定字符串回包会让那条请求
+      // 一直等到超时（3 分钟），错误现场反而看不到。
+      this.sendError(
+        extractRequestId(decoded) ?? "invalid-message",
+        -32600,
+        "Invalid PiCode Protocol message",
+        { issues: parsed.error.issues },
+      );
       return null;
     }
 

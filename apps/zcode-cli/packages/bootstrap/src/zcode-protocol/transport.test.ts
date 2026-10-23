@@ -141,3 +141,87 @@ describe("MCP App NDJSON admission", () => {
     ]);
   });
 });
+
+describe("NDJSON 字节边界", () => {
+  it("中文被切在字节中间时不产生 U+FFFD", async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const received = Promise.withResolvers<string>();
+    const transport = new ZCodeProtocolNdjsonConnection({
+      input,
+      output,
+      async handleMessage(message) {
+        if ("method" in message && typeof message.method === "string") {
+          received.resolve(message.method);
+        }
+        return undefined;
+      },
+    });
+    transport.start();
+    try {
+      const method = "会话/发送中文";
+      const bytes = Buffer.from(`${JSON.stringify({ id: 1, method })}\n`, "utf8");
+      // 切点落在「会」字的 UTF-8 序列中间：toString("utf8") 会在这里产出 U+FFFD。
+      const cut = bytes.indexOf(Buffer.from("会", "utf8")) + 1;
+      expect(cut).toBeGreaterThan(0);
+      input.write(bytes.subarray(0, cut));
+      input.write(bytes.subarray(cut));
+      await expect(received.promise).resolves.toBe(method);
+    } finally {
+      input.end();
+    }
+  });
+
+  it("emoji 跨分片完好且不丢行", async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const methods: string[] = [];
+    const allReceived = Promise.withResolvers<void>();
+    const transport = new ZCodeProtocolNdjsonConnection({
+      input,
+      output,
+      async handleMessage(message) {
+        if ("method" in message && typeof message.method === "string") {
+          methods.push(message.method);
+          if (methods.length === 2) allReceived.resolve();
+        }
+        return undefined;
+      },
+    });
+    transport.start();
+    try {
+      const payload = Buffer.from(
+        `${JSON.stringify({ id: 1, method: "🎉first" })}\n${JSON.stringify({ id: 2, method: "second" })}\n`,
+        "utf8",
+      );
+      // 每 3 字节喂一次，保证 emoji（4 字节）和中文都会被切开。
+      for (let offset = 0; offset < payload.length; offset += 3) {
+        input.write(payload.subarray(offset, Math.min(offset + 3, payload.length)));
+      }
+      await allReceived.promise;
+      expect(methods).toEqual(["🎉first", "second"]);
+    } finally {
+      input.end();
+    }
+  });
+
+  it("末尾无换行的残留行在 close 时仍被派发", async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const received = Promise.withResolvers<string>();
+    const transport = new ZCodeProtocolNdjsonConnection({
+      input,
+      output,
+      async handleMessage(message) {
+        if ("method" in message && typeof message.method === "string") {
+          received.resolve(message.method);
+        }
+        return undefined;
+      },
+    });
+    transport.start();
+    input.write(JSON.stringify({ id: 1, method: "tail/中文" }));
+    input.end();
+    await expect(received.promise).resolves.toBe("tail/中文");
+  });
+});
