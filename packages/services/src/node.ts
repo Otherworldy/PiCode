@@ -195,6 +195,7 @@ export { createAccountProviderCredentialService } from "./model-provider/account
 export { createUsageStatsService } from "./usage-stats/usageStatsService.js";
 // Storage：service 与 adapters 工厂；desktop host 负责组装（Worker runner 在 desktop 包内）
 export { createStorageService } from "./storage/app/storageService.js";
+export type { IStorageService } from "./storage/contract.js";
 export type {
   FsCleanerPort as StorageFsCleanerPort,
   RootsResolverPort as StorageRootsResolverPort,
@@ -448,6 +449,8 @@ import {
 import { ensureAppCaCert } from "./runtime-tools/appCaCert.js";
 import { buildHelperOpenArgs, isCuaLocalDevelopmentRuntime } from "@zcode/zcode-cua/broker/server";
 import { createServiceLogger, type ServiceLogger } from "#src/logger/serviceLogger.js";
+
+const todoAlignLogger = createServiceLogger("todo-align");
 import { IOffPeakTaskService } from "./session/offPeakTask.js";
 import { OffPeakTaskService } from "./session/offPeakTaskService.js";
 import { ITodoService } from "./todos/todo.js";
@@ -2773,7 +2776,15 @@ export function createLocalServices(options: {
     },
   });
   alignTodos = (sessions) => {
-    void todoService.alignSessions(sessions);
+    // 后台对齐不能杀死 Host：todos 库是旧 schema、被外部改坏或磁盘满时，未捕获的
+    // rejection 会让 Node 直接退出（实测：no such column → server exit 1，前端报
+    // 「Web 启动失败」）。这里只记一条 warn，让下一次对齐自然重试。
+    void todoService.alignSessions(sessions).catch((error: unknown) => {
+      todoAlignLogger.warn("todos 会话对齐失败，已忽略", {
+        error: error instanceof Error ? error.message : String(error),
+        sessionCount: sessions.length,
+      });
+    });
   };
   if (pendingTodoSessions.length > 0) alignTodos(pendingTodoSessions.splice(0));
   noteTodoSessionRemoved = (sessionId) =>

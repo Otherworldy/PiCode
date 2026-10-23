@@ -9,6 +9,7 @@ import {
 } from "@zcode/shared";
 import { getTasksIndexDatabasePath } from "#src/paths.js";
 import { runTasksDatabaseMigrations } from "#src/session/tasksDatabase/migrations.js";
+import { ensureTodoSchemaColumns } from "#src/todos/todoSchemaCompat.js";
 import { storedAttachments, usableAttachments } from "#src/todos/todoAttachments.js";
 import { TodoStateError, workspaceKeyOf } from "#src/todos/todo.js";
 
@@ -152,13 +153,7 @@ export class TodoRepo {
     const db = new DatabaseSync(path);
     runTasksDatabaseMigrations(db);
     db.exec(TODO_SCHEMA);
-    const columns = db.prepare("PRAGMA table_info(todos)").all() as { name: string }[];
-    if (!columns.some((column) => column.name === "attachments")) {
-      db.exec("ALTER TABLE todos ADD COLUMN attachments TEXT");
-    }
-    if (!columns.some((column) => column.name === "tags")) {
-      db.exec("ALTER TABLE todos ADD COLUMN tags TEXT");
-    }
+    ensureTodoSchemaColumns(db);
     this.db = db;
   }
 
