@@ -56,6 +56,7 @@ import {
   buildConversationTurnRenderUnits,
   type ConversationTurnRenderUnit,
 } from "@/v4/conversationTurnRenderUnits.js";
+import { applyLiveWorkDuration } from "@/v4/conversationTimelineLiveDuration.js";
 import {
   resolveConversationTurnNavigatorActiveQueryRowId,
   type ConversationTurnNavigatorQueryPosition,
@@ -431,20 +432,33 @@ function ConversationTimelineImpl({
       manualPinned: getPluginUiManualPin(sessionKey, toolCallId),
     });
   }, [pluginUiDerivation, sessionKey, pluginUiDisclosureVersion]);
+  // 不看 UI 时钟：render unit 只在 rows / 会话阶段 / pin 裁决变化时重建。
   const renderUnits = useMemo(
     () =>
       buildConversationTurnRenderUnits(rows, {
-        nowMs: liveNowMs,
         sessionPhase,
         pluginUiPinResolver,
       }),
-    [liveNowMs, pluginUiPinResolver, rows, sessionPhase],
+    [pluginUiPinResolver, rows, sessionPhase],
   );
-  const { virtualizedUnits, liveUnit, liveUnitIndex } = useMemo(
+  const { virtualizedUnits, liveUnitIndex } = useMemo(
     () => splitConversationTimelineLiveTail(renderUnits),
     [renderUnits],
   );
-  const hasRunningUnit = useMemo(() => renderUnits.some((unit) => unit.isRunning), [renderUnits]);
+  // 每秒只有 running 的 live tail 换引用；历史 unit 保持原样，memo 才能 bail out。
+  const liveUnit = useMemo(
+    () =>
+      liveUnitIndex === null ? null : applyLiveWorkDuration(renderUnits[liveUnitIndex]!, liveNowMs),
+    [liveNowMs, liveUnitIndex, renderUnits],
+  );
+  // 只有「live tail 存在，且它的时长真的会随 nowMs 推进」才值得起 1 Hz 定时器。
+  // 历史里陈旧 running 轮（header.state 仍是 running）也会让 some(isRunning) 为真，
+  // 但它们的 liveUnitIndex 是 null、永远算不出新秒数 —— 用 hasRunningUnit 开门就是
+  // 每秒一次空转重渲染。带 activeMs / endedAt 的轮次同样不吃 nowMs。
+  const liveUnitTickable = useMemo(() => {
+    const tail = liveUnitIndex === null ? undefined : renderUnits[liveUnitIndex];
+    return tail !== undefined && tail.header?.activeMs === undefined && tail.header?.endedAt === undefined;
+  }, [liveUnitIndex, renderUnits]);
   const turnNavigatorQueryRowIds = useMemo(
     () =>
       new Set(
@@ -578,7 +592,7 @@ function ConversationTimelineImpl({
   }, [backgroundScrollLocked, selectionPanelLayoutContainerRef, syncShareSelectionPanelLayout]);
 
   useEffect(() => {
-    if (!hasRunningUnit) {
+    if (!liveUnitTickable) {
       return;
     }
 
@@ -590,7 +604,7 @@ function ConversationTimelineImpl({
     }, RUNNING_WORK_DURATION_TICK_MS);
 
     return () => window.clearInterval(timer);
-  }, [hasRunningUnit]);
+  }, [liveUnitTickable]);
 
   const getScrollElement = useCallback(() => scrollRef.current, []);
   const getItemKey = useCallback(
@@ -659,13 +673,14 @@ function ConversationTimelineImpl({
       },
     ];
   }, [liveUnitIndex, totalSize, virtualRows]);
+  const liveUnitKey = liveUnit?.key;
   const mountedRowsKey = useMemo(
     () =>
       [
         ...virtualRows.map((row) => String(row.key)),
-        ...(liveUnit === null ? [] : [String(liveUnit.key)]),
+        ...(liveUnitKey === undefined ? [] : [String(liveUnitKey)]),
       ].join(":"),
-    [liveUnit, virtualRows],
+    [liveUnitKey, virtualRows],
   );
 
   const markProgrammaticScroll = useCallback(() => {

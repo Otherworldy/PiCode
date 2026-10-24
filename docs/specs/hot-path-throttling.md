@@ -43,12 +43,33 @@ scroll 事件（60–120 Hz）或流式帧（33 Hz），乘上会话里的元素
 4. **同文件已有正确的节流工具时，优先复用。** 不要在同一段代码里同时存在"裸函数"和
    "rAF 版本"两条路径 —— 后来的人只会看到其中一条。
 
-## 本轮的取舍
+## 时钟与 render model 的落地方式
 
-`liveNowMs` 的正确修法是把「运行中段的起止时间戳」留在 render unit 里，由叶子组件算时长。
-但那会改动 `conversationTurnWorkSegments` 的输出契约，和已知的架构级问题（每 chunk 全量
-重建 render units）是同一处。**本条与架构级优化合并处理，本轮不动**，只在 spec 记录规则 3，
-避免下一个改这块的人再把它当低成本修法加进 deps。
+`liveNowMs` 不进 `buildConversationTurnRenderUnits` 的依赖，也不进它的入参。运行中那一轮的
+时长在 builder **之外**补：`applyLiveWorkDuration(unit, nowMs)` 只对 `isRunning` 的 unit 返回
+新对象，其余 unit 原样返回同一个引用。
+
+```ts
+const renderUnits = useMemo(() => buildConversationTurnRenderUnits(rows, {
+  sessionPhase,
+  pluginUiPinResolver,
+}), [pluginUiPinResolver, rows, sessionPhase]);      // 不含 liveNowMs
+
+const liveUnit = useMemo(
+  () => (liveUnitIndex === null ? null : applyLiveWorkDuration(renderUnits[liveUnitIndex], liveNowMs)),
+  [liveNowMs, liveUnitIndex, renderUnits],            // 每秒只有这一个引用会变
+);
+```
+
+为什么不是「把时间戳留在 unit 里、叶子自己订阅时钟」：运行中的 work chunk 本来就不报秒数
+（`resolveWorkChunkStatusFacts` 的 `running` 分支只出动作文案），全时间线只有一个
+`TurnChatLoadingSlot` 需要每秒推进。为这一处改动 `ConversationTurnWorkStatus` 的输出契约、
+再让叶子各自持有定时器，成本高于收益。当前做法已经满足规则 3 的验收条件：1 Hz 时钟不再触发
+`buildConversationTurnRenderUnits`。
+
+连带约束：`virtualizedUnits`、`turnNavigatorQueryRowIds`、`rowCount`、
+`ConversationTurnNavigator` 的入参、`useConversationTimelineFind` 的入参都必须吃**稳定的**
+`renderUnits`。其中任何一个改吃实时版本，每秒重渲染就会从「一个 live tail」扩散回整条时间线。
 
 ## 验收场景
 

@@ -64,7 +64,12 @@ export interface ConversationTurnRenderUnit {
   isRunning: boolean;
   assistantHistoryDefaultOpen: boolean;
   timelineOnly: boolean;
-  /** turn 级聚合工作状态，仅供旧调用兼容；新组件消费 workSegments[].workStatus。 */
+  /**
+   * turn 级聚合工作状态。work segment 的折叠标题消费 `workSegments[].workStatus`，
+   * 但轮尾 `TurnChatLoadingSlot` 读的是这一个；运行中的「工作中 N 秒」也由
+   * `applyLiveWorkDuration` 只补这里（见 conversationTimelineLiveDuration.ts）。
+   * 不要当死字段删掉。
+   */
   workStatus?: ConversationTurnWorkStatus;
   startedAt?: number;
   /** 中枢直接启动轮的启动元数据（规则见 `workflowLaunchTurn.ts`）；在场时轮由 run 卡呈现、无用户气泡。 */
