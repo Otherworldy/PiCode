@@ -253,4 +253,53 @@ describe("mobile remote pairing", () => {
       new URL(started.url).searchParams.get("pair"),
     );
   });
+
+  it("keeps the phone cookie for 30 days and explains an expired pairing in HTML", async () => {
+    const controller = createMobileRemotePairingController({
+      logger: { info() {}, warn() {} },
+      selectAddress: () => "192.168.1.20",
+      listenHost: "127.0.0.1",
+      getHost: () => ({ postMessage() {} }),
+      attachRemote: () => {
+        throw new Error("should not attach");
+      },
+      createChannel: () => ({ port1: fakePort(), port2: {} }),
+      resolveWindow: () => ({ id: 3, webContentsId: 3, onClosed() {} }),
+    });
+    controllers.push(controller);
+    const started = await controller.start(3, 47324);
+    expect(started.status).toBe("ready");
+    if (started.status !== "ready") return;
+    const endpoint = "http://127.0.0.1:47324";
+    const token = new URL(started.url).searchParams.get("pair");
+
+    // 扫码进入：下发持久 cookie，手机锁屏或浏览器进程被回收后回来还能带上。
+    const scanned = await fetch(`${endpoint}/?pair=${token}`, { redirect: "manual" });
+    expect(scanned.status).toBe(302);
+    const setCookie = scanned.headers.get("set-cookie") ?? "";
+    expect(setCookie).toContain("Max-Age=2592000");
+    expect(setCookie).toContain("HttpOnly");
+    expect(setCookie).toContain("SameSite=Lax");
+    expect(setCookie).toContain("Path=/");
+
+    // 手机浏览器直接导航：给可读提示，不把 401 JSON 原文摊在页面上。
+    const page = await fetch(`${endpoint}/mobile`, {
+      headers: { accept: "text/html", "accept-language": "zh-CN" },
+    });
+    expect(page.status).toBe(401);
+    expect(await page.text()).toContain("手机配对已失效");
+
+    // 接口请求仍返回 JSON，调用方按状态码处理。
+    const api = await fetch(`${endpoint}/api/mobile-remote/workspaces`, {
+      headers: { accept: "application/json" },
+    });
+    expect(api.status).toBe(401);
+    expect(await api.json()).toEqual({ error: "unauthorized" });
+
+    // 畸形 cookie 只当作没有口令，不能让 Main 抛未捕获异常。
+    const malformed = await fetch(`${endpoint}/api/mobile-remote/workspaces`, {
+      headers: { accept: "application/json", cookie: "zcode_mobile_pair=%zz" },
+    });
+    expect(malformed.status).toBe(401);
+  });
 });

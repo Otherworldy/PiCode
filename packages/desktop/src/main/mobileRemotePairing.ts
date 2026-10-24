@@ -16,10 +16,12 @@ import {
 import {
   bridgeMobileRemoteRpc,
   listMobileRemoteWorkspaces,
-  MOBILE_REMOTE_PAIR_COOKIE,
   mobileRemoteTokensMatch,
   readMobileRemoteToken,
   selectLanIPv4,
+  sendMobileRemotePairCookieRedirect,
+  sendMobileRemotePairingExpired,
+  wantsMobileRemoteHtml,
 } from "./mobileRemoteTransport.js";
 
 export { selectLanIPv4 } from "./mobileRemoteTransport.js";
@@ -187,12 +189,7 @@ export function createMobileRemotePairingController(options: MobileRemotePairing
       return;
     }
     if (url.pathname === "/" && url.searchParams.get("pair")) {
-      response.writeHead(302, {
-        Location: "/mobile",
-        "Set-Cookie": `${MOBILE_REMOTE_PAIR_COOKIE}=${encodeURIComponent(session.token)}; HttpOnly; SameSite=Lax; Path=/`,
-        "Cache-Control": "no-store",
-      });
-      response.end();
+      sendMobileRemotePairCookieRedirect(response, session.token);
       return;
     }
     if (url.pathname === "/api/mobile-remote/workspaces") {
@@ -354,7 +351,8 @@ export function createMobileRemotePairingController(options: MobileRemotePairing
       const session = sessions.get(windowId);
       const presented = readMobileRemoteToken(request, url);
       if (!session || !presented || !mobileRemoteTokensMatch(session.token, presented)) {
-        sendJson(response, 401, { error: "unauthorized" });
+        if (wantsMobileRemoteHtml(request)) sendMobileRemotePairingExpired(response, request);
+        else sendJson(response, 401, { error: "unauthorized" });
         return;
       }
       void handleHttp(session, request, response, url).catch((error) => {
