@@ -7,9 +7,8 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { once } from "node:events";
 import { dirname, join, resolve, sep } from "node:path";
-import { finished } from "node:stream/promises";
+import { finished, pipeline } from "node:stream/promises";
 import { open as openZip, type Entry, type ZipFile } from "yauzl";
 import { findPetPackDir } from "./pack.js";
 import type { DesktopPetDownloadFailure } from "@zcode/shared";
@@ -85,7 +84,8 @@ function aborted(): Error {
   return new DOMException("The operation was aborted", "AbortError");
 }
 
-async function writeResponseBody(
+/** 内部导出仅供失败路径测试（见 test/downloadPackFailure.test.ts）。 */
+export async function writeResponseBody(
   url: string,
   zipPath: string,
   options?: {
@@ -107,27 +107,37 @@ async function writeResponseBody(
   const length = Number(response.headers.get("content-length"));
   const total = Number.isFinite(length) && length > 0 ? length : null;
   if (total != null && total > MAX_PACK_BYTES) throw new PetPackDownloadError("too-large");
+  const body = response.body;
   const output = createWriteStream(zipPath);
-  const reader = response.body.getReader();
   let received = 0;
+  // 修复原因：原来手写 output.write() 循环，output 的 error 监听要等 finally 里的
+  // finished() 才挂上。write() 返回 true（小 chunk 必然如此）时写盘错误异步到达就没有
+  // 消费者，会以 uncaughtException 打死 main 进程（磁盘满、权限变更、Windows 锁文件）。
+  // pipeline 让两侧互相销毁：任一端失败都 destroy 另一端并 reject 到同一条 catch。
   try {
-    while (true) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      received += chunk.value.byteLength;
-      if (received > MAX_PACK_BYTES) throw new PetPackDownloadError("too-large");
-      options?.onProgress?.({ phase: "downloading", received, total });
-      if (!output.write(chunk.value)) await once(output, "drain");
-    }
+    await pipeline(async function* readBody(): AsyncGenerator<Uint8Array> {
+      const reader = body.getReader();
+      try {
+        for (;;) {
+          const chunk = await reader.read();
+          if (chunk.done) return;
+          received += chunk.value.byteLength;
+          if (received > MAX_PACK_BYTES) throw new PetPackDownloadError("too-large");
+          options?.onProgress?.({ phase: "downloading", received, total });
+          yield chunk.value;
+        }
+      } finally {
+        // pipeline 提前终止（abort 或输出流报错）时不能把 reader 悬着。
+        await reader.cancel().catch(() => {});
+      }
+    }, output);
   } catch (error) {
+    // pipeline 已 destroy 输出流，但 Windows 要等 close 才真正释放句柄；上层紧接着
+    // rmSync(dest)，不等就可能 EBUSY，把真实原因掩盖成 missing-config。
+    await finished(output).catch(() => {});
     if (options?.signal?.aborted) throw error;
     if (error instanceof PetPackDownloadError) throw error;
     throw new PetPackDownloadError("network");
-  } finally {
-    output.end();
-    await finished(output).catch(() => {
-      // 失败时关掉文件再删目录，避免 Windows 上还占着 pack.zip。
-    });
   }
 }
 
