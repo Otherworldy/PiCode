@@ -1078,19 +1078,24 @@ export class HostSessionRegistry {
           return extensionRuntime.uiReady;
         },
         run: async (command, execute) => {
+          // 嵌套命令按帧保存外层状态；内层结束不能把外层的决定带脏。
+          const outerDismissed = extensionRuntime.dismissed;
           extensionRuntime.depth += 1;
           extensionRuntime.command = command;
           extensionRuntime.dismissed = false;
           extensionRuntime.noticeId = "";
           extensionRuntime.noticeText = "";
-          emit(projector.setExtensionCommandActive(true));
-          emit(projector.setExtensionNotice(null));
           try {
+            emit(projector.setExtensionCommandActive(true));
+            emit(projector.setExtensionNotice(null));
             await execute();
           } finally {
-            extensionRuntime.depth -= 1;
+            extensionRuntime.depth = Math.max(0, extensionRuntime.depth - 1);
             extensionRuntime.command = "";
-            emit(projector.setExtensionCommandActive(false));
+            // 作废状态只属于这条命令；留到命令结束之后会把后续工具提问全部静默取消。
+            extensionRuntime.dismissed =
+              extensionRuntime.depth > 0 ? outerDismissed : false;
+            emit(projector.setExtensionCommandActive(extensionRuntime.depth > 0));
           }
         },
       },
@@ -1117,7 +1122,9 @@ export class HostSessionRegistry {
       }, 250);
     };
     const handleUi = (event: Extract<PiHostEvent, { type: "extension_ui_request" }>) => {
+      // dismiss 只属于扩展命令：命令外（工具发起的提问）一律照常弹给界面。
       if (
+        extensionRuntime.depth > 0 &&
         extensionRuntime.dismissed &&
         (event.method === "select" ||
           event.method === "confirm" ||
@@ -1489,7 +1496,9 @@ export class HostSessionRegistry {
       prompt: (text) => pi.prompt(text),
       waitTurn: () => pi.waitTurn?.() ?? Promise.resolve(),
       abort: async () => {
-        extensionRuntime.dismissed = true;
+        // 只有扩展命令跑着时，停止才作废这次命令剩下的提问。普通轮次里置位会一直
+        // 留到下一次扩展命令，之后 ask/select/input/confirm 都被 handleUi 静默取消。
+        if (extensionRuntime.depth > 0) extensionRuntime.dismissed = true;
         for (const item of ui.snapshot().pending) {
           ui.respond({ id: item.interactionId, cancelled: true });
         }

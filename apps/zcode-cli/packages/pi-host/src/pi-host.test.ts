@@ -1205,6 +1205,147 @@ test("structured ask keeps the question apart from option previews", async () =>
   assert.equal(answers?.[0]?.custom, false);
 });
 
+type TestAskUi = {
+  ask: (
+    questions: Array<{ question: string; options: Array<{ label: string }> }>,
+  ) => Promise<Array<{ answer: string }> | undefined>;
+};
+
+function askOnce(ui: TestAskUi) {
+  return ui.ask([{ question: "继续吗？", options: [{ label: "是" }, { label: "否" }] }]);
+}
+
+test("stopping a normal turn does not swallow later questions", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const pi = new FakePiSession("s");
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async () => pi,
+  });
+  const session = await registry.create({ workspacePath: root });
+  await session.abort();
+  const ui = pi.boundUi as TestAskUi;
+  const pending = askOnce(ui);
+  const interaction = session.ui.snapshot().pending[0];
+  assert.equal(interaction?.payload.kind, "userInput");
+  if (interaction?.payload.kind !== "userInput") throw new Error("expected a question");
+  assert.equal(interaction.payload.toolName, "AskUserQuestion");
+  session.ui.respond({ id: interaction.interactionId, content: { answer_0: "是" } });
+  assert.equal((await pending)?.[0]?.answer, "是");
+  await rm(root, { recursive: true, force: true });
+});
+
+test("a dismissed extension command stops swallowing questions after it ends", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const pi = new FakePiSession("s");
+  pi.slashCommands = [
+    { name: "prompt", description: "", inputHint: "/prompt", source: "extension" },
+  ];
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async () => pi,
+  });
+  const session = await registry.create({ workspacePath: root });
+  const ui = pi.boundUi as TestAskUi;
+  let firstPending = 0;
+  let firstResult: unknown = "unset";
+  let secondResult: unknown = "unset";
+  let commandFinished!: () => void;
+  const finished = new Promise<void>((resolve) => {
+    commandFinished = resolve;
+  });
+
+  // 扩展命令内的第一次提问被关掉后，这条命令剩下的提问仍作废。
+  pi.prompt = async () => {
+    const first = askOnce(ui);
+    firstPending = session.ui.snapshot().pending.length;
+    const id = session.ui.snapshot().pending[0]?.interactionId ?? "";
+    session.ui.respond({ id, cancelled: true });
+    firstResult = await first;
+    secondResult = await askOnce(ui);
+    commandFinished();
+    return "handled";
+  };
+  await session.bridge.admitSend({
+    text: "/prompt once",
+    clientId: "c",
+    commandId: "1",
+    delivery: "startNow",
+    streaming: false,
+  });
+  await finished;
+  // 让 run 的 finally 跑完，不等固定时长。
+  for (let i = 0; i < 50 && session.projector.getSnapshot().extensionCommandActive; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.equal(firstPending, 1);
+  assert.equal(firstResult, undefined);
+  assert.equal(secondResult, undefined);
+
+  // 命令结束后作废状态要清掉，后面的工具提问重新弹出来。
+  const after = askOnce(ui);
+  assert.equal(session.ui.snapshot().pending.length, 1);
+  const interaction = session.ui.snapshot().pending[0];
+  if (interaction?.payload.kind !== "userInput") throw new Error("expected a question");
+  session.ui.respond({ id: interaction.interactionId, content: { answer_0: "是" } });
+  assert.equal((await after)?.[0]?.answer, "是");
+  await rm(root, { recursive: true, force: true });
+});
+
+test("stopping inside an extension command cancels its remaining questions only", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const pi = new FakePiSession("s");
+  pi.slashCommands = [
+    { name: "prompt", description: "", inputHint: "/prompt", source: "extension" },
+  ];
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async () => pi,
+  });
+  const session = await registry.create({ workspacePath: root });
+  const ui = pi.boundUi as TestAskUi;
+  let firstResult: unknown = "unset";
+  let secondResult: unknown = "unset";
+  let commandFinished!: () => void;
+  const finished = new Promise<void>((resolve) => {
+    commandFinished = resolve;
+  });
+
+  pi.prompt = async () => {
+    const first = askOnce(ui);
+    await session.abort();
+    firstResult = await first;
+    secondResult = await askOnce(ui);
+    commandFinished();
+    return "handled";
+  };
+  await session.bridge.admitSend({
+    text: "/prompt once",
+    clientId: "c",
+    commandId: "1",
+    delivery: "startNow",
+    streaming: false,
+  });
+  await finished;
+  for (let i = 0; i < 50 && session.projector.getSnapshot().extensionCommandActive; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.equal(firstResult, undefined);
+  assert.equal(secondResult, undefined);
+
+  // 停止只作废命令里的提问；命令结束后普通轮次的提问仍要弹。
+  const after = askOnce(ui);
+  assert.equal(session.ui.snapshot().pending.length, 1);
+  const interaction = session.ui.snapshot().pending[0];
+  if (interaction?.payload.kind !== "userInput") throw new Error("expected a question");
+  session.ui.respond({ id: interaction.interactionId, content: { answer_0: "是" } });
+  assert.equal((await after)?.[0]?.answer, "是");
+  await rm(root, { recursive: true, force: true });
+});
+
 test("host extension theme is plain text so plan progress can be listed", () => {
   const ui = new ExtensionUiHost();
   const extensionUi = createHostExtensionUi(ui, (event) => {

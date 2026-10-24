@@ -32,6 +32,8 @@ export class FakePiSession implements PiSessionPort {
   tree: PiSessionTreeNode[] = [];
   sessionName?: string;
   branchFrom?: (entryId: string) => { sessionId: string; sessionFile: string };
+  /** 测试拿 bindUi 交进来的 ui context，直接发 ask/select/confirm。 */
+  boundUi?: unknown;
 
   constructor(sessionId: string, sessionFile?: string) {
     this.sessionId = sessionId;
@@ -41,6 +43,10 @@ export class FakePiSession implements PiSessionPort {
   emit(event: PiHostEvent): void {
     this.events.push(event);
     for (const listener of this.listeners) listener(event);
+  }
+
+  async bindUi(ui: unknown): Promise<void> {
+    this.boundUi = ui;
   }
 
   setSessionName(name: string): void {
