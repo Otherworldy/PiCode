@@ -63,7 +63,7 @@ export function createWorkerWorkspaceFileSearchFilterBackend(): WorkspaceFileSea
   if (typeof document === "undefined") {
     return createSyncWorkspaceFileSearchFilterBackend();
   }
-  let worker: Worker;
+  let worker: Worker | null;
   try {
     worker = new Worker(new URL("./workspaceFileSearchFilter.worker.ts", import.meta.url), {
       type: "module",
@@ -79,8 +79,40 @@ export function createWorkerWorkspaceFileSearchFilterBackend(): WorkspaceFileSea
 
   let seq = 0;
   const pending = new Map<number, { resolve: (entries: WorkspaceFileEntry[] | null) => void }>();
+  // 最近一次 setPacked 的入参：降级时必须重放，否则 filter 会在空候选上返回 []。
+  let packedState: { packed: string; rootPath: string } | null = null;
+  // 终态之后唯一实现。worker 的未捕获异常已经终止了它本身，同实例内重建会立刻再崩，
+  // 所以不重试；hook 卸载后新实例会重新尝试 worker。
+  let fallback: WorkspaceFileSearchFilterBackend | null = null;
+  let disposed = false;
 
-  worker.onmessage = (
+  const settleAllAsStale = (): void => {
+    for (const [, waiter] of pending) {
+      waiter.resolve(null);
+    }
+    pending.clear();
+  };
+
+  /**
+   * 修复原因：onerror 原来只让在途请求过期，注释以为「后续 filter 仍会重试」。但 Worker
+   * 未捕获异常后自身已经终止，之后的 postMessage 是静默 no-op——后续每个 filter 的 Promise
+   * 永不 settle，pending 随输入无限增长，@ 面板永久 loading 且搜索静默失效。
+   */
+  const degrade = (reason: string): WorkspaceFileSearchFilterBackend => {
+    if (fallback) return fallback;
+    const dead = worker;
+    worker = null;
+    dead?.terminate();
+    logger.warn("[workspace-file-search] Worker 已终止，切换到主线程同步过滤", { reason });
+    const sync = createSyncWorkspaceFileSearchFilterBackend();
+    if (packedState) sync.setPacked(packedState.packed, packedState.rootPath);
+    fallback = sync;
+    return sync;
+  };
+
+  const bootWorker = worker;
+
+  bootWorker.onmessage = (
     event: MessageEvent<{ type: string; seq?: number; entries?: WorkspaceFileEntry[] }>,
   ) => {
     const data = event.data;
@@ -95,35 +127,34 @@ export function createWorkerWorkspaceFileSearchFilterBackend(): WorkspaceFileSea
     waiter.resolve(Array.isArray(data.entries) ? data.entries : null);
   };
 
-  worker.onerror = (event) => {
-    // 运行期失败：让所有在途请求过期（null），后续 filter 仍会重试；
-    // 持续失败由调用方通过空结果感知，不影响输入。
-    logger.warn("[workspace-file-search] Worker 运行失败，本轮过滤结果丢弃", {
-      message: event.message,
-    });
-    for (const [, waiter] of pending) {
-      waiter.resolve(null);
-    }
-    pending.clear();
+  bootWorker.onerror = (event) => {
+    settleAllAsStale();
+    if (disposed) return;
+    degrade(event.message || "worker error");
   };
 
   return {
     setPacked(packed, rootPath) {
+      packedState = { packed, rootPath };
       seq += 1;
-      for (const [, waiter] of pending) {
-        waiter.resolve(null);
+      settleAllAsStale();
+      if (fallback) {
+        fallback.setPacked(packed, rootPath);
+        return;
       }
-      pending.clear();
       // packed 由 Host 侧 listWorkspaceFiles 直接产出（RPC 返回字符串，memcpy 级传输），
       // renderer 全程不构建 entries 对象——37 万条实测省去 11-14s 结构化克隆。
-      worker.postMessage({ type: "entries", packed, rootPath });
+      worker?.postMessage({ type: "entries", packed, rootPath });
     },
     filter(query, options) {
+      if (fallback) return fallback.filter(query, options);
+      const live = disposed ? null : worker;
+      if (!live) return Promise.resolve(null);
       seq += 1;
       const currentSeq = seq;
       return new Promise<WorkspaceFileEntry[] | null>((resolve) => {
         pending.set(currentSeq, { resolve });
-        worker.postMessage({
+        live.postMessage({
           type: "filter",
           seq: currentSeq,
           query,
@@ -132,12 +163,16 @@ export function createWorkerWorkspaceFileSearchFilterBackend(): WorkspaceFileSea
       });
     },
     dispose() {
+      if (disposed) return;
+      disposed = true;
       seq += 1;
-      for (const [, waiter] of pending) {
-        waiter.resolve(null);
-      }
-      pending.clear();
-      worker.terminate();
+      settleAllAsStale();
+      const dead = worker;
+      worker = null;
+      dead?.terminate();
+      fallback?.dispose();
+      fallback = null;
+      packedState = null;
     },
   };
 }
