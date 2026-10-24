@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { watch, type FSWatcher } from "node:fs";
 import { mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { Emitter } from "@zcode/rpc";
 import { acquireFileLock } from "@zcode/shared/node";
 import { z } from "zod";
@@ -48,16 +48,19 @@ export function createGenUiStateStorage(root: string): GenUiStateStorage {
   /**
    * 丢弃一个目录下的派生缓存。
    *
-   * **不能清 `targets`**：`targets` 是「文件 → 属于哪个 target」的映射，而 `publishLatest`
-   * 依赖它，缺失时直接 return。一个 session 下可以有多张 gen-ui 卡片共用同一个目录，watcher
-   * 被淘汰后只要有一张卡片重新 observe，其余卡片就会变成「watcher 在场、事件到达、通知被静默
-   * 丢弃」。targets 条目本身很小，留着不影响内存目标。
+   * `targets` 也一起删：`publishLatest` 在 `targets` 缺失时会退到文件记录里自带的
+   * `target`，所以淘汰不会让同目录其他卡片收不到通知。留着反而随「用过的文件」单调
+   * 增长 —— 一个 session 下可以有多张卡片共用同一目录，历史会话的条目永远不会被回收。
+   *
+   * 前缀必须用平台分隔符：文件 key 由 `join()` 拼出，Windows 上是 `\`；写死 `/` 会让
+   * 整个函数在 Windows 上一个条目都匹配不到（淘汰变成空操作，`lastPublished` 从不释放）。
    */
   function forgetDirectory(dir: string): void {
-    const prefix = `${dir}/`;
+    const prefix = `${dir}${sep}`;
     // Map 迭代器允许在遍历中删除当前元素。
     for (const file of targets.keys()) {
       if (!file.startsWith(prefix)) continue;
+      targets.delete(file);
       lastPublished.delete(file);
       notifications.delete(file);
     }
@@ -88,9 +91,13 @@ export function createGenUiStateStorage(root: string): GenUiStateStorage {
     }
   }
   async function publishLatest(file: string) {
-    const target = targets.get(file);
+    if (disposed) return;
+    const record = await readRecord(file);
+    // targets 只覆盖「仍有 watcher 的目录」。被淘汰目录里的卡片重新 observe 时只会
+    // 登记自己，同目录其他卡片不在表里；这里用记录自带的 target 兜底，避免通知被丢。
+    const target = targets.get(file) ?? record?.target;
     if (disposed || !target) return;
-    const state = (await readRecord(file))?.state ?? null;
+    const state = record?.state ?? null;
     const serialized = JSON.stringify(state);
     if (disposed || lastPublished.get(file) === serialized) return;
     lastPublished.set(file, serialized);
@@ -114,9 +121,11 @@ export function createGenUiStateStorage(root: string): GenUiStateStorage {
     const dir = directory(target);
     await mkdir(dir, { recursive: true });
     if (disposed) throw new Error("Gen UI state storage is closed");
-    targets.set(fileFor(target), target);
+    const file = fileFor(target);
     const existingWatcher = watchers.get(dir);
     if (existingWatcher) {
+      // watch 已就绪，这时登记映射才不会留下「有 target、没 watcher」的孤儿项。
+      targets.set(file, target);
       // 命中即刷新顺序，做成真正的 LRU：否则正在使用的 scope 会被新 scope 按 FIFO 淘汰
       // （用户开着看板再连开几个用过 gen-ui 的会话就丢掉跟踪）。
       watchers.delete(dir);
@@ -133,6 +142,7 @@ export function createGenUiStateStorage(root: string): GenUiStateStorage {
       log.warn(undefined, "State watcher failed", { error: error.message }),
     );
     watchers.set(dir, watcher);
+    targets.set(file, target);
     evictWatchScopes();
   }
   async function records(scope: GenUiScope) {
@@ -192,8 +202,13 @@ export function createGenUiStateStorage(root: string): GenUiStateStorage {
             });
             for (const record of existing
               .filter((record) => record.file !== fileFor(target))
-              .slice(GEN_UI_STATE_MAX_ENTRIES - 1))
+              .slice(GEN_UI_STATE_MAX_ENTRIES - 1)) {
               await rm(record.file, { force: true });
+              // 容量淘汰同样要回收派生表，否则长会话里卡片路径不断变化时这两张表
+              // 仍会随「用过的路径」单调增长。
+              targets.delete(record.file);
+              lastPublished.delete(record.file);
+            }
           } finally {
             await release();
           }
