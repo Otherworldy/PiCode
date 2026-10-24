@@ -18,15 +18,15 @@ interface WatcherInstance {
   /** 同一防抖窗口只含一个明确路径时才透传，避免过滤掉同批次里的目标文件事件 */
   pendingChangedPaths: Set<string>;
   hasUnknownChangedPath: boolean;
-  ignoreDirectoryNames: readonly string[];
+  /** 注册时收成 Set：递归监视下每个文件事件都会走一次判定，不能在回调里重复构造。 */
+  ignoreDirectoryNames: ReadonlySet<string>;
 }
 
-export function isIgnoredWatchPath(filePath: string, directoryNames: readonly string[]): boolean {
-  if (directoryNames.length === 0) {
+export function isIgnoredWatchPath(filePath: string, ignored: ReadonlySet<string>): boolean {
+  if (ignored.size === 0) {
     return false;
   }
 
-  const ignored = new Set(directoryNames);
   return filePath.split(/[\\/]+/).some((part) => ignored.has(part));
 }
 
@@ -71,7 +71,7 @@ export function createFileWatcherService(options?: {
       const id = String(nextId++);
       const changeEmitter = new Emitter<FileWatchEvent>();
       const recursive = params.recursive ?? false;
-      const ignoreDirectoryNames = params.ignoreDirectoryNames ?? [];
+      const ignoreDirectoryNames: ReadonlySet<string> = new Set(params.ignoreDirectoryNames ?? []);
 
       let fsWatcher: FSWatcher;
       try {

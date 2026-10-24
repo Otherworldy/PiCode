@@ -1,4 +1,4 @@
-import type { GitRepositorySummary, SystemInfo } from "@zcode/shared";
+import type { GitRepositorySummary } from "@zcode/shared";
 
 interface GitAutoRefreshWatchPath {
   path: string;
@@ -16,7 +16,7 @@ export function shouldEnableGitAutoRefreshForWorkspace(params: {
 // 安静后马上刷。连续写入最多再忍一会儿，避免每个文件一次 git status。
 export const GIT_AUTO_REFRESH_QUIET_MS = 1_000;
 export const GIT_AUTO_REFRESH_MAX_WAIT_MS = 5_000;
-// Linux 和不递归的监听只盯 `.git`。工作区文件改动不会碰元数据，右上角会一直停在干净状态。
+// 只盯 `.git` 时，工作区文件改动不会碰元数据，靠这份轮询让右上角跟上。
 export const GIT_AUTO_REFRESH_POLL_MS = 5_000;
 export const GIT_AUTO_REFRESH_IGNORED_DIRECTORIES = ["node_modules"] as const;
 
@@ -56,36 +56,39 @@ function normalizeWatchPath(path: string): string {
   return trimmed.replace(/[\\/]+$/, "");
 }
 
+/**
+ * 只用于比较的 key：统一分隔符，Windows 盘符/UNC 再抹平大小写。
+ *
+ * 下发给 `fs.watch` 的路径保持原样 —— POSIX 大小写敏感，不能为了比较去改它。
+ */
+function watchPathKey(path: string): string {
+  const unified = normalizeWatchPath(path).replace(/\\/g, "/");
+  return /^(?:[A-Za-z]:|\/\/)/.test(unified) ? unified.toLowerCase() : unified;
+}
+
 export function buildGitAutoRefreshWatchPaths(
   summary: Pick<
     GitRepositorySummary,
     "workspacePath" | "repoRoot" | "isGitAvailable" | "isRepository"
   > &
     Partial<Pick<GitRepositorySummary, "autoRefreshWatchPaths">>,
-  systemInfo?: Pick<SystemInfo, "platform"> | null,
 ): GitAutoRefreshWatchPath[] {
   if (!summary.isGitAvailable || !summary.isRepository) {
     return [];
   }
 
   const workspacePath = normalizeWatchPath(summary.workspacePath || summary.repoRoot);
-  const platform = systemInfo?.platform?.trim();
-  const canWatchWorkspaceRecursively = Boolean(platform && platform !== "linux");
   const watchPaths: GitAutoRefreshWatchPath[] = [];
-  if (workspacePath.length > 0 && canWatchWorkspaceRecursively) {
-    watchPaths.push({
-      path: workspacePath,
-      recursive: true,
-    });
-  }
-
   for (const watchPath of summary.autoRefreshWatchPaths ?? []) {
     const path = normalizeWatchPath(watchPath.path);
     if (
       !path ||
-      // 兼容旧 remote server：旧 summary 仍可能携带 workspacePath，Linux 下不能让
-      // 这个历史字段重新绕过平台边界，触发慢速递归 watcher。
-      (path === workspacePath && !canWatchWorkspaceRecursively) ||
+      // 工作区根永远不进监听，不分平台：`fs.watch(recursive)` 会为整棵目录树挂内核
+      // watcher（Windows ReadDirectoryChangesW / macOS FSEvents），node_modules 与
+      // 生成目录的每次写入都会回调 Host；忽略名单只能在回调里滤，挡不住通知本身。
+      // 工作区内容改动由 GIT_AUTO_REFRESH_POLL_MS 轮询负责。这条同时挡住旧 remote
+      // server 仍下发的 workspacePath 递归项。
+      watchPathKey(path) === watchPathKey(workspacePath) ||
       watchPaths.some((entry) => entry.path === path)
     ) {
       continue;
@@ -110,7 +113,7 @@ export function shouldPollGitWorkspaceContent(
   }
 
   return !watchPaths.some(
-    (entry) => entry.recursive && normalizeWatchPath(entry.path) === normalizedWorkspacePath,
+    (entry) => entry.recursive && watchPathKey(entry.path) === watchPathKey(normalizedWorkspacePath),
   );
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { IDisposable } from "@zcode/rpc";
 import type { GitRepositorySummary } from "@zcode/shared";
 import {
@@ -37,7 +37,7 @@ export function useGitAutoRefresh({
   onRefreshGit: () => void;
 }) {
   const workspaceServices = useWorkspaceServices(workspacePath, remoteSessionId, workspaceIdentity);
-  const { fileWatcherService, systemService } = workspaceServices;
+  const { fileWatcherService } = workspaceServices;
   const refreshRef = useRef(onRefreshGit);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const burstStartedAtRef = useRef<number | null>(null);
@@ -47,45 +47,10 @@ export function useGitAutoRefresh({
     currentWorkspaceKey,
     summaryWorkspaceKey: gitSummaryWorkspaceKey,
   });
-  const [workspacePlatformState, setWorkspacePlatformState] = useState<{
-    service: typeof systemService;
-    platform: string;
-  } | null>(null);
-  // workspaceScopedServices 在远程 workspace 下指向远端 Host，因此这里获取的是
-  // WSL/SSH/Docker 的真实运行平台，而不是桌面应用本身的平台。service identity
-  // 参与状态匹配，避免 Windows workspace 的旧 platform 泄漏到刚切换的 Linux workspace。
-  const workspacePlatform =
-    workspacePlatformState?.service === systemService ? workspacePlatformState.platform : null;
-  useEffect(() => {
-    if (!canWatchCurrentWorkspace || !gitSummary.isGitAvailable || !gitSummary.isRepository) {
-      return;
-    }
-
-    let cancelled = false;
-    void systemService
-      .info()
-      .then((info) => {
-        if (!cancelled) {
-          setWorkspacePlatformState({ service: systemService, platform: info.platform });
-        }
-      })
-      .catch(() => {
-        // 平台信息不可用时由路径构造器采用 metadata-only 保守策略；手动刷新链路不受影响。
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [canWatchCurrentWorkspace, gitSummary.isGitAvailable, gitSummary.isRepository, systemService]);
   const watchPathSignature = useMemo(
     () =>
       stringifyGitAutoRefreshWatchPaths(
-        canWatchCurrentWorkspace
-          ? buildGitAutoRefreshWatchPaths(
-              gitSummary,
-              workspacePlatform ? { platform: workspacePlatform } : null,
-            )
-          : [],
+        canWatchCurrentWorkspace ? buildGitAutoRefreshWatchPaths(gitSummary) : [],
       ),
     [
       canWatchCurrentWorkspace,
@@ -94,7 +59,6 @@ export function useGitAutoRefresh({
       gitSummary.repoRoot,
       gitSummary.workspacePath,
       gitSummary.autoRefreshWatchPaths,
-      workspacePlatform,
     ],
   );
   const watchPaths = useMemo(
