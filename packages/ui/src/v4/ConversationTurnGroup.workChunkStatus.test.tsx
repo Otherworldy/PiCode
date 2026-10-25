@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { ConversationRow, TurnHeaderRow } from "@zcode/shared/zcode-protocol-v4";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
+import zhCN from "@/i18n/locales/zh-CN.js";
 import { DEFAULT_CODE_PREVIEW_SETTINGS } from "@/lib/codePreviewSettings.js";
 import type { ConversationRowRenderContext } from "@/v4/conversationRowContext.js";
 import { ConversationTurnGroup } from "@/v4/ConversationTurnGroup.js";
@@ -143,6 +144,15 @@ function loadingSlotLabel(html: string): string {
   return html.slice(textStart, html.indexOf("</span>", textStart));
 }
 
+/**
+ * 一个动作备几条同义文案，标题按块和工时轮换。
+ * 断言只认「这一组里的一条」，不锁死具体第几条，否则轮换一动测试就红。
+ */
+function expectActivity(html: string, key: string, activity: string): void {
+  const labels = [1, 2, 3].map((n) => zhCN[`chat.workChunk.activity.${activity}.${n}`]);
+  expect(labels).toContain(triggerLabel(html, key));
+}
+
 /** 轮尾那行的整段 HTML：从包住它的 span 开始，含外层文字色类。 */
 function loadingSlotHtml(html: string): string {
   const marker = html.indexOf('data-testid="chat-loading"');
@@ -156,7 +166,7 @@ describe("工作块折叠标题的工时口径", () => {
     const html = renderTurn(twoChunkRows());
 
     // 跑着的那一块报当前动作，不报工时和次数。
-    expect(triggerLabel(html, "t1:chunk-1")).toBe("正在运行命令");
+    expectActivity(html, "t1:chunk-1", "commands");
     // 默认展开，箭头随时可点：运行中也能收起。
     expect(triggerHtml(html, "t1:chunk-1")).toContain('aria-expanded="true"');
     expect(triggerHasChevron(html, "t1:chunk-1")).toBe(true);
@@ -200,7 +210,7 @@ describe("工作块折叠标题的工时口径", () => {
   it("块内最后一条在思考时，标题报「正在思考」", () => {
     const html = renderTurn([runningHeader(), reasoningRow(2, STARTED_AT + 1_000)]);
 
-    expect(triggerLabel(html, "t1")).toBe("正在思考");
+    expectActivity(html, "t1", "thinking");
   });
 
   it("工具后面的空思考行不把标题带成「正在思考」", () => {
@@ -211,7 +221,7 @@ describe("工作块折叠标题的工时口径", () => {
     ]);
 
     // 空的 reasoning block 不渲染，也不能把标题从工具动作改成「正在思考」。
-    expect(triggerLabel(html, "t1")).toBe("正在读取文件");
+    expectActivity(html, "t1", "read");
   });
 
   it("工具还在跑时，后面跟着的思考行不抢走标题", () => {
@@ -221,7 +231,7 @@ describe("工作块折叠标题的工时口径", () => {
       reasoningRow(3, STARTED_AT + 2_000),
     ]);
 
-    expect(triggerLabel(html, "t1")).toBe("正在读取文件");
+    expectActivity(html, "t1", "read");
   });
 
   it("explore 子工具已经落定时，标题仍报它的动作", () => {
@@ -232,7 +242,27 @@ describe("工作块折叠标题的工时口径", () => {
     ]);
 
     // 父阶段还在跑，子工具先 success：报的是读文件，不是退回去说思考。
-    expect(triggerLabel(html, "t1")).toBe("正在读取文件");
+    expectActivity(html, "t1", "read");
+  });
+
+  it("同一块跑久了会换一句，同一个工时不会抖", () => {
+    const at = (elapsedMs: number) =>
+      triggerLabel(renderTurn(twoChunkRows(), STARTED_AT + elapsedMs), "t1:chunk-1");
+
+    // 同一个工时重算两次得到同一句：轮换不能取随机数，否则每秒重渲染都在闪。
+    expect(at(10_000)).toBe(at(10_000));
+    // 跑过一个轮换周期就换一句。
+    expect(at(18_000)).not.toBe(at(10_000));
+  });
+
+  it("连着跑三个周期，三句都轮得到", () => {
+    const seen = new Set(
+      [0, 1, 2].map((step) =>
+        triggerLabel(renderTurn(twoChunkRows(), STARTED_AT + 10_000 + step * 8_000), "t1:chunk-1"),
+      ),
+    );
+
+    expect(seen.size).toBe(3);
   });
 
   it("参数还在流时标题说「准备」，不是「正在」", () => {
@@ -252,13 +282,13 @@ describe("工作块折叠标题的工时口径", () => {
       runningHeader(),
       toolRow(2, STARTED_AT + 1_000, STARTED_AT + 1_400, { toolName: "Grep", status: "running" }),
     ]);
-    expect(triggerLabel(grep, "t1")).toBe("正在搜索代码");
+    expectActivity(grep, "t1", "search");
 
     const agent = renderTurn([
       runningHeader(),
       toolRow(2, STARTED_AT + 1_000, STARTED_AT + 1_400, { toolName: "Agent", status: "running" }),
     ]);
-    expect(triggerLabel(agent, "t1")).toBe("正在协调子智能体");
+    expectActivity(agent, "t1", "subagents");
   });
 
   it("没登记的工具名回退成「正在调用工具」", () => {
@@ -270,14 +300,14 @@ describe("工作块折叠标题的工时口径", () => {
       }),
     ]);
 
-    expect(triggerLabel(html, "t1")).toBe("正在调用工具");
+    expectActivity(html, "t1", "tools");
   });
 
   it("还没有工具块时，状态行报当前动作，统计只在轮尾", () => {
     const html = renderTurn([runningHeader(), textRow(2)]);
 
     // 没有可折叠块可切：这一行只报动作，不报工时和次数。
-    expect(triggerLabel(html, "t1")).toBe("正在回答");
+    expectActivity(html, "t1", "answer");
     // 这一轮没有工具调用：轮尾只剩时长。
     expect(loadingSlotLabel(html)).toBe("用时 14 分 6 秒");
   });

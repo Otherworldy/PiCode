@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AssistantWorkRow } from "./conversationTurnRenderUnits.js";
-import { resolveWorkActivity, workActivityForToolName } from "./workChunkActivity.js";
+import { resolveWorkActivity, workActivityForToolName, workActivityPhraseKey } from "./workChunkActivity.js";
 
 function toolRow(
   rowId: number,
@@ -125,4 +125,43 @@ test("没有在跑的工具时回到思考或正文", () => {
 
 test("一块里什么都没有时不给活动", () => {
   assert.equal(resolveWorkActivity([], { stageRunning: true }), null);
+});
+
+test("同一个块同一个工时算两次得到同一条文案", () => {
+  const state = { activity: "read" as const, preparing: false };
+
+  assert.equal(
+    workActivityPhraseKey(state, { seed: "t1:chunk-1", elapsedMs: 9_000 }),
+    workActivityPhraseKey(state, { seed: "t1:chunk-1", elapsedMs: 9_000 }),
+  );
+});
+
+test("工时递进一个轮换周期就换一条，三个周期把三条跑完", () => {
+  const state = { activity: "read" as const, preparing: false };
+  const at = (elapsedMs: number) => workActivityPhraseKey(state, { seed: "t1", elapsedMs });
+
+  assert.notEqual(at(0), at(8_000));
+  assert.notEqual(at(8_000), at(16_000));
+  assert.equal(new Set([at(0), at(8_000), at(16_000)]).size, 3);
+});
+
+test("不同块从不同的那条起头，跨对话看着不重复", () => {
+  const state = { activity: "read" as const, preparing: false };
+  const starts = new Set(
+    ["t1", "t1:chunk-1", "t2", "t2:chunk-1", "t3", "t3:chunk-2"].map((seed) =>
+      workActivityPhraseKey(state, { seed, elapsedMs: 0 }),
+    ),
+  );
+
+  assert.ok(starts.size > 1, `所有块都从同一条起头：${[...starts].join(",")}`);
+});
+
+test("准备态只有一句，不参与轮换", () => {
+  const state = { activity: "read" as const, preparing: true };
+
+  assert.equal(workActivityPhraseKey(state, { seed: "t1", elapsedMs: 0 }), "chat.workChunk.preparing.read");
+  assert.equal(
+    workActivityPhraseKey(state, { seed: "t1", elapsedMs: 60_000 }),
+    "chat.workChunk.preparing.read",
+  );
 });

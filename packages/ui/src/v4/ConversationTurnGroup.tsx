@@ -88,7 +88,11 @@ import type {
   ConversationTurnRenderUnit,
   ConversationTurnWorkSegment,
 } from "@/v4/conversationTurnRenderUnits.js";
-import { resolveWorkActivity, type WorkActivityState } from "@/v4/workChunkActivity.js";
+import {
+  resolveWorkActivity,
+  workActivityPhraseKey,
+  type WorkActivityState,
+} from "@/v4/workChunkActivity.js";
 import { formatConversationWorkDuration } from "@/v4/conversationWorkDuration.js";
 import { inferReasoningDurations } from "@/v4/reasoningDuration.js";
 import { ConversationTurnRow, resolveAssistantCopyText } from "@/v4/ConversationTurnRow.js";
@@ -810,9 +814,10 @@ function WorkChunkStatus({
       activity == null
         ? intl.formatMessage({ id: "chat.loading.working" })
         : intl.formatMessage({
-            id: activity.preparing
-              ? `chat.workChunk.preparing.${activity.activity}`
-              : `chat.workChunk.activity.${activity.activity}`,
+            id: workActivityPhraseKey(activity, {
+              seed: chunkKey,
+              ...(facts.durationMs === undefined ? {} : { elapsedMs: facts.durationMs }),
+            }),
           });
   } else if (facts.interrupted) {
     label = intl.formatMessage({ id: "chat.history.stopped" });

@@ -33,6 +33,12 @@ export interface WorkActivityState {
   preparing: boolean;
 }
 
+/** 每个动作备几条同义文案，按块和工时轮换。 */
+export const WORK_ACTIVITY_VARIANT_COUNT = 3;
+
+/** 轮换间隔：太短闪，太长看不出变化。 */
+export const WORK_ACTIVITY_ROTATE_MS = 8_000;
+
 function normalizeToolName(toolName: string): string {
   return toolName
     .trim()
@@ -152,4 +158,30 @@ export function resolveWorkActivity(
     activity: lastVisible.kind === "assistantText" ? "answer" : "thinking",
     preparing: false,
   };
+}
+
+/** FNV-1a：让不同的块从不同的那条文案起头，同一块每次算出来一样。 */
+function seedHash(seed: string): number {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+/**
+ * 动作对应的 i18n key。
+ *
+ * 同一动作备几条文案，按「块 key + 净工时」顺次轮换：不取随机数，否则每次重渲染都可能
+ * 换一句，读着像在闪。不同块起头不同，跨对话看着不重复。
+ */
+export function workActivityPhraseKey(
+  state: WorkActivityState,
+  options: { seed: string; elapsedMs?: number },
+): string {
+  if (state.preparing) return `chat.workChunk.preparing.${state.activity}`;
+  const step = Math.floor(Math.max(0, options.elapsedMs ?? 0) / WORK_ACTIVITY_ROTATE_MS);
+  const index = (seedHash(options.seed) + step) % WORK_ACTIVITY_VARIANT_COUNT;
+  return `chat.workChunk.activity.${state.activity}.${index + 1}`;
 }
