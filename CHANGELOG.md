@@ -1,5 +1,128 @@
 # Changelog
 
+## [3.19.0](https://github.com/Otherworldy/PiCode/compare/v3.18.1...v3.19.0) (2026-10-25)
+
+### Features
+
+* **chat:** 回退到此处可撤销消息之后的文件改动 ([aa7b242](https://github.com/Otherworldy/PiCode/commit/aa7b2422c3cf1daba549e579d52e903473150729))
+  * 回退前预检锚点及之后所有 turn 的文件改动，弹确认框选「只回退对话」或「撤销文件并回退」
+  * 文件撤销与对话裁切合并进同一条 editUserQuery，避免两条 CAS 命令踩 revision
+  * core 按 active chain、Pi host 按投影窗口各实现 suffix 展开；覆盖已有文件的 Write 判为不可撤销
+  * 确认框沿用 Dialog 默认规格，宽度与项目确认弹窗一致
+
+* **sidebar:** 项目支持重命名，改名弹窗与其它对话框对齐 ([64b886e](https://github.com/Otherworldy/PiCode/commit/64b886e7ed4d839f5b68be0a3aa5459f53901e31))
+  * 侧栏「更多」菜单新增「重命名项目」，本地和远程项目都可用，只改显示名，不动路径、身份和连接目标
+  * 显示名优先级 自定义名 → SSH 主机名 → 目录名，侧栏、拖拽预览、顶栏、命令面板、任务归属、空态项目菜单、文件树、手机工作区列表、插件作用域、自动化候选统一走同一解析
+  * 随 lastWorkspaceSession 持久化：恢复、重连、首帧补齐都不会丢自定义名，清空改名也不会在重启后复活旧名
+  * 侧栏菜单打开改名弹窗时显式收起菜单，避免下拉和弹框同时停留
+  * 改名弹窗统一到 max-w-3xl、标题 18px、输入框与按钮同高 40
+  * 补 testid 与 vitest：显示名解析/归一化/持久化映射、store 改名与恢复优先级
+
+* **subagents:** 子智能体内置工具清单可配置 ([886cf32](https://github.com/Otherworldy/PiCode/commit/886cf32b7b335dc932a4316cf7ae97dffababd6f))
+  * Pi host 暴露运行时可用工具清单，bootstrap 经 agent-tool-catalog 转成可选项目
+  * 子智能体 profile 支持 builtInToolOverrides，设置页按角色勾选或恢复默认
+  * pi SDK 升级到 1.4.0
+
+* **ui:** 工作块运行中的动作标题按工具分类并轮换文案 ([b17715f](https://github.com/Otherworldy/PiCode/commit/b17715f686b28458b1a34f118b1cf51fe932ca3d))
+
+
+### Bug Fixes
+
+* **agent:** 工作区事件帧与交互回执按工作区回收 ([a4c00a4](https://github.com/Otherworldy/PiCode/commit/a4c00a41592c34338b8733516743cac943106337))
+  * getOrCreateWorkspaceEmitter / fireWorkspaceFrame 的 emitter 表原来只增不减：
+  * userInput.resolved 回执要同时查两张表（resolved 与 pending），否则解析后
+
+* **browser:** 下载监听与录制 Session 不再泄漏 ([fda8639](https://github.com/Otherworldy/PiCode/commit/fda86399269a3b956f43c53279883e089ebcd981))
+  * setupDownloadTracking 的 will-download 监听挂在 session 上，guest 销毁后
+  * 录制 session 原来每次录制都用 fromPartition(zcode-browser-video-recorder-${uuid})：
+  * Playwright executor 补上页面上下文需要的 DOM 类型声明（main 工程不带 dom
+
+* **cli:** stdio 按行切分，drain 以 bufferedAmount 为准并有上限 ([6c7ba49](https://github.com/Otherworldy/PiCode/commit/6c7ba491f7f0d5a0c99d3d3e214fa17a28f88c13))
+  * 原来按 chunk 直接 split("\n")：一个 UTF-8 多字节字符被切在两个 chunk 之间
+  * drain() 改成轮询 bufferedAmount（ws 没有 bufferedamountlow 事件），16ms
+  * 手机远控链路同步改成同样的轮询语义，不再伪造「已经排空」的信号。
+
+* **config:** cli/config.json 收敛为单一带锁写者 ([dc84560](https://github.com/Otherworldy/PiCode/commit/dc845607588caf5c7e6f2c8b9965301698a7d60c))
+  * 新增 userCliConfigFile.ts：updateJsonConfigFile 用文件锁串行化读改写。
+  * 写入路径的读取必须严格：只有 ENOENT 当空文件，其它错误直接抛，避免把损坏的
+  * 路径解析改为函数而不是模块级常量：ensureAppDataDir 的 .zcode→.PiCode 迁移
+  * pluginSyncService 的 addPluginDirToUserConfig 原来用本地 writeJsonFileAtomic
+
+* **desktop:** 宠物包下载的写盘错误不再打死 main 进程 ([d6e51e6](https://github.com/Otherworldy/PiCode/commit/d6e51e6eac03787466ec7d16f79bdfe76a738bbe))
+
+* **desktop:** 手机远控配对 cookie 持久 30 天，失效时给可读提示 ([560305a](https://github.com/Otherworldy/PiCode/commit/560305a30cc858a922b702a443fa4e9ed1a8ec87))
+  * 配对 cookie 加 Max-Age=30 天，回到手机不用再回桌面重新扫码。局域网是明文
+  * 口令对不上时，浏览器导航请求返回一页可读提示（配对已失效，回桌面重新扫码）；
+  * 顺手修掉畸形 cookie 让 decodeURIComponent 抛 URIError 的问题。异常冒到 Main
+
+* **desktop:** 远程连接超时、采样 latch 与沙箱生命周期 ([4401e10](https://github.com/Otherworldy/PiCode/commit/4401e109fbb8ee18c0d92209a4c20e71385c3b38))
+  * ConnectRemote 原来没有任何定时器：对端不响应时 PendingConnect 永久挂着。
+  * resourceManagerHostSampling 的超时回调只 resolve 不摘 requestIdByHost，
+  * 沙箱按文档的五个生命周期阶段收口：clearing 用 try/finally，guestPolicy
+
+* **memory:** 给缓存与额度加界，限制单次读取量 ([e3fd2bd](https://github.com/Otherworldy/PiCode/commit/e3fd2bd14317d5cc5363a94b94f91b66ae0649ac))
+  * shiki tokensCache 加 LRU（200 条 / 8MiB 总量 / 单条 200k）。
+  * plugin-ui 实例、gen-ui stateStorage、taskQueryCache、sessionWorktree 缓存、
+  * pi-host projector 终态后不再保留完整 inputText（row.inputText 已有）；
+  * MCP UI 调用加 per-instance 4 并发 / per-session 500 次 / 120s 超时；
+  * taskRealtimeBus 分片改 netstring 长度前缀（原来 O(K²) stringify）；
+  * proxyFetch 的 agent 表加界，超额时 close 而不是只从表里删（否则连接池继续
+  * 日志写入改 WriteStream，hostLogRelay 保留 2000 条。
+
+* **memory:** 遥测队列与 gen-ui 派生缓存不再无界增长 ([d7b18bd](https://github.com/Otherworldy/PiCode/commit/d7b18bd73bfcd691cc291f9f467d5288c7ea0e97))
+
+* **pi-host:** 扩展命令的作废状态不再漏到之后的工具提问 ([bf68ad5](https://github.com/Otherworldy/PiCode/commit/bf68ad581f15e616eb0f0e34e1e1cc3815400647))
+  * 只有扩展命令跑着（depth > 0）时，停止才作废这次命令剩下的提问。
+  * 嵌套命令按帧保存外层 dismissed，内层结束不把外层的决定带脏。
+  * handleUi 只在命令内因 dismissed 静默取消；命令外（工具发起的提问）照常弹。
+  * depth 用 Math.max(0, ...) 收口，避免重复结束把计数压成负数。
+  * 补三个场景：普通轮次停止不吞后续提问、命令结束后不再吞、命令内停止只取消
+
+* **remote:** SSH 密码认证可用，目录浏览器默认打开远端 home ([66c61df](https://github.com/Otherworldy/PiCode/commit/66c61dfc16c20103a628207f46563c697331bdb6))
+  * 密码不再只在 UI 里：Host 写入 0600 私有凭据文件，spec / agent spawn env / 子进程只带路径，askpass 从文件读口令
+  * 有密码时改 BatchMode=no 并走 password,keyboard-interactive；askpass 形态按 ssh -V 判定 .cmd 或 sh 脚本
+  * 主机密钥统一 TOFU（StrictHostKeyChecking=accept-new），指纹变化仍然拒绝
+  * 目录浏览器起始目录探测远端 $HOME，失败回退 /www/wwwroot、/var/www、/opt、/srv、/home，最后回 /
+  * 修 child.stdin EPIPE 未捕获、signal 已 abort 时子进程不被杀
+  * bind 用 Host 内部未脱敏 target 重建 spec，避免脱敏快照覆盖 agent 侧凭据
+
+* **rpc:** 限制单帧大小，隔离单次调用错误，按连接回收资源 ([dbcc637](https://github.com/Otherworldy/PiCode/commit/dbcc637832453bcdaacfe315e7631ed0093daaad))
+  * 帧上限 MAX_FRAME_BYTES = 64MiB：超出直接断开，避免一条畸形长度头就把
+  * 单次 RPC 抛错不再影响同连接上的其它调用：错误只回给发起方，连接保持可用。
+  * host/index.ts 按连接包装服务：记录本连接创建的 terminal id，连接 dispose 时
+  * docker-backend 的 dispose 只 kill 已证明归属的子进程，绝不 terminate 容器。
+
+* **startup:** 存储启动等待加进度看门狗，不再永久挂起 ([d105ad1](https://github.com/Otherworldy/PiCode/commit/d105ad11f8010e920cb0186911a1b5525956f332))
+  * 新增 createProgressWatchdog(firstFrameTimeoutMs, stallTimeoutMs)：首帧 30s、
+  * zcodeStorageStartupGate 每帧续期；waiting_for_lock 暂停计时（锁等待有独立的
+  * gate 失败后 zcodeProtocolClient 主动 rejectAll：本地 fail 不走 handleMessage，
+  * 存储 worker 的 failed 终态帧也要喂看门狗（上一帧若是 waiting_for_lock，
+  * worker.terminate() 抢占不了 node:sqlite 的同步原生调用，超时后直接 reject
+
+* **todo:** 兼容旧库列名，后台对齐失败不再杀死 Host ([8153589](https://github.com/Otherworldy/PiCode/commit/81535899c6cca00b36c77eb722f3aa6760eb0cc4))
+  * 新增 todoSchemaCompat.ts：补列并回填旧值（session_id ← last_session_id、
+  * alignTodos 加 catch + warn，一次后台对齐失败只丢一条日志。
+
+* **ui:** 文件搜索 Worker 崩溃后真正降级到主线程 ([0ecb93b](https://github.com/Otherworldy/PiCode/commit/0ecb93bf31a48b63c30b881204f40a017cfbf0b6))
+
+
+### Chores
+
+* 忽略 pi-host 编译产物，清理无用导入与类型配置 ([2af3878](https://github.com/Otherworldy/PiCode/commit/2af3878206539df449ce3b70f562c29636d7f521))
+  * build-desktop-agent-cli 会在 pi-host/src 下生成 .js/.d.ts/.map，这些文件
+  * 删除 desktopCommandHandlers / desktopHostProcess 里已不用的 import。
+  * 补齐 main 进程 typecheck 配置与 browser-perf-probe 的类型声明。
+  * AboutSettingsSection 加 max-lines 豁免（各分区共享同一份版本快照）。
+
+
+### Refactorings
+
+* **ui:** 移除 onboarding 引导、办公模式与主动推荐 ([190d656](https://github.com/Otherworldy/PiCode/commit/190d656427bcb30de187b3540c3db683e7c906fc))
+  * 删除引导流程、设置同步、办公模式与草稿主动推荐入口及相关 i18n
+  * 清理 isOfficeMode / interfaceMode / toggleInterfaceMode 等跨包引用
+  * 工作区插件排序去掉办公模式维度
+  * 修正 ConversationTimeline 与下载进度文案的遗留类型错误
+
 ## [3.18.1](https://github.com/Otherworldy/PiCode/compare/v3.18.0...v3.18.1) (2026-10-21)
 
 ### Features
