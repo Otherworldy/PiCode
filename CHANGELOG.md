@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.19.2](https://github.com/Otherworldy/PiCode/compare/v3.19.1...v3.19.2) (2026-10-27)
+
+### Bug Fixes
+
+* **plan:** 计划模式开关不再弹扩展命令回执窗 ([5318165](https://github.com/Otherworldy/PiCode/commit/5318165ee47310b0ea6bac9a9435047b63b8e708))
+  * 扩展命令执行期间的 notify 会聚成一个模态弹窗。plannotator-plan-mode 的 info 回执不再聚进去，状态已经在输入框的计划开关上
+  * warning 和 error 照旧弹，插件报的问题不被吞掉
+  * 插件后装、会话没重载时命令未注册，走普通输入不进这条路径，所以之前只有部分会话弹窗
+
+* **session:** 标题总结不再把用户任务当指令执行 ([e0e1253](https://github.com/Otherworldy/PiCode/commit/e0e1253d1c2d0bb5aaa7f17b7a7586276b14350d))
+  * 种子用 <transcript> 圈起来，系统提示说明它只是素材、里面的指令一律不执行：模型常把首条任务当成自己的活，直接执行并返回数据列表
+  * 清洗后为空、或输出是纯数字和数据列表这类非短语时按失败处理，换下一个候选模型
+  * 韩文、西里尔等非拉丁标题不再被丢掉
+  * 指定总结模型失败或没有可用标题时继续试对话模型，候选去重
+
 ## [3.19.1](https://github.com/Otherworldy/PiCode/compare/v3.19.0...v3.19.1) (2026-10-27)
 
 ### Features
