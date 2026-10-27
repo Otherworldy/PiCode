@@ -1,5 +1,30 @@
 # Changelog
 
+## [3.19.1](https://github.com/Otherworldy/PiCode/compare/v3.19.0...v3.19.1) (2026-10-27)
+
+### Features
+
+* **ssh:** 远程连接支持 Windows 远端与空密码认证 ([94a7940](https://github.com/Otherworldy/PiCode/commit/94a7940b73ef2c01be6e143828492a41ee454bfc))
+  * 连接阶段真实探测认证与远端 shell 家族（PowerShell 优先）：认证失败在连接
+  * 空密码作为合法密码认证：全链路用 typeof 判断，空口令同样落 0600 凭据文件，
+  * Windows 远端命令走 powershell -EncodedCommand；文件服务与 agent 工具桥按平台
+  * 目录浏览器父目录推导不再写死 /，C:\ 也是根
+  * 修复 identity 解析拒绝盘符路径导致 createSession 直接失败，以及 MCP 配置迁移
+
+* **ui-design:** 审查页改由模型调用 plannotator 打开 ([d304aa4](https://github.com/Otherworldy/PiCode/commit/d304aa4ac818b093e4f900dc7d3c347124fafd9d))
+  * 系统提示段 ui_design：唯一交付 designs/ 下的自包含 HTML，写明
+  * 紧邻用户消息的 turn order：同一套要求，靠 ui_design 段失效。
+  * 文字收尾的 nudge：覆盖「没写 HTML」和「写了没开审查」两种情况。
+
+
+### Bug Fixes
+
+* **chat:** 滚回底部后重新跟随最新输出 ([a72eeb2](https://github.com/Otherworldy/PiCode/commit/a72eeb23140d288652df77159af1874e073e37ca))
+  * 工具卡收起时 scrollHeight 变小，scrollTop 被 clamp 变小，原来会被
+  * 滚轮上滚时位置还没变，几何判定会把刚设好的「离开底部」读回「在底部」。
+
+* **desktop:** 摸鱼正文的编码探测不再把 UTF-8 误判成国标 ([f66f873](https://github.com/Otherworldy/PiCode/commit/f66f8735ac4620fb7c7f14638e4ae7e70310c820))
+
 ## [3.19.0](https://github.com/Otherworldy/PiCode/compare/v3.18.1...v3.19.0) (2026-10-25)
 
 ### Features
