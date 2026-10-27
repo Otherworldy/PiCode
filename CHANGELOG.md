@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.19.3](https://github.com/Otherworldy/PiCode/compare/v3.19.2...v3.19.3) (2026-10-27)
+
+### Bug Fixes
+
+* **ui-design:** UI 设计模式稳定拿到 plannotator 工具 ([d4166b9](https://github.com/Otherworldy/PiCode/commit/d4166b9998f5eb2b3be4aa822269bb40c7cd36f4))
+  * 插件把 plannotator 注册成 defaultActive: false，激活只放在它自己的
+  * 插件在 Pi 宿主上默认不注册这个工具（AGENT_TOOL_DEFAULTS.pi 为 false），
+  * SPEC 补上两条规则的归属，子会话按 print 绑定不补
+
 ## [3.19.2](https://github.com/Otherworldy/PiCode/compare/v3.19.1...v3.19.2) (2026-10-27)
 
 ### Bug Fixes
