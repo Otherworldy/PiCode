@@ -1,10 +1,9 @@
 import { completePiPrompt, listPiCatalog } from "./session-factory.js";
 import { piCoding } from "./pi-sdk.js";
 import {
-  cleanSummarizedTitle,
   readTitleSummarySettings,
+  requestSummarizedTitle,
   scheduleSessionTitleSummary,
-  TITLE_SUMMARY_SYSTEM_PROMPT,
   titleExcerptFromJsonl,
   titleExcerptFromRows,
   titleSummaryRequest,
@@ -82,27 +81,11 @@ export async function generateSessionTitleText(input: {
       fallback = { providerId: catalog.defaultProvider, modelId: catalog.defaultModel };
     }
   }
-  const requestFor = (model: { providerId: string; modelId: string }) => ({
-    providerId: model.providerId,
-    modelId: model.modelId,
-    system: TITLE_SUMMARY_SYSTEM_PROMPT,
+  const title = await requestSummarizedTitle({
     prompt,
+    models: [configured, fallback],
+    complete: completePiPrompt,
   });
-  const sameModel =
-    configured !== undefined &&
-    fallback !== undefined &&
-    fallback.providerId === configured.providerId &&
-    fallback.modelId === configured.modelId;
-  let raw: string | null = null;
-  if (configured) {
-    try {
-      raw = await completePiPrompt(requestFor(configured));
-    } catch (error) {
-      if (!fallback || sameModel) throw error;
-    }
-  }
-  if (!raw && fallback && !sameModel) raw = await completePiPrompt(requestFor(fallback));
-  const title = raw ? cleanSummarizedTitle(raw) : "";
   if (!title) throw new Error("session title summary was empty");
   return title;
 }
