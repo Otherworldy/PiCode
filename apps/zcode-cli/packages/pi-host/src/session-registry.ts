@@ -5,7 +5,12 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import type { ConversationDelta, DeliveryProfileName } from "@zcode/shared/zcode-protocol-v4";
-import { CommandBridge, piHostBlocksResidency, type SubmissionModel } from "./command-bridge.js";
+import {
+  CommandBridge,
+  piHostBlocksResidency,
+  suppressesExtensionNotice,
+  type SubmissionModel,
+} from "./command-bridge.js";
 import { createHostExtensionUi } from "./extension-ui-bridge.js";
 import { isPlannotatorReviewDismissed, textOfMessageContent } from "./plan-review-signal.js";
 import { ExtensionUiHost } from "./extension-ui-host.js";
@@ -1143,7 +1148,11 @@ export class HostSessionRegistry {
       emit(projector.replaceStatuses(next.statuses));
       for (const effect of next.sideEffects) {
         if (effect.kind === "notify") {
-          if (extensionRuntime.depth > 0 && effect.message.trim()) {
+          if (
+            extensionRuntime.depth > 0 &&
+            effect.message.trim() &&
+            !suppressesExtensionNotice(extensionRuntime.command, effect.notifyType)
+          ) {
             // 连续 notify 叠进同一个弹窗，不写进对话。
             extensionRuntime.noticeText = extensionRuntime.noticeText
               ? `${extensionRuntime.noticeText}\n${effect.message}`

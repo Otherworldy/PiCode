@@ -97,6 +97,15 @@ export interface ExtensionCommandRunner {
   run(command: string, execute: () => Promise<void>): Promise<void>;
 }
 
+/**
+ * 计划模式开关只是切输入框上已有的一个状态。它的 info 回执再弹一个模态框是噪音，
+ * 所以不聚进扩展命令弹窗。warning / error 照旧弹，不吞插件报的问题。
+ */
+export function suppressesExtensionNotice(command: string, notifyType: string): boolean {
+  if (notifyType !== "info") return false;
+  return command.trim().replace(/^\/+/, "").toLowerCase() === "plannotator-plan-mode";
+}
+
 export class CommandBridge {
   constructor(
     private readonly session: PiSessionPort,

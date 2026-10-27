@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { conversationDeltaSchema } from "@zcode/shared/zcode-protocol-v4";
-import { CommandBridge, sendDelivery } from "./command-bridge.js";
+import { CommandBridge, sendDelivery, suppressesExtensionNotice } from "./command-bridge.js";
 import { createHostExtensionUi } from "./extension-ui-bridge.js";
 import { ExtensionUiHost } from "./extension-ui-host.js";
 import { FakePiSession } from "./fake-session.js";
@@ -589,6 +589,17 @@ test("ui design review stays working until the mode ends", () => {
   projector.replaceStatuses([]);
   const finished = projector.getSnapshot().rows.window.find((row) => row.kind === "turnHeader");
   assert.equal(finished && finished.kind === "turnHeader" ? finished.state : "", "completedSuccess");
+});
+
+test("plan mode toggles do not pile up an extension notice", () => {
+  // 状态已经在输入框的计划开关上。回执再弹一个模态框只是噪音。
+  assert.equal(suppressesExtensionNotice("plannotator-plan-mode", "info"), true);
+  assert.equal(suppressesExtensionNotice("/plannotator-plan-mode", "info"), true);
+  // 插件报的问题不能吞。
+  assert.equal(suppressesExtensionNotice("plannotator-plan-mode", "warning"), false);
+  assert.equal(suppressesExtensionNotice("plannotator-plan-mode", "error"), false);
+  // 其他扩展命令照旧把输出弹出来。
+  assert.equal(suppressesExtensionNotice("plannotator-review", "info"), false);
 });
 
 test("message_end + agent_end flushes assistant text", () => {
