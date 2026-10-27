@@ -2,6 +2,7 @@ import type { BackgroundBashOutputResult } from "@zcode/shared";
 import type { BackgroundWorkSummary } from "@zcode/shared/zcode-protocol-v4";
 import type { PiContextUsage } from "./context-breakdown.js";
 import type { ToolPermissionCheck } from "./permission-gate.js";
+import type { ToolLoadoutPort } from "./tool-loadout.js";
 
 export type PiThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -304,6 +305,8 @@ export interface PiSessionPort {
   setFollowUpMode?(mode: "all" | "one-at-a-time"): void;
   setUiDesignMode?(enabled: boolean): void;
   isUiDesignMode?(): boolean;
+  /** 声明给模型的激活工具列表。发送前用来把插件工具补回去。 */
+  toolLoadout?: ToolLoadoutPort;
   readonly sessionName?: string;
   setSessionName?(name: string): Promise<void> | void;
   bindUi?(ui: unknown): Promise<void>;

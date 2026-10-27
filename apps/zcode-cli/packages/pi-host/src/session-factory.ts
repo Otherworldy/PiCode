@@ -766,6 +766,13 @@ export function createSdkSessionFactory(
         uiDesign.setEnabled(enabled);
       },
       isUiDesignMode: () => uiDesign.isEnabled(),
+      // 插件把 `plannotator` 的激活放在自己的 `session_start` 里，而绑 UI 是异步的；
+      // 会话重放、阶段恢复也会重算激活列表。发送前用它把工具补回去。
+      toolLoadout: {
+        getToolDefinition: (name) => session.getToolDefinition(name),
+        getActiveToolNames: () => session.getActiveToolNames(),
+        setActiveToolsByName: (names) => session.setActiveToolsByName(names),
+      },
       bindUi: async (ui) => {
         try {
           await session.bindExtensions({ uiContext: ui as never, mode: "rpc" });

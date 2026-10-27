@@ -671,6 +671,37 @@ test("replayable streams tool progress not inputText", () => {
   assert.ok(tool && tool.kind === "toolCall" && tool.progress);
 });
 
+test("a send puts the plugin plannotator tool back into the declared loadout", async () => {
+  // 插件只在它自己的 session_start 里激活这个工具，而绑 UI 是异步的；
+  // 会话重放和阶段恢复还会重算列表。少了这一下，UI 设计模式那一轮里模型看不到它。
+  const session = new FakePiSession("s");
+  session.registeredTools = ["read", "plannotator"];
+  session.activeTools = ["read"];
+  const bridge = new CommandBridge(session, new HostQueue());
+  await bridge.admitSend({
+    text: "design a dialog",
+    clientId: "c",
+    commandId: "1",
+    delivery: "startNow",
+    streaming: false,
+  });
+  assert.deepEqual(session.activeTools, ["read", "plannotator"]);
+  assert.deepEqual(session.prompts, ["design a dialog"]);
+  // 用户关了插件工具开关时工具没注册，不许凭空造一个。
+  const bare = new FakePiSession("s2");
+  bare.registeredTools = ["read"];
+  bare.activeTools = ["read"];
+  await new CommandBridge(bare, new HostQueue()).admitSend({
+    text: "hi",
+    clientId: "c",
+    commandId: "1",
+    delivery: "startNow",
+    streaming: false,
+  });
+  assert.deepEqual(bare.activeTools, ["read"]);
+  assert.deepEqual(bare.toolLoadoutCalls, []);
+});
+
 test("an extension command returns before its dialog is answered", async () => {
   const session = new FakePiSession("s");
   session.slashCommands = [

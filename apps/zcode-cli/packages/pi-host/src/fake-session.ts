@@ -34,6 +34,20 @@ export class FakePiSession implements PiSessionPort {
   branchFrom?: (entryId: string) => { sessionId: string; sessionFile: string };
   /** 测试拿 bindUi 交进来的 ui context，直接发 ask/select/confirm。 */
   boundUi?: unknown;
+  registeredTools: string[] = [];
+  activeTools: string[] = [];
+  toolLoadoutCalls: string[][] = [];
+  get toolLoadout() {
+    return {
+      getToolDefinition: (name: string) =>
+        this.registeredTools.includes(name) ? { name } : undefined,
+      getActiveToolNames: () => this.activeTools,
+      setActiveToolsByName: (names: string[]) => {
+        this.toolLoadoutCalls.push(names);
+        this.activeTools = [...names];
+      },
+    };
+  }
 
   constructor(sessionId: string, sessionFile?: string) {
     this.sessionId = sessionId;

@@ -7,6 +7,7 @@ import {
   type PiPromptAttachment,
 } from "./prompt-images.js";
 import { registeredExtensionCommandText } from "./pi-slash-commands.js";
+import { ensurePlannotatorToolActive } from "./tool-loadout.js";
 import type { PiSessionPort } from "./types.js";
 
 export type SendDelivery = "startNow" | "queue" | "guide";
@@ -116,6 +117,10 @@ export class CommandBridge {
   ) {}
 
   async admitSend(input: AdmitSendInput): Promise<AdmitSendResult> {
+    // 声明给模型的工具列表是宿主的责任：插件把 `plannotator` 的激活放在自己的
+    // `session_start` 里，而绑 UI 是异步的，会话重放和阶段恢复还会重算这份列表。
+    // 少了这一下，这一轮请求里就没有 UI 设计模式要用的工具。同步、幂等。
+    if (this.session.toolLoadout) ensurePlannotatorToolActive(this.session.toolLoadout);
     const extensionText = registeredExtensionCommandText(
       input.text,
       this.session.listSlashCommands?.(),

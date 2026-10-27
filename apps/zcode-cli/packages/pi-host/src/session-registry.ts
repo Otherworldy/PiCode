@@ -31,6 +31,7 @@ import {
   setPlannotatorBrowserStreaming,
 } from "./plannotator-browser-redirect.js";
 import { UI_DESIGN_STATUS_KEY, UI_DESIGN_STATUS_TEXT } from "./ui-design-mode.js";
+import { ensurePlannotatorAgentToolEnabled } from "./plannotator-agent-tool.js";
 import {
   abortLiveSubagent,
   getLiveSubagentModel,
@@ -402,6 +403,9 @@ export class HostSessionRegistry {
     if (options.redirectPlannotatorToEmbeddedBrowser) {
       installPlannotatorEmbeddedBrowserRedirect();
     }
+    // UI 设计模式要靠插件注册的 `plannotator` 工具，而它在 Pi 宿主上默认不注册。
+    // 插件每个会话读一次这个环境变量，所以要在建会话之前替用户打开。
+    ensurePlannotatorAgentToolEnabled();
   }
 
   get(sessionId: string): HostedSession | undefined {
