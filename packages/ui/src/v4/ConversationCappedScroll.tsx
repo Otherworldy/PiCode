@@ -22,33 +22,52 @@ export function ConversationCappedScroll({
   // 只有读者自己离开底部才停止吸底。内容增长、工具卡展开都不算。
   const stickToBottom = useRef(true);
   const lastScrollTop = useRef(0);
-  // 滚动条按需出现：没滚过、或者已经到底了，不留一根粗条占着右边。
+  // 上一轮的 max。读者停在底部、内容刚好长高时，top 还停在旧底部而 max 已经变大；
+  // 只看新 max 会把他判成「已经离开底部」，从此不再跟随。
+  const lastMax = useRef(0);
+  // 滚动条按需出现：没滚过、或者还在跟随底部时，不留一根粗条占着右边。
   const scrolledOnce = useRef(false);
   const [edges, setEdges] = useState({ up: false, down: false });
   const [scrollbarVisible, setScrollbarVisible] = useState(false);
 
-  const sync = useCallback(() => {
+  /**
+   * `source` 决定要不要做「上滚」判断：
+   * - `scroll`：读者自己滚的，`top` 变小就是上滚。
+   * - `content`：内容高度变化（流式输出、工具卡展开/收起）也会改 `scrollTop`，
+   *   尤其收起时 top 被 clamp 变小，会被误读成上滚。这时只认「是否在底部」。
+   * - `awayFromBottom`：滚轮/按键已经明确表达了上滚意图，此刻位置还没变，
+   *   不能靠几何判断。
+   */
+  const sync = useCallback((source: "scroll" | "content" | "awayFromBottom" = "scroll") => {
     const element = scrollRef.current;
     if (!element) return;
     const max = Math.max(0, element.scrollHeight - element.clientHeight);
     const top = element.scrollTop;
-    // 内容变高时 top 不动、max 变大；读者上滚时 top 变小。只认后者。
-    // 若只看「离底多远」，流式输出每帧都会把刚滚出去的人再拽回底部。
-    if (top < lastScrollTop.current - 1) {
+    const previousTop = lastScrollTop.current;
+    const previousMax = lastMax.current;
+    lastScrollTop.current = top;
+    lastMax.current = max;
+
+    const atBottom = max - top <= STICK_THRESHOLD_PX;
+    // 读者没动、内容长高了：top 仍停在上一轮确认过的底部。
+    const stayedAtKnownBottom = previousMax > 0 && top >= previousMax - STICK_THRESHOLD_PX;
+
+    if (source === "awayFromBottom") {
       stickToBottom.current = false;
-    } else if (max - top <= STICK_THRESHOLD_PX) {
+    } else if (source === "scroll" && top < previousTop - 1) {
+      stickToBottom.current = false;
+    } else if (atBottom || stayedAtKnownBottom) {
       stickToBottom.current = true;
     }
-    lastScrollTop.current = top;
+
     setEdges((previous) => {
       const next = { up: top > 1, down: max - top > 1 };
       return previous.up === next.up && previous.down === next.down ? previous : next;
     });
-    // 下面还有没看的内容时才亮出滚动条；回到最底部就收起来。
-    setScrollbarVisible(scrolledOnce.current && max - top > 1);
+    // 跟随中说明读者在看最新内容，不该有滚动条；离开底部才亮出来。
+    setScrollbarVisible(scrolledOnce.current && !stickToBottom.current);
   }, []);
 
-  /** 滚轮、按键、拖滚动条都算读者自己滚过。自动吸底不算。 */
   const markScrolled = useCallback(() => {
     scrolledOnce.current = true;
   }, []);
@@ -60,7 +79,7 @@ export function ConversationCappedScroll({
 
     const follow = () => {
       if (running && stickToBottom.current) element.scrollTop = element.scrollHeight;
-      sync();
+      sync("content");
     };
 
     follow();
@@ -79,13 +98,12 @@ export function ConversationCappedScroll({
     // 这里提前接住意图，免得下一次内容增长又把人拽回底部。
     const onWheel = (event: WheelEvent) => {
       markScrolled();
-      if (event.deltaY < 0) stickToBottom.current = false;
-      sync();
+      sync(event.deltaY < 0 ? "awayFromBottom" : "scroll");
     };
     const onKeyDown = (event: KeyboardEvent) => {
       markScrolled();
-      if (event.key === "ArrowUp" || event.key === "PageUp") stickToBottom.current = false;
-      sync();
+      const away = event.key === "ArrowUp" || event.key === "PageUp";
+      sync(away ? "awayFromBottom" : "scroll");
     };
     const onPointerDown = () => markScrolled();
     const onTouchStart = () => markScrolled();
@@ -108,7 +126,7 @@ export function ConversationCappedScroll({
       data-scroll-up={edges.up ? "true" : undefined}
       data-scroll-down={edges.down ? "true" : undefined}
       data-scrollbar={scrollbarVisible ? "true" : undefined}
-      onScroll={sync}
+      onScroll={() => sync("scroll")}
     >
       <div ref={contentRef} className="flex flex-col gap-4">
         {children}
