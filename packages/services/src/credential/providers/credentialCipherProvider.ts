@@ -85,7 +85,9 @@ export function createCredentialCipherProvider(
       const parts = payload.split(".");
       const [ivRaw, authTagRaw, cipherRaw] = parts;
 
-      if (!ivRaw || !authTagRaw || !cipherRaw || parts.length !== 3) {
+      // 空串口令的密文段也是空的（`enc:v1:<iv>.<tag>.`），不能按 truthiness 判非法，
+      // 否则「保存空密码 → 重启后重连」会在解密阶段抛 CREDENTIAL_DECRYPT_ERROR。
+      if (parts.length !== 3 || !ivRaw || !authTagRaw || cipherRaw === undefined) {
         throw createCredentialDecryptError("密文格式非法");
       }
 

@@ -14,11 +14,19 @@
  * 3. 后续远端 connect / scoped attachment 都由同一 Host 处理
  */
 import { createHostDatabaseStartup } from "./hostDatabaseStartup.js";
-import { createSshFileService, resolveRemoteStartDirectory } from "./sshWorkspaceFileService.js";
+import {
+  createSshFileService,
+  probeSshAuthentication,
+  resolveRemoteStartDirectory,
+} from "./sshWorkspaceFileService.js";
 import {
   forgetSshWorkspaceTarget,
+  probeSshRemotePlatform,
   rememberSshWorkspaceTarget,
+  remoteRootPath,
+  sshRemotePlatform,
   sshSpecFromConnectTarget,
+  type SshRemoteSpec,
   writeSshPasswordSecret,
 } from "@zcode/shared/node";
 import { join } from "node:path";
@@ -2691,12 +2699,25 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
     void remoteConnectionProgressContext
       .run(msg.requestId, async () => {
         // 密码先落到 0600 私有文件，spec/env/子进程只带路径；写入失败直接算连接失败。
+        let connectTarget: RemoteTarget = msg.target;
         if (sshTarget) {
-          await rememberSshWorkspaceTargetFromTarget(workspaceIdentity, sshTarget, workspacePath);
+          const sshSpec = await rememberSshWorkspaceTargetFromTarget(
+            workspaceIdentity,
+            sshTarget,
+            workspacePath,
+          );
+          // SSH workspace 不建立常驻会话，且 registry 会按 host 复用已 online 的 entry，
+          // 所以每次连接都要真实认证一次；否则认证失败会被拖到目录步骤才暴露。
+          await probeSshAuthentication(sshSpec);
+          // 远端 shell 家族决定后续所有文件命令的写法。探测结果同时进 spec（agent env）
+          // 和 target（registry 里的 file service），两处必须一致。
+          const platform = await probeSshRemotePlatform(sshSpec);
+          rememberSshWorkspaceTarget(workspaceIdentity, { ...sshSpec, platform });
+          connectTarget = { ...sshTarget, platform };
         }
         return windowRemoteConnectionRegistry.connect({
           requestId: msg.requestId,
-          target: msg.target,
+          target: connectTarget,
           remoteAssets: msg.remoteAssets,
           workspacePath,
           workspaceIdentity,
@@ -3086,15 +3107,15 @@ async function rememberSshWorkspaceTargetFromTarget(
   workspaceIdentity: string,
   target: Extract<RemoteTarget, { kind: "ssh" }>,
   remotePath: string,
-): Promise<void> {
+): Promise<SshRemoteSpec> {
   const passwordSecretDirectory = resolveSshPasswordSecretDirectory();
-  if (target.password) {
+  // 空字符串是「密码认证 + 空口令」，也要写凭据文件；用 truthiness 会把无密码账户退回公钥认证。
+  if (typeof target.password === "string") {
     await writeSshPasswordSecret(passwordSecretDirectory, target, target.password);
   }
-  rememberSshWorkspaceTarget(
-    workspaceIdentity,
-    sshSpecFromConnectTarget(target, remotePath, { passwordSecretDirectory }),
-  );
+  const spec = sshSpecFromConnectTarget(target, remotePath, { passwordSecretDirectory });
+  rememberSshWorkspaceTarget(workspaceIdentity, spec);
+  return spec;
 }
 
 function createSshLocalConnectionHandle(
@@ -3104,7 +3125,7 @@ function createSshLocalConnectionHandle(
   // SSH 不再部署远端 zcode-server，因此也不会访问 PiCode CDN。
   // 模型和 agent 继续用本机服务；只有文件服务改走系统 ssh。
   const services = activeServices.fork();
-  const sshSpec = sshSpecFromConnectTarget(target, "/", {
+  const sshSpec = sshSpecFromConnectTarget(target, remoteRootPath(sshRemotePlatform(target)), {
     passwordSecretDirectory: resolveSshPasswordSecretDirectory(),
   });
   services.register(IFileService, createSshFileService(sshSpec));

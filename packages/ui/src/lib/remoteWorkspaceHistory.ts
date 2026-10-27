@@ -193,7 +193,7 @@ function createRemoteTargetSnapshot(
         assetInstallMode: target.assetInstallMode,
         privateKeyPath: target.privateKeyPath,
         passwordCredentialKey:
-          target.password && target.password.length > 0
+          typeof target.password === "string"
             ? previousSnapshot?.kind === "ssh" && previousSnapshot.passwordCredentialKey
               ? previousSnapshot.passwordCredentialKey
               : buildRemoteWorkspacePasswordCredentialKey(workspaceKey)
@@ -238,7 +238,7 @@ export function createRemoteTargetFromSnapshot(
         ...(snapshot.sshConfigAlias ? { sshConfigAlias: snapshot.sshConfigAlias } : {}),
         ...(snapshot.assetInstallMode ? { assetInstallMode: snapshot.assetInstallMode } : {}),
         ...(snapshot.privateKeyPath ? { privateKeyPath: snapshot.privateKeyPath } : {}),
-        ...(credentials.password ? { password: credentials.password } : {}),
+        ...(typeof credentials.password === "string" ? { password: credentials.password } : {}),
         ...(credentials.privateKeyPassphrase
           ? { privateKeyPassphrase: credentials.privateKeyPassphrase }
           : {}),
@@ -372,7 +372,7 @@ export function buildRemoteWorkspaceSessionMutation(params: {
   if (
     params.target.kind === "ssh" &&
     nextSnapshot.kind === "ssh" &&
-    params.target.password &&
+    typeof params.target.password === "string" &&
     nextSnapshot.passwordCredentialKey
   ) {
     credentialsToSave.push({

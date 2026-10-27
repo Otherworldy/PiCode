@@ -6,6 +6,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { atomicWritePrivateTextFile } from "./privateFilePersistence.js";
 
+import type { SshRemotePlatform } from "../remoteTarget.js";
+
+export type { SshRemotePlatform };
+
 /** 密码认证目标的最小字段集合；凭据文件按 host/port/user 归档。 */
 export interface SshSecretTarget {
   host: string;
@@ -13,9 +17,14 @@ export interface SshSecretTarget {
   username: string;
 }
 
+/** 远端 shell 家族。Windows 一律走 PowerShell（cmd 也能启动 powershell.exe）。 */
 export interface SshRemoteSpec extends SshSecretTarget {
   alias?: string;
   remotePath: string;
+  /**
+   * 远端 shell 家族。缺省按 posix：旧 Host 写入的 ZCODE_SSH_REMOTE 没有这个字段。
+   */
+  platform?: SshRemotePlatform;
   /**
    * 密码认证凭据文件（0600，由 Host 写入）。
    *
@@ -138,7 +147,11 @@ export async function writeSshPasswordSecret(
 }
 
 export function sshSpecFromConnectTarget(
-  target: SshSecretTarget & { sshConfigAlias?: string; password?: string },
+  target: SshSecretTarget & {
+    sshConfigAlias?: string;
+    password?: string;
+    platform?: SshRemotePlatform;
+  },
   remotePath: string,
   options?: { passwordSecretDirectory?: string },
 ): SshRemoteSpec {
@@ -146,20 +159,108 @@ export function sshSpecFromConnectTarget(
   const secretDirectory = options?.passwordSecretDirectory;
   // 有密码就是密码认证：系统 ssh 通路不会用 target.privateKeyPath 的 -i，
   // 若这里同时按私钥处理会变成"既没用密码也没用指定私钥"。
+  // 空字符串是「密码认证 + 空口令」，必须和 undefined（未用密码认证）区分开，
+  // 否则无密码账户会退回 BatchMode 公钥认证并报 Permission denied。
   const passwordFile =
-    target.password && secretDirectory ? sshPasswordSecretPath(secretDirectory, target) : undefined;
+    typeof target.password === "string" && secretDirectory
+      ? sshPasswordSecretPath(secretDirectory, target)
+      : undefined;
   return {
     host: target.host,
     username: target.username,
     remotePath,
     ...(target.port ? { port: target.port } : {}),
     ...(alias ? { alias } : {}),
+    ...(target.platform ? { platform: target.platform } : {}),
     ...(passwordFile ? { passwordFile } : {}),
   };
 }
 
 export function quotePosixArg(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
+export function sshRemotePlatform(spec: Pick<SshRemoteSpec, "platform">): SshRemotePlatform {
+  return spec.platform === "windows" ? "windows" : "posix";
+}
+
+/**
+ * 按远端 shell 引用一个参数。
+ *
+ * PowerShell 单引号字符串是字面量，只需把 `'` 写成 `''`；POSIX 用 `'\''`。
+ * 两边都不做变量展开，所以路径里的 `$`、`%`、反引号不会被解释。
+ */
+export function quoteRemoteArg(value: string, platform: SshRemotePlatform): string {
+  if (platform === "windows") {
+    return `'${value.replaceAll("'", "''")}'`;
+  }
+  return quotePosixArg(value);
+}
+
+/**
+ * Windows 远端每条命令都走 PowerShell -EncodedCommand。
+ *
+ * 外层 shell 可能是 cmd 也可能是 PowerShell（Windows OpenSSH 的 DefaultShell），
+ * 直接拼引号会两边各解析一次；base64/UTF-16LE 不包含任何特殊字符，两种外层都能执行。
+ * 前缀固定关掉进度流（否则 stderr 会混进 CLIXML）并强制 UTF-8 stdout。
+ */
+const WINDOWS_REMOTE_SHELL_PREFIX =
+  "$ProgressPreference='SilentlyContinue';[Console]::OutputEncoding=[System.Text.Encoding]::UTF8";
+
+export function buildRemoteShellCommand(script: string, platform: SshRemotePlatform): string {
+  if (platform === "posix") return script;
+  const encoded = Buffer.from(`${WINDOWS_REMOTE_SHELL_PREFIX};${script}`, "utf16le").toString(
+    "base64",
+  );
+  return `powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`;
+}
+
+/** 远端路径拼接：Windows 用 `\\`，POSIX 用 `/`。 */
+export function remoteJoin(dir: string, name: string, platform: SshRemotePlatform): string {
+  const separator = platform === "windows" ? "\\" : "/";
+  const base = dir.replace(/[\\/]+$/u, "");
+  if (!base) return `${separator}${name}`;
+  return `${base}${separator}${name}`;
+}
+
+/** 远端路径的父目录；已经是根时返回 undefined。 */
+export function remoteDirname(path: string, platform: SshRemotePlatform): string | undefined {
+  const trimmed = path.trim().replace(/[\\/]+$/u, "");
+  if (!trimmed) return undefined;
+  const index = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  if (index < 0) return undefined;
+  if (index === 0) return "/";
+  const parent = trimmed.slice(0, index);
+  if (platform === "windows" && /^[A-Za-z]:$/u.test(parent)) {
+    return `${parent}${trimmed[index] ?? "\\"}`;
+  }
+  return parent || undefined;
+}
+
+/**
+ * 探测远端 shell 家族。
+ *
+ * 探测命令本身走 EncodedCommand：外层 shell 是 PowerShell 时，命令行里的引号
+ * 会被剥一层，`-Command "[Console]::WriteLine('X')"` 会变成语法错误。
+ */
+export async function probeSshRemotePlatform(
+  spec: SshRemoteSpec,
+  runRemoteCommand: typeof runSsh = runSsh,
+): Promise<SshRemotePlatform> {
+  // 先试 PowerShell：Windows 上 powershell.exe 必然存在，POSIX 主机只会返回 127。
+  // 反过来先试 uname 不可靠：装了 Git for Windows / MSYS2 / Cygwin 的 Windows
+  // PATH 里就有 uname，会返回 MINGW64_NT 并被误判成 posix，之后每条命令都是 POSIX 命令。
+  const probe = await runRemoteCommand(spec, buildRemoteShellCommand("$env:OS", "windows")).catch(
+    () => undefined,
+  );
+  if (probe?.code === 0 && probe.stdout.toString("utf8").trim() === "Windows_NT") {
+    return "windows";
+  }
+  const uname = await runRemoteCommand(spec, "uname -s").catch(() => undefined);
+  if (uname?.code === 0 && uname.stdout.toString("utf8").trim()) {
+    return "posix";
+  }
+  return "posix";
 }
 
 /** Pi 在 Windows 上会把远端绝对路径解析成盘符路径。按远端根切回去。 */
@@ -277,42 +378,54 @@ export async function spawnSsh(
   remoteCommand: string,
   stdio: "pipe" | ["ignore", "pipe", "pipe"] = "pipe",
 ): Promise<ChildProcess> {
-  const passwordFile = sshPasswordFile(spec);
-  let env = process.env;
-  if (passwordFile) {
-    const askpass = await resolveAskpassScript();
-    env = {
-      ...process.env,
-      SSH_ASKPASS: askpass.path,
-      SSH_ASKPASS_REQUIRE: "force",
-      [ASKPASS_SECRET_ENV]: passwordFile,
-      // OpenSSH 8.4 之前只认 DISPLAY + SSH_ASKPASS，保留兼容。
-      ...(askpass.flavor === "sh" ? { DISPLAY: process.env["DISPLAY"] ?? "zcode-ssh" } : {}),
-    };
-  }
   return spawn("ssh", [...sshDestinationArgs(spec), remoteCommand], {
     windowsHide: true,
     stdio,
-    env,
+    env: await sshAskpassEnv(spec),
   });
+}
+
+/**
+ * ssh/scp 子进程的环境：密码认证时注入 askpass，凭据只以文件路径形式经过 env。
+ *
+ * agent 派生的第三方子进程会继承整个 env，所以密码本体永远不进环境变量。
+ */
+export async function sshAskpassEnv(spec: SshRemoteSpec): Promise<NodeJS.ProcessEnv> {
+  const passwordFile = sshPasswordFile(spec);
+  if (!passwordFile) return process.env;
+  const askpass = await resolveAskpassScript();
+  return {
+    ...process.env,
+    SSH_ASKPASS: askpass.path,
+    SSH_ASKPASS_REQUIRE: "force",
+    [ASKPASS_SECRET_ENV]: passwordFile,
+    // OpenSSH 8.4 之前只认 DISPLAY + SSH_ASKPASS，保留兼容。
+    ...(askpass.flavor === "sh" ? { DISPLAY: process.env["DISPLAY"] ?? "zcode-ssh" } : {}),
+  };
+}
+
+/** 密码认证目标才有 passwordFile；scp 的认证参数与 ssh 保持一致。 */
+export function sshPasswordFileOf(spec: SshRemoteSpec): string | undefined {
+  return sshPasswordFile(spec);
 }
 
 export function parseFindEntries(
   stdout: string,
   dir: string,
+  platform: SshRemotePlatform = "posix",
 ): Array<{ name: string; path: string; type: "file" | "directory"; isSymbolicLink: boolean }> {
-  const base = dir.replace(/\/+$/u, "") || "/";
+  const base = dir.replace(/[\\/]+$/u, "") || (platform === "windows" ? "" : "/");
   const entries = [];
   for (const line of stdout.split("\n")) {
     if (!line) continue;
     const tab = line.indexOf("\t");
     if (tab <= 0) continue;
     const kind = line.slice(0, tab);
-    const name = line.slice(tab + 1);
+    const name = line.slice(tab + 1).replace(/\r$/u, "");
     if (!name || name === "." || name === "..") continue;
     entries.push({
       name,
-      path: base === "/" ? `/${name}` : `${base}/${name}`,
+      path: remoteJoin(base, name, platform),
       type: kind === "d" ? ("directory" as const) : ("file" as const),
       isSymbolicLink: kind === "l",
     });

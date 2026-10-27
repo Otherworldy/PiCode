@@ -75,12 +75,8 @@ export function buildRemoteTarget(
         };
       }
 
-      if (snapshot.sshAuthMethod === "password" && !snapshot.password) {
-        return {
-          errorMessage: intl.formatMessage({ id: "ssh.validation.passwordRequired" }),
-        };
-      }
-
+      // 空密码是合法输入（无密码账户）：只要选的是密码认证，就带上空字符串。
+      // 用 truthiness 判断会让空密码变成「未选认证方式」，下游退回公钥认证。
       if (snapshot.sshAuthMethod === "privateKey" && !snapshot.privateKeyPath) {
         return {
           errorMessage: intl.formatMessage({ id: "ssh.validation.privateKeyRequired" }),
@@ -97,9 +93,7 @@ export function buildRemoteTarget(
           username: snapshot.username,
           ...(sshConfigAlias ? { sshConfigAlias } : {}),
           assetInstallMode: snapshot.assetInstallMode,
-          ...(snapshot.sshAuthMethod === "password" && snapshot.password
-            ? { password: snapshot.password }
-            : {}),
+          ...(snapshot.sshAuthMethod === "password" ? { password: snapshot.password } : {}),
           ...(snapshot.sshAuthMethod === "privateKey" && snapshot.privateKeyPath
             ? { privateKeyPath: snapshot.privateKeyPath }
             : {}),

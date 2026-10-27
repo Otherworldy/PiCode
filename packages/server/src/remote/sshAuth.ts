@@ -23,7 +23,9 @@ function isInvalidPrivateKeyPassphraseMessage(message: string): boolean {
 }
 
 export function buildSSHConnectConfig(input: SSHConnectConfigInput): ConnectConfig {
-  const hasPassword = typeof input.password === "string" && input.password.length > 0;
+  // 空字符串是「密码认证 + 空口令」，和未提供密码（undefined）语义不同，
+  // 这里必须用 typeof 判定：否则无密码账户会退回隐式 agent 公钥认证。
+  const hasPassword = typeof input.password === "string";
 
   // 密码登录场景里如果无条件带上 SSH_AUTH_SOCK，ssh2 会先走 agent 公钥尝试。
   // 某些主机 MaxAuthTries 很小，公钥阶段就会把认证次数耗尽，导致正确密码也无法进入认证。
@@ -36,7 +38,7 @@ export function buildSSHConnectConfig(input: SSHConnectConfigInput): ConnectConf
     username: input.username,
     privateKey: input.privateKey,
     passphrase: input.passphrase,
-    password: hasPassword ? input.password : undefined,
+    password: input.password,
     agent: resolvedAgent,
     // ssh2 默认 readyTimeout 是 20s，公网弱网或服务端抖动时容易误判超时。
     // 这里显式放宽连接握手超时，既给真实慢连接机会，也让错误归一化能和实际配置保持一致。
@@ -59,7 +61,7 @@ export function createKeyboardInteractiveResponder(password?: string) {
     prompts: Array<{ prompt: string; echo: boolean }>,
     finish: (responses: string[]) => void,
   ) => {
-    if (!password || prompts.length === 0) {
+    if (password === undefined || prompts.length === 0) {
       finish([]);
       return;
     }

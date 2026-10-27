@@ -1219,6 +1219,8 @@ const zhCN: Record<string, string> = {
   "ssh.localRuntime": "使用本机模型和系统 ssh。不会把运行时下载或上传到 PiCode CDN。",
   "ssh.password": "密码",
   "ssh.passwordPlaceholder": "输入 SSH 密码",
+  "ssh.passwordEmptyHint":
+    "留空表示发送空口令（无密码账户）；能否登录取决于远端 SSH 服务是否允许空密码。",
   "ssh.privateKey": "私钥",
   "ssh.privateKeyPlaceholder": "选择或输入私钥文件路径",
   "ssh.privateKeyPassphrase": "私钥口令（可选）",
@@ -1235,7 +1237,6 @@ const zhCN: Record<string, string> = {
   "ssh.connecting": "正在连接...",
   "ssh.success": "已连接，并在新窗口中打开。",
   "ssh.validation.required": "主机和用户名不能为空",
-  "ssh.validation.passwordRequired": "密码不能为空",
   "ssh.validation.privateKeyRequired": "私钥路径不能为空",
   "common.back": "上一步",
   "common.next": "下一步",

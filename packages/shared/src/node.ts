@@ -5,19 +5,26 @@
  */
 export { acquireFileLock } from "./node/atomicFileLock.js";
 export {
+  buildRemoteShellCommand,
   buildSshAskpassScript,
   forgetSshWorkspaceTarget,
   parseFindEntries,
+  probeSshRemotePlatform,
   quotePosixArg,
+  quoteRemoteArg,
   rememberSshWorkspaceTarget,
+  remoteDirname,
+  remoteJoin,
   remotePosixPath,
   runSsh,
   spawnSsh,
   sshDestinationArgs,
   sshPasswordSecretPath,
+  sshRemotePlatform,
   sshSpecFromConnectTarget,
   sshWorkspaceSpawnEnv,
   writeSshPasswordSecret,
+  type SshRemotePlatform,
   type SshRemoteSpec,
   type SshSecretTarget,
 } from "./node/sshRemote.js";
@@ -26,6 +33,29 @@ export {
   GEN_UI_OUTPUT_DIRECTORY,
   getGenUiOutputDirectory,
 } from "./node/genUiPaths.js";
+export {
+  buildAccessScript,
+  buildExistsScript,
+  buildIsDirectoryExitScript,
+  buildIsFileScript,
+  buildListMarkdownScript,
+  buildListNamesScript,
+  buildMkdirScript,
+  buildReadRangeScript,
+  buildReadTextScript,
+  buildReaddirScript,
+  buildRemoteCommandScript,
+  buildRemoteStartDirectoryScript,
+  buildRemoveFileScript,
+  buildResolvePathScript,
+  buildStatScript,
+  buildWriteFileScript,
+  normalizeRemoteStartDirectory,
+  parseRemoteStat,
+  remoteRootPath,
+  spawnScp,
+  writeSshFileContent,
+} from "./node/sshRemoteCommands.js";
 export { scanOfficialPluginCacheRoots } from "./node/officialPluginCache.js";
 export {
   ensurePiMcpFiles,

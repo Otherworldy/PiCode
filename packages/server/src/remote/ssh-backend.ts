@@ -148,7 +148,9 @@ export class SSHBackend implements IRemoteBackend {
         console.debug(`[ssh2] ${message}`);
       };
     }
-    if (typeof options.password === "string" && options.password.length > 0) {
+    // 空字符串是「密码认证 + 空口令」，同样要注册 keyboard-interactive 应答；
+    // 用 truthiness 会把无密码账户当成未提供密码，challenge-response 主机直接失败。
+    if (typeof options.password === "string") {
       // `ssh2` 类型定义遗漏了 keyboard-interactive 事件，但运行时确实支持。
       // 这里局部转成 EventEmitter 接口，避免为了一个事件把整段代码降级到 any。
       (

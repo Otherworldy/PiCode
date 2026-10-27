@@ -34,7 +34,10 @@ export function toPiStoredMcpServer(raw: unknown): Record<string, unknown> | und
   return value;
 }
 
-export function mcpServersFromDocument(parsed: unknown, key: "mcpServers" | "mcp.servers"): Record<string, unknown> {
+export function mcpServersFromDocument(
+  parsed: unknown,
+  key: "mcpServers" | "mcp.servers",
+): Record<string, unknown> {
   if (!isRecord(parsed)) return {};
   if (key === "mcpServers") {
     return isRecord(parsed.mcpServers) ? parsed.mcpServers : {};
@@ -69,7 +72,11 @@ function importedMarker(target: string): string {
  * An empty one still receives the legacy servers (Pi may have created the file first).
  * ponytail: one marker file, not a second config. Delete the marker to import again.
  */
-function migrateIfMissing(target: string, legacyPath: string, key: "mcpServers" | "mcp.servers"): void {
+function migrateIfMissing(
+  target: string,
+  legacyPath: string,
+  key: "mcpServers" | "mcp.servers",
+): void {
   const marker = importedMarker(target);
   if (existsSync(marker)) return;
   const existing = mcpServersFromDocument(readDocument(target), "mcpServers");
@@ -77,7 +84,13 @@ function migrateIfMissing(target: string, legacyPath: string, key: "mcpServers" 
     writeFileSync(marker, "");
     return;
   }
-  const legacy = mcpServersFromDocument(readDocument(legacyPath), key);
+  const legacyDocument = readDocument(legacyPath);
+  // 没有 legacy 文件就没有迁移需求：不写 marker，也不创建它的目录。
+  // SSH 远端的 cwd 是本机不存在的远端路径，无条件 mkdir 会 EPERM 打断 createSession。
+  if (legacyDocument === undefined) {
+    return;
+  }
+  const legacy = mcpServersFromDocument(legacyDocument, key);
   const servers: Record<string, unknown> = {};
   for (const [name, config] of Object.entries(legacy)) {
     const stored = toPiStoredMcpServer(config);
@@ -97,19 +110,31 @@ export function ensurePiMcpFiles(input: { agentDir: string; cwd: string }): void
   if (resolve(input.agentDir) === resolve(dirname(piUserMcpFile()))) {
     migrateIfMissing(userTarget, join(homedir(), ".PiCode", "cli", "config.json"), "mcp.servers");
   }
-  migrateIfMissing(piProjectMcpFile(input.cwd), join(input.cwd, ".PiCode", "config.json"), "mcp.servers");
+  migrateIfMissing(
+    piProjectMcpFile(input.cwd),
+    join(input.cwd, ".PiCode", "config.json"),
+    "mcp.servers",
+  );
 }
 
-export function readPiMcpServers(agentDir: string, cwd: string): {
+export function readPiMcpServers(
+  agentDir: string,
+  cwd: string,
+): {
   projectWins: boolean;
   servers: Array<{ name: string; config: Record<string, unknown>; scope: "global" | "project" }>;
   errors: string[];
 } {
   ensurePiMcpFiles({ agentDir, cwd });
   const errors: string[] = [];
-  const merged = new Map<string, { name: string; config: Record<string, unknown>; scope: "global" | "project" }>();
+  const merged = new Map<
+    string,
+    { name: string; config: Record<string, unknown>; scope: "global" | "project" }
+  >();
   const take = (path: string, scope: "global" | "project") => {
-    for (const [name, config] of Object.entries(mcpServersFromDocument(readDocument(path), "mcpServers"))) {
+    for (const [name, config] of Object.entries(
+      mcpServersFromDocument(readDocument(path), "mcpServers"),
+    )) {
       if (!isRecord(config)) continue;
       if (config.type === "sse") {
         errors.push(`${name}: SSE is not supported`);

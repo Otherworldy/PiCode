@@ -6,7 +6,8 @@
 //   remote:wsl:<distro>[:<user>]:<posixPath>
 //   remote:docker:<container>:<posixPath>
 // path 段经 normalizeWorkspacePathForIdentity 归一（分隔符 → "/"，去收尾斜杠，
-// 空 → "/"），因此恒以 "/" 开头；authority 各段不含 "/"（host 小写、port 数字、
+// 空 → "/"）：POSIX 路径以 "/" 开头，Windows 远端保留盘符形态（`C:/Users/x`），
+// 两种形态都必须能被 parse 还原；authority 各段不含 "/"（host 小写、port 数字、
 // docker 容器名/wsl 发行版名的合法字符集均不含 ":" 与 "/"）。
 // 消费方：CLI v4 createSession 的 workspaceId（远程 pane 里 workspaceKey =
 // identity）需要还原出真实 workspacePath 作为会话 workingDirectory。
@@ -16,7 +17,7 @@ export type RemoteWorkspaceIdentityKind = "ssh" | "wsl" | "docker";
 
 export interface ParsedRemoteWorkspaceIdentity {
   kind: RemoteWorkspaceIdentityKind;
-  /** 远端真实路径（posix 归一形态）。 */
+  /** 远端真实路径：POSIX 是 `/...`，Windows 是 `C:/...`。 */
   workspacePath: string;
 }
 
@@ -36,6 +37,11 @@ function isRemoteWorkspaceIdentityKind(value: string): value is RemoteWorkspaceI
 function normalizeWorkspacePathForIdentity(workspacePath: string): string {
   const normalized = workspacePath.replace(/\\/g, "/").replace(/\/+/g, "/");
   const trimmed = normalized.replace(/^\/+|\/+$/g, "");
+  // Windows 远端的盘符路径保留原形态（`C:/Users/x`）。加前导 `/` 会变成 `/C:/Users/x`，
+  // 消费方按 POSIX 绝对路径 resolve 后得到 `C:\C:\Users\x`，agent 因此丢掉 SSH 身份。
+  if (/^[A-Za-z]:\//u.test(trimmed)) {
+    return trimmed;
+  }
   return `/${trimmed}`;
 }
 
@@ -101,10 +107,16 @@ export function parseRemoteWorkspaceIdentity(
     cursor = userEnd + 1;
   }
   const workspacePath = rest.slice(cursor);
-  if (!workspacePath.startsWith("/")) {
+  // Windows 远端的 identity 保留盘符形态（`C:/Users/x`）；老版本会写成 `/C:/Users/x`，
+  // 两种都要能解析，否则 createSession 直接报 "Invalid remote workspace identity"。
+  const isWindowsDrivePath = /^[A-Za-z]:[\\/]/u.test(workspacePath);
+  if (!workspacePath.startsWith("/") && !isWindowsDrivePath) {
     return null;
   }
-  return { kind, workspacePath };
+  const restoredWorkspacePath = /^\/[A-Za-z]:([\\/]|$)/u.test(workspacePath)
+    ? workspacePath.slice(1)
+    : workspacePath;
+  return { kind, workspacePath: restoredWorkspacePath };
 }
 
 /** identity 是否是远程 workspace identity（可被 parseRemoteWorkspaceIdentity 解析）。 */

@@ -1,11 +1,24 @@
-import { posix } from "node:path";
 import {
-  quotePosixArg,
+  buildAccessScript,
+  buildExistsScript,
+  buildIsDirectoryExitScript,
+  buildIsFileScript,
+  buildListNamesScript,
+  buildMkdirScript,
+  buildReadTextScript,
+  buildRemoteCommandScript,
+  buildRemoteShellCommand,
+  buildRemoveFileScript,
   remoteAgentSystemPromptPath,
   type AgentSystemPromptKind,
+  remoteDirname,
   remotePosixPath,
+  remoteRootPath,
+  writeSshFileContent,
   runSsh,
   spawnSsh,
+  sshRemotePlatform,
+  type SshRemotePlatform,
   type SshRemoteSpec,
 } from "@zcode/shared/node";
 
@@ -31,6 +44,10 @@ export function readProcessSshRemoteSpec(workspacePath: string): SshRemoteSpec |
   if (typeof parsed.passwordFile !== "string" || parsed.passwordFile.length === 0) {
     delete parsed.passwordFile;
   }
+  // platform 同理：旧 Host 不写这个字段，脏值按 posix 处理，不能让 spec 整体失效。
+  if (parsed.platform !== "posix" && parsed.platform !== "windows") {
+    delete parsed.platform;
+  }
   // Pi 在 Windows 上会把 /root/... resolve 成 C:\root\...。两边都指远端根才算同一个工作区。
   const mapped = remotePosixPath(workspacePath, parsed.remotePath);
   if (!samePath(parsed.remotePath, workspacePath) && !samePath(parsed.remotePath, mapped)) {
@@ -40,6 +57,9 @@ export function readProcessSshRemoteSpec(workspacePath: string): SshRemoteSpec |
 }
 
 export function sshWorkspacePrompt(spec: SshRemoteSpec): string {
+  if (sshRemotePlatform(spec) === "windows") {
+    return `This session is an SSH workspace on a remote Windows host. The working directory is ${spec.remotePath}. Commands run in PowerShell. Use Windows paths (for example C:\\Users\\name\\project) and PowerShell cmdlets instead of POSIX tools: use Get-ChildItem instead of ls/find, Get-Content instead of cat, Select-String instead of grep, and New-Item/Remove-Item for file operations.`;
+  }
   return `This session is an SSH workspace on a remote POSIX host. The working directory is ${spec.remotePath}. Use POSIX paths and a POSIX shell. Do not use cmd, PowerShell, or Windows drive paths.`;
 }
 
@@ -54,15 +74,31 @@ export function rewriteRemoteCommand(command: string, remoteRoot: string): strin
   return command.replace(new RegExp(`[A-Za-z]:[\\\\/]${body}`, "g"), root);
 }
 
-async function sshOk(spec: SshRemoteSpec, remoteCommand: string): Promise<void> {
-  const result = await runSsh(spec, remoteCommand);
+/** 按远端平台生成脚本并执行；脚本构造收口在 @zcode/shared/node。 */
+async function runRemoteScript(
+  spec: SshRemoteSpec,
+  build: (platform: SshRemotePlatform) => string,
+  options?: { stdin?: Buffer; signal?: AbortSignal },
+): Promise<{ code: number | null; stdout: Buffer; stderr: string }> {
+  const platform = sshRemotePlatform(spec);
+  return await runSsh(spec, buildRemoteShellCommand(build(platform), platform), options);
+}
+
+async function sshScriptOk(
+  spec: SshRemoteSpec,
+  build: (platform: SshRemotePlatform) => string,
+): Promise<void> {
+  const result = await runRemoteScript(spec, build);
   if (result.code !== 0) {
     throw new Error(result.stderr.trim() || `ssh exited ${result.code ?? "null"}`);
   }
 }
 
-async function sshStdout(spec: SshRemoteSpec, remoteCommand: string): Promise<Buffer> {
-  const result = await runSsh(spec, remoteCommand);
+async function sshScriptStdout(
+  spec: SshRemoteSpec,
+  build: (platform: SshRemotePlatform) => string,
+): Promise<Buffer> {
+  const result = await runRemoteScript(spec, build);
   if (result.code !== 0) {
     throw new Error(result.stderr.trim() || `ssh exited ${result.code ?? "null"}`);
   }
@@ -70,18 +106,13 @@ async function sshStdout(spec: SshRemoteSpec, remoteCommand: string): Promise<Bu
 }
 
 async function writeRemoteFile(spec: SshRemoteSpec, path: string, content: string): Promise<void> {
-  const result = await runSsh(
-    spec,
-    `mkdir -p ${quotePosixArg(posix.dirname(path))} && cat > ${quotePosixArg(path)}`,
-    { stdin: Buffer.from(content) },
-  );
-  if (result.code !== 0) {
-    throw new Error(result.stderr.trim() || `ssh exited ${result.code ?? "null"}`);
-  }
+  await writeSshFileContent(spec, path, content);
 }
 
 export async function sshReadText(spec: SshRemoteSpec, remotePath: string): Promise<string> {
-  return (await sshStdout(spec, `cat -- ${quotePosixArg(remotePath)}`)).toString("utf8");
+  return (
+    await sshScriptStdout(spec, (platform) => buildReadTextScript(remotePath, platform))
+  ).toString("utf8");
 }
 
 /**
@@ -93,10 +124,7 @@ export async function readSshProjectSystemPrompt(
   kind: AgentSystemPromptKind = "replace",
 ): Promise<string | undefined> {
   const filePath = remoteAgentSystemPromptPath(spec.remotePath, kind);
-  const probe = await sshStdout(
-    spec,
-    `if test -f ${quotePosixArg(filePath)}; then printf yes; else printf no; fi`,
-  );
+  const probe = await sshScriptStdout(spec, (platform) => buildIsFileScript(filePath, platform));
   if (probe.toString("utf8").trim() !== "yes") return undefined;
   const text = await sshReadText(spec, filePath);
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
@@ -111,7 +139,7 @@ export async function sshWriteText(
 }
 
 export async function sshRemoveFile(spec: SshRemoteSpec, remotePath: string): Promise<void> {
-  await sshOk(spec, `rm -f -- ${quotePosixArg(remotePath)}`);
+  await sshScriptOk(spec, (platform) => buildRemoveFileScript(remotePath, platform));
 }
 
 export function sshCodingToolOptions(spec: SshRemoteSpec) {
@@ -120,24 +148,31 @@ export function sshCodingToolOptions(spec: SshRemoteSpec) {
     read: {
       operations: {
         readFile: (absolutePath: string) =>
-          sshStdout(spec, `cat -- ${quotePosixArg(pathOf(absolutePath))}`),
-        access: (absolutePath: string) => sshOk(spec, `test -r ${quotePosixArg(pathOf(absolutePath))}`),
+          sshScriptStdout(spec, (platform) => buildReadTextScript(pathOf(absolutePath), platform)),
+        access: (absolutePath: string) =>
+          sshScriptOk(spec, (platform) =>
+            buildAccessScript(pathOf(absolutePath), "read", platform),
+          ),
       },
     },
     write: {
       operations: {
-        mkdir: (dir: string) => sshOk(spec, `mkdir -p ${quotePosixArg(pathOf(dir))}`),
-        writeFile: (absolutePath: string, content: string) => writeRemoteFile(spec, pathOf(absolutePath), content),
+        mkdir: (dir: string) =>
+          sshScriptOk(spec, (platform) => buildMkdirScript(pathOf(dir), platform)),
+        writeFile: (absolutePath: string, content: string) =>
+          writeRemoteFile(spec, pathOf(absolutePath), content),
       },
     },
     edit: {
       operations: {
         readFile: (absolutePath: string) =>
-          sshStdout(spec, `cat -- ${quotePosixArg(pathOf(absolutePath))}`),
+          sshScriptStdout(spec, (platform) => buildReadTextScript(pathOf(absolutePath), platform)),
         writeFile: (absolutePath: string, content: string) =>
           writeRemoteFile(spec, pathOf(absolutePath), content),
         access: (absolutePath: string) =>
-          sshOk(spec, `test -r ${quotePosixArg(pathOf(absolutePath))} && test -w ${quotePosixArg(pathOf(absolutePath))}`),
+          sshScriptOk(spec, (platform) =>
+            buildAccessScript(pathOf(absolutePath), "readwrite", platform),
+          ),
       },
     },
     bash: {
@@ -151,11 +186,17 @@ export function sshCodingToolOptions(spec: SshRemoteSpec) {
             timeout?: number;
           },
         ): Promise<{ exitCode: number | null }> => {
+          const platform = sshRemotePlatform(spec);
           const remoteCwd = pathOf(cwd);
-          const remoteCommand = rewriteRemoteCommand(command, spec.remotePath);
+          // POSIX 远端要把模型照着本机 cwd 写出的盘符路径换回远端根；
+          // Windows 远端 cwd 本身就是 Windows 路径，不需要重写。
+          const remoteCommand =
+            platform === "windows"
+              ? buildRemoteCommandScript(command, remoteCwd, platform)
+              : buildRemoteCommandScript(rewriteRemoteCommand(command, spec.remotePath), remoteCwd, platform);
           const child = await spawnSsh(
             spec,
-            `cd ${quotePosixArg(remoteCwd)} && ${remoteCommand}`,
+            buildRemoteShellCommand(remoteCommand, platform),
             ["ignore", "pipe", "pipe"],
           );
           // Pi 的 timeout 单位是秒。当成毫秒会在 SSH 握手前把进程杀掉，退出码是 null。
@@ -190,10 +231,16 @@ export function sshCodingToolOptions(spec: SshRemoteSpec) {
     },
     ls: {
       operations: {
-        exists: async (absolutePath: string) =>
-          (await runSsh(spec, `test -e ${quotePosixArg(pathOf(absolutePath))}`)).code === 0,
+        exists: async (absolutePath: string) => {
+          const output = await sshScriptStdout(spec, (platform) =>
+            buildExistsScript([pathOf(absolutePath)], platform),
+          );
+          return output.toString("utf8").trim() === "1";
+        },
         stat: async (absolutePath: string) => {
-          const result = await runSsh(spec, `test -d ${quotePosixArg(pathOf(absolutePath))}`);
+          const result = await runRemoteScript(spec, (platform) =>
+            buildIsDirectoryExitScript(pathOf(absolutePath), platform),
+          );
           if (result.code !== 0 && result.code !== 1) {
             throw new Error(result.stderr.trim() || "ssh stat failed");
           }
@@ -201,17 +248,16 @@ export function sshCodingToolOptions(spec: SshRemoteSpec) {
           return { isDirectory: () => isDirectory };
         },
         readdir: async (absolutePath: string) => {
-          const result = await runSsh(
-            spec,
-            `find ${quotePosixArg(pathOf(absolutePath))} -mindepth 1 -maxdepth 1 -printf '%f\\n'`,
+          const output = await sshScriptStdout(spec, (platform) =>
+            buildListNamesScript(pathOf(absolutePath), platform),
           );
-          if (result.code !== 0) {
-            throw new Error(result.stderr.trim() || "ssh ls failed");
-          }
-          return result.stdout.toString("utf8").split("\n").filter(Boolean);
+          return output
+            .toString("utf8")
+            .split("\n")
+            .map((name) => name.replace(/\r$/u, ""))
+            .filter(Boolean);
         },
       },
     },
   };
 }
-

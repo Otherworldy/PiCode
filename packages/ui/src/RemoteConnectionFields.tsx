@@ -421,6 +421,9 @@ export function RemoteConnectionFields({
                 autoComplete="off"
                 data-testid={TID_SSH_PASSWORD_INPUT}
               />
+              <p className="mt-1 text-ui-sm text-foreground-subtle">
+                {intl.formatMessage({ id: "ssh.passwordEmptyHint" })}
+              </p>
             </div>
           ) : (
             <div>

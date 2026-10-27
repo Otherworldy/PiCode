@@ -15,7 +15,11 @@ import {
   sshWorkspaceSpawnEnv,
   writeSshPasswordSecret,
 } from "@zcode/shared/node";
-import { readProcessSshRemoteSpec, rewriteRemoteCommand } from "./ssh-remote.js";
+import {
+  readProcessSshRemoteSpec,
+  rewriteRemoteCommand,
+  sshWorkspacePrompt,
+} from "./ssh-remote.js";
 
 test("ssh destination prefers the config alias and never adds a port", () => {
   assert.deepEqual(
@@ -107,12 +111,20 @@ test("connect target turns the password into a secret file reference", () => {
 
   // 没有密码或没有目录时不能凭空造出密码认证。
   assert.equal("passwordFile" in sshSpecFromConnectTarget({ host: "h", username: "u" }, "/"), false);
-  assert.equal(
-    "passwordFile" in sshSpecFromConnectTarget({ host: "h", username: "u", password: "" }, "/", {
-      passwordSecretDirectory: secretDirectory,
-    }),
-    false,
+  // 空字符串是「密码认证 + 空口令」：无密码账户必须仍走密码认证，
+  // 否则会退回 BatchMode 公钥认证，报 Permission denied (publickey,...)。
+  const emptyPasswordSpec = sshSpecFromConnectTarget(
+    { host: "h", username: "u", password: "" },
+    "/",
+    { passwordSecretDirectory: secretDirectory },
   );
+  assert.equal(
+    emptyPasswordSpec.passwordFile,
+    sshPasswordSecretPath(secretDirectory, emptyPasswordSpec),
+  );
+  const emptyPasswordArgs = sshDestinationArgs(emptyPasswordSpec);
+  assert.ok(emptyPasswordArgs.includes("BatchMode=no"));
+  assert.ok(emptyPasswordArgs.includes("PreferredAuthentications=password,keyboard-interactive"));
 });
 
 test("secret path is stable per target and isolated from the remote path", () => {
@@ -221,6 +233,54 @@ test("env spec with a non-string secret path degrades to key auth, not to a loca
     if (previous === undefined) delete process.env.ZCODE_SSH_REMOTE;
     else process.env.ZCODE_SSH_REMOTE = previous;
   }
+});
+
+test("env spec keeps the detected platform and drops dirty values", () => {
+  const previous = process.env.ZCODE_SSH_REMOTE;
+  try {
+    process.env.ZCODE_SSH_REMOTE = JSON.stringify({
+      host: "192.168.87.20",
+      username: "agent",
+      remotePath: "C:\\work",
+      platform: "windows",
+    });
+    assert.equal(readProcessSshRemoteSpec("C:\\work")?.platform, "windows");
+
+    // 脏值只丢字段：旧 Host 或未来新增的枚举不能让整个 spec 失效，
+    // 否则远程工作区会静默退化成本地目录。
+    process.env.ZCODE_SSH_REMOTE = JSON.stringify({
+      host: "192.168.87.20",
+      username: "agent",
+      remotePath: "C:\\work",
+      platform: "os2",
+    });
+    const dirty = readProcessSshRemoteSpec("C:\\work");
+    assert.equal(dirty?.host, "192.168.87.20");
+    assert.equal(dirty && "platform" in dirty, false);
+  } finally {
+    if (previous === undefined) delete process.env.ZCODE_SSH_REMOTE;
+    else process.env.ZCODE_SSH_REMOTE = previous;
+  }
+});
+
+test("workspace prompt switches shell family with the remote platform", () => {
+  const windowsPrompt = sshWorkspacePrompt({
+    host: "192.168.87.20",
+    username: "agent",
+    remotePath: "C:\\work",
+    platform: "windows",
+  });
+  assert.match(windowsPrompt, /remote Windows host/u);
+  assert.match(windowsPrompt, /PowerShell/u);
+  assert.equal(/POSIX shell/u.test(windowsPrompt), false);
+
+  const posixPrompt = sshWorkspacePrompt({
+    host: "203.0.113.10",
+    username: "root",
+    remotePath: "/srv/app",
+  });
+  assert.match(posixPrompt, /remote POSIX host/u);
+  assert.match(posixPrompt, /Do not use cmd, PowerShell/u);
 });
 
 test("find output becomes file entries", () => {

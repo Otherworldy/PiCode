@@ -4,6 +4,7 @@ import type { FileEntry } from "@zcode/shared";
 import { FolderIcon, FolderSymlinkIcon } from "lucide-react";
 import { Button } from "./components/ui/button.js";
 import { Input } from "./components/ui/input.js";
+import { getContainingDirectoryPath } from "./lib/path.js";
 import { useZCodeIntl } from "./i18n/IntlProvider.js";
 import { logger } from "./logger.js";
 
@@ -121,9 +122,10 @@ export function DirectoryBrowser({
   };
 
   const handleGoUp = () => {
-    // 提取父目录路径
-    const parent = currentPath.replace(/\/[^/]+\/?$/, "") || "/";
-    navigateTo(parent);
+    // 父目录推导要同时支持 POSIX（/home/a）与 Windows 远端（C:\Users\a）：
+    // 以前用 `/` 正则，Windows 路径永远匹配不到，点“..”会跳到一个不存在的根。
+    const parent = getContainingDirectoryPath(currentPath);
+    if (parent) navigateTo(parent);
   };
 
   const handleInputSubmit = (e: React.FormEvent) => {
@@ -209,8 +211,8 @@ export function DirectoryBrowser({
         ref={listRef}
         className="flex-1 flex flex-col overflow-y-auto rounded-lg border border-border bg-background"
       >
-        {/* 上级目录 */}
-        {currentPath && currentPath !== "/" ? (
+        {/* 上级目录：根目录本身没有父级（`/` 或 `C:\`）。 */}
+        {currentPath && getContainingDirectoryPath(currentPath) ? (
           <button
             onClick={handleGoUp}
             // 滚动容器是纵向 flex 布局，子项默认允许 shrink；

@@ -1309,6 +1309,8 @@ const enUS: Record<string, string> = {
     "Uses the local models and the system ssh client. Nothing is downloaded from or uploaded to the PiCode CDN.",
   "ssh.password": "Password",
   "ssh.passwordPlaceholder": "Enter your SSH password",
+  "ssh.passwordEmptyHint":
+    "Leave empty to send an empty password; the remote sshd must allow empty passwords.",
   "ssh.privateKey": "Private key",
   "ssh.privateKeyPlaceholder": "Select or enter a private key file path",
   "ssh.privateKeyPassphrase": "Private key passphrase (optional)",
@@ -1326,7 +1328,6 @@ const enUS: Record<string, string> = {
   "ssh.connecting": "Connecting...",
   "ssh.success": "Connected. Opened in a new window.",
   "ssh.validation.required": "Host and username are required",
-  "ssh.validation.passwordRequired": "Password is required",
   "ssh.validation.privateKeyRequired": "Private key path is required",
   "common.back": "Back",
   "common.next": "Next",
