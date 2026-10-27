@@ -11,7 +11,10 @@ export function detectPetReaderEncoding(bytes: Uint8Array): PetReaderEncoding {
     sample.length >= 3 && sample[0] === 0xef && sample[1] === 0xbb && sample[2] === 0xbf
       ? sample.subarray(3)
       : sample;
-  return isUtf8(body) ? "utf-8" : "gb18030";
+  // 采样长度是固定的，正好切在多字节字符中间时尾部会残缺，不先对齐就会把 UTF-8 判成国标。
+  return isUtf8(body.subarray(0, prefixBytes(body, "utf-8", Number.MAX_SAFE_INTEGER)))
+    ? "utf-8"
+    : "gb18030";
 }
 
 /** 从缓冲开头截出至多 maxChars 个完整字符。 */

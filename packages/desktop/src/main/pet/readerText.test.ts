@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   detectPetReaderEncoding,
   findPetReaderQuery,
+  PET_READER_CHUNK_BYTES,
   readPetReaderChars,
   readPetReaderTail,
 } from "./readerText.js";
@@ -24,6 +25,18 @@ describe("pet reader text", () => {
     expect(findPetReaderQuery(text, "utf-8", "小说")).toBe(Buffer.from("abc").length);
     const torn = Buffer.concat([Buffer.from([0x80]), Buffer.from("abcd")]);
     expect(readPetReaderTail(torn, "utf-8", 2)).toEqual({ text: "cd", start: 3 });
+  });
+
+  it("keeps utf-8 when the sample is cut in the middle of a character", () => {
+    const torn = Buffer.concat([
+      Buffer.alloc(PET_READER_CHUNK_BYTES - 1, 0x41),
+      Buffer.from("你").subarray(0, 1),
+    ]);
+    expect(torn.length).toBe(PET_READER_CHUNK_BYTES);
+    expect(detectPetReaderEncoding(torn)).toBe("utf-8");
+
+    const withBom = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), torn.subarray(1)]);
+    expect(detectPetReaderEncoding(withBom)).toBe("utf-8");
   });
 
   it("normalizes the shortcut and rejects anything that is not a key", () => {
