@@ -12,21 +12,19 @@ const WRITE_DENIED =
   "UI 设计模式只允许改当前工作区 designs/ 下的 .html 或 .htm。不要改产品代码，也不要使用 bash。";
 
 export const UI_DESIGN_CONSTRAINT = [
-  "UI 设计模式已开启。本轮唯一交付是当前工作区 designs/ 里的一份自包含 HTML，样式和脚本都放在这一个文件里。",
-  "用 write 或 edit 直接写这个文件，写完就停，宿主会打开标注页。",
-  "不要用 Markdown、ASCII 图或文字方案代替，也不要只回复说明。",
-  "不要自己调用 plannotator，不要把 HTML 转成 Markdown，不要开 dev server，不要用 codemode、bash 或 powershell。",
-  "用户批注回来后，只改同一份 HTML。关掉审查页不是通过。",
-  "用户关掉 UI 设计模式之前，不要改产品代码。",
-].join("");
+  "UI 设计模式已开启。唯一交付是当前工作区 designs/ 下的一份自包含 HTML，样式和脚本都写在这一个文件里。",
+  "不要用 Markdown、ASCII 图或文字方案代替这份 HTML，不要开 dev server，不要用 bash、powershell 或 codemode。",
+  "写完立即调用 plannotator 打开它：action=annotate、target 用这份 HTML 的路径、gate=true。然后结束本轮，等用户批注。",
+  "批注回来后只改同一份 HTML，改完再调 plannotator 等下一轮批注。用户关掉 UI 设计模式之前，不要改产品代码。",
+].join("\n");
 
 /** 紧挨用户消息。关掉模式后系统提示没了这段，旧消息就失效。 */
 export const UI_DESIGN_TURN_ORDER =
-  "系统提示里有 ui_design 段时，本轮必须用 write 或 edit 把一份自包含 HTML 写进当前工作区的 designs/。样式和脚本都放在这一个文件里。不要用 Markdown、ASCII 图或文字方案代替，也不要只回复说明。写完就停。没有 ui_design 段就忽略本条。";
+  "系统提示里有 ui_design 段时，本轮必须用 write 或 edit 把一份自包含 HTML 写进当前工作区的 designs/，写完立即调用 plannotator 打开它并等用户批注。不要改产品代码，不要用文字方案代替。没有 ui_design 段就忽略本条。";
 
-/** 模型用文字收尾时续上的那一次。同样靠 ui_design 段失效，避免关模式后还被旧消息拽回去。 */
+/** 文字收尾、或写完 HTML 却没打开审查时，续上的那一次。同样靠 ui_design 段失效。 */
 export const UI_DESIGN_NUDGE =
-  "系统提示里还有 ui_design 段：上一轮没有写成 designs/ 下的 HTML，这次不算完成。不要再解释。现在就用 write 写那份自包含 HTML，写完就停。没有 ui_design 段就忽略本条，按普通对话继续。";
+  "系统提示里还有 ui_design 段：上一轮没有写成 designs/ 下的 HTML 并调用 plannotator 打开它，这次不算完成。不要再解释。现在就把这份自包含 HTML 写完，写完立即调用 plannotator。没有 ui_design 段就忽略本条。";
 
 const NUDGE_LIMIT = 1;
 
@@ -38,18 +36,22 @@ export function uiDesignStartMessage(
   return { customType: "ui-design", display: false, content: UI_DESIGN_TURN_ORDER };
 }
 
-/** 没写成 HTML 就用文字收尾时，续一次。读文件那种工具回合不续，避免插进工具结果中间。 */
+/** 没写成 HTML、或写完没打开审查，就用文字收尾时，续一次。工具回合不续，避免插进工具结果中间。 */
 export function uiDesignShouldContinue(input: {
   enabled: boolean;
   htmlWritten: boolean;
+  reviewOpened: boolean;
   nudges: number;
   outcome: string;
   hasToolCall: boolean;
   toolResultCount: number;
 }): boolean {
-  if (!input.enabled || input.htmlWritten || input.nudges >= NUDGE_LIMIT) return false;
+  if (!input.enabled || input.reviewOpened || input.nudges >= NUDGE_LIMIT) return false;
   if (input.outcome !== "completed") return false;
-  if (input.hasToolCall || input.toolResultCount > 0) return false;
+  if (input.hasToolCall) return false;
+  // HTML 已经写好了，只差打开审查，这时不受工具回合限制。
+  if (input.htmlWritten) return true;
+  if (input.toolResultCount > 0) return false;
   return true;
 }
 
@@ -99,26 +101,39 @@ export function uiDesignToolDecision(
   return { block: true, reason: WRITE_DENIED };
 }
 
-/** 写入成功后要打开标注的 HTML。失败、命令、嵌套调用都不打开。 */
-export function uiDesignAnnotateTarget(
+/** 刚写成功的是 designs/ 下的 HTML。失败、命令、嵌套调用都不算。 */
+export function uiDesignHtmlSaved(
   enabled: boolean,
   toolName: string,
   isError: boolean,
   args: unknown,
   cwd: string,
   parentToolCallId?: string,
-): string | undefined {
-  if (!enabled || isError || parentToolCallId) return undefined;
+): boolean {
+  if (!enabled || isError || parentToolCallId) return false;
   const name = toolName.trim().toLowerCase();
-  if (name !== "write" && name !== "edit") return undefined;
+  if (name !== "write" && name !== "edit") return false;
   const path = toolPath(args);
-  if (!path || !isUiDesignWritePathAllowed(path, cwd)) return undefined;
-  return path;
+  return !!path && isUiDesignWritePathAllowed(path, cwd);
+}
+
+/** 模型自己调 plannotator annotate 打开审查页。宿主不再替它打开。 */
+export function uiDesignReviewOpened(
+  enabled: boolean,
+  toolName: string,
+  isError: boolean,
+  args: unknown,
+): boolean {
+  if (!enabled || isError) return false;
+  const name = toolName.trim().toLowerCase();
+  if (name !== "plannotator" && !name.endsWith("__plannotator")) return false;
+  const action = (args as { action?: unknown } | undefined)?.action;
+  return action === "annotate";
 }
 
 export function createUiDesignMode(
   cwd: string,
-  openAnnotate: (path: string, ctx: object) => Promise<void> = async () => undefined,
+  onReviewOpened: () => void = () => undefined,
 ): {
   extension: InlineExtension;
   setEnabled(enabled: boolean): void;
@@ -130,27 +145,35 @@ export function createUiDesignMode(
       name: "picode-ui-design",
       hidden: true,
       factory(pi) {
-        // 只写系统提示时，模型会用文字方案结束，标注页不会开。
+        // 只写系统提示时，模型会用文字方案结束，审查页不会开。
         let htmlWritten = false;
+        let reviewOpened = false;
         let nudges = 0;
         pi.on("tool_call", (event) =>
           uiDesignToolDecision(enabled, event.toolName, event.input, cwd),
         );
-        pi.on("tool_result", (event, ctx) => {
-          const target = uiDesignAnnotateTarget(
-            enabled,
-            event.toolName,
-            event.isError,
-            event.input,
-            cwd,
-            event.parentToolCallId,
-          );
-          if (!target) return;
-          htmlWritten = true;
-          return openAnnotate(target, ctx);
+        pi.on("tool_result", (event) => {
+          if (uiDesignReviewOpened(enabled, event.toolName, event.isError, event.input)) {
+            reviewOpened = true;
+            onReviewOpened();
+            return;
+          }
+          if (
+            uiDesignHtmlSaved(
+              enabled,
+              event.toolName,
+              event.isError,
+              event.input,
+              cwd,
+              event.parentToolCallId,
+            )
+          ) {
+            htmlWritten = true;
+          }
         });
         pi.on("before_agent_start", (event) => {
           htmlWritten = false;
+          reviewOpened = false;
           nudges = 0;
           const sections = event.systemPromptOptions?.sections;
           if (sections) applyUiDesignConstraint(sections, enabled);
@@ -164,6 +187,7 @@ export function createUiDesignMode(
             !uiDesignShouldContinue({
               enabled,
               htmlWritten,
+              reviewOpened,
               nudges,
               outcome: event.outcome,
               hasToolCall: messageHasToolCall(message),

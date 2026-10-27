@@ -6,7 +6,8 @@ import {
   isUiDesignWritePathAllowed,
   UI_DESIGN_CONSTRAINT,
   UI_DESIGN_NUDGE,
-  uiDesignAnnotateTarget,
+  uiDesignHtmlSaved,
+  uiDesignReviewOpened,
   uiDesignShouldContinue,
   uiDesignStartMessage,
   uiDesignToolDecision,
@@ -50,54 +51,37 @@ test("open mode blocks shells and non-html writes, and keeps annotate", () => {
   assert.equal(uiDesignToolDecision(true, "plannotator", { action: "annotate" }, cwd), undefined);
 });
 
-test("a saved html file is the annotate target", () => {
+test("a saved html file counts as written", () => {
   assert.equal(
-    uiDesignAnnotateTarget(true, "write", false, { path: "designs/hello.html" }, cwd),
-    "designs/hello.html",
+    uiDesignHtmlSaved(true, "write", false, { path: "designs/hello.html" }, cwd),
+    true,
   );
+  assert.equal(uiDesignHtmlSaved(true, "write", true, { path: "designs/hello.html" }, cwd), false);
+  assert.equal(uiDesignHtmlSaved(true, "bash", false, { command: "ls" }, cwd), false);
+  assert.equal(uiDesignHtmlSaved(false, "write", false, { path: "designs/hello.html" }, cwd), false);
   assert.equal(
-    uiDesignAnnotateTarget(true, "write", true, { path: "designs/hello.html" }, cwd),
-    undefined,
-  );
-  assert.equal(
-    uiDesignAnnotateTarget(true, "bash", false, { command: "ls" }, cwd),
-    undefined,
-  );
-  assert.equal(
-    uiDesignAnnotateTarget(false, "write", false, { path: "designs/hello.html" }, cwd),
-    undefined,
+    uiDesignHtmlSaved(true, "write", false, { path: "designs/hello.html" }, cwd, "parent"),
+    false,
   );
 });
 
-test("saving the html opens annotate", async () => {
-  const opened: string[] = [];
-  let onResult: ((event: object, ctx: object) => Promise<void> | void) | undefined;
-  const mode = createUiDesignMode(cwd, async (path) => {
-    opened.push(path);
-  });
-  mode.setEnabled(true);
-  mode.extension.factory({
-    on(event: string, handler: (event: object, ctx: object) => Promise<void> | void) {
-      if (event === "tool_result") onResult = handler;
-    },
-  } as never);
-  await onResult?.(
-    {
-      toolName: "write",
-      isError: false,
-      input: { path: "designs/hello.html" },
-      toolCallId: "1",
-    },
-    {},
+test("only the model's own annotate call opens the review", () => {
+  assert.equal(uiDesignReviewOpened(true, "plannotator", false, { action: "annotate" }), true);
+  assert.equal(
+    uiDesignReviewOpened(true, "mcp__x__plannotator", false, { action: "annotate" }),
+    true,
   );
-  assert.deepEqual(opened, ["designs/hello.html"]);
+  assert.equal(uiDesignReviewOpened(true, "plannotator", true, { action: "annotate" }), false);
+  assert.equal(uiDesignReviewOpened(true, "plannotator", false, { action: "review" }), false);
+  assert.equal(uiDesignReviewOpened(true, "write", false, { path: "designs/a.html" }), false);
+  assert.equal(uiDesignReviewOpened(false, "plannotator", false, { action: "annotate" }), false);
 });
 
 test("the design constraint is a prompt section, not a user message", () => {
   const sections: Record<string, string> = {};
   applyUiDesignConstraint(sections, true);
   assert.match(sections.ui_design ?? "", /designs\//);
-  assert.match(sections.ui_design ?? "", /标注/);
+  assert.match(sections.ui_design ?? "", /plannotator/);
   assert.match(sections.ui_design ?? "", /文字方案/);
   assert.equal(sections.ui_design, UI_DESIGN_CONSTRAINT);
   applyUiDesignConstraint(sections, false);
@@ -108,15 +92,17 @@ test("a user turn gets a hidden order only while the mode is on", () => {
   const message = uiDesignStartMessage(true, "user");
   assert.equal(message?.display, false);
   assert.match(message?.content ?? "", /designs\//);
+  assert.match(message?.content ?? "", /plannotator/);
   assert.match(message?.content ?? "", /没有 ui_design 段就忽略/);
   assert.equal(uiDesignStartMessage(false, "user"), undefined);
   assert.equal(uiDesignStartMessage(true, "custom"), undefined);
 });
 
-test("a prose ending continues once, a tool turn or a saved html does not", () => {
+test("a prose ending continues once, a tool turn or an opened review does not", () => {
   const prose = {
     enabled: true,
     htmlWritten: false,
+    reviewOpened: false,
     nudges: 0,
     outcome: "completed",
     hasToolCall: false,
@@ -125,18 +111,21 @@ test("a prose ending continues once, a tool turn or a saved html does not", () =
   assert.equal(uiDesignShouldContinue(prose), true);
   assert.equal(uiDesignShouldContinue({ ...prose, nudges: 1 }), false);
   assert.equal(uiDesignShouldContinue({ ...prose, enabled: false }), false);
-  assert.equal(uiDesignShouldContinue({ ...prose, htmlWritten: true }), false);
+  assert.equal(uiDesignShouldContinue({ ...prose, reviewOpened: true }), false);
   assert.equal(uiDesignShouldContinue({ ...prose, outcome: "aborted" }), false);
   assert.equal(uiDesignShouldContinue({ ...prose, outcome: "error" }), false);
   assert.equal(uiDesignShouldContinue({ ...prose, hasToolCall: true }), false);
   assert.equal(uiDesignShouldContinue({ ...prose, toolResultCount: 1 }), false);
+  // HTML 写好了却没打开审查，同样要续一次。
+  assert.equal(uiDesignShouldContinue({ ...prose, htmlWritten: true }), true);
+  assert.equal(uiDesignShouldContinue({ ...prose, htmlWritten: true, reviewOpened: true }), false);
 });
 
 test("ending without html continues once, then a later write does not", async () => {
-  const opened: string[] = [];
+  let opened = 0;
   const handlers = new Map<string, (event: Record<string, unknown>, ctx?: object) => unknown>();
-  const mode = createUiDesignMode(cwd, async (path) => {
-    opened.push(path);
+  const mode = createUiDesignMode(cwd, () => {
+    opened += 1;
   });
   mode.setEnabled(true);
   mode.extension.factory({
@@ -184,6 +173,27 @@ test("ending without html continues once, then a later write does not", async ()
     },
     {},
   );
-  assert.deepEqual(opened, ["designs/channel-card.html"]);
+  // 写完 HTML 但没调 plannotator，宿主不打开审查，续一次。
+  assert.equal(opened, 0);
+  const afterHtml = (await handlers.get("turn_end")?.(textEnd)) as
+    | { continue?: boolean }
+    | undefined;
+  assert.equal(afterHtml?.continue, true);
+  assert.equal(await handlers.get("turn_end")?.(textEnd), undefined);
+
+  await handlers.get("before_agent_start")?.({
+    messageType: "user",
+    systemPromptOptions: { sections },
+  });
+  await handlers.get("tool_result")?.(
+    {
+      toolName: "plannotator",
+      isError: false,
+      input: { action: "annotate", target: "designs/channel-card.html" },
+      toolCallId: "2",
+    },
+    {},
+  );
+  assert.equal(opened, 1);
   assert.equal(await handlers.get("turn_end")?.(textEnd), undefined);
 });
