@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.19.5](https://github.com/Otherworldy/PiCode/compare/v3.19.4...v3.19.5) (2026-10-29)
+
+### Features
+
+* **desktop:** 摸鱼正文可调字号、行距和字间距 ([b7e5ed7](https://github.com/Otherworldy/PiCode/commit/b7e5ed74091a0acfb2a3096af116760308325043))
+
 ## [3.19.4](https://github.com/Otherworldy/PiCode/compare/v3.19.3...v3.19.4) (2026-10-29)
 
 ### Features
