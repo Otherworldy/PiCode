@@ -60,6 +60,10 @@ export type PiHostEvent =
         id?: string;
         /** 请求开始时刻，Pi 的 `AssistantMessage.timestamp`（ms）。 */
         timestamp?: number;
+        /** `role: "custom"` 的来源标识（`pi.sendMessage` 的 customType）。 */
+        customType?: string;
+        /** `role: "custom"` 是否上屏；`false` 只进上下文。 */
+        display?: boolean;
       };
     }
   | {

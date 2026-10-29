@@ -62,14 +62,16 @@ test("web tool names go into the subagent allowlist", () => {
 
 test("capability tools call PiCode subagents", async () => {
   const calls: string[] = [];
+  const options: Array<{ signal?: AbortSignal; background?: boolean }> = [];
   const tools = await createCapabilityTools({
     cwd: "D:/work",
     sessionId: "sess_browser",
     ports: {
       listSubagents: async () => [{ name: "Explore", description: "search", systemPrompt: "look" }],
     },
-    runSubagent: async (profile, task) => {
+    runSubagent: async (profile, task, runOptions) => {
       calls.push(`${profile.name}:${task}`);
+      options.push(runOptions);
       return "done";
     },
   });
@@ -87,6 +89,34 @@ test("capability tools call PiCode subagents", async () => {
   const subagentResult = await subagent;
   assert.equal(subagentResult.content[0]?.text, "done");
   assert.ok(calls.includes("Explore:find it"));
+  // 缺省走同步分支，父工具的 signal 照旧透传。
+  assert.deepEqual(options, [{ signal: undefined }]);
+});
+
+test("run_in_background forwards the flag and drops the tool signal", async () => {
+  const options: Array<{ signal?: AbortSignal; background?: boolean }> = [];
+  const tools = await createCapabilityTools({
+    cwd: "D:/work",
+    ports: {
+      listSubagents: async () => [{ name: "Explore", description: "search", systemPrompt: "look" }],
+    },
+    runSubagent: async (_profile, _task, runOptions) => {
+      options.push(runOptions);
+      return "started in background";
+    },
+  });
+  const controller = new AbortController();
+  const result = await tools[0]?.execute(
+    "2",
+    { agent: "Explore", task: "find it", run_in_background: true },
+    controller.signal,
+    undefined,
+    undefined as never,
+  );
+
+  assert.equal(result.content[0]?.text, "started in background");
+  // 后台派发不能绑父工具 signal：工具返回后它就没有意义了。
+  assert.deepEqual(options, [{ background: true }]);
 });
 
 test("subagent without a model inherits the parent model and thinking level", () => {

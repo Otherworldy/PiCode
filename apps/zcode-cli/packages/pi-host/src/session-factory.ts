@@ -1,6 +1,10 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { CreateAgentSessionOptions, ModelRuntime } from "@earendil-works/pi-coding-agent";
+import type {
+  CreateAgentSessionOptions,
+  CreateAgentSessionResult,
+  ModelRuntime,
+} from "@earendil-works/pi-coding-agent";
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
 import { createPiProcessBridge } from "./pi-process-bridge.js";
 import { retainZcodePluginPlan, zcodePluginLoaderExtras } from "./pi-plugins.js";
@@ -18,7 +22,9 @@ import {
   createCapabilityTools,
   runZcodeSubagent,
   type PiCapabilityPorts,
+  type ZcodeSubagentProfile,
 } from "./host-capabilities.js";
+import { createBackgroundSubagents } from "./subagent-background.js";
 import { readPiContextUsage } from "./context-breakdown.js";
 import { createPermissionExtension } from "./permission-gate.js";
 import { createUiDesignMode } from "./ui-design-mode.js";
@@ -473,35 +479,52 @@ export function createSdkSessionFactory(
     // 本地不塞 read/bash/grep/find。Pi 自己有，扩展（pi-fff）才能按原名换掉。
     // SSH 必须换成远端读写，否则这些工具打到本机盘。
     const sshTools = ssh ? piCoding().createCodingTools(input.cwd, sshCodingToolOptions(ssh)) : [];
-    let live:
-      | {
-          model?: CreateAgentSessionOptions["model"];
-          thinkingLevel?: CreateAgentSessionOptions["thinkingLevel"];
-          sessionFile?: string;
-        }
-      | undefined;
+    let live: CreateAgentSessionResult["session"] | undefined;
+    // 子会话要写在真实父文件旁边，目录页才扫得到。
+    const launchSubagent = (
+      profile: ZcodeSubagentProfile,
+      task: string,
+      extra: { signal?: AbortSignal; onStarted?: (childSessionId: string) => void },
+    ) =>
+      runZcodeSubagent({
+        cwd: input.cwd,
+        // Pi 落盘文件名带自己的时间戳，和注册表预先拼的路径不是同一个。
+        parentSessionFile: live?.sessionFile || input.sessionFile,
+        profile,
+        task,
+        check: input.checkPermission,
+        modelRuntime,
+        model: live?.model,
+        thinkingLevel: live?.thinkingLevel,
+        agentDir,
+        ...extra,
+        ...(sshTools.length > 0 ? { sshTools } : {}),
+      });
+    // 后台派发的所有者是这个会话：并发上限、取消与结果投递都只在它这里。
+    const backgroundSubagents = createBackgroundSubagents({
+      run: (profile, task, onStarted) => launchSubagent(profile, task, { onStarted }),
+      notify: (text) => {
+        // 投递失败不改子代理的结算，但不能静默：这是结果的唯一副本。
+        void live
+          ?.sendCustomMessage(
+            { customType: "picode_subagent_result", display: true, content: text },
+            { triggerTurn: true, deliverAs: "followUp" },
+          )
+          .catch((error: unknown) => {
+            console.error("background subagent result delivery failed", error);
+          });
+      },
+    });
     const capabilityTools = options.capabilities
       ? await createCapabilityTools({
           cwd: input.cwd,
           ports: options.capabilities,
           check: input.checkPermission,
           sessionId: input.sessionId,
-          runSubagent: (profile, task, signal) =>
-            runZcodeSubagent({
-              cwd: input.cwd,
-              // Pi 落盘文件名带自己的时间戳，和注册表预先拼的路径不是同一个。
-              // 子会话必须写在真实父文件旁边，目录页才扫得到。
-              parentSessionFile: live?.sessionFile || input.sessionFile,
-              profile,
-              task,
-              signal,
-              check: input.checkPermission,
-              modelRuntime,
-              model: live?.model,
-              thinkingLevel: live?.thinkingLevel,
-              agentDir,
-              ...(sshTools.length > 0 ? { sshTools } : {}),
-            }),
+          runSubagent: (profile, task, runOptions) =>
+            runOptions.background
+              ? Promise.resolve(backgroundSubagents.start(profile, task))
+              : launchSubagent(profile, task, { signal: runOptions.signal }),
         })
       : [];
     const created = await piCoding().createAgentSession({
@@ -791,7 +814,10 @@ export function createSdkSessionFactory(
           persistedListeners.delete(listener);
         };
       },
-      dispose: () => (shuttingDown ??= shutdownPiSession(session)),
+      dispose: () => {
+        backgroundSubagents.abortAll();
+        return (shuttingDown ??= shutdownPiSession(session));
+      },
     } satisfies PiSessionPort;
   };
 }

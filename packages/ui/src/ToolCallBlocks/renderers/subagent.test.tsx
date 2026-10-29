@@ -8,8 +8,14 @@ import type { ToolCallBlockRenderContext } from "../shared.js";
 import { FallbackToolCallBlock } from "./fallback.js";
 import { SubagentToolCallBlock } from "./subagent.js";
 
-function makeContext(kind: string, input: unknown): ToolCallBlockRenderContext {
-  const toolCall = { toolId: "t1", kind, status: "in_progress", input } as never;
+function makeContext(kind: string, input: unknown, raw?: unknown): ToolCallBlockRenderContext {
+  const toolCall = {
+    toolId: "t1",
+    kind,
+    status: "in_progress",
+    input,
+    ...(raw === undefined ? {} : { raw }),
+  } as never;
   return {
     toolCallNode: { toolCall, childToolCalls: [] },
     workspacePath: "D:/workspace",
@@ -59,5 +65,29 @@ describe("picode_subagent 摘要行", () => {
 
     expect(html).toContain("工具调用");
     expect(html).toContain("lucide-wrench");
+  });
+
+  it("后台派发在摘要行挂「后台」角标", () => {
+    const html = render(
+      <SubagentToolCallBlock
+        {...makeContext(
+          "picode_subagent",
+          { agent: "reviewer", task: "复核改动", run_in_background: true },
+          { backgrounded: true },
+        )}
+      />,
+    );
+
+    expect(html).toContain("后台");
+    expect(html).toContain('data-subagent-background="true"');
+    expect(html).toContain("reviewer");
+  });
+
+  it("同步派发不挂角标", () => {
+    const html = render(
+      <SubagentToolCallBlock {...makeContext("picode_subagent", { agent: "reviewer" }, {})} />,
+    );
+
+    expect(html).not.toContain('data-subagent-background="true"');
   });
 });

@@ -13,6 +13,8 @@ const FALLBACK_TOOL_ICON = <WrenchIcon className="size-4 shrink-0 text-foregroun
 
 interface FallbackToolCallBlockProps extends ToolCallBlockRenderContext {
   iconOverride?: ReactNode;
+  /** 摘要行 kind 文案后的附加标记（如后台派发角标）。 */
+  kindDetail?: ReactNode;
   hideRawFallback?: boolean;
   summaryOnly?: boolean;
   summaryTextOverride?: ReactNode;
@@ -135,6 +137,7 @@ export function FallbackToolCallBlock(context: FallbackToolCallBlockProps) {
       canToggle={context.canToggle ?? true}
       forceOpen={context.forceOpen ?? false}
       kindLabel={context.summaryOnly ? null : (context.kindLabelOverride ?? kindLabel)}
+      kindDetail={context.summaryOnly ? undefined : context.kindDetail}
       sourceLabel={context.sourceLabel}
       primaryText={
         context.summaryOnly ? (

@@ -43,6 +43,11 @@ export function readSubagentDispatchRole(source: { input?: unknown }): string | 
   return typeof role === "string" && role.trim().length > 0 ? role.trim() : undefined;
 }
 
+/** 这次派发是不是后台的：v4 工具行的 `backgrounded` 由 `toolCallRowToLegacyNode` 桥接进 raw。 */
+export function readSubagentBackgrounded(source: { raw?: unknown }): boolean {
+  return isPlainRecord(source.raw) && source.raw.backgrounded === true;
+}
+
 function parseInputRecord(input: unknown): Record<string, unknown> | undefined {
   if (typeof input !== "string" || !input.trim().startsWith("{")) {
     return undefined;

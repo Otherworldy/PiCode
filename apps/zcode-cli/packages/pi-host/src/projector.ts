@@ -42,6 +42,15 @@ function messageText(content: unknown): string {
     .join("");
 }
 
+/** 工具自报的后台派发：`details.backgrounded === true`。 */
+function isBackgroundToolResult(details: unknown): boolean {
+  return (
+    typeof details === "object" &&
+    details !== null &&
+    (details as { backgrounded?: unknown }).backgrounded === true
+  );
+}
+
 function clipError(text: string | undefined): string | undefined {
   const flat = text?.replace(/\s+/g, " ").trim();
   if (!flat) return undefined;
@@ -578,7 +587,7 @@ export class PiToV4Projector {
         }
         return event.message.role === "user"
           ? this.appendUser(messageText(event.message.content), event.message.id)
-          : [];
+          : this.appendCustomMessageEvent(event);
       case "message_update":
         // 首 token 时刻只能在这里打点：Pi 给 usage 和 durationMs，但不给首输出
         // 时刻，而吐字速度要用它把等待时间从分母里扣掉。toolCall 也是一种输出，
@@ -894,6 +903,29 @@ export class PiToV4Projector {
     return [{ op: "row.upserted", row: { ...row, text: row.text + append } }];
   }
 
+  /**
+   * 工具 / 扩展注入的 custom message（`pi.sendMessage`）。后台子代理的结果走这条路。
+   *
+   * 口径必须与 `jsonl-history.ts` 的回放一致：那里把 `display !== false` 的 custom_message
+   * 合成一条 assistant 正文，这里就画成同一种行；否则同一条消息在实时与重载后长得不一样，
+   * 实时则完全看不到。`display: false`（如 ui-design 的提醒）只进上下文，不占画面。
+   */
+  private appendCustomMessageEvent(
+    event: Extract<PiHostEvent, { type: "message_start" }>,
+  ): ConversationDelta[] {
+    if (event.message.role !== "custom" || event.message.display === false) return [];
+    const text = messageText(event.message.content).trim();
+    if (!text) return [];
+    const row: ConversationRow = {
+      ...this.base(),
+      kind: "assistantText",
+      text,
+      state: "complete",
+    };
+    if (event.message.id) row.entityId = event.message.id;
+    return [{ op: "row.appended", row }];
+  }
+
   private ensureToolRow(
     toolCallId: string,
     toolName: string,
@@ -1034,6 +1066,9 @@ export class PiToV4Projector {
           : {}),
       },
       ...(event.isError ? { error: { code: "tool.error", message: text || "tool failed" } } : {}),
+      // 工具自报的后台派发（`picode_subagent` 的 details）：UI 靠它显示角标，
+      // 也靠它区分“这行还在阻塞 turn”与“已经交给后台了”。
+      ...(isBackgroundToolResult(details) ? { backgrounded: true as const } : {}),
       outputPreview: undefined,
       progress: undefined,
       endedAt: this.stamp ?? Date.now(),

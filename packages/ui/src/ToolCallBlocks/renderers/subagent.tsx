@@ -1,7 +1,8 @@
 import { BotIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { resolveSubagentColorFromName } from "@/lib/subagentColors.js";
-import { readSubagentDispatchRole } from "@/lib/subagentToolNames.js";
+import { readSubagentBackgrounded, readSubagentDispatchRole } from "@/lib/subagentToolNames.js";
 import type { ToolCallBlockRenderContext } from "../shared.js";
 import { AgentNameText } from "./agent.js";
 import { FallbackToolCallBlock } from "./fallback.js";
@@ -16,11 +17,23 @@ const SUBAGENT_TOOL_ICON = <BotIcon className="size-4 shrink-0 text-foreground-s
 export function SubagentToolCallBlock(context: ToolCallBlockRenderContext) {
   const { intl } = useZCodeIntl();
   const role = readSubagentDispatchRole(context.toolCallNode.toolCall);
+  const backgrounded = readSubagentBackgrounded(context.toolCallNode.toolCall);
   return (
     <FallbackToolCallBlock
       {...context}
       iconOverride={SUBAGENT_TOOL_ICON}
       kindLabelOverride={intl.formatMessage({ id: "chat.toolCall.kind.subagent" })}
+      kindDetail={
+        backgrounded ? (
+          <Badge
+            variant="outline"
+            data-subagent-background="true"
+            className="align-baseline text-ui-xs"
+          >
+            {intl.formatMessage({ id: "chat.toolCall.subagent.background" })}
+          </Badge>
+        ) : undefined
+      }
       primaryTextOverride={
         role ? <AgentNameText color={resolveSubagentColorFromName(role)} name={role} /> : null
       }

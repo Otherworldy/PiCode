@@ -37,6 +37,11 @@ export interface ZcodeSubagentProfile {
 
 const THOUGHT_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 
+/** 子代理被取消时的返回值。后台 runner 靠它归类，两处必须同源。 */
+export const SUBAGENT_CANCELLED_TEXT = "subagent cancelled";
+/** 子代理失败的返回值前缀。后台 runner 靠它归类，两处必须同源。 */
+export const SUBAGENT_FAILED_PREFIX = "subagent failed:";
+
 export function toZcodeSubagentProfile(profile: {
   name: string;
   description: string;
@@ -253,8 +258,8 @@ type CodingTool = {
   ) => Promise<unknown>;
 };
 
-function textResult(text: string) {
-  return { content: [{ type: "text" as const, text }], details: {} };
+function textResult(text: string, details: Record<string, unknown> = {}) {
+  return { content: [{ type: "text" as const, text }], details };
 }
 
 function tool<T extends Record<string, unknown>>(definition: {
@@ -268,7 +273,7 @@ function tool<T extends Record<string, unknown>>(definition: {
     toolCallId: string,
     params: T,
     signal: AbortSignal | undefined,
-  ) => Promise<{ content: Array<{ type: "text"; text: string }>; details: Record<string, never> }>;
+  ) => Promise<{ content: Array<{ type: "text"; text: string }>; details: Record<string, unknown> }>;
 }) {
   return definition;
 }
@@ -322,9 +327,11 @@ export async function runZcodeSubagent(input: {
   check?: ToolPermissionCheck;
   /** SSH 工作区才传入。本地子会话用 Pi 内置工具，好让扩展替换 grep/find。 */
   sshTools?: readonly CodingTool[];
+  /** 子会话建好后的真实 id。后台派发靠它接管取消与通知。 */
+  onStarted?: (childSessionId: string) => void;
 }): Promise<string> {
   await ensurePiSdk();
-  if (input.signal?.aborted) return "subagent cancelled";
+  if (input.signal?.aborted) return SUBAGENT_CANCELLED_TEXT;
   const launchModel = resolveZcodeSubagentLaunchModel({
     profileModel: input.profile.model,
     profileThought: input.profile.thought,
@@ -339,7 +346,7 @@ export async function runZcodeSubagent(input: {
         modelId: model.id,
       })) ?? [],
   });
-  if (launchModel.error) return `subagent failed: ${launchModel.error}`;
+  if (launchModel.error) return `${SUBAGENT_FAILED_PREFIX} ${launchModel.error}`;
   const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } = piCoding();
   const requestedTargets = piRequestedToolTargets(input.profile.tools);
   const extensionToolNames = requestedTargets.filter((name) => !PI_BUILTIN_NAME_SET.has(name));
@@ -365,7 +372,7 @@ export async function runZcodeSubagent(input: {
     const missing = requestedTargets.filter(
       (name) => !PI_BUILTIN_NAME_SET.has(name) && !available.includes(name),
     );
-    if (missing.length > 0) return `subagent failed: tools not available: ${missing.join(", ")}`;
+    if (missing.length > 0) return `${SUBAGENT_FAILED_PREFIX} tools not available: ${missing.join(", ")}`;
   }
   const childDir = join(
     dirname(input.parentSessionFile),
@@ -453,6 +460,8 @@ export async function runZcodeSubagent(input: {
       return true;
     },
   });
+  // 活表已登记，真实 id 才算可用；后台派发从这里接管取消与通知。
+  input.onStarted?.(session.sessionId);
   input.signal?.addEventListener("abort", stopChild);
   // 子会话的用量只有这里看得到：父会话要等它结束才拿到最终文本，
   // 所以订阅 message_end 把每次模型调用累加进活表，面板才能边跑边显示。
@@ -509,14 +518,17 @@ export async function runZcodeSubagent(input: {
     childFirstTokenAt = undefined;
   });
   try {
+    // abort 可能落在 prompt 之前（后台派发在子会话建好、首轮还没起时就收到取消），
+    // 而 session.abort() 在没有 activeRun 时是 no-op。不在这里拦一下，子代理会照常跑完整轮。
+    if (cancelled || input.signal?.aborted) return SUBAGENT_CANCELLED_TEXT;
     await session.prompt(input.task);
-    if (cancelled || input.signal?.aborted) return "subagent cancelled";
+    if (cancelled || input.signal?.aborted) return SUBAGENT_CANCELLED_TEXT;
     return (
       assistantText(session.messages as { role?: string; content?: unknown }[]) || "(no response)"
     );
   } catch (error) {
-    if (cancelled || input.signal?.aborted) return "subagent cancelled";
-    return `subagent failed: ${error instanceof Error ? error.message : String(error)}`;
+    if (cancelled || input.signal?.aborted) return SUBAGENT_CANCELLED_TEXT;
+    return `${SUBAGENT_FAILED_PREFIX} ${error instanceof Error ? error.message : String(error)}`;
   } finally {
     await writeRole();
     stopUsage();
@@ -549,7 +561,7 @@ export async function createCapabilityTools(input: {
   runSubagent: (
     profile: ZcodeSubagentProfile,
     task: string,
-    signal?: AbortSignal,
+    options: { signal?: AbortSignal; background?: boolean },
   ) => Promise<string>;
 }) {
   const agents = await input.ports.listSubagents(input.cwd).catch(() => []);
@@ -557,13 +569,14 @@ export async function createCapabilityTools(input: {
     agents.length > 0
       ? agents.map((agent) => `- ${agent.name}: ${agent.description}`).join("\n")
       : "- scout\n- researcher\n- evidence-auditor\n- worker\n- reviewer\n- oracle\n- delegate";
-  const subagent = tool<{ agent?: string; task?: string }>({
+  const subagent = tool<{ agent?: string; task?: string; run_in_background?: boolean }>({
     name: "picode_subagent",
     label: "Subagent",
-    description: `Run a PiCode subagent and return its final answer.\n${catalog}`,
+    description: `Run a PiCode subagent and return its final answer. With run_in_background it returns immediately instead and the result arrives later as a message; do not poll for it.\n${catalog}`,
     promptSnippet: "Delegate a task to a PiCode subagent",
     promptGuidelines: [
       "Use picode_subagent for work that should run in a separate agent. Pick a name from the tool description.",
+      "Set run_in_background only when you have other work to do while it runs; never poll, the result arrives as a message.",
     ],
     parameters: {
       type: "object",
@@ -571,6 +584,11 @@ export async function createCapabilityTools(input: {
       properties: {
         agent: { type: "string", description: "Agent name" },
         task: { type: "string", description: "Complete task for that agent" },
+        run_in_background: {
+          type: "boolean",
+          description:
+            "Return immediately and deliver the result as a message when the subagent settles. Default false.",
+        },
       },
     },
     execute: async (_toolCallId, params, signal) => {
@@ -587,7 +605,14 @@ export async function createCapabilityTools(input: {
       }
       if (!task) return textResult("Subagent task is empty");
       // ponytail: one child depth and no MCP inside the child. Add both when a subagent must call them.
-      return textResult(await input.runSubagent(profile, task, signal));
+      const background = params.run_in_background === true;
+      // 后台派发不绑父工具 signal：工具返回后 signal 的语义到此为止，
+      // 取消走面板 Stop（abortLiveSubagent）或父会话关闭（runner.abortAll）。
+      return textResult(
+        await input.runSubagent(profile, task, background ? { background: true } : { signal }),
+        // projector 靠这个 details 给工具行标 backgrounded，UI 才知道结果稍后到。
+        background ? { backgrounded: true } : {},
+      );
     },
   });
 

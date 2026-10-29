@@ -120,6 +120,8 @@ export function toolCallRowToLegacyNode(row: ToolCallRow): TaskChatToolCallTreeN
         ...(legacyDisplay ? { display: legacyDisplay } : {}),
         // R7：运行中进度（MCP notifications/progress）供 McpToolCallBlock 头部进度条消费。
         ...(row.progress ? { progress: row.progress } : {}),
+        // 后台派发：结果稍后以消息到达，卡片摘要行靠它挂角标。
+        ...(row.backgrounded ? { backgrounded: true } : {}),
         inputPreviewComplete: inputPreview.inputPreviewComplete,
         streamingRawInputLength: inputPreview.streamingRawInputLength,
       },

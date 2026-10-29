@@ -4629,6 +4629,7 @@ const zhCN: Record<string, string> = {
   "chat.toolCall.kind.taskStop": "停止任务",
   "chat.toolCall.kind.todo": "待办",
   "chat.toolCall.kind.subagent": "子智能体",
+  "chat.toolCall.subagent.background": "后台",
   "chat.toolCall.goal.label": "Goal",
   "chat.toolCall.edit.writing": "正在写入",
   "chat.toolCall.edit.wrote": "已写入",
