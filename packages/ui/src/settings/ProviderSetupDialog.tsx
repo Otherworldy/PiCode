@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Check, Eye, EyeOff, Loader2, PlugZap, X } from "lucide-react";
 import type { ZCodePiModelsMutateParams } from "@zcode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -13,12 +13,9 @@ import {
 } from "@/components/ui/dialog.js";
 import { toast } from "@/components/ui/toast.js";
 import { ApiSelect, Field, ModelDraftList } from "@/settings/ModelDraftCard.js";
-import {
-  defaultChosen,
-  slugProviderId,
-  type CatalogView,
-  type ProviderDraft,
-} from "@/settings/provider-draft.js";
+import { ModelPickerDialog } from "@/settings/ModelPickerDialog.js";
+import type { DiscoveredModel } from "@/settings/model-picker-selection.js";
+import { slugProviderId, type CatalogView, type ProviderDraft } from "@/settings/provider-draft.js";
 
 /**
  * 编辑/新建 AI 服务弹窗：
@@ -43,6 +40,7 @@ export function ProviderSetupDialog({
   const { intl } = useZCodeIntl();
   const [testingConnection, setTestingConnection] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const draftRef = useRef(draft);
   draftRef.current = draft;
 
@@ -52,16 +50,15 @@ export function ProviderSetupDialog({
     onChange({ ...current, ...partial });
   };
 
-  const fetchModels = async (importModels: boolean) => {
-    const current = draftRef.current;
-    if (!current?.baseUrl.trim()) {
-      toast(intl.formatMessage({ id: "settings.modelProvider.pi.needNameUrl" }));
-      return;
-    }
-    if (!importModels) {
-      setTestingConnection(true);
-    }
-    try {
+  // 连接字段决定 discover 结果的有效性；键变了自然失效，不需要额外的清理逻辑。
+  const discoverCacheRef = useRef<{ key: string; list: DiscoveredModel[] } | null>(null);
+  const discoverModels = useCallback(
+    async (force = false): Promise<DiscoveredModel[]> => {
+      const current = draftRef.current;
+      if (!current) return [];
+      const key = `${current.baseUrl.trim()}\u0000${current.api}\u0000${current.apiKey.trim()}`;
+      const cached = discoverCacheRef.current;
+      if (!force && cached?.key === key) return cached.list;
       const next = await mutate({
         action: "discover",
         providerId: current.id.trim() || undefined,
@@ -74,22 +71,52 @@ export function ProviderSetupDialog({
         },
       });
       const list = next.discovered ?? [];
-      const latest = draftRef.current ?? current;
-      if (importModels) {
-        const known = new Set(latest.models.map((model) => model.id));
-        const added = list.filter((item) => !known.has(item.id)).map(defaultChosen);
-        if (added.length > 0) onChange({ ...latest, models: [...latest.models, ...added] });
-      }
+      discoverCacheRef.current = { key, list };
+      return list;
+    },
+    [mutate],
+  );
+
+  const testConnection = async () => {
+    if (!draftRef.current?.baseUrl.trim()) {
+      toast(intl.formatMessage({ id: "settings.modelProvider.pi.needNameUrl" }));
+      return;
+    }
+    setTestingConnection(true);
+    try {
+      const list = await discoverModels();
       toast(
         intl.formatMessage({ id: "settings.modelProvider.pi.discoverOk" }, { count: list.length }),
       );
     } catch {
       toast(intl.formatMessage({ id: "settings.modelProvider.pi.discoverFailed" }));
     } finally {
-      if (!importModels) {
-        setTestingConnection(false);
-      }
+      setTestingConnection(false);
     }
+  };
+
+  const openPicker = () => {
+    if (!draftRef.current?.baseUrl.trim()) {
+      toast(intl.formatMessage({ id: "settings.modelProvider.pi.needNameUrl" }));
+      return;
+    }
+    setPickerOpen(true);
+  };
+
+  // 差集在写入前再取一次，连点导入不会产生重复模型。
+  const importModels = (models: ProviderDraft["models"]) => {
+    const current = draftRef.current;
+    if (!current) return;
+    const known = new Set(current.models.map((model) => model.id));
+    const added = models.filter((model) => !known.has(model.id));
+    if (added.length > 0) onChange({ ...current, models: [...current.models, ...added] });
+    toast(
+      intl.formatMessage(
+        { id: "settings.modelProvider.pi.pickModels.imported" },
+        { count: added.length },
+      ),
+    );
+    setPickerOpen(false);
   };
 
   const save = async () => {
@@ -214,7 +241,7 @@ export function ProviderSetupDialog({
                         variant="outline"
                         size="lg"
                         disabled={busy || testingConnection || !draft.baseUrl.trim()}
-                        onClick={() => void fetchModels(false)}
+                        onClick={() => void testConnection()}
                         className="shrink-0"
                       >
                         {testingConnection ? <Loader2 className="animate-spin" /> : <PlugZap />}
@@ -261,7 +288,7 @@ export function ProviderSetupDialog({
                   busy={busy}
                   draft={draft}
                   onChange={onChange}
-                  onFetch={() => void fetchModels(true)}
+                  onFetch={openPicker}
                 />
               </section>
             </>
@@ -286,6 +313,18 @@ export function ProviderSetupDialog({
           </div>
         </DialogFooter>
       </DialogContent>
+
+      {pickerOpen && draft ? (
+        <ModelPickerDialog
+          providerName={draft.name.trim() || draft.id.trim() || draft.baseUrl.trim()}
+          baseUrl={draft.baseUrl.trim()}
+          providerApi={draft.api}
+          existingModels={draft.models}
+          discover={discoverModels}
+          onImport={importModels}
+          onClose={() => setPickerOpen(false)}
+        />
+      ) : null}
     </Dialog>
   );
 }

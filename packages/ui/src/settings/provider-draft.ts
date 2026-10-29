@@ -57,7 +57,6 @@ export const OUTPUT_PRESETS = [
 
 export type CatalogView = ZCodePiModelsMutateResult;
 export type CatalogModel = CatalogView["providers"][number]["models"][number];
-type OfferedModel = { id: string; name: string; contextWindow?: number; maxTokens?: number };
 
 export type ProviderDraft = {
   existing: boolean;
@@ -99,16 +98,14 @@ export function slugProviderId(name: string, url: string): string {
   return `custom-${Date.now().toString(36)}`;
 }
 
-export function defaultChosen(offered: OfferedModel): CatalogModel {
-  return {
-    id: offered.id,
-    name: offered.name && offered.name !== offered.id ? offered.name : offered.id,
-    contextWindow: offered.contextWindow ?? 128_000,
-    maxTokens: offered.maxTokens ?? 8192,
-    reasoning: true,
-    thinkingLevels: ["off", "low", "medium", "high"],
-    input: ["text"],
-  };
+// defaultChosen 与「拉取模型」的选择逻辑同属一处，这里转出以保持既有导入路径不变。
+export { defaultChosen } from "./model-picker-selection.js";
+
+/** 上下文窗口与最大输出的紧凑显示，模型列表与拉取弹窗共用同一口径。 */
+export function formatTokens(value: number): string {
+  if (value >= 1_000_000) return `${Math.round(value / 100_000) / 10}M`.replace(/\.0M$/u, "M");
+  if (value >= 1000) return `${Math.round(value / 100) / 10}K`.replace(/\.0K$/u, "K");
+  return String(value);
 }
 
 export function applyModelPatch(model: CatalogModel, partial: ModelPatch): CatalogModel {

@@ -31,16 +31,11 @@ import {
   THINKING_LEVELS,
   applyModelPatch,
   defaultChosen,
+  formatTokens,
   type CatalogModel,
   type ModelPatch,
   type ProviderDraft,
 } from "@/settings/provider-draft.js";
-
-function formatTokens(value: number): string {
-  if (value >= 1_000_000) return `${Math.round(value / 100_000) / 10}M`.replace(/\.0M$/u, "M");
-  if (value >= 1000) return `${Math.round(value / 100) / 10}K`.replace(/\.0K$/u, "K");
-  return String(value);
-}
 
 export function Field({
   label,
