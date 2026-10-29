@@ -1,5 +1,44 @@
 # Changelog
 
+## [3.19.4](https://github.com/Otherworldy/PiCode/compare/v3.19.3...v3.19.4) (2026-10-29)
+
+### Features
+
+* **models:** 拉取模型改为先选择再导入 ([acba911](https://github.com/Otherworldy/PiCode/commit/acba911596316a4dce87793a07a05dd555e87e47))
+  * 可添加项超过 20 个时默认只选前 5 个，避免一次导入把模型菜单淹没
+  * 已添加行保留展示并禁用勾选，不参与全选三态
+  * 搜索与「只看未添加」只改可见性，不改已选集合
+  * discover 结果按连接字段做请求级缓存，与「测试连接」共享
+
+* **subagent:** 子代理支持后台派发 ([2d21485](https://github.com/Otherworldy/PiCode/commit/2d214853c51109786afcff34a0007d9065f04f03))
+  * 后台派发由每会话一个 runner 管：并发上限 6、占位到真实 id 的交接、恰好一次
+  * 结果走 `sendCustomMessage({ triggerTurn, deliverAs: "followUp" })`；
+  * 工具结果带 `details.backgrounded`，工具卡摘要行显示「后台」角标
+  * 后台分支不绑父工具的 AbortSignal；`session.abort()` 在首轮 prompt 之前是
+
+
+### Refactorings
+
+* 移除遥测系统 ([2cbb1ba](https://github.com/Otherworldy/PiCode/commit/2cbb1ba04544367934b27bbce902906cec97352c))
+  * `V4_NOTIFICATIONS` 移除 `conversationTelemetryFact`、`localTtftFacts`
+  * 新增 `v4/turn/lifecycle`，只携带 sessionId 与终态，供
+  * `zcode-protocol` 移除 4 个遥测通知及 `zcodeMcpTelemetry*`、
+  * `packages/ui/src/lib/*telemetry*`（22 个）、`v4/telemetry/`
+  * `packages/services`：`telemetryCore`、`conversation-telemetry/`、
+  * `packages/desktop`：9 个 `host*Telemetry`、ARMS RUM bootstrap、
+  * `packages/shared`：`telemetry`、`telemetryRedaction`、
+  * `packages/rpc`：`network-telemetry-middleware`
+  * `apps/zcode-cli/packages/telemetry`（整包）
+  * `adapters/src/exec/bash-resource-telemetry`
+  * `deviceMid`：仍作为模型 API 与错峰服务请求头，磁盘文件名
+  * 资源管理器：新建 `adapters/src/mcp/process-registry.ts` 承接
+  * 会话统计 TTFT：进程内单调测量，链路未受影响
+  * `ModelStatusSink` 的 `admissionTicket` / `requestStatusSink`
+  * `runtimeEnv.ts` 的 `OTEL_*` / `ZCODE_TELEMETRY_*` 剔除名单：
+  * 模型错误归因从遥测命名空间迁至
+  * 依赖移除 `@arms/rum-electron`（含 patch）、6 个 `@opentelemetry/*`、
+  * `SkillTelemetryMetadata` 整链删除；`turn.started`/`turn.terminal`
+
 ## [3.19.3](https://github.com/Otherworldy/PiCode/compare/v3.19.2...v3.19.3) (2026-10-27)
 
 ### Bug Fixes
