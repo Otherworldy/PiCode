@@ -326,6 +326,12 @@ export interface AppSettings {
   desktopPetReaderAutoPage?: boolean;
   /** 自动翻页时每行停留的毫秒数，200–20000。缺省 1200。Web/手机端忽略。 */
   desktopPetReaderAutoPageMs?: number;
+  /** 摸鱼正文字号，10–20px。缺省 12。只作用于摸鱼正文，消息提醒气泡不变。Web/手机端忽略。 */
+  desktopPetReaderFontSize?: number;
+  /** 摸鱼正文行距，按字号的倍数记，1.2–2.0。缺省 1.35。Web/手机端忽略。 */
+  desktopPetReaderLineHeight?: number;
+  /** 摸鱼正文字间距，0–4px。缺省 0。Web/手机端忽略。 */
+  desktopPetReaderLetterSpacing?: number;
   /** 是否在消息流中展示模型思考过程 */
   messageStreamShowReasoning?: boolean;
   // TODO(settings-schema-version): 能证明所有受支持升级路径都已执行本次迁移后，改用统一 settings schema version，并一起删除此 marker、迁移函数和持久化判断。

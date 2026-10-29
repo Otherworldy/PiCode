@@ -3,8 +3,11 @@ import {
   normalizeDesktopPetCropCharacter,
   normalizeDesktopPetDisplayScale,
   normalizeDesktopPetReaderBubbleRect,
+  normalizeDesktopPetReaderFontSize,
   normalizeDesktopPetReaderHotkey,
   normalizeDesktopPetReaderHotkeyMode,
+  normalizeDesktopPetReaderLetterSpacing,
+  normalizeDesktopPetReaderLineHeight,
   normalizeDesktopPetStageCrop,
   type AppSettings,
   type DesktopPetPersistedSettings,
@@ -28,5 +31,10 @@ export function petFormFromSettings(
     readerHotkeyMode: normalizeDesktopPetReaderHotkeyMode(settings?.desktopPetReaderHotkeyMode),
     readerAutoPage: settings?.desktopPetReaderAutoPage === true,
     readerAutoPageMs: normalizeDesktopPetAutoPageMs(settings?.desktopPetReaderAutoPageMs),
+    readerFontSize: normalizeDesktopPetReaderFontSize(settings?.desktopPetReaderFontSize),
+    readerLineHeight: normalizeDesktopPetReaderLineHeight(settings?.desktopPetReaderLineHeight),
+    readerLetterSpacing: normalizeDesktopPetReaderLetterSpacing(
+      settings?.desktopPetReaderLetterSpacing,
+    ),
   };
 }

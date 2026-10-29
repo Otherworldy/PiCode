@@ -88,7 +88,17 @@ describe("pet bubble", () => {
     expect(PET_BUBBLE_HEIGHT - PET_BUBBLE_PADDING_Y * 2).toBe(PET_BUBBLE_LINE_HEIGHT * 4);
     const html = renderPetPlayerHtml("{}");
     expect(html).toContain(`font: 12px/${PET_BUBBLE_LINE_HEIGHT}px sans-serif`);
-    expect(html).toContain(`const LINE = ${PET_BUBBLE_LINE_HEIGHT};`);
+    expect(html).toContain(`const LINE_DEFAULT = ${PET_BUBBLE_LINE_HEIGHT};`);
+  });
+
+  it("takes font size, line height and letter spacing from the settings", () => {
+    const html = renderPetPlayerHtml("{}");
+    // 消息提醒气泡的字体写在 CSS 里，摸鱼正文靠三个变量盖掉字号、行高和字间距。
+    expect(html).toContain("font-size: var(--pet-reader-font)");
+    expect(html).toContain("line-height: var(--pet-reader-line)");
+    expect(html).toContain("letter-spacing: var(--pet-reader-gap)");
+    expect(html).toContain('type === "read-style"');
+    expect(html).toContain("geometry.reader");
   });
 
   it("defaults to a black bubble and can switch to white", () => {

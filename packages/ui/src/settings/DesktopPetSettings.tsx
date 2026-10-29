@@ -3,13 +3,15 @@ import {
   normalizeDesktopPetAutoPageMs,
   normalizeDesktopPetCropCharacter,
   normalizeDesktopPetDisplayScale,
+  normalizeDesktopPetReaderFontSize,
   normalizeDesktopPetReaderHotkey,
   normalizeDesktopPetReaderHotkeyMode,
+  normalizeDesktopPetReaderLetterSpacing,
+  normalizeDesktopPetReaderLineHeight,
   type DesktopPetDownloadStatus,
   type DesktopPetInstalledPack,
   type DesktopPetPersistedSettings,
 } from "@zcode/shared";
-import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
 import {
   Select,
@@ -27,6 +29,8 @@ import { DesktopPetAutoPageRows } from "./DesktopPetAutoPageRows.js";
 import { DesktopPetBubbleRectRow } from "./DesktopPetBubbleRectRow.js";
 import { DesktopPetBubbleStyleRows } from "./DesktopPetBubbleStyleRows.js";
 import { DesktopPetPacksCardGrid } from "./DesktopPetPacksCardGrid.js";
+import { DesktopPetReaderFileRows } from "./DesktopPetReaderFileRows.js";
+import { DesktopPetReaderTextRows } from "./DesktopPetReaderTextRows.js";
 import { petFormFromSettings } from "./desktopPetSettingsForm.js";
 import { SettingsGroupCard, SettingsRow } from "./SettingsPageParts.js";
 
@@ -39,8 +43,6 @@ export function DesktopPetSettings() {
     petFormFromSettings(settings),
   );
   const [hotkeyDraft, setHotkeyDraft] = useState(form.readerHotkey);
-  const [findDraft, setFindDraft] = useState("");
-  const [findMiss, setFindMiss] = useState(false);
   const [downloadStatus, setDownloadStatus] = useState<DesktopPetDownloadStatus>({ phase: "idle" });
   const [installedPacks, setInstalledPacks] = useState<DesktopPetInstalledPack[]>([]);
   const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
@@ -59,6 +61,9 @@ export function DesktopPetSettings() {
   const readerHotkeyMode = form.readerHotkeyMode;
   const readerAutoPage = form.readerAutoPage;
   const readerAutoPageMs = form.readerAutoPageMs;
+  const readerFontSize = form.readerFontSize;
+  const readerLineHeight = form.readerLineHeight;
+  const readerLetterSpacing = form.readerLetterSpacing;
 
   useEffect(() => {
     if (preferLocal.current || !settings) return;
@@ -114,6 +119,9 @@ export function DesktopPetSettings() {
         readerHotkeyMode: normalizeDesktopPetReaderHotkeyMode(saved.readerHotkeyMode),
         readerAutoPage: saved.readerAutoPage === true,
         readerAutoPageMs: normalizeDesktopPetAutoPageMs(saved.readerAutoPageMs),
+        readerFontSize: normalizeDesktopPetReaderFontSize(saved.readerFontSize),
+        readerLineHeight: normalizeDesktopPetReaderLineHeight(saved.readerLineHeight),
+        readerLetterSpacing: normalizeDesktopPetReaderLetterSpacing(saved.readerLetterSpacing),
       };
       setForm(next);
       setHotkeyDraft(next.readerHotkey);
@@ -172,14 +180,6 @@ export function DesktopPetSettings() {
       remember({ packUrl: "" });
       void update({ desktopPetPackUrl: "" });
     }
-  };
-
-  const jumpToText = () => {
-    const query = findDraft.trim();
-    if (!query) return;
-    void platform.findDesktopPetReaderText?.(query).then((found) => {
-      setFindMiss(found === false);
-    });
   };
 
   return (
@@ -271,76 +271,16 @@ export function DesktopPetSettings() {
         }}
       />
 
-      <SettingsRow
-        label={intl.formatMessage({ id: "settings.desktopPetReader" })}
-        description={
-          <>
-            {intl.formatMessage({ id: "settings.desktopPetReaderDescription" })}
-            {readerPath ? <div className="mt-1 break-all">{readerPath}</div> : null}
-          </>
-        }
-        control={
-          <>
-            {readerPath ? (
-              <Button
-                type="button"
-                size="lg"
-                variant="outline"
-                onClick={() => {
-                  remember({ readerPath: "" });
-                  void update({ desktopPetReaderPath: "" });
-                }}
-              >
-                {intl.formatMessage({ id: "settings.desktopPetReaderClear" })}
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              size="lg"
-              variant="outline"
-              onClick={() => {
-                void (async () => {
-                  const file = await platform.selectFile();
-                  if (!file) return;
-                  remember({ readerPath: file });
-                  await update({ desktopPetReaderPath: file });
-                })();
-              }}
-            >
-              {intl.formatMessage({ id: "settings.desktopPetReaderChoose" })}
-            </Button>
-          </>
-        }
-      />
-      <SettingsRow
-        label={intl.formatMessage({ id: "settings.desktopPetReaderFind" })}
-        description={
-          findMiss
-            ? intl.formatMessage({ id: "settings.desktopPetReaderFindMiss" })
-            : intl.formatMessage({ id: "settings.desktopPetReaderFindDescription" })
-        }
-        detail={
-          <Input
-            size="lg"
-            value={findDraft}
-            aria-label={intl.formatMessage({ id: "settings.desktopPetReaderFind" })}
-            onChange={(event) => {
-              setFindDraft(event.target.value);
-              setFindMiss(false);
-            }}
-            onKeyDown={(event) => {
-              if (event.key !== "Enter") return;
-              event.preventDefault();
-              jumpToText();
-            }}
-            className="max-w-[520px]"
-          />
-        }
-        control={
-          <Button type="button" size="lg" variant="outline" onClick={jumpToText}>
-            {intl.formatMessage({ id: "settings.desktopPetReaderFindAction" })}
-          </Button>
-        }
+      <DesktopPetReaderFileRows
+        path={readerPath}
+        onClear={() => {
+          remember({ readerPath: "" });
+          void update({ desktopPetReaderPath: "" });
+        }}
+        onPick={(file) => {
+          remember({ readerPath: file });
+          void update({ desktopPetReaderPath: file });
+        }}
       />
       <SettingsRow
         label={intl.formatMessage({ id: "settings.desktopPetReaderHotkeyMode" })}
@@ -384,6 +324,24 @@ export function DesktopPetSettings() {
         onAutoPageMs={(ms) => {
           remember({ readerAutoPageMs: ms });
           void update({ desktopPetReaderAutoPageMs: ms });
+        }}
+      />
+      <DesktopPetReaderTextRows
+        enabled={enabled}
+        fontSize={readerFontSize}
+        lineHeight={readerLineHeight}
+        letterSpacing={readerLetterSpacing}
+        onFontSize={(value) => {
+          remember({ readerFontSize: value });
+          void update({ desktopPetReaderFontSize: value });
+        }}
+        onLineHeight={(value) => {
+          remember({ readerLineHeight: value });
+          void update({ desktopPetReaderLineHeight: value });
+        }}
+        onLetterSpacing={(value) => {
+          remember({ readerLetterSpacing: value });
+          void update({ desktopPetReaderLetterSpacing: value });
         }}
       />
       <SettingsRow

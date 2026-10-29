@@ -1990,6 +1990,15 @@ const enUS: Record<string, string> = {
   "settings.desktopPetReaderAutoPageMs": "Page speed (ms per line)",
   "settings.desktopPetReaderAutoPageMsDescription":
     "How long each line stays put, from 200 to 20000. 1200 means one line every 1.2 seconds.",
+  "settings.desktopPetReaderFontSize": "Text size",
+  "settings.desktopPetReaderFontSizeDescription":
+    "Between {min} and {max}, 12px by default. The line height is currently {line}px. Only the reading bubble follows this; task reminders stay as they are.",
+  "settings.desktopPetReaderLineHeight": "Line spacing",
+  "settings.desktopPetReaderLineHeightDescription":
+    "A multiple of the text size, between {min} and {max}, 1.35 by default. Larger values spread the lines apart.",
+  "settings.desktopPetReaderLetterSpacing": "Letter spacing",
+  "settings.desktopPetReaderLetterSpacingDescription":
+    "Between {min} and {max} px, 0 by default. Wider spacing fits fewer characters per line.",
   "settings.desktopPetReaderHotkey": "Bubble shortcut",
   "settings.desktopPetReaderHotkeyDescription":
     "F9 by default. You can also use Ctrl+Alt+F2. PiCode reserves this key while it is running.",

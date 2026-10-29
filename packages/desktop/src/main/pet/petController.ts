@@ -16,17 +16,24 @@ import {
   buildLocalMediaPreviewUrl,
   DESKTOP_PET_AUTO_PAGE_MS_DEFAULT,
   DESKTOP_PET_DISPLAY_SCALE_DEFAULT,
+  DESKTOP_PET_READER_FONT_SIZE_DEFAULT,
+  DESKTOP_PET_READER_LETTER_SPACING_DEFAULT,
+  DESKTOP_PET_READER_LINE_HEIGHT_DEFAULT,
   desktopPetAutoPageMs,
   DESKTOP_PET_READER_HOTKEY_DEFAULT,
   desktopPetMoodSlot,
+  desktopPetReaderTextMetrics,
   mergeDesktopPetMoods,
   normalizeDesktopPetAutoPageMs,
   normalizeDesktopPetCropCharacter,
   normalizeDesktopPetDisplayScale,
   normalizeDesktopPetMood,
   normalizeDesktopPetReaderBubbleRect,
+  normalizeDesktopPetReaderFontSize,
   normalizeDesktopPetReaderHotkey,
   normalizeDesktopPetReaderHotkeyMode,
+  normalizeDesktopPetReaderLetterSpacing,
+  normalizeDesktopPetReaderLineHeight,
   normalizeDesktopPetStageCrop,
   type AppSettings,
   type DesktopPetInstalledPack,
@@ -113,6 +120,8 @@ interface PetManifest extends PetMenuSource {
     stageCrop: DesktopPetStageCrop | null;
     /** 按住模式下每行停留的毫秒数，0 表示不自动翻页。 */
     autoPageMs: number;
+    /** 摸鱼正文的排版尺寸（px）。消息提醒气泡不用这一套。 */
+    reader: { fontSize: number; lineHeight: number; letterSpacing: number };
   };
   size: number;
   fixed: boolean;
@@ -134,6 +143,9 @@ interface PetSettings {
   readerHotkeyMode: "toggle" | "hold";
   readerAutoPage: boolean;
   readerAutoPageMs: number;
+  readerFontSize: number;
+  readerLineHeight: number;
+  readerLetterSpacing: number;
 }
 
 let logger: PetLogger = { info: () => {}, warn: () => {} };
@@ -155,6 +167,9 @@ let settings: PetSettings = {
   readerHotkeyMode: "toggle",
   readerAutoPage: false,
   readerAutoPageMs: DESKTOP_PET_AUTO_PAGE_MS_DEFAULT,
+  readerFontSize: DESKTOP_PET_READER_FONT_SIZE_DEFAULT,
+  readerLineHeight: DESKTOP_PET_READER_LINE_HEIGHT_DEFAULT,
+  readerLetterSpacing: DESKTOP_PET_READER_LETTER_SPACING_DEFAULT,
 };
 let registeredHotkey = "";
 let holdProbe: KeyHeldProbe | null = null;
@@ -278,6 +293,21 @@ export function noteDesktopPetSettings(patch: Partial<AppSettings>, full = false
       : full
         ? DESKTOP_PET_AUTO_PAGE_MS_DEFAULT
         : settings.readerAutoPageMs,
+    readerFontSize: hasOwn(patch, "desktopPetReaderFontSize")
+      ? normalizeDesktopPetReaderFontSize(patch.desktopPetReaderFontSize)
+      : full
+        ? DESKTOP_PET_READER_FONT_SIZE_DEFAULT
+        : settings.readerFontSize,
+    readerLineHeight: hasOwn(patch, "desktopPetReaderLineHeight")
+      ? normalizeDesktopPetReaderLineHeight(patch.desktopPetReaderLineHeight)
+      : full
+        ? DESKTOP_PET_READER_LINE_HEIGHT_DEFAULT
+        : settings.readerLineHeight,
+    readerLetterSpacing: hasOwn(patch, "desktopPetReaderLetterSpacing")
+      ? normalizeDesktopPetReaderLetterSpacing(patch.desktopPetReaderLetterSpacing)
+      : full
+        ? DESKTOP_PET_READER_LETTER_SPACING_DEFAULT
+        : settings.readerLetterSpacing,
   };
   // 旧进程重写 setting.json 时会丢掉不认识的宠物字段。启动时如果读到的全是默认值，沿用 pets/settings.json。
   let chosen = next;
@@ -305,6 +335,11 @@ export function noteDesktopPetSettings(patch: Partial<AppSettings>, full = false
     chosen.readerAutoPage !== settings.readerAutoPage ||
     chosen.readerAutoPageMs !== settings.readerAutoPageMs ||
     chosen.readerHotkeyMode !== settings.readerHotkeyMode;
+  // 排版只改正文的度量，气泡矩形和窗口都不动，所以不重载页面，直接推给渲染端。
+  const textStyleChanged =
+    chosen.readerFontSize !== settings.readerFontSize ||
+    chosen.readerLineHeight !== settings.readerLineHeight ||
+    chosen.readerLetterSpacing !== settings.readerLetterSpacing;
   if (chosen.readerPath !== settings.readerPath) readerFile = null;
   settings = chosen;
   if (pendingRestore !== chosen) writePetSettingsFile(settings);
@@ -324,6 +359,7 @@ export function noteDesktopPetSettings(patch: Partial<AppSettings>, full = false
   }
   if (toneChanged) sendBubbleTone();
   if (autoPageChanged) sendAutoPage();
+  if (textStyleChanged) sendReaderStyle();
   if (readerChanged) syncReaderHotkey();
 }
 
@@ -839,6 +875,15 @@ function sendAutoPage(): void {
   petWindow.webContents.send(PET_COMMAND, { type: "read-auto", ms: autoPageMsFor(settings) });
 }
 
+/** 正文字号、行高、字间距变了：只改渲染端的度量，正文和阅读位置都留在原地。 */
+function sendReaderStyle(): void {
+  if (!petWindow || petWindow.isDestroyed()) return;
+  petWindow.webContents.send(PET_COMMAND, {
+    type: "read-style",
+    reader: desktopPetReaderTextMetrics(settings),
+  });
+}
+
 function stopHoldWatch(): void {
   if (holdTimer) clearInterval(holdTimer);
   holdTimer = null;
@@ -1155,7 +1200,10 @@ function isDefaultPetSettings(value: PetSettings): boolean {
     value.readerHotkey === DESKTOP_PET_READER_HOTKEY_DEFAULT &&
     value.readerHotkeyMode === "toggle" &&
     !value.readerAutoPage &&
-    value.readerAutoPageMs === DESKTOP_PET_AUTO_PAGE_MS_DEFAULT
+    value.readerAutoPageMs === DESKTOP_PET_AUTO_PAGE_MS_DEFAULT &&
+    value.readerFontSize === DESKTOP_PET_READER_FONT_SIZE_DEFAULT &&
+    value.readerLineHeight === DESKTOP_PET_READER_LINE_HEIGHT_DEFAULT &&
+    value.readerLetterSpacing === DESKTOP_PET_READER_LETTER_SPACING_DEFAULT
   );
 }
 
@@ -1176,6 +1224,9 @@ function readPetSettingsFile(): PetSettings | null {
       readerHotkeyMode?: unknown;
       readerAutoPage?: unknown;
       readerAutoPageMs?: unknown;
+      readerFontSize?: unknown;
+      readerLineHeight?: unknown;
+      readerLetterSpacing?: unknown;
     };
     // 旧文件把缺省键写成 F1，而且没有方式字段。升级后改成 F9，避免设置页还停在旧缺省。
     const legacyDefault = parsed.readerHotkeyMode == null && parsed.readerHotkey === "F1";
@@ -1195,6 +1246,9 @@ function readPetSettingsFile(): PetSettings | null {
       readerHotkeyMode: normalizeDesktopPetReaderHotkeyMode(parsed.readerHotkeyMode),
       readerAutoPage: parsed.readerAutoPage === true,
       readerAutoPageMs: normalizeDesktopPetAutoPageMs(parsed.readerAutoPageMs),
+      readerFontSize: normalizeDesktopPetReaderFontSize(parsed.readerFontSize),
+      readerLineHeight: normalizeDesktopPetReaderLineHeight(parsed.readerLineHeight),
+      readerLetterSpacing: normalizeDesktopPetReaderLetterSpacing(parsed.readerLetterSpacing),
     };
     if (legacyDefault) writePetSettingsFile(value);
     return value;
@@ -1387,6 +1441,7 @@ function toManifest(pack: PetPack): PetManifest {
       rect: settings.readerBubbleRect,
       stageCrop: settings.stageCrop,
       autoPageMs: autoPageMsFor(settings),
+      reader: desktopPetReaderTextMetrics(settings),
     },
     size: pack.size,
     fixed: pack.fixed,

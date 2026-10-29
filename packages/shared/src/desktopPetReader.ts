@@ -18,6 +18,12 @@ export interface DesktopPetPersistedSettings {
   readerAutoPage: boolean;
   /** 自动翻页时每行停留的毫秒数。 */
   readerAutoPageMs: number;
+  /** 摸鱼正文字号，10–20px。 */
+  readerFontSize: number;
+  /** 摸鱼正文行距，按字号的倍数记，1.2–2.0。 */
+  readerLineHeight: number;
+  /** 摸鱼正文字间距，0–4px。 */
+  readerLetterSpacing: number;
 }
 
 /** 自动翻页速率的上下限与缺省值，单位是每行停留的毫秒数。 */
@@ -162,6 +168,77 @@ export function normalizeDesktopPetAutoPageMs(value: unknown): number {
     DESKTOP_PET_AUTO_PAGE_MS_MAX,
     Math.max(DESKTOP_PET_AUTO_PAGE_MS_MIN, Math.round(ms)),
   );
+}
+
+/**
+ * 摸鱼正文的排版。字号和字间距是 px，行距是字号的倍数；
+ * 行高由字号乘行距取整，保证滚动和气泡高度都按整行走。
+ */
+export const DESKTOP_PET_READER_FONT_SIZE_MIN = 10;
+export const DESKTOP_PET_READER_FONT_SIZE_MAX = 20;
+export const DESKTOP_PET_READER_FONT_SIZE_DEFAULT = 12;
+export const DESKTOP_PET_READER_LINE_HEIGHT_MIN = 1.2;
+export const DESKTOP_PET_READER_LINE_HEIGHT_MAX = 2;
+/** 缺省行距乘出 12 × 1.35 ≈ 16px，和改版前的行高一致。 */
+export const DESKTOP_PET_READER_LINE_HEIGHT_DEFAULT = 1.35;
+export const DESKTOP_PET_READER_LETTER_SPACING_MIN = 0;
+export const DESKTOP_PET_READER_LETTER_SPACING_MAX = 4;
+export const DESKTOP_PET_READER_LETTER_SPACING_DEFAULT = 0;
+
+/** 读一个设置里的数字。空串、非数字都算认不出来。 */
+function petReaderNumber(value: unknown): number | null {
+  const text = typeof value === "string" ? value.trim() : value;
+  if (text === "" || text == null) return null;
+  const number = Number(text);
+  return Number.isFinite(number) ? number : null;
+}
+
+/** 正文字号。越界或认不出来就用 12px。 */
+export function normalizeDesktopPetReaderFontSize(value: unknown): number {
+  const size = petReaderNumber(value);
+  if (size === null) return DESKTOP_PET_READER_FONT_SIZE_DEFAULT;
+  return Math.min(
+    DESKTOP_PET_READER_FONT_SIZE_MAX,
+    Math.max(DESKTOP_PET_READER_FONT_SIZE_MIN, Math.round(size)),
+  );
+}
+
+/** 正文字距，按字号的倍数记。越界或认不出来就用缺省值。 */
+export function normalizeDesktopPetReaderLineHeight(value: unknown): number {
+  const ratio = petReaderNumber(value);
+  if (ratio === null) return DESKTOP_PET_READER_LINE_HEIGHT_DEFAULT;
+  const clamped = Math.min(
+    DESKTOP_PET_READER_LINE_HEIGHT_MAX,
+    Math.max(DESKTOP_PET_READER_LINE_HEIGHT_MIN, ratio),
+  );
+  return Math.round(clamped * 100) / 100;
+}
+
+/** 正文字间距（px）。认不出来就不断字。 */
+export function normalizeDesktopPetReaderLetterSpacing(value: unknown): number {
+  const spacing = petReaderNumber(value);
+  if (spacing === null) return DESKTOP_PET_READER_LETTER_SPACING_DEFAULT;
+  const clamped = Math.min(
+    DESKTOP_PET_READER_LETTER_SPACING_MAX,
+    Math.max(DESKTOP_PET_READER_LETTER_SPACING_MIN, spacing),
+  );
+  return Math.round(clamped * 10) / 10;
+}
+
+/** 正文实际用的排版尺寸（px）。行高按字号乘行距取整，滚动和吸附都按这个整行算。 */
+export function desktopPetReaderTextMetrics(value: {
+  readerFontSize: number;
+  readerLineHeight: number;
+  readerLetterSpacing: number;
+}): { fontSize: number; lineHeight: number; letterSpacing: number } {
+  const fontSize = normalizeDesktopPetReaderFontSize(value.readerFontSize);
+  const ratio = normalizeDesktopPetReaderLineHeight(value.readerLineHeight);
+  return {
+    fontSize,
+    // 行距下限 1.2，所以这里乘出来的行高不会小于字号。
+    lineHeight: Math.round(fontSize * ratio),
+    letterSpacing: normalizeDesktopPetReaderLetterSpacing(value.readerLetterSpacing),
+  };
 }
 
 /** 点击切换是按一下开、再按一下关。按住是松开才关。认不出来就用点击切换。 */

@@ -1357,6 +1357,9 @@ app.whenReady().then(async () => {
           desktopPetReaderHotkeyMode: restoredPetSettings.readerHotkeyMode,
           desktopPetReaderAutoPage: restoredPetSettings.readerAutoPage,
           desktopPetReaderAutoPageMs: restoredPetSettings.readerAutoPageMs,
+          desktopPetReaderFontSize: restoredPetSettings.readerFontSize,
+          desktopPetReaderLineHeight: restoredPetSettings.readerLineHeight,
+          desktopPetReaderLetterSpacing: restoredPetSettings.readerLetterSpacing,
         })
         .catch(() => undefined);
     }

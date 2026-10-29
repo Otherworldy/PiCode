@@ -1873,6 +1873,15 @@ const zhCN: Record<string, string> = {
   "settings.desktopPetReaderAutoPageMs": "翻页速率（毫秒/行）",
   "settings.desktopPetReaderAutoPageMsDescription":
     "每行停留多少毫秒，200 到 20000 之间。填 1200 就是每 1.2 秒往下走一行。",
+  "settings.desktopPetReaderFontSize": "正文字号",
+  "settings.desktopPetReaderFontSizeDescription":
+    "{min} 到 {max} 之间，缺省 12px。当前行高 {line}px。只作用摸鱼正文，消息提醒气泡不变。",
+  "settings.desktopPetReaderLineHeight": "行距",
+  "settings.desktopPetReaderLineHeightDescription":
+    "按字号的倍数记，{min} 到 {max} 之间，缺省 1.35。调大后行与行之间更松。",
+  "settings.desktopPetReaderLetterSpacing": "字间距",
+  "settings.desktopPetReaderLetterSpacingDescription":
+    "{min} 到 {max} px，缺省 0。调大后每行放的汉字会变少。",
   "settings.desktopPetReaderHotkey": "摸鱼快捷键",
   "settings.desktopPetReaderHotkeyDescription":
     "默认 F9。也可以写成 Ctrl+Alt+F2。PiCode 运行时会占住这个键。",

@@ -23,7 +23,14 @@ for (const dir of ["nw", "n", "ne", "e", "se", "s", "sw", "w"]) {
     (kind === "crop" ? cropHandles : bubbleHandles).push(handle);
   }
 }
-const LINE = ${PET_BUBBLE_LINE_HEIGHT};
+const LINE_DEFAULT = ${PET_BUBBLE_LINE_HEIGHT};
+// 摸鱼正文的排版：字号、行高、字间距都由主进程算好，传进来才生效。
+// 行高是滚动和气泡高度吸附的基准，所以单独存一份可变的 LINE。
+let readerStyle = Object.assign(
+  { fontSize: 12, lineHeight: LINE_DEFAULT, letterSpacing: 0 },
+  (geometry && geometry.reader) || {},
+);
+let LINE = Math.max(1, Number(readerStyle.lineHeight) || LINE_DEFAULT);
 const PADDING_Y = ${PET_BUBBLE_PADDING_Y};
 const MIN_LINES = 2;
 const MIN_WIDTH = 160;
@@ -32,6 +39,15 @@ let wheelAcc = 0;
 
 function novelMaxScroll() {
   return Math.max(0, bubble.scrollHeight - bubble.clientHeight);
+}
+function applyReaderStyle(next) {
+  if (next) readerStyle = Object.assign(readerStyle, next);
+  LINE = Math.max(1, Number(readerStyle.lineHeight) || LINE_DEFAULT);
+  bubble.style.setProperty("--pet-reader-font", Number(readerStyle.fontSize) + "px");
+  bubble.style.setProperty("--pet-reader-line", LINE + "px");
+  bubble.style.setProperty("--pet-reader-gap", Number(readerStyle.letterSpacing) + "px");
+  // 换字号会重排，滚动位置回到整行，免得停在新行高的半行上。
+  if (bubble.dataset.mode === "read") bubble.scrollTop = Math.round(bubble.scrollTop / LINE) * LINE;
 }
 // 滚一格正好一行，且总是停在行边界上：不会露半行，也不会一下冲掉整屏。
 // 已经到头才翻页。
@@ -239,6 +255,7 @@ window.pet?.onCommand((command) => {
     autoPageWait = false;
     syncAutoPage();
   }
+  if (command && command.type === "read-style") applyReaderStyle(command.reader);
   if (command && command.type === "read-hide") {
     if (editBase) return;
     if (novel) window.pet?.send({ type: "read-scroll", top: bubble.scrollTop || novel.top || 0 });
@@ -257,6 +274,7 @@ window.pet?.onCommand((command) => {
   }
 });
 applyFacing();
+applyReaderStyle();
 const first = nextChain();
 play(first.clip, first.kind);
 `;

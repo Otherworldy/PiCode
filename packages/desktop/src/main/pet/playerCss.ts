@@ -2,7 +2,7 @@ import { PET_BUBBLE_LINE_HEIGHT, PET_BUBBLE_PADDING_Y } from "./petBubble.js";
 
 /**
  * 宠物透明窗口的页面样式。角色舞台和气泡都按窗口布局定位，位置由 JS 写进 style。
- * 气泡正文区高度是行高的整数倍，滚动按整行走，不会露半行。
+ * 气泡正文区高度在编辑保存时按行高吸附，滚动按整行走，不会露半行。
  */
 export const PET_PLAYER_CSS = `
   html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
@@ -12,6 +12,10 @@ export const PET_PLAYER_CSS = `
     border-radius: 10px;
     background: rgba(20, 20, 20, 0.88); color: white;
     font: 12px/${PET_BUBBLE_LINE_HEIGHT}px sans-serif;
+    /* 摸鱼正文自己的排版，由页面按设置写到这三个变量上。 */
+    --pet-reader-font: 12px;
+    --pet-reader-line: ${PET_BUBBLE_LINE_HEIGHT}px;
+    --pet-reader-gap: 0px;
     cursor: pointer; display: none;
   }
   #bubble[data-tone="light"] {
@@ -20,6 +24,8 @@ export const PET_PLAYER_CSS = `
   }
   #bubble[data-mode="read"] {
     overflow-y: auto; white-space: pre-wrap; word-break: break-word; scrollbar-width: none;
+    font-size: var(--pet-reader-font); line-height: var(--pet-reader-line);
+    letter-spacing: var(--pet-reader-gap);
   }
   #bubble[data-mode="read"]::-webkit-scrollbar { width: 0; height: 0; }
   #stage { position: absolute; overflow: hidden; }
