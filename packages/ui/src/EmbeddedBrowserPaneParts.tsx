@@ -39,7 +39,6 @@ import {
   type BrowserGuestFailure,
   type BrowserState,
 } from "@/embeddedBrowserHelpers.js";
-import { runUserAction } from "@/lib/userActionTelemetry.js";
 
 export function BrowserToolbar({
   addressValue,
@@ -74,14 +73,7 @@ export function BrowserToolbar({
 }) {
   return (
     <form
-      onSubmit={(event) =>
-        runUserAction({
-          input: { featureId: "workbench.browser", action: "navigate", trigger: "keyboard" },
-          operation: () => onSubmit(event),
-          completed: { resultSource: "optimistic_projection" },
-          failureStage: "browser_navigate",
-        })
-      }
+      onSubmit={(event) => onSubmit(event)}
       className="flex items-center h-12 px-3 gap-2"
     >
       <BrowserIconButton

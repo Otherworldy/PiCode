@@ -6,7 +6,6 @@ import { Textarea } from "@/components/ui/textarea.js";
 import { toast } from "@/components/ui/toast.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
-import { runUserActionAsync } from "@/lib/userActionTelemetry.js";
 
 const PROMPT_TEXTAREA_CLASS =
   "field-sizing-fixed h-[30rem] max-h-[30rem] min-h-[30rem] w-full resize-none overflow-y-auto rounded-lg border border-input-border bg-input font-mono text-ui-base whitespace-pre-wrap break-words hover:border-input-border-hover focus-visible:border-input-border-focused focus-visible:bg-input-focused focus-visible:ring-0";
@@ -72,23 +71,11 @@ export function AgentSystemPromptField({
     if (!dirty || saving) return;
     setSaving(true);
     try {
-      const result = await runUserActionAsync({
-        input: {
-          featureId: "settings.systemPrompt",
-          action:
-            kind === "append"
-              ? scope === "global"
-                ? "save_system_global_append"
-                : "save_system_project_append"
-              : scope === "global"
-                ? "save_system_global"
-                : "save_system_project",
-          trigger: "button",
-        },
-        operation: () =>
-          fileServiceRef.current.writeAgentSystemPrompt({ scope, rootPath, kind, content: draft }),
-        completed: { resultSource: "platform_result" },
-        failureStage: "settings_commit",
+      const result = await fileServiceRef.current.writeAgentSystemPrompt({
+        scope,
+        rootPath,
+        kind,
+        content: draft,
       });
       setDraft(result.content);
       setSaved(result.content);

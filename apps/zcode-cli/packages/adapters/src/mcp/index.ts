@@ -93,7 +93,6 @@ import {
 import { terminateMcpStdioProcessTree } from "./process-tree.js";
 import { McpResourceSubscriptionRegistry } from "./resource-subscriptions.js";
 import { ProcessTreeStdioClientTransport } from "./stdio-transport.js";
-import type { McpTelemetryTracker } from "./telemetry.js";
 import {
   createMcpDeadline,
   McpTimeoutError,
@@ -114,13 +113,17 @@ const MCP_STDIO_STDERR_LOG_MAX_CHARS = 4_000;
  */
 const MAX_TRACKED_SERVER_REQUEST_IDS = 64;
 
+import type { McpProcessRegistry } from "./process-registry.js";
+import { resolvePluginName } from "./process-registry.js";
+
 export interface CreateMcpAdapterOptions {
   clientName?: string;
+  /** 进程归属注册表：stdio 子进程 pid 交给桌面 Host 资源管理器归到 server/插件名下。 */
+  processRegistry?: McpProcessRegistry;
   clientVersion?: string;
   connectionContext?: McpConnectionContext;
   env?: NodeJS.ProcessEnv;
   logger?: Logger;
-  telemetry?: McpTelemetryTracker;
   mcpOAuth?: McpOAuthRuntimeOptions;
   network?: NetworkEgressEnvPolicy;
   /**
@@ -211,7 +214,6 @@ export function createMcpAdapterConnectionPool(
 ): McpConnectionPool {
   return createMcpConnectionPool({
     logger: options.logger,
-    telemetry: options.telemetry,
     createAdapter: ({ connectionContext, workingDirectory }) =>
       createMcpAdapter({
         ...options,
@@ -227,11 +229,13 @@ export {
   type McpConnectionPoolOptions,
 } from "./pool.js";
 export {
-  createMcpTelemetryTracker,
+  createMcpProcessRegistry,
   resolvePluginName,
-  type McpTelemetryTracker,
+  type McpProcessRegistry,
+  type McpProcessSource,
   type McpTrackedProcess,
-} from "./telemetry.js";
+} from "./process-registry.js";
+
 
 /** elicitation 模式白名单（MCP form 与 兼容别名）。 */
 const SUPPORTED_ELICITATION_MODES = new Set(["form", "openai/form", "openaiForm"]);
@@ -249,7 +253,6 @@ class NodeMcpAdapter implements McpPort {
   private readonly mcpOAuth?: McpOAuthRuntimeOptions;
   private readonly network?: NetworkEgressEnvPolicy;
   private readonly officialMcpAuth?: CreateMcpAdapterOptions["officialMcpAuth"];
-  private readonly telemetry?: McpTelemetryTracker;
   private readonly connectionGenerations = new Map<string, number>();
   private credentialStore?: SharedZCodeCredentialStore;
   /**
@@ -283,6 +286,7 @@ class NodeMcpAdapter implements McpPort {
   private toolListRevisionCounter = 0;
   /** 每个 server 当前正在执行的工具调用 trace；elicitation 借此归属到会话 / 工具行。 */
   private readonly activeCallTraces = new Map<string, McpElicitationTrace>();
+  private readonly processRegistry?: McpProcessRegistry;
 
   constructor(options: CreateMcpAdapterOptions) {
     this.clientName = options.clientName ?? "zcode";
@@ -296,10 +300,10 @@ class NodeMcpAdapter implements McpPort {
     this.mcpOAuth = options.mcpOAuth;
     this.network = options.network;
     this.officialMcpAuth = options.officialMcpAuth;
-    this.telemetry = options.telemetry;
     this.workingDirectory = options.workingDirectory;
     this.elicitation = options.elicitation;
     this.notifications = options.notifications;
+    this.processRegistry = options.processRegistry;
   }
 
   async connectConfiguredServers(
@@ -1606,13 +1610,10 @@ class NodeMcpAdapter implements McpPort {
       // A3：重连（同一 adapter 实例）后按登记表重放订阅；首次连接登记表为空，直接跳过。
       await this.replayResourceSubscriptions(name, client);
       const mcpTransportPid = getStdioTransportPid(transport);
-      const mcpProcessIdentity =
-        mcpTransportPid != null && this.connectionContext
-          ? this.telemetry?.recordProcessStarted({
-              connectionId: this.connectionContext.mcpConnectionId,
-              pid: mcpTransportPid,
-            })
-          : undefined;
+      if (mcpTransportPid != null) {
+        const connectionId = this.connectionContext?.mcpConnectionId;
+        if (connectionId) this.processRegistry?.recordProcessStarted({ connectionId, pid: mcpTransportPid });
+      }
       // stdio MCP 子进程死亡（如 node_repl 被 REPL cell 的异步错误击穿）不能完全
       // 静默——不记日志、状态停留在 connected，后续调用只会抛裸的 "Not connected"。
       // 挂 onclose 把意外断连显式化；主动关闭路径会先清掉 onclose（见 closeClientAndTransport）。
@@ -1632,7 +1633,6 @@ class NodeMcpAdapter implements McpPort {
           event: "mcp.server.connection_lost",
           mcpServerName: name,
           ...(mcpTransportPid != null ? { mcpTransportPid } : {}),
-          ...(mcpProcessIdentity ?? {}),
           ...(processExit
             ? { exitCode: processExit.exitCode, signal: processExit.signal ?? undefined }
             : {}),
@@ -1640,17 +1640,6 @@ class NodeMcpAdapter implements McpPort {
           transport: current.config.type,
           ...(recentStderr ? { stderr: recentStderr } : {}),
         });
-        if (
-          current.config.type === "stdio" &&
-          this.connectionContext &&
-          (processExit || !isStdioTransportProcessAlive(transport))
-        ) {
-          this.telemetry?.recordProcessCrashed({
-            connectionId: this.connectionContext.mcpConnectionId,
-            exitCode: processExit?.exitCode ?? null,
-            signal: processExit?.signal ?? null,
-          });
-        }
       };
       // 此前连接日志只记录 transport，auto 协商后无法判断实际走 modern 还是 legacy。
       // 同时记录配置策略和 SDK 握手结果，避免把 `auto` 误当成最终协议版本。
@@ -1667,7 +1656,6 @@ class NodeMcpAdapter implements McpPort {
         mcpProtocolEra: negotiatedProtocolEra ?? "unknown",
         mcpProtocolVersion: negotiatedProtocolVersion ?? "unknown",
         mcpServerName: name,
-        ...(mcpProcessIdentity ?? {}),
         ...(mcpTransportPid != null ? { mcpTransportPid } : {}),
         mcpVersionNegotiationMode: formatVersionNegotiationMode(config),
         status: "completed",
@@ -2167,9 +2155,7 @@ class NodeMcpAdapter implements McpPort {
       transport instanceof ProcessTreeStdioClientTransport &&
       !transport.processAlive
     ) {
-      this.telemetry?.recordProcessClosed({
-        connectionId: this.connectionContext.mcpConnectionId,
-      });
+      // 进程已退出：下面的 info 日志与状态收口照旧，无需额外记录。
     }
     this.logger?.info("MCP server closed", {
       ...this.connectionContext,

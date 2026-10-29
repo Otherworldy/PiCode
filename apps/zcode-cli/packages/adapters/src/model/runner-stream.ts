@@ -83,7 +83,7 @@ import {
   modelFailureStatusFields,
   providerRequestIdFromHeaders,
   readModelFailureErrorPhase,
-} from "./runner-telemetry.js";
+} from "./model-error-attribution.js";
 import { repairReasoningHistoryAfterSignatureRejection } from "./reasoning-history-normalization.js";
 
 type StreamFailurePhase = "request_setup" | "response_body";

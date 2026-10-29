@@ -28,7 +28,6 @@ import type {
   SessionPhase,
 } from "@zcode/shared/zcode-protocol-v4";
 import { cn } from "@/components/lib/utils.js";
-import { runUserAction } from "@/lib/userActionTelemetry.js";
 import { Button } from "@/components/ui/button.js";
 import { ChatLoading } from "@/components/ai-elements/chat-loading.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -152,14 +151,7 @@ function ConversationBackToBottomButton({
       variant="outline"
       className={cn("rounded-full bg-card hover:bg-card-selected", className)}
       data-testid={TID_V4_TIMELINE_BOTTOM}
-      onClick={() =>
-        runUserAction({
-          input: { featureId: "conversation.navigation", action: "jump_bottom", trigger: "button" },
-          operation: onClick,
-          completed: { resultSource: "local_commit" },
-          failureStage: "timeline_scroll",
-        })
-      }
+      onClick={onClick}
     >
       <ArrowDownIcon className="size-4" />
     </Button>

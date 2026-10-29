@@ -112,7 +112,6 @@ export class NodeExecutionAdapterRun extends NodeExecutionAdapterProcess {
     let timeoutTimer: NodeJS.Timeout | undefined;
     const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     let finishExit: (state: ExitState) => void = () => undefined;
-    let finishResourceTelemetry: (state: ExitState) => void = () => undefined;
     // timeout 计时器在 spawn 后才启动（见下），spawn 前的停止只可能来自取消或 adapter 关闭。
     const createPreSpawnStoppedResult = () =>
       this.createStoppedResult(
@@ -207,10 +206,6 @@ export class NodeExecutionAdapterRun extends NodeExecutionAdapterProcess {
         prepared.spawnOptions,
       );
       child = spawnedChild;
-      finishResourceTelemetry = this.trackBashResources(spawnedChild, useBashMergedOutput, () => ({
-        timedOut,
-        killed: cancelled || outputLimitExceeded,
-      }));
       cwdDialect = prepared.cwdDialect;
       cwdFilePath = prepared.cwdFilePath;
 
@@ -218,7 +213,6 @@ export class NodeExecutionAdapterRun extends NodeExecutionAdapterProcess {
         finishExit = (state) => {
           if (exited) return;
           exited = true;
-          finishResourceTelemetry(state);
           file?.stopWatching();
           if (file) internalOptions.bashLifecycle?.onExit?.();
           resolve(state);
@@ -384,7 +378,6 @@ export class NodeExecutionAdapterRun extends NodeExecutionAdapterProcess {
       return result;
     } finally {
       if (!exited)
-        finishResourceTelemetry({ error: new Error("Execution ended before child exit") });
       executionSettled = true;
       file?.stopWatching();
       if (internalOptions.bashLifecycle) internalOptions.bashLifecycle.onBackgrounded = undefined;

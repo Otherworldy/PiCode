@@ -24,10 +24,6 @@ import {
 import type { MainToSchedulerMessage, SchedulerToMainMessage } from "./schedulerProtocol.js";
 import { settleManualClaimForDispatchResult } from "./manualClaimRelease.js";
 import { settleOffPeakDispatchResult } from "./offPeakDispatchSettlement.js";
-import {
-  startSchedulerResourceTelemetry,
-  type SchedulerResourceTelemetry,
-} from "./schedulerResourceTelemetry.js";
 
 /** 轮询间隔：cron 最小粒度是分钟，20s 轮询足以按时命中且开销低。 */
 const POLL_INTERVAL_MS = 20_000;
@@ -62,8 +58,6 @@ let tickRequested = false;
 let schedulerReady = false;
 let disposed = false;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
-/** 资源遥测：本进程唯一的自采定时器。 */
-let resourceTelemetry: SchedulerResourceTelemetry | null = null;
 
 function log(level: "info" | "warn" | "error", message: string): void {
   const msg: SchedulerToMainMessage = { type: "scheduler-log", level, message };
@@ -339,8 +333,6 @@ async function dispose(): Promise<void> {
   disposed = true;
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = null;
-  resourceTelemetry?.stop();
-  resourceTelemetry = null;
   // 释放本进程仍在途的认领，避免下次启动等到 CLAIM_STALE 才回收。
   for (const [, context] of inFlight) {
     try {
@@ -441,10 +433,6 @@ async function main(): Promise<void> {
   log("info", "cron scheduler started");
   requestTick();
   pollTimer = setInterval(requestTick, POLL_INTERVAL_MS);
-  // 资源遥测：60 秒自采一次 CPU / 内存发给 main（heap 只有本进程读得到）。
-  resourceTelemetry = startSchedulerResourceTelemetry({
-    postMessage: (message) => parentPort?.postMessage(message),
-  });
 }
 
 void main().catch((error) => {

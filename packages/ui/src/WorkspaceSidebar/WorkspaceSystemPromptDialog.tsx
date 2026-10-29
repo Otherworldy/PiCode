@@ -15,7 +15,6 @@ import { toast } from "@/components/ui/toast.js";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
-import { runUserActionAsync } from "@/lib/userActionTelemetry.js";
 import {
   SETTINGS_SEGMENTED_TABS_LIST_CLASS,
   SETTINGS_SEGMENTED_TABS_TRIGGER_CLASS,
@@ -180,21 +179,11 @@ export function WorkspaceSystemPromptDialog({
     const content = text.draft;
     setSaving(true);
     try {
-      const result = await runUserActionAsync({
-        input: {
-          featureId: "settings.systemPrompt",
-          action: kind === "append" ? "save_system_project_append" : "save_system_project",
-          trigger: "button",
-        },
-        operation: () =>
-          fileServiceRef.current.writeAgentSystemPrompt({
-            scope: "project",
-            rootPath: workspacePath,
-            kind,
-            content,
-          }),
-        completed: { resultSource: "platform_result" },
-        failureStage: "settings_commit",
+      const result = await fileServiceRef.current.writeAgentSystemPrompt({
+        scope: "project",
+        rootPath: workspacePath,
+        kind,
+        content,
       });
       const next = {
         path: result.path,

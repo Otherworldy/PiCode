@@ -50,7 +50,6 @@ export * from "./model/image-media.js";
 export * from "./model/media-policy.js";
 
 // Telemetry
-export * from "./telemetry/index.js";
 
 // Errors
 export * from "./errors/index.js";
@@ -100,7 +99,7 @@ export {
   VIDEO_INPUT_MAX_BYTES,
 } from "@zcode/shared";
 
-export * from "./tracing/local-turn-preparation.js";
-export type { LocalTtftDetail } from "@zcode/shared";
+
+export * from "./model/apiCall.js";
 
 export * from "./interfaces/permission-full-access.js";

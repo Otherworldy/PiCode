@@ -20,7 +20,7 @@ interface BuildTaskContextUsageUpdateParams {
 
 /**
  * 已经上报过 usage 的任务键。key 由 workspace + taskId 组成，随打开过的任务增长，
- * 原来没有删除点 —— 对齐同目录 planUsageArmsTelemetry 的容量淘汰写法。
+ * 原来没有删除点 —— 这里补一个定长容量淘汰，避免长会话内存无界增长。
  */
 const MAX_TASK_CONTEXT_USAGE_KEYS = 2000;
 const taskContextUsageUpdateKeys = new Set<string>();

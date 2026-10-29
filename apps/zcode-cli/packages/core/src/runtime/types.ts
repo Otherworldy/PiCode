@@ -3,8 +3,6 @@ import type { RuntimeInputPresentation } from "@zcode/contracts";
 import { PermissionService, ToolScheduler } from "./deps.js";
 import type {
   JsonSchema,
-  AgentExecutionTelemetryPort,
-  AgentTelemetryCausation,
   BackgroundResultOriginMeta,
   ContextUsageBreakdownItem,
   CoordinatorResponsePort,
@@ -314,9 +312,6 @@ export interface MemoryRuntimeConfig {
 }
 
 export interface AgentRuntimeDeps {
-  agentTelemetry?: AgentExecutionTelemetryPort;
-  agentTelemetryCausation?: AgentTelemetryCausation;
-  agentTelemetryCausationMode?: "child" | "linked_root";
   appVersion?: string;
   eventStore: SessionEventStorePort;
   sessionStore?: SessionStorePort;

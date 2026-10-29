@@ -795,7 +795,7 @@ export class ZCodeProtocolAgentServer {
       case zcodeProtocolMethods.workflowsMove:
         return await moveSavedWorkflowOp(this.context, request.params);
       case zcodeProtocolMethods.processChildProcesses:
-        return listChildProcesses(this.context.deps.mcpTelemetry?.listProcesses() ?? []);
+        return listChildProcesses(this.context.deps.mcpProcessRegistry?.listProcesses() ?? []);
       case zcodeProtocolMethods.runtimeCapabilities: {
         await ensurePiSdk();
         return { independentPlanState: true, piSdk: getPiSdkStatus() };

@@ -53,7 +53,7 @@ import type {
 } from "./runner-runtime.js";
 import { resolveModelForAttempt, RuntimeHeadersRefreshError } from "./runner-runtime-headers.js";
 import { retryAllowedByFailurePolicy } from "./workflow-model-failure-policy.js";
-import { modelFailureStatusFields, providerRequestIdFromHeaders } from "./runner-telemetry.js";
+import { modelFailureStatusFields, providerRequestIdFromHeaders } from "./model-error-attribution.js";
 import { repairReasoningHistoryAfterSignatureRejection } from "./reasoning-history-normalization.js";
 import { admitAttempt, type AttemptAdmission } from "./request-admission.js";
 import {

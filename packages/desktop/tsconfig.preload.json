@@ -5,6 +5,6 @@
     "rootDir": "src",
     "lib": ["es2025", "dom"]
   },
-  "include": ["src/preload", "src/shared/armsRumBridgeForward.ts"],
+  "include": ["src/preload"],
   "references": [{ "path": "../shared" }]
 }

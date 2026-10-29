@@ -17,10 +17,6 @@ import type {
   ModelSelection,
   ZCodeSessionImportHistory,
   ZCodePermissionRequestParams,
-  AgentLaneResourceSample,
-  ZCodeMcpTelemetryEvent,
-  ZCodeMcpResourceSample,
-  ZCodeToolExecResource,
   ZCodeProcessChildProcess,
   ZCodeMcpListResult,
   ZCodePluginsListResult,
@@ -87,9 +83,9 @@ import type {
   CommandKey,
   CommandsQueryResult,
   ConversationTopicWireCandidate,
-  ConversationTelemetryFact,
   CuaPermissionObservation,
   ConversationRowTarget,
+  TurnLifecycleFact,
   HelloMessage,
   SessionsIndexTopicWireCandidate,
   V4AttachmentBeginResult,
@@ -801,18 +797,6 @@ export interface IZCodeAgentService {
   ): Promise<void>;
   onDynamicSessionRuntimePreferencesRequest(): Event<ZCodeAgentSessionRuntimePreferencesRequest>;
   /**
-   * CLI 进程级资源样本，带 services 打的 lane 标签（CLI 自己不知道 lane）。
-   * 使用 dynamic event 避免 RPC 服务在无人订阅时缓冲周期事件；
-   * 该事件不属于 session/conversation continuous 或 replayable 状态。
-   */
-  onDynamicProcessResourceSample(): Event<AgentLaneResourceSample>;
-  /** MCP 进程生命周期与低频内存事件，仅供可信 Host relay 上报 ARMS。 */
-  onDynamicMcpTelemetry(): Event<ZCodeMcpTelemetryEvent>;
-  /** MCP 进程树资源事实，只供可信 Host 汇总上报。 */
-  onDynamicMcpResourceSamples(): Event<ZCodeMcpResourceSample[]>;
-  /** Bash 完成事实，仅可信 Host 资源旁路订阅。 */
-  onDynamicToolExecResource(): Event<ZCodeToolExecResource>;
-  /**
    * @deprecated 旧协议订阅面（session/subscribe + session/event + state.updated）。
    * task-index syncer 已迁 v4 sessions-index/workspace-config 帧；
    * 仅剩 zcodeTaskServiceAdapter.onDynamicTaskEvent（replayable 读路径）消费。
@@ -901,15 +885,15 @@ export interface IZCodeAgentService {
   onDynamicConversationFrame(
     params: ZCodeAgentWorkspaceTarget,
   ): Event<ConversationTopicWireCandidate>;
-  /** workspace 级 live telemetry 事实；connection facade 仅向可信 desktop-continuous 下游暴露。 */
-  onDynamicLocalTtftFacts(
-    params: ZCodeAgentWorkspaceTarget,
-  ): Event<import("@zcode/shared").LocalTtftFacts>;
-  onDynamicConversationTelemetryFact(
-    params: ZCodeAgentWorkspaceTarget,
-  ): Event<ConversationTelemetryFact>;
   /** 当前窗口全部本地 live task 的 CUA 权限观察；历史、远程与 replayable 不在此事件面。 */
   onDynamicCuaPermissionObservation(): Event<ZCodeAgentCuaPermissionObservation>;
+  /**
+   * workspace 级轮次起止事实。
+   *
+   * 功能信号：server supervisor 据此统计运行中会话数并阻止带任务的更新 / 卸载。
+   * 只由可信 Host relay 消费，不进入 continuous / replayable 会话消息面。
+   */
+  onDynamicTurnLifecycle(params: ZCodeAgentWorkspaceTarget): Event<TurnLifecycleFact>;
   // ── sessions-index 通道（列表活性）──
   subscribeSessionsIndexV4(
     params: ZCodeAgentSessionsIndexSubscribeParams,

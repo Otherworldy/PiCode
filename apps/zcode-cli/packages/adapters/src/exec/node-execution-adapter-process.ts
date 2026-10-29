@@ -1,6 +1,5 @@
 import { spawn, type ChildProcess, type StdioOptions } from "node:child_process";
 import { applyBashSourcesToExecutionRequest } from "./bash-startup-script.js";
-import { createBashResourceTelemetry } from "./bash-resource-telemetry.js";
 import { createCwdCapturePlan } from "./cwd-capture.js";
 import {
   applyResolvedShellCommand,
@@ -34,30 +33,6 @@ import type {
 import type { ExecutionRequest, ExecutionRunOptions } from "@zcode/contracts";
 
 export class NodeExecutionAdapterProcess extends NodeExecutionAdapterResults {
-  protected trackBashResources(
-    child: ChildProcess,
-    isBash: boolean,
-    stopState: () => { timedOut: boolean; killed: boolean },
-  ): (state: ExitState) => void {
-    if (!isBash || !this.options.onToolExecResource) return () => {};
-    const telemetry = createBashResourceTelemetry({
-      platform: this.platform,
-      processGroupId: child.pid,
-      onComplete: this.options.onToolExecResource,
-    });
-    return (state) => {
-      const stop = stopState();
-      telemetry.finish(
-        stop.timedOut
-          ? "timeout"
-          : stop.killed || state.signal
-            ? "killed"
-            : state.error
-              ? "error"
-              : "completed",
-      );
-    };
-  }
 
   protected async prepareChildSpawn(request: ExecutionRequest): Promise<PreparedChildSpawn> {
     const env = buildExecutionEnv(request.env, {

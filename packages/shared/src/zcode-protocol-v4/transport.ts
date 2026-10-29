@@ -1,4 +1,3 @@
-import { localTtftFactsSchema } from "../localTtft.js";
 /* eslint-disable max-lines -- 三个 topic 的 logical/physical/candidate schema 必须共享同一通用传输声明，避免跨文件分叉。 */
 // 传输外壳：连接握手 / 订阅 / 帧信封。
 // 阶段为类型占位（后半接通道层时启用），数据形状已按规范定稿。
@@ -192,10 +191,6 @@ export const conversationTopicFrameSchema = createTopicFrameSchema(
   conversationSnapshotSchema,
   conversationDeltaSchema,
 )
-  .extend({
-    ttft: localTtftFactsSchema.optional(),
-    ttftRelated: z.array(localTtftFactsSchema).max(16).optional(),
-  })
   .superRefine((frame, context) => {
     if (!frame.topic.startsWith("conversation/") || frame.topic.length === "conversation/".length) {
       context.addIssue({ code: "custom", message: "invalid conversation topic", path: ["topic"] });
@@ -407,11 +402,10 @@ export const v4ConnectionFlowResultSchema = z.object({}).strict();
 export const V4_NOTIFICATIONS = {
   // 下行帧（snapshot / deltas），params = ConversationTopicFrame。
   conversationFrame: "v4/conversation/frame",
-  // 仅 live ingest 的无正文事实；不进入 topic snapshot/recovery。
-  conversationTelemetryFact: "v4/telemetry/event",
-  localTtftFacts: "v4/telemetry/local-ttft",
   // 仅当前进程 live ToolCallResult 产生；历史与 replayable 链路不得补造。
   cuaPermissionObservation: "v4/cua/permission-observation",
+  // 轮次起止事实：供 server supervisor 统计运行中会话数并阻止带任务的更新 / 卸载。
+  turnLifecycle: "v4/turn/lifecycle",
 } as const;
 
 /** 3.3.6 SSH 历史任务归属证明与 sessions-index 冷种子共享同一有界窗口。 */

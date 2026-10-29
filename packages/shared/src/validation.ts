@@ -1,13 +1,11 @@
 import { databaseStartupControlSchema, databaseStartupStateSchema } from "./database-startup.js";
 import { mcpAppInstanceSchema } from "./mcp-apps/instance.js";
-import { automationSessionCreateTelemetrySchema } from "./sessionCreateTelemetry.js";
 /* eslint-disable max-lines -- 运行时 schema 当前集中在共享包入口，外部 relay payload 校验加入后先保持单一导出面。 */
 import { z } from "zod";
 import { browserCommandSchema } from "./browser-use/commands.js";
 import { browserCommandResultSchema } from "./browser-use/result.js";
 import { modelSelectionSchema } from "./model-selection.js";
 import { zcodeProcessDiagnosticSchema } from "./process-diagnostic.js";
-import { PROCESS_RESOURCE_CLI_LANES } from "./processResourceTelemetry.js";
 import { providerProvisioningTriggerSchema } from "./provider-provisioning.js";
 import { zcodeProviderSchema } from "./providers.js";
 import { REMOTE_ASSET_INSTALL_MODES } from "./remoteAssetInstallMode.js";
@@ -28,12 +26,6 @@ import {
 import { wslUserSchema } from "./wslUserValidation.js";
 import { zcodeAgentProviderSchema } from "./zcode-agent-policy.js";
 import { errorAttributionSchema } from "./zcode-protocol-v4/snapshot.js";
-import {
-  zcodeMcpResourceSamplesSchema,
-  zcodeMcpTelemetryEventSchema,
-  zcodeProcessResourceSampleSchema,
-  zcodeToolExecResourceSchema,
-} from "./zcode-protocol/index.js";
 import { zcodeTaskModeSchema } from "./zcode-task-mode-schema.js";
 
 export {
@@ -124,33 +116,6 @@ export const taskNotificationPayloadSchema = z.object({
   requestId: nonEmptyStringSchema.optional(),
   title: z.string(),
   body: z.string(),
-});
-
-export const telemetryRendererContextSchema = z.object({
-  clientTimezone: nonEmptyStringSchema,
-  clientLanguage: nonEmptyStringSchema,
-  screenResolution: nonEmptyStringSchema,
-});
-
-export const rendererTelemetryEventPayloadSchema = z.object({
-  context: telemetryRendererContextSchema,
-  elementName: nonEmptyStringSchema,
-  eventRegion: nonEmptyStringSchema,
-  eventType: nonEmptyStringSchema,
-  eventText: z.string().optional(),
-  eventExtraDetail: z.record(z.string(), z.string()),
-  userId: z.string().optional(),
-  talkId: z.string().optional(),
-  messageId: z.string().optional(),
-});
-
-export const armsCustomEventPayloadSchema = z.object({
-  name: nonEmptyStringSchema,
-  group: nonEmptyStringSchema,
-  value: z.number().finite().optional(),
-  properties: z
-    .record(z.string(), z.union([z.string(), z.number().finite(), z.boolean(), z.undefined()]))
-    .optional(),
 });
 
 export const broadcastMessageSchema = z.object({
@@ -664,110 +629,6 @@ export type HostAgentProcessExceptionResponse = z.infer<
   typeof hostAgentProcessExceptionResponseSchema
 >;
 
-/**
- * services 打标后的 CLI 资源样本。
- *
- * `lane` 不是 CLI 协议字段：CLI 进程不知道自己被哪个进程管理器拉起，由 services 层在解析
- * 协议样本时按所属进程管理器补上。样本自身仍按 CLI 协议 schema 严格校验，因此 CLI 自报 lane
- * 会被协议层直接拒绝。`lane` 可选是为了兼容版本落后、还没打标的远端 server。
- */
-export const processResourceCliLaneSchema = z.enum(PROCESS_RESOURCE_CLI_LANES);
-export const agentLaneResourceSampleSchema = zcodeProcessResourceSampleSchema
-  .extend({ lane: processResourceCliLaneSchema.optional() })
-  .strict();
-export type AgentLaneResourceSample = z.infer<typeof agentLaneResourceSampleSchema>;
-
-/** Host 仅传运行环境的 SHA-256 哈希，避免原始主机、用户或 URL 进入消息与日志。 */
-const resourceTelemetryEnvironmentKeySchema = z.string().regex(/^[a-f0-9]{64}$/);
-
-export const hostAgentResourceSampleResponseSchema = z
-  .object({
-    type: z.literal("agent-resource-sample"),
-    runtimeSurface: z.enum(["local", "remote"]),
-    environmentKey: resourceTelemetryEnvironmentKeySchema.optional(),
-    sample: agentLaneResourceSampleSchema,
-  })
-  .strict();
-export type HostAgentResourceSampleResponse = z.infer<typeof hostAgentResourceSampleResponseSchema>;
-
-/**
- * Node 进程（host / scheduler）每 60 秒自采的瞬时事实
- *
- * 只带这三项：CPU 与 RSS 由 main 的 `getAppMetrics()` 负责，heap 只有进程自己读得到。
- */
-export const nodeSelfResourceSampleSchema = z
-  .object({
-    /**
-     * 整机归一化 CPU 百分比，100 表示所有逻辑核占满。
-     * 上限刻意放宽（与 CLI 的 `zcodeProcessResourceSampleSchema` 同口径）：读数异常时宁可让
-     * 样本带着离谱数值上去、由平台侧数值异常规则暴露，也不在客户端静默丢样本。
-     */
-    cpuPercent: z.number().finite().nonnegative().max(100_000),
-    rssKb: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER),
-    heapUsedKb: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER),
-  })
-  .strict();
-export type NodeSelfResourceSample = z.infer<typeof nodeSelfResourceSampleSchema>;
-
-/**
- * 主窗口 renderer 每 60 秒经 preload 桥送 main 的 heap 读数
- *
- * 只带 heap：renderer 的 CPU 与 RSS 由 main 的 `getAppMetrics()` 负责，
- * renderer 自己也读不到。`strict` 保证 UI 侧不会顺手夹带路径、session 等隐私字段。
- */
-export const rendererHeapSampleSchema = z
-  .object({
-    heapUsedKb: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER),
-  })
-  .strict();
-export type RendererHeapSample = z.infer<typeof rendererHeapSampleSchema>;
-
-export const hostResourceSampleResponseSchema = z
-  .object({
-    type: z.literal("host-resource-sample"),
-    sample: nodeSelfResourceSampleSchema,
-  })
-  .strict();
-export type HostResourceSampleResponse = z.infer<typeof hostResourceSampleResponseSchema>;
-
-export const hostMcpResourceSamplesResponseSchema = z
-  .object({
-    type: z.literal("mcp-resource-samples"),
-    runtimeSurface: z.enum(["local", "remote"]),
-    environmentKey: resourceTelemetryEnvironmentKeySchema.optional(),
-    samples: zcodeMcpResourceSamplesSchema,
-  })
-  .strict();
-export type HostMcpResourceSamplesResponse = z.infer<typeof hostMcpResourceSamplesResponseSchema>;
-
-export const hostToolExecResourceResponseSchema = z
-  .object({
-    type: z.literal("tool-exec-resource"),
-    runtimeSurface: z.enum(["local", "remote"]),
-    sample: zcodeToolExecResourceSchema,
-  })
-  .strict();
-export type HostToolExecResourceResponse = z.infer<typeof hostToolExecResourceResponseSchema>;
-
-export const hostMcpTelemetryResponseSchema = z
-  .object({
-    type: z.literal("mcp-telemetry"),
-    runtimeSurface: z.enum(["local", "remote"]),
-    event: zcodeMcpTelemetryEventSchema,
-  })
-  .strict();
-export type HostMcpTelemetryResponse = z.infer<typeof hostMcpTelemetryResponseSchema>;
-
-export const hostSessionCreateTelemetryResponseSchema = z
-  .object({
-    type: z.literal("session-create-telemetry"),
-    event: automationSessionCreateTelemetrySchema,
-  })
-  .strict();
-export type HostSessionCreateTelemetryResponse = z.infer<
-  typeof hostSessionCreateTelemetryResponseSchema
->;
-
 export const hostAgentRunningTaskCountChangedResponseSchema = z.object({
   type: z.literal("agent-running-task-count-changed"),
   runningTaskCount: z.number().int().nonnegative(),
@@ -998,26 +859,6 @@ export const hostPluginSandboxRegisterRequestResponseSchema = z
     "Invalid sandbox provenance",
   );
 
-export const networkObservationSchema = z.object({
-  transport: z.enum(["http", "websocket", "rpc"]),
-  interface: z.string(),
-  durationMs: z.number(),
-  ok: z.boolean(),
-  statusCode: z.number().optional(),
-  errorKind: z.string().optional(),
-  attempt: z.number().int().positive().optional(),
-  dnsMs: z.number().optional(),
-  tcpMs: z.number().optional(),
-  tlsMs: z.number().optional(),
-  ttfbMs: z.number().optional(),
-  downloadMs: z.number().optional(),
-});
-
-export const hostNetworkTelemetryBatchResponseSchema = z.object({
-  type: z.literal("network-telemetry-batch"),
-  observations: z.array(networkObservationSchema).max(500),
-});
-
 export const hostProviderProvisioningSourceChangedResponseSchema = z
   .object({
     type: z.literal("provider-provisioning-source-changed"),
@@ -1074,12 +915,6 @@ export const hostResponseMessageSchema = z.discriminatedUnion("type", [
   hostAgentProcessExitedResponseSchema,
   hostAgentProcessErrorResponseSchema,
   hostAgentProcessExceptionResponseSchema,
-  hostAgentResourceSampleResponseSchema,
-  hostResourceSampleResponseSchema,
-  hostMcpTelemetryResponseSchema,
-  hostMcpResourceSamplesResponseSchema,
-  hostToolExecResourceResponseSchema,
-  hostSessionCreateTelemetryResponseSchema,
   hostAgentRunningTaskCountChangedResponseSchema,
   hostWorkspaceRunningTaskCountChangedResponseSchema,
   hostCuaOperationStateResponseSchema,
@@ -1103,7 +938,6 @@ export const hostResponseMessageSchema = z.discriminatedUnion("type", [
   hostBrowserExecuteRequestResponseSchema,
   hostLocalMediaPreviewPathAuthorizeRequestResponseSchema,
   hostPluginSandboxRegisterRequestResponseSchema,
-  hostNetworkTelemetryBatchResponseSchema,
   hostProviderProvisioningSourceChangedResponseSchema,
   hostProviderProvisioningExecutionResultResponseSchema,
   hostCronRunResultResponseSchema,

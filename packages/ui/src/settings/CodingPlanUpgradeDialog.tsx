@@ -138,7 +138,6 @@ export function CodingPlanUpgradeDialog({
       onOpenResult={onOpenResult}
       credentialService={credentialService}
       providerId={providerId}
-      funnelContext={target.funnelContext}
       audience={target.initialAudience}
       teamPlanKey={target.initialTeamPlanKey}
       onPurchaseComplete={handlePurchaseComplete}

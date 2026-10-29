@@ -1,4 +1,3 @@
-import { beginLocalTurnPreparation } from "@zcode/contracts";
 import {
   CompactTrigger,
   CoreErrorType,
@@ -99,35 +98,7 @@ export async function runModelBackedTurnStep(
   },
 ): Promise<ModelStepResult> {
   const assistantMessageId = createMessageId();
-  const stepTelemetry = this.agentTelemetry.step({
-    stepId: assistantMessageId,
-    stepIndex: state.modelStepCount,
-  });
-  return stepTelemetry.run(async () => {
-    try {
-      const result = await runModelBackedTurnStepImpl.call(
-        this,
-        state,
-        options,
-        assistantMessageId,
-      );
-      stepTelemetry.finishCompleted(
-        result === "output_continuation"
-          ? "model_completed"
-          : result === "continue"
-            ? "tool_requested"
-            : "turn_completed",
-      );
-      return result;
-    } catch (error) {
-      if (isTurnCancellationError(error, state.turnAbortSignal)) {
-        stepTelemetry.finishCancelled("abort_signal");
-      } else {
-        stepTelemetry.finishFailed("unhandled", "unknown", error);
-      }
-      throw error;
-    }
-  });
+  return runModelBackedTurnStepImpl.call(this, state, options, assistantMessageId);
 }
 
 async function runModelBackedTurnStepImpl(
@@ -171,7 +142,6 @@ async function runModelBackedTurnStepImpl(
     modelStepCount: state.modelStepCount,
     traceContext: modelTraceContext,
   });
-  const finishPersistence = beginLocalTurnPreparation(modelTraceContext, "persistence");
   await this.persistAssistantMessage(
     assistantMessageId,
     state.currentUserMessageId,
@@ -205,7 +175,6 @@ async function runModelBackedTurnStepImpl(
   );
   await this.appendEvent(modelRequestEvent, modelTraceContext);
   state.events.push(modelRequestEvent);
-  finishPersistence();
   const streamingToolCoordinator = createStreamingToolCoordinator(this, state, {
     assistantMessageId,
     model,

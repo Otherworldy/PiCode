@@ -8,7 +8,6 @@ import {
   ZAI_PROVIDER_ID,
 } from "@zcode/shared";
 import type { CodingPlanWebviewLocale } from "@zcode/shared";
-import type { CodingPlanFunnelContext } from "@/lib/codingPlanFunnelTelemetry.js";
 import type { CodingPlanProviderId } from "@/settings/model-provider-section/constants.js";
 
 type CodingPlanWebsiteProvider = "zai" | "bigmodel";
@@ -21,17 +20,6 @@ export interface CodingPlanEmbeddedCredentials {
 }
 
 interface CodingPlanEmbeddedReportContext {
-  purchase_funnel_id?: string;
-  purchase_entry_reporter?: "app";
-  upgrade_source?: string;
-  event_region?: string;
-  event_text?: string;
-  entry_plan_status?: string;
-  entry_plan_level?: string;
-  entry_plan_list?: string;
-  purchase_audience?: string;
-  provider_family?: string;
-  channel?: string;
   device_mid?: string;
   user_id?: string;
   app_version?: string;
@@ -222,29 +210,15 @@ export function createCodingPlanAuthInjectionScript({
 }
 
 export function buildCodingPlanEmbeddedReportContext({
-  funnelContext,
   deviceMid,
   userId,
   appVersion,
 }: {
-  funnelContext?: CodingPlanFunnelContext | null;
   deviceMid?: string | null;
   userId?: string | null;
   appVersion?: string | null;
 }): CodingPlanEmbeddedReportContext {
   return normalizeCodingPlanEmbeddedReportContext({
-    purchase_funnel_id: funnelContext?.purchaseFunnelId,
-    // 缺少归属标记会让兼容官网重复上报入口；无漏斗时不能声明 App 已接管。
-    purchase_entry_reporter: funnelContext ? "app" : undefined,
-    upgrade_source: funnelContext?.upgradeSource,
-    event_region: funnelContext?.eventRegion,
-    event_text: funnelContext?.eventText,
-    entry_plan_status: funnelContext?.entryPlanStatus,
-    entry_plan_level: funnelContext?.entryPlanLevel,
-    entry_plan_list: funnelContext?.entryPlanList,
-    purchase_audience: funnelContext?.purchaseAudience,
-    provider_family: funnelContext?.providerFamily,
-    channel: funnelContext?.channel,
     device_mid: deviceMid ?? undefined,
     user_id: userId ?? undefined,
     app_version: appVersion ?? undefined,

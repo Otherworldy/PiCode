@@ -27,11 +27,6 @@ import {
   isMaxCodingPlanSnapshot,
   resolveSidebarCodingPlanUpgradeFallbackProviderId,
 } from "@/lib/sidebarCodingPlanUpgrade.js";
-import {
-  createCodingPlanFunnelContext,
-  resolveCodingPlanEntryPlanState,
-  type CodingPlanFunnelContext,
-} from "@/lib/codingPlanFunnelTelemetry.js";
 import { type SidebarUsageCodingPlanProviderId } from "@/lib/sidebarUsageCodingPlanProviderPreference.js";
 import { useEnterpriseCodingPlanProducts } from "@/settings/model-provider-section/useEnterpriseCodingPlanProducts.js";
 import {
@@ -62,10 +57,7 @@ export function WorkspaceSidebarFooterUsageSummary({
 }: {
   enabled: boolean;
   onUsageClick?: () => void;
-  onUpgradeClick?: (
-    providerId: SidebarUsageCodingPlanProviderId,
-    funnelContext: CodingPlanFunnelContext,
-  ) => void;
+  onUpgradeClick?: (providerId: SidebarUsageCodingPlanProviderId) => void;
   workspaceIdentity?: string;
   workspacePath?: string;
 }) {
@@ -422,10 +414,7 @@ export function WorkspaceSidebarFooterUsageSummaryContent({
 }: {
   state: WorkspaceSidebarFooterUsageSummaryState;
   onUsageClick?: () => void;
-  onUpgradeClick?: (
-    providerId: SidebarUsageCodingPlanProviderId,
-    funnelContext: CodingPlanFunnelContext,
-  ) => void;
+  onUpgradeClick?: (providerId: SidebarUsageCodingPlanProviderId) => void;
 }) {
   const { intl } = useZCodeIntl();
   const entryGate = useCodingPlanEntryGate();
@@ -460,18 +449,7 @@ export function WorkspaceSidebarFooterUsageSummaryContent({
             entryGate.retry?.();
             return;
           }
-          onUpgradeClick?.(
-            upgradeTargetProviderId,
-            createCodingPlanFunnelContext({
-              providerId: upgradeTargetProviderId,
-              upgradeSource: "profile_menu",
-              eventRegion: "app.profile",
-              eventText: intl.formatMessage({ id: upgradeActionLabelId }),
-              entryPlanState: resolveCodingPlanEntryPlanState({
-                snapshot: upgradeProviderSnapshot,
-              }),
-            }),
-          );
+          onUpgradeClick?.(upgradeTargetProviderId);
         }}
       >
         <RocketIcon className="size-4" />

@@ -46,8 +46,7 @@ import type {
 } from "../model/index.js";
 import { createModelUsageSummary } from "../model/index.js";
 import type { CheckpointCreatedPayload, RewindTriggeredPayload } from "../rewind/index.js";
-import type { SkillTelemetryMetadata } from "../skills/index.js";
-import type { ModelApiErrorPhase, ModelFailureExceptionKind } from "../telemetry/index.js";
+import type { ModelApiErrorPhase, ModelFailureExceptionKind } from "../model/apiCall.js";
 import type { ToolSideEffectScope } from "../tools/contract.js";
 import type { SavedWorkflowScope } from "../tools/saved-workflow.js";
 import type { GoalCompletionVerificationOutput, SessionGoal } from "../tools/target.js";
@@ -874,15 +873,11 @@ export interface ToolCallResultPayload {
   toolCallId: ToolCallId;
   result: ToolResultPayload;
   duration: number;
-  /** Skill metadata 仅用于 telemetry，不进入模型可见的 result.content。 */
-  skillMetadata?: SkillTelemetryMetadata;
 }
 
 export interface ToolCallErrorPayload {
   toolCallId: ToolCallId;
   error: ErrorPayload;
-  /** Skill metadata 仅用于 telemetry，不进入模型可见的错误正文。 */
-  skillMetadata?: SkillTelemetryMetadata;
 }
 
 export interface ToolBatchCompletePayload {

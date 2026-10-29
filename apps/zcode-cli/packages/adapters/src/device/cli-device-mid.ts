@@ -9,12 +9,12 @@ const LOCK_RETRY_COUNT = 200;
 const LOCK_STALE_MS = 5 * 60 * 1000;
 const ZCODE_DATA_BASE_DIR_ENV_KEY = "ZCODE_DATA_BASE_DIR";
 
-interface TelemetryState {
+interface DeviceMidState {
   deviceMid?: unknown;
   [key: string]: unknown;
 }
 
-interface TelemetryLockOwner {
+interface DeviceMidLockOwner {
   createdAt: number;
   pid: number;
 }
@@ -33,7 +33,7 @@ const deviceMidCacheByStateFile = new Map<string, Promise<string>>();
  * 文件系统异常不阻断模型请求；同一进程会继续使用首次生成的 fallback UUID。
  */
 export function ensureCliDeviceMid(options: EnsureCliDeviceMidOptions = {}): Promise<string> {
-  const stateFile = resolveCliTelemetryStateFile(options);
+  const stateFile = resolveCliDeviceMidStateFile(options);
   const cached = deviceMidCacheByStateFile.get(stateFile);
   if (cached) {
     return cached;
@@ -53,7 +53,7 @@ export function ensureCliDeviceMid(options: EnsureCliDeviceMidOptions = {}): Pro
   return pending;
 }
 
-function resolveCliTelemetryStateFile(options: EnsureCliDeviceMidOptions): string {
+function resolveCliDeviceMidStateFile(options: EnsureCliDeviceMidOptions): string {
   const env = options.env ?? process.env;
   const configuredBaseDir =
     options.baseDir ?? env[ZCODE_DATA_BASE_DIR_ENV_KEY]?.trim() ?? homedir();
@@ -70,7 +70,7 @@ async function ensurePersistedDeviceMid(input: {
     return existingDeviceMid;
   }
 
-  return withTelemetryStateLock(input.stateFile, async (state) => {
+  return withDeviceMidStateLock(input.stateFile, async (state) => {
     const lockedExistingDeviceMid = readDeviceMid(state);
     if (lockedExistingDeviceMid) {
       return lockedExistingDeviceMid;
@@ -78,22 +78,22 @@ async function ensurePersistedDeviceMid(input: {
 
     const deviceMid = input.getGeneratedDeviceMid();
     state.deviceMid = deviceMid;
-    await writeTelemetryState(input.stateFile, state);
+    await writeDeviceMidState(input.stateFile, state);
     return deviceMid;
   });
 }
 
 async function readExistingDeviceMid(stateFile: string): Promise<string | undefined> {
-  return readDeviceMid(await readTelemetryState(stateFile));
+  return readDeviceMid(await readDeviceMidState(stateFile));
 }
 
-function readDeviceMid(state: TelemetryState): string | undefined {
+function readDeviceMid(state: DeviceMidState): string | undefined {
   return typeof state.deviceMid === "string" && state.deviceMid.length > 0
     ? state.deviceMid
     : undefined;
 }
 
-async function readTelemetryState(stateFile: string): Promise<TelemetryState> {
+async function readDeviceMidState(stateFile: string): Promise<DeviceMidState> {
   try {
     const parsed = JSON.parse(await readFile(stateFile, "utf-8")) as unknown;
     return isRecord(parsed) ? parsed : {};
@@ -102,7 +102,7 @@ async function readTelemetryState(stateFile: string): Promise<TelemetryState> {
   }
 }
 
-async function writeTelemetryState(stateFile: string, state: TelemetryState): Promise<void> {
+async function writeDeviceMidState(stateFile: string, state: DeviceMidState): Promise<void> {
   const directory = dirname(stateFile);
   await mkdir(directory, { recursive: true });
   const tempFile = join(
@@ -121,9 +121,9 @@ async function writeTelemetryState(stateFile: string, state: TelemetryState): Pr
   }
 }
 
-async function withTelemetryStateLock<T>(
+async function withDeviceMidStateLock<T>(
   stateFile: string,
-  run: (state: TelemetryState) => Promise<T>,
+  run: (state: DeviceMidState) => Promise<T>,
 ): Promise<T> {
   const lockFile = join(dirname(stateFile), "telemetry-state.lock");
   await mkdir(dirname(lockFile), { recursive: true });
@@ -139,7 +139,7 @@ async function withTelemetryStateLock<T>(
           }),
           "utf-8",
         );
-        return await run(await readTelemetryState(stateFile));
+        return await run(await readDeviceMidState(stateFile));
       } finally {
         await handle.close();
         await unlink(lockFile).catch(() => undefined);
@@ -148,24 +148,24 @@ async function withTelemetryStateLock<T>(
       if (!isNodeErrorCode(error, "EEXIST")) {
         throw error;
       }
-      if (await removeStaleTelemetryLockIfNeeded(lockFile, Date.now())) {
+      if (await removeStaleDeviceMidLockIfNeeded(lockFile, Date.now())) {
         continue;
       }
       await sleep(LOCK_RETRY_DELAY_MS);
     }
   }
 
-  throw new Error("CLI telemetry state lock timeout");
+  throw new Error("CLI device identity state lock timeout");
 }
 
-async function removeStaleTelemetryLockIfNeeded(
+async function removeStaleDeviceMidLockIfNeeded(
   lockFile: string,
   timestamp: number,
 ): Promise<boolean> {
   try {
     const metadata = await stat(lockFile);
     if (timestamp - metadata.mtimeMs < LOCK_STALE_MS) {
-      const owner = await readTelemetryLockOwner(lockFile);
+      const owner = await readDeviceMidLockOwner(lockFile);
       if (!owner || isProcessAlive(owner.pid)) {
         return false;
       }
@@ -178,7 +178,7 @@ async function removeStaleTelemetryLockIfNeeded(
   }
 }
 
-async function readTelemetryLockOwner(lockFile: string): Promise<TelemetryLockOwner | null> {
+async function readDeviceMidLockOwner(lockFile: string): Promise<DeviceMidLockOwner | null> {
   try {
     const parsed = JSON.parse(await readFile(lockFile, "utf-8")) as unknown;
     if (

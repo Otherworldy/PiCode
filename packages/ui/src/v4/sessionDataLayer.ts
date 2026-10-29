@@ -5,17 +5,19 @@
 // Map<workspaceKey, SessionDataLayer>，本层不感知 workspace。
 import { ConversationProjectionStore } from "@/v4/conversationProjectionStore.js";
 import { shouldExposeE2EStoreBridge } from "@/lib/e2eStoreBridge.js";
-import type { SessionOpenKind } from "@/lib/sessionOpenArmsTelemetry.js";
 import { conversationTopic, type ConversationTransport } from "@/v4/transport.js";
 import { logger } from "@/logger.js";
 import type { CommandsQueryParams, CommandsQueryResult } from "@zcode/shared/zcode-protocol-v4";
+
+/** 会话租约命中状态：cold = 新订阅，warm = 引用未断，keep_warm = 空闲池保活命中。 */
+type SessionLeaseOpenKind = "cold" | "warm" | "keep_warm";
 
 /** pane 持有的租约；release 幂等。 */
 export interface SessionLease {
   readonly sessionId: string;
   readonly store: ConversationProjectionStore;
   /** 由数据层按 projection 生命周期判定，避免 pane 首次 render 时 snapshot 仍为空。 */
-  readonly openKind: SessionOpenKind;
+  readonly openKind: SessionLeaseOpenKind;
   /** pane acquire 的 Renderer 单调时钟起点。 */
   readonly startedAt: number;
   release(): void;
@@ -84,7 +86,7 @@ export class SessionDataLayer {
     const topic = conversationTopic(sessionId);
     const startedAt = monotonicNow();
     let entry = this.entries.get(topic);
-    let openKind: SessionOpenKind;
+    let openKind: SessionLeaseOpenKind;
     if (entry) {
       openKind = entry.keepWarmTimer !== null ? "keep_warm" : "warm";
       entry.refCount++;
@@ -106,7 +108,6 @@ export class SessionDataLayer {
       // 不能现读 entry.keepWarmTimer：命中分支在上面已经把它清成 null 了。
       keepWarm: openKind === "keep_warm",
       module: "ui.v4.session_data_layer",
-      openKind,
       refCount: entry.refCount,
       sessionId,
       status: "completed",

@@ -18,7 +18,6 @@ import { toast } from "@/components/ui/toast.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
-import { startUserAction } from "@/lib/userActionTelemetry.js";
 import { SettingsGroupCard, SettingsRow } from "@/settings/SettingsPageParts.js";
 import { formatImportSummary } from "./browserImportSummary.js";
 
@@ -91,20 +90,13 @@ export function BrowserSettingsSection({
   const handleImport = useCallback(async () => {
     if (!platform.importChromeBrowserData) return;
     setPendingOperation("import");
-    const trace = startUserAction({
-      featureId: "settings.browser",
-      action: "import_browser_data",
-      trigger: "button",
-    });
     try {
       const result = await platform.importChromeBrowserData();
-      trace.complete({ resultSource: "platform_result" });
       setLastImportResult(result);
       toast(formatImportSummary(result, intl.formatMessage), {
         durationMs: 5000,
       });
     } catch (error) {
-      trace.fail({ failureStage: "browser_data_import" });
       logger.error("[browser-settings] 导入 Chrome 数据失败", {
         error: error instanceof Error ? error.message : String(error),
       });
@@ -118,14 +110,8 @@ export function BrowserSettingsSection({
     async (mode: "cache" | "all") => {
       if (!platform.clearEmbeddedBrowserData) return;
       setPendingOperation(mode === "cache" ? "clear-cache" : "clear-all");
-      const trace = startUserAction({
-        featureId: "settings.browser",
-        action: mode === "cache" ? "clear_cache" : "clear_all_data",
-        trigger: "button",
-      });
       try {
         const result = await platform.clearEmbeddedBrowserData(mode);
-        trace.complete({ resultSource: "platform_result" });
         toast(
           intl.formatMessage({
             id: result.success
@@ -136,7 +122,6 @@ export function BrowserSettingsSection({
           }),
         );
       } catch (error) {
-        trace.fail({ failureStage: "browser_data_clear" });
         logger.error("[browser-settings] 清理内置浏览器数据失败", {
           error: error instanceof Error ? error.message : String(error),
           mode,

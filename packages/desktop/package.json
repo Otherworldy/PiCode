@@ -27,7 +27,6 @@
     "lint:fix": "oxlint --fix"
   },
   "dependencies": {
-    "@arms/rum-electron": "^0.0.3",
     "@babel/runtime": "^7.24.5",
     "@fiahfy/icns": "^0.0.7",
     "@larksuiteoapi/node-sdk": "1.61.1",
@@ -36,12 +35,6 @@
     "@modelcontextprotocol/client": "2.0.0",
     "@modelcontextprotocol/core": "2.0.0",
     "@modelcontextprotocol/ext-apps": "2.0.0",
-    "@opentelemetry/api": "1.9.1",
-    "@opentelemetry/exporter-metrics-otlp-proto": "0.214.0",
-    "@opentelemetry/exporter-trace-otlp-proto": "0.214.0",
-    "@opentelemetry/resources": "2.6.1",
-    "@opentelemetry/sdk-metrics": "2.6.1",
-    "@opentelemetry/sdk-trace-base": "2.6.1",
     "@zcode/client": "workspace:*",
     "@zcode/provider": "workspace:*",
     "@zcode/provider-node": "workspace:*",

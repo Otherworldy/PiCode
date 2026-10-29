@@ -47,7 +47,6 @@ import {
   type RemoteWorkspaceSessionEntry,
   type WorkspacePurpose,
 } from "@zcode/shared";
-import { runUserAction, runUserActionAsync } from "@/lib/userActionTelemetry.js";
 export {
   getScratchWorkspaceLocationHint,
   getScratchWorkspaceNameErrorKind,
@@ -289,16 +288,7 @@ export function ChatEmptyWorkspacePreviewMenu({
             data-testid={TID_COMPOSER_PROJECT_DETACH}
             onClick={(event) => {
               event.stopPropagation();
-              void runUserActionAsync({
-                input: {
-                  featureId: "workspace.project_binding",
-                  action: "detach",
-                  trigger: "button",
-                },
-                operation: () => Promise.resolve(onSelectConversationWorkspace()),
-                completed: { resultSource: "optimistic_projection" },
-                failureStage: "project_detach",
-              });
+              void Promise.resolve(onSelectConversationWorkspace());
             }}
           >
             <X className="size-3.5" />
@@ -374,19 +364,7 @@ export function ChatEmptyWorkspacePreviewMenu({
                   workspaceIdentity,
                 })}
                 onSelect={() => {
-                  runUserAction({
-                    input: {
-                      featureId: isConversationWorkspace
-                        ? "workspace.project_binding"
-                        : "workspace.local.lifecycle",
-                      action: isConversationWorkspace ? "attach" : "switch",
-                      trigger: "menu",
-                      workspaceKind: isRemoteWorkspace ? "remote" : "local",
-                    },
-                    operation: () => onSelectWorkspace(workspaceTab),
-                    completed: { resultSource: "local_commit" },
-                    failureStage: "workspace_switch",
-                  });
+                  onSelectWorkspace(workspaceTab);
                 }}
               >
                 <WorkspaceIcon className="size-4 text-foreground-subtle" />
@@ -416,17 +394,7 @@ export function ChatEmptyWorkspacePreviewMenu({
                 logger.info(
                   `[ChatEmptyWorkspacePreviewMenu] open remote dialog from workspace menu workspace=${workspacePath}`,
                 );
-                runUserAction({
-                  input: {
-                    featureId: "workspace.remote.lifecycle",
-                    action: "open_dialog",
-                    trigger: "menu",
-                    workspaceKind: "remote",
-                  },
-                  operation: () => setSshDialogOpen(true),
-                  completed: { resultSource: "local_commit" },
-                  failureStage: "dialog_open",
-                });
+                setSshDialogOpen(true);
               }}
             >
               <Cloud className="size-4 text-foreground-subtle" />
@@ -438,16 +406,7 @@ export function ChatEmptyWorkspacePreviewMenu({
               data-testid={TID_COMPOSER_WORK_OUTSIDE_PROJECT}
               checked={isConversationWorkspace}
               onSelect={() =>
-                void runUserActionAsync({
-                  input: {
-                    featureId: "workspace.project_binding",
-                    action: "work_outside_project",
-                    trigger: "menu",
-                  },
-                  operation: () => Promise.resolve(onSelectConversationWorkspace()),
-                  completed: { resultSource: "optimistic_projection" },
-                  failureStage: "project_detach",
-                })
+                void Promise.resolve(onSelectConversationWorkspace())
               }
             >
               <MessageCircle className="size-4 text-foreground-subtle" />

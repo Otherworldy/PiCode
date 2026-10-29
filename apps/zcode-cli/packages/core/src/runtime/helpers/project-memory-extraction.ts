@@ -94,16 +94,16 @@ export async function drainMemoryExtractions(
 
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
-    await Promise.race([
-      scheduler.drain(),
-      new Promise<void>((resolve) => {
-        timeout = setTimeout(resolve, timeoutMs);
-        timeout.unref?.();
-      }),
-    ]);
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
+  await Promise.race([
+    scheduler.drain(),
+    new Promise<void>((resolve) => {
+      timeout = setTimeout(resolve, timeoutMs);
+      timeout.unref?.();
+    }),
+  ]);
+} finally {
+  if (timeout) clearTimeout(timeout);
+}
 }
 
 async function executeProjectMemoryExtraction(
@@ -114,63 +114,48 @@ async function executeProjectMemoryExtraction(
     snapshot: ProjectMemoryExtractionSnapshot;
   },
 ) {
-  const telemetry = runtime.agentTelemetry.detached({
-    causation: input.snapshot.causation,
-    executionKind: "background",
-    operation: "project_memory_extract",
-    targetKind: "project_memory",
-    traceContext: input.snapshot.traceContext,
-    trigger: "scheduler",
-  });
-
-  return telemetry.run(async () => {
-    try {
-      const manifest = await scanMemoryManifest({
-        fileSystem: runtime.fileSystemPort!,
-        rootDir: input.snapshot.memoryRoot,
-        signal: input.abortSignal,
-      });
-      if (input.abortSignal.aborted) {
-        telemetry.finishCancelled("abort_signal");
-        return "aborted" as const;
-      }
-      const prompt = buildMemoryExtractionPrompt({
-        manifest,
-        messageCount: input.messageCount,
-      });
-      const providerMessages = buildProjectMemoryAgentProviderMessages(
-        runtime,
-        input.snapshot,
-        prompt,
-      );
-      const executor = createProjectMemoryAgentToolExecutor(runtime, input.snapshot);
-
-      await runMemoryAgentLoop({
-        abortSignal: input.abortSignal,
-        executeTool: (toolCall, options) =>
-          executor.execute(toolCall, {
-            signal: options.abortSignal,
-            traceContext: input.snapshot.traceContext,
-          }),
-        maxTurns: EXTRACTION_MAX_TURNS,
-        messages: providerMessages,
-        model: input.snapshot.model,
-        rootDir: input.snapshot.memoryRoot,
-        tools: input.snapshot.tools,
-        workingDirectory: input.snapshot.workingDirectory,
-        workspaceRoot: input.snapshot.workspaceRoot,
-      });
-      telemetry.finishCompleted();
-      return "success" as const;
-    } catch (error) {
-      if (input.abortSignal.aborted || isAbortError(error)) {
-        telemetry.finishCancelled("abort_signal");
-        return "aborted" as const;
-      }
-      telemetry.finishFailed("execute", "internal", error);
-      return "error" as const;
+  try {
+    const manifest = await scanMemoryManifest({
+      fileSystem: runtime.fileSystemPort!,
+      rootDir: input.snapshot.memoryRoot,
+      signal: input.abortSignal,
+    });
+    if (input.abortSignal.aborted) {
+      return "aborted" as const;
     }
-  });
+    const prompt = buildMemoryExtractionPrompt({
+      manifest,
+      messageCount: input.messageCount,
+    });
+    const providerMessages = buildProjectMemoryAgentProviderMessages(
+      runtime,
+      input.snapshot,
+      prompt,
+    );
+    const executor = createProjectMemoryAgentToolExecutor(runtime, input.snapshot);
+
+    await runMemoryAgentLoop({
+      abortSignal: input.abortSignal,
+      executeTool: (toolCall, options) =>
+        executor.execute(toolCall, {
+          signal: options.abortSignal,
+          traceContext: input.snapshot.traceContext,
+        }),
+      maxTurns: EXTRACTION_MAX_TURNS,
+      messages: providerMessages,
+      model: input.snapshot.model,
+      rootDir: input.snapshot.memoryRoot,
+      tools: input.snapshot.tools,
+      workingDirectory: input.snapshot.workingDirectory,
+      workspaceRoot: input.snapshot.workspaceRoot,
+    });
+    return "success" as const;
+  } catch (error) {
+    if (input.abortSignal.aborted || isAbortError(error)) {
+      return "aborted" as const;
+    }
+    return "error" as const;
+  }
 }
 
 function isAbortError(error: unknown): boolean {

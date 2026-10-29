@@ -8,7 +8,6 @@ import { toast } from "@/components/ui/toast.js";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
-import { runUserActionAsync } from "@/lib/userActionTelemetry.js";
 import { cn } from "@/components/lib/utils.js";
 
 type PromptFileService = Pick<
@@ -136,21 +135,11 @@ export function SystemPromptEditor({
     if (!selected || !dirty || saving) return;
     setSaving(true);
     try {
-      const result = await runUserActionAsync({
-        input: {
-          featureId: "settings.systemPrompt",
-          action: scope === "global" ? "save_global" : "save_project",
-          trigger: "button",
-        },
-        operation: () =>
-          fileServiceRef.current.writeAgentPrompt({
-            scope,
-            rootPath,
-            name: selected,
-            content: draft,
-          }),
-        completed: { resultSource: "platform_result" },
-        failureStage: "settings_commit",
+      const result = await fileServiceRef.current.writeAgentPrompt({
+        scope,
+        rootPath,
+        name: selected,
+        content: draft,
       });
       setDraft(draft);
       setSaved(draft);
@@ -214,17 +203,7 @@ export function SystemPromptEditor({
     if (!accepted) return;
     setSaving(true);
     try {
-      await runUserActionAsync({
-        input: {
-          featureId: "settings.systemPrompt",
-          action: scope === "global" ? "delete_global" : "delete_project",
-          trigger: "button",
-        },
-        operation: () =>
-          fileServiceRef.current.deleteAgentPrompt({ scope, rootPath, name: selected }),
-        completed: { resultSource: "platform_result" },
-        failureStage: "settings_commit",
-      });
+      await fileServiceRef.current.deleteAgentPrompt({ scope, rootPath, name: selected });
       toast(intl.formatMessage({ id: "settings.systemPrompt.deleted" }));
       await loadList();
     } catch (error) {

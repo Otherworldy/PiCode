@@ -47,11 +47,11 @@ export * from "./shared-context-import.js";
 export * from "./input-intent.js";
 export * from "./submission.js";
 export * from "./fork.js";
-export * from "./telemetry.js";
 export * from "./controller.js";
 export * from "./workspace-hook-review.js";
 export * from "./cuaPermission.js";
 export * from "./turn-usage.js";
+export * from "./turnLifecycle.js";
 
 export {
   executionOutputPreviewSchema,
@@ -61,4 +61,3 @@ export {
 export { bashOutputDisplaySchema } from "../bash-output-display.js";
 export { modelSelectionSchema, type ModelSelection } from "../model-selection.js";
 
-export * from "../localTtft.js";

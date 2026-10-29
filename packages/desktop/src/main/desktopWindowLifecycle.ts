@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { app, BrowserWindow, Menu, MessageChannelMain } from "electron";
 import type { UtilityProcess as ElectronUtilityProcess } from "electron";
 import { HostMessageTypes, InternalChannels, PlatformChannels, type Locale } from "@zcode/shared";
-import { scheduleArmsBrowserPerfLoadNudge } from "./armsBrowserPerfLoadNudge.js";
 import { createBrowserWindow } from "./desktopWindowChrome.js";
 import type { HostInitMessage, WindowBootstrapOptions } from "./desktopHostProcess.js";
 import type { StartupWorkspaceWarmupTarget } from "./startupWorkspace.js";
@@ -14,10 +13,6 @@ import {
   syncAppUnreadBadge,
 } from "./unreadBadge.js";
 import { attachDesktopWindowSizePersistence, type DesktopWindowSize } from "./desktopWindowSize.js";
-import {
-  registerMainApplicationWindow,
-  unregisterMainApplicationWindow,
-} from "./resourceManagerWindow.js";
 
 const DEFAULT_RUNTIME_PROCESS_ENV_WAIT_TIMEOUT_MS = 4_500;
 
@@ -116,11 +111,8 @@ export function createWindow(options: {
 
   const wcId = win.webContents.id;
   const browserWindowId = win.id;
-  // 资源遥测据此把主窗口 renderer 归 renderer_main；辅助窗口与 DevTools 归 chromium_other。
-  registerMainApplicationWindow(wcId);
   let domReadyGeneration = 0;
   let cancelRuntimeProcessEnvWait: (() => void) | null = null;
-  scheduleArmsBrowserPerfLoadNudge(win.webContents);
   win.webContents.on("dom-ready", async () => {
     cancelRuntimeProcessEnvWait?.();
     cancelRuntimeProcessEnvWait = null;
@@ -253,7 +245,6 @@ export function createWindow(options: {
   });
 
   win.on("closed", () => {
-    unregisterMainApplicationWindow(wcId);
     cancelRuntimeProcessEnvWait?.();
     cancelRuntimeProcessEnvWait = null;
     options.logger.info(`[createWindow] window closed, killing host process (${label})`);

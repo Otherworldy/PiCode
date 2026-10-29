@@ -1,14 +1,11 @@
 {
-  // 仅用于 typecheck：main 入口跨用了 src/shared（ARMS 共享配置）与 src/scheduler（cron 协议），
-  // 两者不在 tsconfig.main.json 的 rootDir 内。若直接放宽 main 的 rootDir，tsc -b 会把产物写到
-  // out/main/main/*，覆盖 tsup 产出的 Electron 入口 out/main/index.js，因此这里单独出一份
-  // noEmit 配置：rootDir 上提到 src，产物一律不落盘。
+  // 仅用于 typecheck：main 入口跨用了 src/scheduler（cron 协议），它不在 tsconfig.main.json 的
+  // rootDir 内。若直接放宽 main 的 rootDir，tsc -b 会把产物写到 out/main/main/*，覆盖 tsup 产出的
+  // Electron 入口 out/main/index.js，因此这里单独出一份 noEmit 配置：rootDir 上提到 src，产物一律不落盘。
   "extends": "./tsconfig.main.json",
   "compilerOptions": {
     "rootDir": "src",
     "noEmit": true
   },
-  // 只纳入 main 实际 import 的跨目录文件：src/shared/armsRumBridgeForward.ts 是 renderer/preload
-  // 专用（依赖 window），由 tsconfig.preload.json 覆盖，放进 main 工程会误报 DOM 缺失。
-  "include": ["src/main", "src/shared/armsRumShared.ts", "src/scheduler"]
+  "include": ["src/main", "src/scheduler"]
 }

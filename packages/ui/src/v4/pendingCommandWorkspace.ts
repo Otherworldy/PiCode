@@ -1,4 +1,3 @@
-import type { SessionCreateSource } from "@zcode/shared";
 import type { GroupedDraftTaskState } from "@/store/zcodeSessionStoreTypes.js";
 
 export interface PendingCommandClientContext {
@@ -7,7 +6,6 @@ export interface PendingCommandClientContext {
     workspaceIdentity?: string;
   };
   groupedDraftTask?: GroupedDraftTaskState;
-  sessionCreateSource?: SessionCreateSource;
 }
 
 interface WorkspaceScopedPendingCommand {

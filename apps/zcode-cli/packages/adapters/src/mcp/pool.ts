@@ -13,7 +13,6 @@ import type {
   McpToolDescriptor,
 } from "@zcode/contracts";
 import { randomUUID } from "node:crypto";
-import type { McpTelemetryTracker } from "./telemetry.js";
 
 const DEFAULT_IDLE_GRACE_MS = 30_000;
 
@@ -22,6 +21,7 @@ interface CreateMcpAdapterForPoolInput {
   config: McpServerConfig;
   serverName: string;
   workingDirectory?: string;
+  processRegistry?: McpProcessRegistry;
 }
 
 export interface McpConnectionContext {
@@ -31,11 +31,14 @@ export interface McpConnectionContext {
   workspaceKey?: string;
 }
 
+import type { McpProcessRegistry } from "./process-registry.js";
+
 export interface McpConnectionPoolOptions {
   createAdapter(input: CreateMcpAdapterForPoolInput): McpPort;
   idleGraceMs?: number;
   logger?: Logger;
-  telemetry?: McpTelemetryTracker;
+  /** 进程归属注册表：桌面 Host 资源管理器按 pid 归到 server/插件名下。 */
+  processRegistry?: McpProcessRegistry;
 }
 
 export interface McpConnectionPool {
@@ -68,6 +71,9 @@ export function createMcpConnectionPool(options: McpConnectionPoolOptions): McpC
     if (entry.closeTimer) clearTimeout(entry.closeTimer);
     entry.closeTimer = undefined;
     if (entries.get(entry.key) === entry) entries.delete(entry.key);
+    options.processRegistry?.unregisterConnection({
+      connectionId: entry.connectionContext.mcpConnectionId,
+    });
     try {
       await entry.adapter.close();
       logger?.info("MCP pooled connection closed", {
@@ -85,9 +91,6 @@ export function createMcpConnectionPool(options: McpConnectionPoolOptions): McpC
         mcpServerName: entry.serverName,
       });
     } finally {
-      options.telemetry?.unregisterConnection({
-        connectionId: entry.connectionContext.mcpConnectionId,
-      });
     }
   };
 
@@ -194,10 +197,6 @@ export function createMcpConnectionPool(options: McpConnectionPoolOptions): McpC
       const entry = entries.get(key);
       if (!entry) return;
       if (!entry.refs.delete(leaseId)) return;
-      options.telemetry?.releaseOwner({
-        connectionId: entry.connectionContext.mcpConnectionId,
-        ownerId: leaseId,
-      });
       logger?.info("MCP connection lease released", {
         ...entry.connectionContext,
         event: "mcp.pool.lease.released",
@@ -240,14 +239,14 @@ export function createMcpConnectionPool(options: McpConnectionPoolOptions): McpC
           connectOptions,
           sessionId,
         });
-        options.telemetry?.registerConnection({
+        options.processRegistry?.registerConnection({
           connectionId: connectionContext.mcpConnectionId,
-          isolation: connectionContext.mcpIsolation,
           serverName,
           ...(config.source ? { source: config.source.kind } : {}),
         });
         const adapter = options.createAdapter({
           connectionContext,
+          processRegistry: options.processRegistry,
           config,
           serverName,
           workingDirectory: connectOptions.workingDirectory,
@@ -274,10 +273,6 @@ export function createMcpConnectionPool(options: McpConnectionPoolOptions): McpC
         const previous = entries.get(previousKey);
         if (previous) {
           if (previous.refs.delete(leaseId)) {
-            options.telemetry?.releaseOwner({
-              connectionId: previous.connectionContext.mcpConnectionId,
-              ownerId: leaseId,
-            });
             logger?.info("MCP connection lease released", {
               ...previous.connectionContext,
               event: "mcp.pool.lease.released",
@@ -292,11 +287,6 @@ export function createMcpConnectionPool(options: McpConnectionPoolOptions): McpC
       }
       leased.set(serverName, key);
       if (ownerAdded) {
-        options.telemetry?.acquireOwner({
-          connectionId: entry.connectionContext.mcpConnectionId,
-          ownerId: leaseId,
-          ...(sessionId ? { sessionId } : {}),
-        });
       }
       if (previousKey !== key) {
         // workspace 隔离连接会被多个 session 共享，不能把首个 session 记成唯一 owner；
@@ -331,16 +321,6 @@ export function createMcpConnectionPool(options: McpConnectionPoolOptions): McpC
         const connectedCount = enabledServers.filter(
           ([serverName]) => statuses[serverName]?.status === "connected",
         ).length;
-        options.telemetry?.recordSessionStartup({
-          configuredCount: enabledServers.length,
-          connectedCount,
-          failedCount: enabledServers.length - connectedCount,
-          processCount: enabledServers.filter(
-            ([serverName, config]) =>
-              config.type === "stdio" && statuses[serverName]?.status === "connected",
-          ).length,
-          sessionId,
-        });
       }
       return { statuses, tools };
     };

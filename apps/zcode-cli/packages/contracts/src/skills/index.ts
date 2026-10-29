@@ -56,13 +56,6 @@ export interface SkillMetadata {
   policy?: SkillPolicy;
 }
 
-/** Skill tool result 中允许跨边界传播的最小 metadata；不包含正文或 description。 */
-export interface SkillTelemetryMetadata {
-  qualifiedName?: string;
-  pluginId?: string;
-  source?: SkillSource;
-}
-
 export interface SkillDiagnostic {
   code: SkillDiagnosticCode;
   severity: SkillDiagnosticSeverity;

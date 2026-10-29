@@ -1,5 +1,4 @@
 /* eslint-disable max-lines */
-import { localTtftContextSchema, localTtftClockSchema } from "../localTtft.js";
 // Command 层：信封 / ACK / 命令全集 payload。
 // conversation rewind 无独立命令。
 // 重发 = editUserQuery。回退到输入框 = editUserQuery { restoreToInput: true }：
@@ -372,7 +371,6 @@ export const ROW_TARGETING_COMMANDS: ReadonlySet<CommandType> = new Set([
 
 // ── 信封 ──
 export const commandEnvelopeSchema = z.object({
-  ttft: localTtftContextSchema.optional(),
   // uuid v7，客户端生成，重试不变。
   commandId: z.string(),
   clientId: z.string(),
@@ -504,7 +502,6 @@ export type CommandResult = z.infer<typeof commandResultSchema>;
 export const commandAckSchema = z.object({
   /** 会话创建期采用的 App Memory 开关；旧发送端缺省表示未知。 */
   memoryEnabled: z.boolean().optional(),
-  ttftExcluded: z.literal("capacity").optional(),
   commandId: z.string(),
   // accepted 不承诺跨 CLI 进程存活；最终收口以权威数据（sourceCommandId）为准。
   status: z.enum(["accepted", "rejected", "stale", "duplicate", "noop", "failed"]),
@@ -550,7 +547,6 @@ export type CommandQueryItem = z.infer<typeof commandQueryItemSchema>;
 export const commandsQueryResultSchema = z
   .object({
     results: z.array(commandQueryItemSchema).min(1).max(64),
-    clock: localTtftClockSchema.optional(),
   })
   .strict();
 export type CommandsQueryResult = z.infer<typeof commandsQueryResultSchema>;

@@ -109,31 +109,7 @@ export async function generateWorkspaceText(
   assertWorkspaceModelInput(input);
   const querySource = input.querySource.trim() || "workspace_generate_text";
   const traceContext = options?.traceContext ?? this.rootTraceContext;
-  const operationTelemetry = this.agentTelemetry.detached({
-    executionKind: "foreground",
-    operation:
-      querySource === GIT_COMMIT_MESSAGE_QUERY_SOURCE
-        ? "workspace_git_commit_message"
-        : "workspace_generate_text",
-    targetKind: "workspace",
-    trigger: "user",
-    traceContext,
-  });
-  return operationTelemetry.run(async () => {
-    try {
-      const result = await generateWorkspaceTextImpl.call(this, input, options);
-      operationTelemetry.setResultType("text");
-      operationTelemetry.finishCompleted();
-      return result;
-    } catch (error) {
-      if (options?.abortSignal?.aborted) {
-        operationTelemetry.finishCancelled("abort_signal");
-      } else {
-        operationTelemetry.finishFailed("execute", "unknown", error);
-      }
-      throw error;
-    }
-  });
+  return generateWorkspaceTextImpl.call(this, input, options);
 }
 
 async function generateWorkspaceTextImpl(

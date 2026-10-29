@@ -42,7 +42,6 @@ export type WorkspaceConnectionAgentService = Pick<
   | "attachmentPreviewSourceV4"
   | "attachmentReadV4"
   | "onDynamicConversationFrame"
-  | "onDynamicLocalTtftFacts"
   | "onAgentRuntimeRestarted"
 >;
 

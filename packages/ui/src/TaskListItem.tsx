@@ -68,7 +68,6 @@ import { isSameWorkspaceTab } from "@/store/tabWorkspaceIdentity.js";
 import { resolveWorkspaceDisplayLabel } from "@/lib/workspaceDisplayName.js";
 import { TaskTitleOverflowText } from "@/components/TaskTitleOverflowText.js";
 import { createTaskWorkbenchDragPreview } from "@/lib/taskWorkbenchDragPreview.js";
-import { runUserAction } from "@/lib/userActionTelemetry.js";
 import { TaskRowActionButton } from "@/workspace-grouped-tasks/task-row-action-button.js";
 import { TaskWorkflowRunLines } from "@/components/workflow-run-line/TaskWorkflowRunLines.js";
 
@@ -278,12 +277,7 @@ export const MemoTaskItem = memo(function TaskListItem({
   );
   const worktreeLabel = worktreePath ? worktreeBranchLabel(worktreePath) : null;
   const handleSelect = useCallback(() => {
-    runUserAction({
-      input: { featureId: "task.lifecycle", action: "open", trigger: "button" },
-      operation: () => onSelectTask(task.taskId),
-      completed: { resultSource: "optimistic_projection" },
-      failureStage: "task_open",
-    });
+    onSelectTask(task.taskId);
   }, [onSelectTask, task.taskId]);
   const handleDragStart = useCallback(
     (event: React.DragEvent<HTMLLIElement>) => {
@@ -342,12 +336,7 @@ export const MemoTaskItem = memo(function TaskListItem({
       if (workspaceActionsDisabled) {
         return;
       }
-      runUserAction({
-        input: { featureId: "workbench.file", action: "open_tree", trigger: "button" },
-        operation: () => onOpenFileTree?.(task),
-        completed: { resultSource: "local_commit" },
-        failureStage: "file_tree_open",
-      });
+      onOpenFileTree?.(task);
     },
     [onOpenFileTree, task, workspaceActionsDisabled],
   );
@@ -359,12 +348,7 @@ export const MemoTaskItem = memo(function TaskListItem({
         event.stopPropagation();
         return;
       }
-      runUserAction({
-        input: { featureId: "task.lifecycle", action: "archive", trigger: "button" },
-        operation: () => onArchiveTaskInline(event, task.taskId),
-        completed: { resultSource: "optimistic_projection" },
-        failureStage: "task_archive",
-      });
+      onArchiveTaskInline(event, task.taskId);
     },
     [onArchiveTaskInline, task.taskId, workspaceActionsDisabled],
   );

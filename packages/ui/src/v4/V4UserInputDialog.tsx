@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input.js";
 import { XIcon } from "lucide-react";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import type { V4UserInputViewModel } from "@/v4/pendingInteractionAdapter.js";
-import { runUserAction } from "@/lib/userActionTelemetry.js";
 
 interface V4UserInputDialogProps {
   model: V4UserInputViewModel;
@@ -32,16 +31,7 @@ export function V4UserInputDialog({
 
   const handleOption = useCallback(
     (optionId: string) => {
-      runUserAction({
-        input: {
-          featureId: "conversation.blocking.user_input",
-          action: "select_option",
-          trigger: "button",
-        },
-        operation: () => onSubmit({ optionId }),
-        completed: { resultSource: "optimistic_projection" },
-        failureStage: "user_input_submit",
-      });
+      onSubmit({ optionId });
     },
     [onSubmit],
   );

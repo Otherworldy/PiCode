@@ -1,4 +1,3 @@
-import { beginLocalTurnPreparation } from "@zcode/contracts";
 import {
   CompactPhase,
   CompactReason,
@@ -95,14 +94,10 @@ export async function runRegularTurnLoop(
       recordCompactHistoryRound(state);
     }
     throwIfTurnAborted(state.turnAbortSignal);
-
-    const finishMcp = beginLocalTurnPreparation(state.turnTraceContext, "mcp");
     await this.initializeMcp(state.turnTraceContext);
     // tools/list_changed 只在回合开始前生效。
     await this.refreshMcpToolsIfChanged(state.turnTraceContext);
-    finishMcp();
     throwIfTurnAborted(state.turnAbortSignal);
-    const finishTools = beginLocalTurnPreparation(state.turnTraceContext, "tools");
     const turnDisallowedTools = buildTurnDisallowedTools(state);
     // automation 派发到已 active 会话或重试恢复时，入口 metadata 可能没有带到
     // loop state；但 queryId 仍是 automation-*。provider 请求边界必须按 queryId 再硬过滤
@@ -112,7 +107,6 @@ export async function runRegularTurnLoop(
       : turnDisallowedTools
         ? this.getTools(state.model).filter((tool) => !turnDisallowedTools.has(tool.name))
         : this.getTools(state.model);
-    finishTools();
     if (!outputTokenRecoveryActive && this.needsPlanModeExitReminder) {
       this.needsPlanModeExitReminder = false;
       commitTurnRequestEntries(this, state.turnRequestState, [

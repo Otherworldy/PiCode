@@ -5,7 +5,6 @@ import { toast } from "@/components/ui/toast.js";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
-import { runUserActionAsync } from "@/lib/userActionTelemetry.js";
 import { WorkspaceProjectCommandList } from "@/WorkspaceSidebar/WorkspaceProjectCommandList.js";
 
 type CommandDraft = {
@@ -154,17 +153,11 @@ export function WorkspaceProjectCommandPane({
     const name = commands.selected;
     setSaving(true);
     try {
-      await runUserActionAsync({
-        input: { featureId: "settings.systemPrompt", action: "save_project", trigger: "button" },
-        operation: () =>
-          fileServiceRef.current.writeAgentPrompt({
-            scope: "project",
-            rootPath: workspacePath,
-            name,
-            content: commands.draft,
-          }),
-        completed: { resultSource: "platform_result" },
-        failureStage: "settings_commit",
+      await fileServiceRef.current.writeAgentPrompt({
+        scope: "project",
+        rootPath: workspacePath,
+        name,
+        content: commands.draft,
       });
       setCommands((state) => ({ ...state, saved: state.draft }));
       toast(intl.formatMessage({ id: "settings.systemPrompt.saved" }));
@@ -270,20 +263,10 @@ export function WorkspaceProjectCommandPane({
       if (!accepted) return;
       setSaving(true);
       try {
-        await runUserActionAsync({
-          input: {
-            featureId: "settings.systemPrompt",
-            action: "delete_project",
-            trigger: "button",
-          },
-          operation: () =>
-            fileServiceRef.current.deleteAgentPrompt({
-              scope: "project",
-              rootPath: workspacePath,
-              name,
-            }),
-          completed: { resultSource: "platform_result" },
-          failureStage: "settings_commit",
+        await fileServiceRef.current.deleteAgentPrompt({
+          scope: "project",
+          rootPath: workspacePath,
+          name,
         });
         toast(intl.formatMessage({ id: "settings.systemPrompt.deleted" }));
         const files = commands.files.filter((file) => file !== name);

@@ -760,14 +760,8 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
     onOpenAutomations?.();
   }, [onOpenAutomations]);
   const handleOpenCodingPlanUpgrade = useCallback(
-    (
-      providerId: string,
-      funnelContext?: import("@/lib/codingPlanFunnelTelemetry.js").CodingPlanFunnelContext,
-    ) => {
-      openCodingPlanUpgrade({
-        providerId,
-        funnelContext,
-      });
+    (providerId: string) => {
+      openCodingPlanUpgrade({ providerId });
     },
     [openCodingPlanUpgrade],
   );

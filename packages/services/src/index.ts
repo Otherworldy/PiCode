@@ -48,11 +48,6 @@ export type {
 } from "./conversation-share/conversationShare.js";
 // Conversation share 的具体实现依赖 Node 文件系统，只能从 @zcode/services/node 引入；
 // 根入口必须保持 browser-safe，避免 renderer 解析到 node:* 模块。
-export {
-  createConversationTelemetryService,
-  type ConversationTelemetryWorkspaceTarget,
-  type IConversationTelemetryService,
-} from "./conversation-telemetry/conversationTelemetry.js";
 
 // File service — IFileService is both a type (interface) and value (descriptor)
 export { IFileService } from "./file/file.js";

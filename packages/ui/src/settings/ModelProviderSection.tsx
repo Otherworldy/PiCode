@@ -41,7 +41,6 @@ import { ModelProviderSectionLayout } from "./model-provider-section/SectionLayo
 import { ProviderTemplatePicker } from "./model-provider-section/ProviderTemplatePicker.js";
 import type { CodingPlanLoginOptions } from "./model-provider-section/codingPlanPricingCards.js";
 import { useModelProviderNavigation } from "./model-provider-section/useModelProviderNavigation.js";
-import { reportPresetSubscriptionSuccess } from "./model-provider-section/oauthActions.js";
 import {
   createCodingPlanProviderNodeKey,
   createCustomProviderNodeKey,
@@ -631,10 +630,6 @@ export function ModelProviderSection({
 
       presetSubscriptionCompletionProviderIdRef.current = presetSubscriptionProviderId;
       void (async () => {
-        void reportPresetSubscriptionSuccess({
-          platform,
-          presetId: presetSubscriptionProviderId,
-        });
         try {
           // 连接/重新授权成功后 provider apiKey 会先于权益接口结果落盘。
           // pending 必须等本轮权益刷新完成后再清，否则 Plan Card 会短暂显示旧套餐态或非 loading 状态。
@@ -650,12 +645,7 @@ export function ModelProviderSection({
         }
       })();
     }
-  }, [
-    platform,
-    presetSubscriptionProviderId,
-    providerSettingsView,
-    refreshProviderPanelAfterAuthChange,
-  ]);
+  }, [presetSubscriptionProviderId, providerSettingsView, refreshProviderPanelAfterAuthChange]);
 
   useEffect(() => {
     if (!presetSubscriptionProviderId) {
