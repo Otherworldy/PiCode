@@ -299,6 +299,12 @@ export interface ComposerRestoreRequest {
   inputKind: "sendText" | "sendGoalCommand";
   text: string;
   attachments: readonly AttachmentRef[];
+  /**
+   * 与 attachments 同下标的展示源（object URL / Desktop 本地媒体 URL）。
+   * 回退已经把锁点 user row 从投影里裁掉，裁切后 gateway 不再有行能授权这些 ref，
+   * 所以媒体缩略图必须由调用方在裁切前读出并随请求带过来。
+   */
+  attachmentPreviewUrls?: readonly (string | undefined)[];
   config?: Pick<V4ComposerDraft, "mode" | "planEnabled" | "modelSelection">;
   /** 回退已经裁掉原文。输入框里后来打的字也要让位，否则这段话两边都没了。 */
   replaceDraft?: boolean;
@@ -324,7 +330,10 @@ function applyComposerRestoreRequestToComposer({
   inputApi: Pick<LexicalChatInputHandle, "setText"> | null;
   request: ComposerRestoreRequest | null | undefined;
   requestFocus: () => void;
-  restoreSessionOwnedAttachments: (attachments: readonly AttachmentRef[]) => boolean;
+  restoreSessionOwnedAttachments: (
+    attachments: readonly AttachmentRef[],
+    previewUrls?: readonly (string | undefined)[],
+  ) => boolean;
   restoreDraftConfig?: (config: NonNullable<ComposerRestoreRequest["config"]>) => void;
   scheduleDraftPersist: () => void;
   updateText: (text: string) => void;
@@ -340,7 +349,7 @@ function applyComposerRestoreRequestToComposer({
   ) {
     return appliedRequestId;
   }
-  if (!restoreSessionOwnedAttachments(request.attachments)) {
+  if (!restoreSessionOwnedAttachments(request.attachments, request.attachmentPreviewUrls)) {
     return appliedRequestId;
   }
   inputApi.setText(request.text);

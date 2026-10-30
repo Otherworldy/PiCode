@@ -1,7 +1,6 @@
 /* oxlint-disable eslint(max-lines) -- 附件采集、分 scope 上传调度和生命周期必须在同一 hook 中原子收口。 */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/components/ui/toast.js";
-import { nanoid } from "nanoid";
 import type { AttachmentRef } from "@zcode/shared/zcode-protocol-v4";
 import { WORKSPACE_FILE_DRAG_MIME } from "@/lib/workspaceFileDrag.js";
 import {
@@ -43,6 +42,7 @@ import {
   type ComposerAttachmentUploadStatus,
 } from "@/store/composerAttachmentUploadStore.js";
 import { uploadComposerAttachment, type AttachmentPutFn } from "@/v4/composer/attachmentUpload.js";
+import { buildSessionOwnedComposerAttachments } from "@/v4/composer/sessionOwnedComposerAttachments.js";
 
 const COMPOSER_ATTACHMENT_UPLOAD_CONCURRENCY = 2;
 const COMPOSER_ATTACHMENT_AUTO_RETRY_DELAY_MS = 500;
@@ -94,8 +94,15 @@ interface ComposerAttachmentsApi {
   retryAttachment: (id: string) => void;
   /** 发送成功只清冻结的附件 id；不传表示用户主动清空整个附件区。 */
   clearAttachments: (attachmentIds?: readonly string[]) => void;
-  /** 把已由 session 接管的 queue refs 原样恢复为 ready chips；不触发 upload/adopt。 */
-  restoreSessionOwnedAttachments: (attachments: readonly AttachmentRef[]) => boolean;
+  /**
+   * 把已由 session 接管的 queue refs 原样恢复为 ready chips；不触发 upload/adopt。
+   * previewUrls 与 attachments 同下标：调用方在裁切前用仍然存在的权威行读出的缩略图源，
+   * 只给 session-owned 的媒体项补展示源（没有它就只能渲染成文件图标）。
+   */
+  restoreSessionOwnedAttachments: (
+    attachments: readonly AttachmentRef[],
+    previewUrls?: readonly (string | undefined)[],
+  ) => boolean;
   /** 只返回已 ready ref；任一附件未就绪时返回 null 作 submit 二次门禁。 */
   prepareForSend: () => Promise<AttachmentRef[] | null>;
   /** sendText accepted 后才移交远端暂存内容，发送失败时仍由草稿持有。 */
@@ -1014,29 +1021,13 @@ export function useComposerAttachments(
   );
 
   const restoreSessionOwnedAttachments = useCallback(
-    (attachmentRefs: readonly AttachmentRef[]): boolean => {
+    (
+      attachmentRefs: readonly AttachmentRef[],
+      previewUrls?: readonly (string | undefined)[],
+    ): boolean => {
       if (attachmentRefs.length === 0) return true;
       if (readComposerAttachmentScope(scopeKey).length > 0) return false;
-      const restored: ComposerAttachmentUploadItem[] = attachmentRefs.map((attachmentRef) => {
-        const id = nanoid();
-        return {
-          id,
-          filename: attachmentRef.fileName,
-          mimeType: attachmentRef.mime,
-          sizeBytes: attachmentRef.bytes,
-          referenceOwnership: "session",
-          uploadStatus: "ready",
-          uploadProgress: 100,
-          attachmentRef: { ...attachmentRef },
-          operationId: `session-owned-${id}`,
-          autoRetryCount: 0,
-          runtimeRebuildRetryCount: 0,
-          staged: false,
-          adopted: true,
-          showComplete: false,
-          localZeroCopy: false,
-        };
-      });
+      const restored = buildSessionOwnedComposerAttachments(attachmentRefs, previewUrls);
       // queue 中的 AttachmentRef 已在首次发送时由 session 接管；若按普通
       // composer 文件重建，会在撤回后重复 upload/adopt，并在 runtime restart 时误清引用。
       commitScope(scopeKey, () => restored);

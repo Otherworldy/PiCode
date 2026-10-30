@@ -100,6 +100,10 @@ import {
   subscribeSessionWorktrees,
 } from "@/v4/sessionWorktree.js";
 import { projectSessionConfigToTaskConfigOptions } from "@/v4/composer/sessionConfigTaskCache.js";
+import {
+  isPreviewableComposerMediaMime,
+  releaseAttachmentPreviewUrls,
+} from "@/v4/composer/sessionOwnedComposerAttachments.js";
 import { useDraftRuntimeRebuildGate } from "@/v4/composer/useDraftRuntimeRebuildGate.js";
 import { useDraftModelReadinessGate } from "@/v4/composer/useDraftModelReadinessGate.js";
 import { useSettings } from "@/hooks/useSettingService.js";
@@ -2038,6 +2042,48 @@ export function SessionPane({
     return false;
   }, [intl]);
   const handlePrepareRewindHere = useCallback(() => !rewindDraftBlocked(), [rewindDraftBlocked]);
+  /**
+   * 回退会把锁点 user row 从投影里裁掉，裁切后 gateway 不再有任何行能证明这些 ref 的归属，
+   * 回到输入框的 session-owned 媒体附件就只剩文件图标。缩略图必须趁当前行还在时读出来。
+   */
+  const readRewindAttachmentPreviewUrls = useCallback(
+    async (
+      target: { rowId: number; entityId: string },
+      attachments: readonly AttachmentRef[],
+    ): Promise<(string | undefined)[] | undefined> => {
+      if (!attachmentRead || !sessionId || attachments.length === 0) return undefined;
+      const urls = await Promise.all(
+        attachments.map(async (attachment, attachmentIndex) => {
+          if (!isPreviewableComposerMediaMime(attachment.mime)) return undefined;
+          try {
+            const result = await attachmentRead({
+              sessionId,
+              ref: attachment.previewRef ?? attachment.ref,
+              target,
+              attachmentIndex,
+              ...(attachment.mime.toLowerCase().startsWith("video/")
+                ? { mediaType: attachment.mime }
+                : {}),
+            });
+            return "url" in result
+              ? result.url
+              : URL.createObjectURL(
+                  new Blob([Uint8Array.from(result.bytes)], { type: result.mediaType }),
+                );
+          } catch (error: unknown) {
+            logger.warn("[v4-pane] 回退附件缩略图读取失败", {
+              attachmentIndex,
+              error: error instanceof Error ? error.message : String(error),
+            });
+            return undefined;
+          }
+        }),
+      );
+      // 全部读失败时不把一组 undefined 带下去，composer 自然退化成文件图标。
+      return urls.some((url) => url !== undefined) ? urls : undefined;
+    },
+    [attachmentRead, sessionId],
+  );
   const handleRewindHere = useCallback(
     async (input: {
       rowId: number;
@@ -2052,6 +2098,10 @@ export function SessionPane({
       if (rewindDraftBlocked()) return false;
       const current = snapshotRef.current;
       if (!sessionId || current === null) return false;
+      const attachmentPreviewUrls = await readRewindAttachmentPreviewUrls(
+        { rowId: input.rowId, entityId: input.entityId },
+        input.attachments ?? [],
+      );
       try {
         const ack = await dispatchCommand(
           "editUserQuery",
@@ -2091,6 +2141,7 @@ export function SessionPane({
           logger.warn(
             `[v4-pane] 回退被拒绝: ${blocked?.disposition ?? ack.status} ${reasonCode ?? ""}`,
           );
+          releaseAttachmentPreviewUrls(attachmentPreviewUrls);
           return false;
         }
         setComposerRestoreRequest({
@@ -2100,10 +2151,13 @@ export function SessionPane({
           inputKind: "sendText",
           text: input.text,
           attachments: input.attachments ?? [],
+          ...(attachmentPreviewUrls ? { attachmentPreviewUrls } : {}),
           replaceDraft: true,
         });
         return true;
       } catch (error: unknown) {
+        // 没回填就没有接收方，临时建出来的 object URL 必须当场释放。
+        releaseAttachmentPreviewUrls(attachmentPreviewUrls);
         logger.warn("[v4-pane] 回退提交失败", {
           error: error instanceof Error ? error.message : String(error),
         });
@@ -2115,7 +2169,14 @@ export function SessionPane({
         return false;
       }
     },
-    [dispatchCommand, intl, rewindDraftBlocked, sessionId, workspaceKey],
+    [
+      dispatchCommand,
+      intl,
+      readRewindAttachmentPreviewUrls,
+      rewindDraftBlocked,
+      sessionId,
+      workspaceKey,
+    ],
   );
   // 正在总结被丢下的分支时，这个会话不能再开分支。停止键仍走 canStop。
   const branchSummaryRunning =
