@@ -1,4 +1,9 @@
-import type { RemoteAssetInstallMode, RemoteTarget } from "@zcode/shared";
+import type {
+  RemoteAssetInstallMode,
+  RemoteTarget,
+  SshProxyEndpoint,
+  SshProxyKind,
+} from "@zcode/shared";
 import { isValidWslUser, normalizeRemoteResourcePackageSelection } from "@zcode/shared";
 import type { SSHAuthMethod } from "@/hooks/useRemoteConnectionForm.js";
 import type { RemoteWizardStep } from "@/RemoteConnectionWizardChrome.js";
@@ -16,6 +21,11 @@ interface RemoteConnectionFormSnapshot {
   assetInstallMode?: RemoteAssetInstallMode;
   selectedSshConfigAlias?: string | null;
   password: string;
+  proxyKind: "" | SshProxyKind;
+  proxyHost: string;
+  proxyPort: string;
+  proxyUsername: string;
+  proxyPassword: string;
   privateKeyPath: string;
   privateKeyPassphrase: string;
   wslDistro: string;
@@ -63,6 +73,35 @@ export function getRemoteWizardStepCopy(
   }
 }
 
+/**
+ * 代理是选填项：`proxyKind` 为空表示直连。
+ *
+ * 返回字符串是校验失败的文案，undefined 表示不走代理。
+ */
+function buildProxyEndpoint(
+  intl: WizardIntlLike,
+  snapshot: RemoteConnectionFormSnapshot,
+): SshProxyEndpoint | undefined | string {
+  if (!snapshot.proxyKind) return undefined;
+  const host = snapshot.proxyHost.trim();
+  if (!host) return intl.formatMessage({ id: "ssh.validation.proxyHostRequired" });
+  const portText = snapshot.proxyPort.trim();
+  if (portText) {
+    const port = Number(portText);
+    if (!Number.isSafeInteger(port) || port < 1 || port > 65535) {
+      return intl.formatMessage({ id: "ssh.validation.proxyPortInvalid" });
+    }
+  }
+  const username = snapshot.proxyUsername.trim();
+  return {
+    kind: snapshot.proxyKind,
+    host,
+    ...(portText ? { port: Number(portText) } : {}),
+    // 填了用户名才算需要认证；空口令是合法值，用 typeof 判断已经不需要了。
+    ...(username ? { username, password: snapshot.proxyPassword } : {}),
+  };
+}
+
 export function buildRemoteTarget(
   intl: WizardIntlLike,
   snapshot: RemoteConnectionFormSnapshot,
@@ -85,6 +124,9 @@ export function buildRemoteTarget(
 
       const sshConfigAlias = snapshot.selectedSshConfigAlias?.trim();
 
+      const proxy = buildProxyEndpoint(intl, snapshot);
+      if (typeof proxy === "string") return { errorMessage: proxy };
+
       return {
         target: {
           kind: "ssh",
@@ -92,6 +134,7 @@ export function buildRemoteTarget(
           port: snapshot.port ? Number(snapshot.port) : undefined,
           username: snapshot.username,
           ...(sshConfigAlias ? { sshConfigAlias } : {}),
+          ...(proxy ? { proxy } : {}),
           assetInstallMode: snapshot.assetInstallMode,
           ...(snapshot.sshAuthMethod === "password" ? { password: snapshot.password } : {}),
           ...(snapshot.sshAuthMethod === "privateKey" && snapshot.privateKeyPath

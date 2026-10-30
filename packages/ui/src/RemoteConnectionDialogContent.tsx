@@ -6,6 +6,7 @@ import type {
   RemoteTarget,
   RemoteWorkspaceSessionEntry,
   SSHConfigAliasOption,
+  SshProxyKind,
   WSLDistro,
 } from "@zcode/shared";
 import { TID_REMOTE_KIND_DOCKER, TID_REMOTE_KIND_SSH, TID_REMOTE_KIND_WSL } from "@zcode/shared";
@@ -166,6 +167,16 @@ export function RemoteConnectionSettingsStep({
   onSshAuthMethodChange,
   onAssetInstallModeChange,
   onPasswordChange,
+  proxyKind,
+  proxyHost,
+  proxyPort,
+  proxyUsername,
+  proxyPassword,
+  onProxyKindChange,
+  onProxyHostChange,
+  onProxyPortChange,
+  onProxyUsernameChange,
+  onProxyPasswordChange,
   onPrivateKeyPathChange,
   onPrivateKeyPassphraseChange,
   onWslDistroChange,
@@ -184,6 +195,11 @@ export function RemoteConnectionSettingsStep({
   sshAuthMethod: SSHAuthMethod;
   assetInstallMode: RemoteAssetInstallMode;
   password: string;
+  proxyKind: "" | SshProxyKind;
+  proxyHost: string;
+  proxyPort: string;
+  proxyUsername: string;
+  proxyPassword: string;
   privateKeyPath: string;
   privateKeyPassphrase: string;
   wslDistro: string;
@@ -209,6 +225,11 @@ export function RemoteConnectionSettingsStep({
   onSshAuthMethodChange: (value: SSHAuthMethod) => void;
   onAssetInstallModeChange: (value: RemoteAssetInstallMode) => void;
   onPasswordChange: (value: string) => void;
+  onProxyKindChange: (value: "" | SshProxyKind) => void;
+  onProxyHostChange: (value: string) => void;
+  onProxyPortChange: (value: string) => void;
+  onProxyUsernameChange: (value: string) => void;
+  onProxyPasswordChange: (value: string) => void;
   onPrivateKeyPathChange: (value: string) => void;
   onPrivateKeyPassphraseChange: (value: string) => void;
   onWslDistroChange: (value: string) => void;
@@ -245,6 +266,11 @@ export function RemoteConnectionSettingsStep({
           sshAuthMethod={sshAuthMethod}
           assetInstallMode={assetInstallMode}
           password={password}
+          proxyKind={proxyKind}
+          proxyHost={proxyHost}
+          proxyPort={proxyPort}
+          proxyUsername={proxyUsername}
+          proxyPassword={proxyPassword}
           privateKeyPath={privateKeyPath}
           privateKeyPassphrase={privateKeyPassphrase}
           wslDistro={wslDistro}
@@ -268,6 +294,11 @@ export function RemoteConnectionSettingsStep({
           setSshAuthMethod={onSshAuthMethodChange}
           setAssetInstallMode={onAssetInstallModeChange}
           setPassword={onPasswordChange}
+          setProxyKind={onProxyKindChange}
+          setProxyHost={onProxyHostChange}
+          setProxyPort={onProxyPortChange}
+          setProxyUsername={onProxyUsernameChange}
+          setProxyPassword={onProxyPasswordChange}
           setPrivateKeyPath={onPrivateKeyPathChange}
           setPrivateKeyPassphrase={onPrivateKeyPassphraseChange}
           setWslDistro={onWslDistroChange}

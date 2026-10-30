@@ -28,6 +28,7 @@ import {
   sshSpecFromConnectTarget,
   type SshRemoteSpec,
   writeSshPasswordSecret,
+  writeSshProxyPasswordSecret,
 } from "@zcode/shared/node";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -3049,6 +3050,10 @@ async function rememberSshWorkspaceTargetFromTarget(
   // 空字符串是「密码认证 + 空口令」，也要写凭据文件；用 truthiness 会把无密码账户退回公钥认证。
   if (typeof target.password === "string") {
     await writeSshPasswordSecret(passwordSecretDirectory, target, target.password);
+  }
+  // 代理口令同样只落文件：spec 与 agent spawn env 里只有路径。
+  if (typeof target.proxy?.password === "string") {
+    await writeSshProxyPasswordSecret(passwordSecretDirectory, target, target.proxy.password);
   }
   const spec = sshSpecFromConnectTarget(target, remotePath, { passwordSecretDirectory });
   rememberSshWorkspaceTarget(workspaceIdentity, spec);

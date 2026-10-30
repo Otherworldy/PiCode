@@ -11,6 +11,11 @@ function snapshot(overrides: Record<string, unknown>) {
     username: "user",
     sshAuthMethod: "password",
     password: "",
+    proxyKind: "",
+    proxyHost: "",
+    proxyPort: "",
+    proxyUsername: "",
+    proxyPassword: "",
     privateKeyPath: "",
     privateKeyPassphrase: "",
     wslDistro: "",
@@ -51,5 +56,57 @@ describe("buildRemoteTarget", () => {
 
     expect(target).toBeUndefined();
     expect(errorMessage).toBe("ssh.validation.privateKeyRequired");
+  });
+});
+
+describe("SSH proxy in the connection wizard", () => {
+  it("omits the proxy field when no proxy kind is selected", () => {
+    const { target } = buildRemoteTarget(intl, snapshot({}));
+
+    expect(target).not.toHaveProperty("proxy");
+  });
+
+  it("keeps the proxy endpoint and its credentials on the target", () => {
+    const { target, errorMessage } = buildRemoteTarget(
+      intl,
+      snapshot({
+        proxyKind: "socks5",
+        proxyHost: " 127.0.0.1 ",
+        proxyPort: "7897",
+        proxyUsername: "alice",
+        proxyPassword: "s3cret",
+      }),
+    );
+
+    expect(errorMessage).toBeUndefined();
+    expect(target).toMatchObject({
+      proxy: {
+        kind: "socks5",
+        host: "127.0.0.1",
+        port: 7897,
+        username: "alice",
+        password: "s3cret",
+      },
+    });
+  });
+
+  it("rejects a proxy without a host", () => {
+    const { target, errorMessage } = buildRemoteTarget(
+      intl,
+      snapshot({ proxyKind: "http", proxyHost: "  " }),
+    );
+
+    expect(target).toBeUndefined();
+    expect(errorMessage).toBe("ssh.validation.proxyHostRequired");
+  });
+
+  it("rejects an out-of-range proxy port", () => {
+    const { target, errorMessage } = buildRemoteTarget(
+      intl,
+      snapshot({ proxyKind: "http", proxyHost: "proxy.local", proxyPort: "70000" }),
+    );
+
+    expect(target).toBeUndefined();
+    expect(errorMessage).toBe("ssh.validation.proxyPortInvalid");
   });
 });

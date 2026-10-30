@@ -289,3 +289,53 @@ test("find output becomes file entries", () => {
     { name: "README.md", path: "/srv/app/README.md", type: "file", isSymbolicLink: false },
   ]);
 });
+
+test("代理端点随 spec 穿过 spawn env，脏值只丢字段", () => {
+  const spec = sshSpecFromConnectTarget(
+    {
+      host: "82.118.28.109",
+      port: 49615,
+      username: "root",
+      sshConfigAlias: "56idc-jp",
+      proxy: { kind: "socks5", host: "127.0.0.1", port: 7897, username: "alice", password: "pw" },
+    },
+    "/root",
+    { passwordSecretDirectory: "/tmp/ssh-secrets" },
+  );
+  assert.deepEqual(spec.proxy, {
+    kind: "socks5",
+    host: "127.0.0.1",
+    port: 7897,
+    username: "alice",
+  });
+  // 代理口令和 SSH 口令一样只以文件路径下发。
+  assert.match(spec.proxyPasswordFile ?? "", /\.proxy\.secret$/u);
+  assert.equal(JSON.stringify(spec).includes("\"pw\""), false);
+
+  rememberSshWorkspaceTarget("remote:ssh:82.118.28.109:49615:root:/root", spec);
+  const spawnEnv = sshWorkspaceSpawnEnv("remote:ssh:82.118.28.109:49615:root:/root");
+  const previousSpec = process.env.ZCODE_SSH_REMOTE;
+  process.env.ZCODE_SSH_REMOTE = spawnEnv.ZCODE_SSH_REMOTE;
+  try {
+    const parsed = readProcessSshRemoteSpec("/root");
+    assert.deepEqual(parsed?.proxy, spec.proxy);
+
+    // 半截端点会让 ssh 连向不存在的本地端口，报错却只说 Connection refused。
+    process.env.ZCODE_SSH_REMOTE = JSON.stringify({
+      ...spec,
+      proxy: { kind: "socks5", host: "  " },
+    });
+    const broken = readProcessSshRemoteSpec("/root");
+    assert.equal(broken?.proxy, undefined);
+    assert.equal(broken?.proxyPasswordFile, undefined);
+
+    process.env.ZCODE_SSH_REMOTE = JSON.stringify({
+      ...spec,
+      proxy: { kind: "socks5", host: "127.0.0.1", port: 70000 },
+    });
+    assert.equal(readProcessSshRemoteSpec("/root")?.proxy, undefined);
+  } finally {
+    if (previousSpec === undefined) delete process.env.ZCODE_SSH_REMOTE;
+    else process.env.ZCODE_SSH_REMOTE = previousSpec;
+  }
+});

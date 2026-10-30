@@ -39,6 +39,9 @@ export type {
   DockerConnectOptions,
   RemoteTarget,
   SSHConnectOptions,
+  SshProxyEndpoint,
+  SshProxyKind,
+  SshRemotePlatform,
   WSLConnectOptions,
 } from "./remoteTarget.js";
 export { stripRemoteTargetSecrets } from "./remoteTarget.js";

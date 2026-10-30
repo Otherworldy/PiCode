@@ -118,6 +118,11 @@ export function RemoteConnectionDialog({
     dockerAvailable,
     wslDistros,
     dockerContainers,
+    proxyKind,
+    proxyHost,
+    proxyPort,
+    proxyUsername,
+    proxyPassword,
     availableKinds,
     setKind,
     setHost,
@@ -126,6 +131,11 @@ export function RemoteConnectionDialog({
     setSshAuthMethod,
     setAssetInstallMode,
     setPassword,
+    setProxyKind,
+    setProxyHost,
+    setProxyPort,
+    setProxyUsername,
+    setProxyPassword,
     setPrivateKeyPath,
     setPrivateKeyPassphrase,
     setWslDistro,
@@ -311,6 +321,11 @@ export function RemoteConnectionDialog({
       sshAuthMethod,
       assetInstallMode,
       password,
+      proxyKind,
+      proxyHost,
+      proxyPort,
+      proxyUsername,
+      proxyPassword,
       privateKeyPath,
       privateKeyPassphrase,
       selectedSshConfigAlias,
@@ -509,6 +524,11 @@ export function RemoteConnectionDialog({
                     sshAuthMethod={sshAuthMethod}
                     assetInstallMode={assetInstallMode}
                     password={password}
+                    proxyKind={proxyKind}
+                    proxyHost={proxyHost}
+                    proxyPort={proxyPort}
+                    proxyUsername={proxyUsername}
+                    proxyPassword={proxyPassword}
                     privateKeyPath={privateKeyPath}
                     privateKeyPassphrase={privateKeyPassphrase}
                     wslDistro={wslDistro}
@@ -537,6 +557,11 @@ export function RemoteConnectionDialog({
                     onSshAuthMethodChange={setSshAuthMethod}
                     onAssetInstallModeChange={setAssetInstallMode}
                     onPasswordChange={setPassword}
+                    onProxyKindChange={setProxyKind}
+                    onProxyHostChange={setProxyHost}
+                    onProxyPortChange={setProxyPort}
+                    onProxyUsernameChange={setProxyUsername}
+                    onProxyPasswordChange={setProxyPassword}
                     onPrivateKeyPathChange={setPrivateKeyPath}
                     onPrivateKeyPassphraseChange={setPrivateKeyPassphrase}
                     onWslDistroChange={setWslDistro}

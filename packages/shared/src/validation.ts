@@ -51,6 +51,14 @@ export const credentialRecordSchema = z.record(z.string(), z.string());
 export const credentialKeySchema = nonEmptyStringSchema;
 export const credentialValueSchema = z.string();
 
+export const sshProxySchema = z.object({
+  kind: z.enum(["socks5", "http"]),
+  host: nonEmptyStringSchema,
+  port: z.number().int().positive().max(65535).optional(),
+  username: z.string().optional(),
+  password: z.string().optional(),
+});
+
 export const sshConnectOptionsSchema = z.object({
   kind: z.literal("ssh"),
   host: nonEmptyStringSchema,
@@ -60,6 +68,9 @@ export const sshConnectOptionsSchema = z.object({
   password: z.string().optional(),
   privateKeyPath: z.string().optional(),
   privateKeyPassphrase: z.string().optional(),
+  // Zod object 会剥离未声明字段：不写在这里，代理配置会在 renderer→main→host 的路上消失，
+  // 症状是 ssh 仍然直连并超时。
+  proxy: sshProxySchema.optional(),
   assetInstallMode: z.enum(REMOTE_ASSET_INSTALL_MODES).optional(),
   resourcePackages: z
     .object({

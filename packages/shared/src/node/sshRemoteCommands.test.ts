@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  sshDestinationArgs,
   buildRemoteShellCommand,
   parseFindEntries,
   probeSshRemotePlatform,
@@ -129,5 +130,49 @@ describe("probeSshRemotePlatform", () => {
     });
 
     expect(platform).toBe("posix");
+  });
+});
+
+describe("sshDestinationArgs with a proxy tunnel", () => {
+  const proxied: SshRemoteSpec = {
+    host: "82.118.28.109",
+    port: 49615,
+    username: "root",
+    alias: "56idc-jp",
+    remotePath: "/root",
+    proxy: { kind: "socks5", host: "127.0.0.1", port: 7897 },
+  };
+
+  it("keeps an alias but points ssh at the local tunnel port", () => {
+    const args = sshDestinationArgs(proxied, { host: "127.0.0.1", port: 45123 });
+
+    expect(args).toContain("HostName=127.0.0.1");
+    expect(args).toContain("Port=45123");
+    // known_hosts 必须仍按远端主机记账，否则所有代理主机共用 127.0.0.1 条目。
+    expect(args).toContain("HostKeyAlias=82.118.28.109");
+    expect(args.at(-1)).toBe("56idc-jp");
+    // 命令行里出现 user@host 会覆盖 -o HostName，把连接拉回真实地址绕开代理。
+    expect(args.join(" ")).not.toContain("root@82.118.28.109");
+  });
+
+  it("uses user@127.0.0.1 and -p without an alias", () => {
+    const args = sshDestinationArgs(
+      { ...proxied, alias: undefined },
+      { host: "127.0.0.1", port: 45123 },
+    );
+
+    expect(args).toContain("-p");
+    expect(args).toContain("45123");
+    expect(args.at(-1)).toBe("root@127.0.0.1");
+    expect(args).toContain("HostKeyAlias=82.118.28.109");
+  });
+
+  it("keeps the direct target when no tunnel is given", () => {
+    const args = sshDestinationArgs({ ...proxied, alias: undefined });
+
+    expect(args.at(-1)).toBe("root@82.118.28.109");
+    expect(args).toContain("-p");
+    expect(args).toContain("49615");
+    expect(args.join(" ")).not.toContain("HostKeyAlias");
   });
 });

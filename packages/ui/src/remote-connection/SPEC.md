@@ -57,10 +57,31 @@ Windows 远端的所有命令走 `powershell -NoProfile -NonInteractive -Encoded
 
 目录浏览器的父目录推导与根判定不再写死 `/`：`C:\` 也是根，`..` 用 `getContainingDirectoryPath` 推导。
 
-已知限制：workspace identity 里的路径段仍按 `/` 归一（`C:\work` → `/C:/work`），只作为身份键使用，真实 IO 用原路径；Windows 远端不提供工作区索引搜索、媒体预览与符号链接解析（与 POSIX 远端一致）。
+已知限制：workspace identity 里的路径段保留盘符形态（`C:/work`，不加前导 `/`），只作为身份键使用，真实 IO 用原路径；Windows 远端不提供工作区索引搜索、媒体预览与符号链接解析（与 POSIX 远端一致）。
 
 命令退出码：Windows OpenSSH 的 DefaultShell 外面还包一层 shell，内层 `powershell -EncodedCommand` 的非零退出码会被外层统一压成 1（实测 `exit 7` 经双层 PowerShell 返回 1）。因此 agent 的 bash 工具在 Windows 远端只能可靠区分成功/失败，拿不到具体退出码；POSIX 远端不受影响。
 
 命令行长度：Windows 侧脚本以 base64（UTF-16LE）进 `-EncodedCommand`，膨胀约 2.67 倍。DefaultShell 是 cmd 时整条命令行受 8191 字符限制，模型写超过约 3KB 的脚本会报 `The input line is too long`；DefaultShell 是 PowerShell 时上限高得多。
 
 隐藏项：Windows 没有 POSIX 点文件约定，`Get-ChildItem -Force` 总是返回隐藏项，目录浏览器的「显示隐藏目录」开关在 Windows 远端不生效。
+
+## 代理
+
+世界范围的 SSH 主机常常只有通过代理才能连上。向导里代理是选填项：`不使用代理` / `SOCKS5` / `HTTP CONNECT`，字段为地址、端口（缺省 SOCKS5 1080、HTTP 8080）、用户名、密码。
+
+实现不走 `ssh -o ProxyCommand`：SOCKS5 需要 `nc -X 5` 或 `connect` 这类外部 helper，Windows 上不保证存在；自带 helper 又得让 ssh 执行一个可执行文件，`C:\Program Files\...` 的空格与两次引号解析很容易失败。改用 Host 进程内的本地转发器（`packages/shared/src/node/sshProxyTunnel.ts`）：`127.0.0.1:<随机端口>` 接受 ssh/scp 的连接，按配置完成 SOCKS5（RFC 1928/1929，含用户名密码认证）或 HTTP CONNECT（含 `Proxy-Authorization: Basic`）握手后双向转发。
+
+ssh 参数据此改成：
+
+- 有别名：`-o HostName=127.0.0.1 -o Port=<本地端口> -o HostKeyAlias=<远端主机> <别名>`。命令行里不能出现 `user@远端主机`——那个位置会覆盖 `-o HostName`，把连接拉回真实地址绕开代理；别名仍由 ssh 自己解析，`IdentityFile` 等配置继续生效。
+- 无别名：`-p <本地端口> <用户名>@127.0.0.1`。
+
+`HostKeyAlias` 是必需的，不是可选项：少了它所有走代理的主机共用 `127.0.0.1` 一条 known_hosts 记录，第二台机指纹就冲突被拒。加上之后实测写入的是 `82.118.28.109`（不带端口），端口随本地转发器变化也不会产生新条目。
+
+转发器按 `代理 + 目标主机` 缓存复用，空闲 30 分钟且没有活跃连接时关闭。Host 与 agent 进程各自持有自己的转发器（读同一份 spec），不需要跨进程传递端口。
+
+代理口令与 SSH 口令同一套：向导里的密码进 target，Host 落 0600 私有文件 `<hash>.<pid>.proxy.secret`，spec 与 agent spawn env 只带 `proxyPasswordFile` 路径，`stripRemoteTargetSecrets` 剥掉口令。历史快照保存端点（类型/地址/端口/用户名）与 `proxyPasswordCredentialKey`，重连时从 credentialService 取回口令。
+
+代理端点脏值（未知类型、空地址、越界端口）只丢 `proxy` 与 `proxyPasswordFile` 字段并退回直连，不能让整个 spec 失效——半截端点会让 ssh 连向不存在的本地端口，报错只说 `Connection refused`，看不出是代理配置坏了。
+
+已知限制：只覆盖 Desktop 的系统 `ssh`/`scp` 通道（目录浏览、文件读写、agent bash 工具、连接探测）。`packages/server` 里 `ssh2` 那条通道没有代理支持。

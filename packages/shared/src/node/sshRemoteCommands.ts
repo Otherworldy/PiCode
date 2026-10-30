@@ -23,6 +23,7 @@ import {
   runSsh,
   sshAskpassEnv,
   sshPasswordFileOf,
+  sshTunnelEndpoint,
   type SshRemotePlatform,
   type SshRemoteSpec,
 } from "./sshRemote.js";
@@ -284,10 +285,31 @@ export async function spawnScp(
       "NumberOfPasswordPrompts=1",
     );
   }
+  // 走代理时 scp 与 ssh 共用同一个本地转发端口，主机名只留给 HostKeyAlias。
+  const tunnel = await sshTunnelEndpoint(spec);
   // 别名连接时目标只写别名：HostName/Port/User/ProxyJump 都在 ssh_config 里，
   // 拼 username@host 会绕开这些配置，连到和 ssh 命令不同的端点。
   const alias = spec.alias?.trim();
-  if (alias) {
+  if (tunnel) {
+    args.push("-o", `HostKeyAlias=${spec.host}`);
+    if (alias) {
+      args.push(
+        "-o",
+        `HostName=${tunnel.host}`,
+        "-o",
+        `Port=${tunnel.port}`,
+        localPath,
+        `${alias}:${remotePath}`,
+      );
+    } else {
+      args.push(
+        "-P",
+        String(tunnel.port),
+        localPath,
+        `${spec.username}@${tunnel.host}:${remotePath}`,
+      );
+    }
+  } else if (alias) {
     args.push(localPath, `${alias}:${remotePath}`);
   } else {
     const port = spec.port ?? 22;

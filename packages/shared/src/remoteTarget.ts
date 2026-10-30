@@ -9,6 +9,23 @@ import type { RemoteResourcePackageSelection } from "./remoteResourcePackages.js
  */
 export type SshRemotePlatform = "posix" | "windows";
 
+/** 远程连接的代理类型。 */
+export type SshProxyKind = "socks5" | "http";
+
+/**
+ * 代理端点。
+ *
+ * `password` 只存在于连接流程内的 target；落到 spec / env / 历史快照时只保留
+ * 00600 私有文件路径（与 SSH 密码同一套机制）。
+ */
+export interface SshProxyEndpoint {
+  kind: SshProxyKind;
+  host: string;
+  port?: number;
+  username?: string;
+  password?: string;
+}
+
 export interface SSHConnectOptions {
   kind: "ssh";
   host: string;
@@ -22,6 +39,8 @@ export interface SSHConnectOptions {
   resourcePackages?: RemoteResourcePackageSelection;
   /** 探测结果，缺省按 posix（兼容旧快照与旧 Host）。 */
   platform?: SshRemotePlatform;
+  /** 选填的 SOCKS5 / HTTP CONNECT 代理；缺省直连。 */
+  proxy?: SshProxyEndpoint;
 }
 
 export interface WSLConnectOptions {
@@ -40,7 +59,7 @@ export type RemoteTarget = SSHConnectOptions | WSLConnectOptions | DockerConnect
 /**
  * 删除只应存在于当前连接流程中的字段，供长期内存状态和跨进程回包使用。
  *
- * password/私钥口令是 secret；platform 是 Host 连接期探测结果，
+ * password/私钥口令/代理口令是 secret；platform 是 Host 连接期探测结果，
  * 下发给 renderer 只会和每次连接重新探测的值冲突，所以一起剥掉。
  */
 export function stripRemoteTargetSecrets(target: RemoteTarget): RemoteTarget {
@@ -49,9 +68,12 @@ export function stripRemoteTargetSecrets(target: RemoteTarget): RemoteTarget {
       password: _password,
       privateKeyPassphrase: _privateKeyPassphrase,
       platform: _platform,
+      proxy,
       ...sanitized
     } = target;
-    return sanitized;
+    if (!proxy) return sanitized;
+    const { password: _proxyPassword, ...proxyRest } = proxy;
+    return { ...sanitized, proxy: proxyRest };
   }
 
   return target;

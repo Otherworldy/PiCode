@@ -34,11 +34,17 @@ function buildRemoteWorkspacePrivateKeyPassphraseCredentialKey(workspaceKey: str
   return `remote-workspace:${workspaceKey}:private-key-passphrase`;
 }
 
+function buildRemoteWorkspaceProxyPasswordCredentialKey(workspaceKey: string): string {
+  return `remote-workspace:${workspaceKey}:proxy-password`;
+}
+
 function collectRemoteWorkspaceCredentialKeys(snapshot: RemoteTargetSnapshot): string[] {
   if (snapshot.kind === "ssh") {
-    return [snapshot.passwordCredentialKey, snapshot.privateKeyPassphraseCredentialKey].filter(
-      (key): key is string => typeof key === "string" && key.length > 0,
-    );
+    return [
+      snapshot.passwordCredentialKey,
+      snapshot.privateKeyPassphraseCredentialKey,
+      snapshot.proxyPasswordCredentialKey,
+    ].filter((key): key is string => typeof key === "string" && key.length > 0);
   }
 
   return [];
@@ -204,6 +210,23 @@ function createRemoteTargetSnapshot(
               ? previousSnapshot.privateKeyPassphraseCredentialKey
               : buildRemoteWorkspacePrivateKeyPassphraseCredentialKey(workspaceKey)
             : undefined,
+        // 代理端点不含口令；口令走 credentialService，和 SSH 密码同一套处理。
+        ...(target.proxy
+          ? {
+              proxy: {
+                kind: target.proxy.kind,
+                host: target.proxy.host,
+                ...(target.proxy.port ? { port: target.proxy.port } : {}),
+                ...(target.proxy.username !== undefined ? { username: target.proxy.username } : {}),
+              },
+            }
+          : {}),
+        proxyPasswordCredentialKey:
+          typeof target.proxy?.password === "string"
+            ? previousSnapshot?.kind === "ssh" && previousSnapshot.proxyPasswordCredentialKey
+              ? previousSnapshot.proxyPasswordCredentialKey
+              : buildRemoteWorkspaceProxyPasswordCredentialKey(workspaceKey)
+            : undefined,
       };
     case "wsl": {
       const user = target.user?.trim();
@@ -226,6 +249,7 @@ export function createRemoteTargetFromSnapshot(
   credentials: {
     password: string | null;
     privateKeyPassphrase: string | null;
+    proxyPassword?: string | null;
   },
 ): RemoteTarget {
   switch (snapshot.kind) {
@@ -241,6 +265,16 @@ export function createRemoteTargetFromSnapshot(
         ...(typeof credentials.password === "string" ? { password: credentials.password } : {}),
         ...(credentials.privateKeyPassphrase
           ? { privateKeyPassphrase: credentials.privateKeyPassphrase }
+          : {}),
+        ...(snapshot.proxy
+          ? {
+              proxy: {
+                ...snapshot.proxy,
+                ...(typeof credentials.proxyPassword === "string"
+                  ? { password: credentials.proxyPassword }
+                  : {}),
+              },
+            }
           : {}),
       };
     case "wsl":
@@ -378,6 +412,18 @@ export function buildRemoteWorkspaceSessionMutation(params: {
     credentialsToSave.push({
       key: nextSnapshot.passwordCredentialKey,
       value: params.target.password,
+    });
+  }
+
+  if (
+    params.target.kind === "ssh" &&
+    nextSnapshot.kind === "ssh" &&
+    typeof params.target.proxy?.password === "string" &&
+    nextSnapshot.proxyPasswordCredentialKey
+  ) {
+    credentialsToSave.push({
+      key: nextSnapshot.proxyPasswordCredentialKey,
+      value: params.target.proxy.password,
     });
   }
 

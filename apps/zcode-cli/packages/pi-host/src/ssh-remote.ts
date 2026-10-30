@@ -48,6 +48,26 @@ export function readProcessSshRemoteSpec(workspacePath: string): SshRemoteSpec |
   if (parsed.platform !== "posix" && parsed.platform !== "windows") {
     delete parsed.platform;
   }
+  // 代理端点脏值整体丢弃：半截端点会让 ssh 连到一个不存在的本地端口，
+  // 报错是 "Connection refused"，看不出去代理配置坏了。丢掉就退回直连。
+  if (parsed.proxy) {
+    const proxy = parsed.proxy;
+    const validPort =
+      proxy.port === undefined ||
+      (Number.isSafeInteger(proxy.port) && proxy.port > 0 && proxy.port <= 65535);
+    const valid =
+      (proxy.kind === "socks5" || proxy.kind === "http") &&
+      typeof proxy.host === "string" &&
+      proxy.host.trim().length > 0 &&
+      validPort;
+    if (!valid) {
+      delete parsed.proxy;
+      delete parsed.proxyPasswordFile;
+    }
+  }
+  if (parsed.proxy && (typeof parsed.proxyPasswordFile !== "string" || !parsed.proxyPasswordFile)) {
+    delete parsed.proxyPasswordFile;
+  }
   // Pi 在 Windows 上会把 /root/... resolve 成 C:\root\...。两边都指远端根才算同一个工作区。
   const mapped = remotePosixPath(workspacePath, parsed.remotePath);
   if (!samePath(parsed.remotePath, workspacePath) && !samePath(parsed.remotePath, mapped)) {

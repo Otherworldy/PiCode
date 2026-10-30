@@ -1,4 +1,5 @@
 import type { RemoteAssetInstallMode } from "./remoteAssetInstallMode.js";
+import type { SshProxyEndpoint } from "./remoteTarget.js";
 import type { RemoteResourcePackageSelection } from "./remoteResourcePackages.js";
 import type { ProviderFamilyDomain } from "./model-provider-family.js";
 import type { ProviderFamilyConnectionSelectionSettings } from "./provider-family-connection-selection.js";
@@ -141,6 +142,13 @@ export interface SSHRemoteTargetSnapshot {
    * 这里只保存 credentialService 的键名，恢复时再去安全存储读取真实口令。
    */
   privateKeyPassphraseCredentialKey?: string;
+  /** 代理端点（不含口令）；快照里只留这些字段，重连时重建隧道。 */
+  proxy?: Omit<SshProxyEndpoint, "password">;
+  /**
+   * 代理口令同样只保存 credentialService 的键名。
+   * 代理不能留下一个「连得上但认证失败」的重连路径。
+   */
+  proxyPasswordCredentialKey?: string;
 }
 
 export interface WSLRemoteTargetSnapshot {

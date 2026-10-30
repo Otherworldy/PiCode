@@ -1,14 +1,16 @@
+/* eslint-disable max-lines -- SSH 远端的 spec/凭据/askpass/spawn 入口必须共用同一份目标注册表与残留清理逻辑，拆分会把进程内状态切成两份。 */
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { unlinkSync } from "node:fs";
-import { mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { atomicWritePrivateTextFile } from "./privateFilePersistence.js";
 
-import type { SshRemotePlatform } from "../remoteTarget.js";
+import type { SshProxyEndpoint, SshRemotePlatform } from "../remoteTarget.js";
+import { ensureSshProxyForwarder, type SshTunnelEndpoint } from "./sshProxyTunnel.js";
 
-export type { SshRemotePlatform };
+export type { SshRemotePlatform, SshProxyEndpoint };
 
 /** 密码认证目标的最小字段集合；凭据文件按 host/port/user 归档。 */
 export interface SshSecretTarget {
@@ -32,6 +34,10 @@ export interface SshRemoteSpec extends SshSecretTarget {
    * （MCP server 等）会继承整个 env，密码放 env 等于把长期凭据交给它们。
    */
   passwordFile?: string;
+  /** 走代理时的端点；口令不放这里，放 proxyPasswordFile。 */
+  proxy?: Omit<SshProxyEndpoint, "password">;
+  /** 代理口令的 0600 凭据文件（由 Host 写入）；无认证时缺省。 */
+  proxyPasswordFile?: string;
 }
 
 const targets = new Map<string, string>();
@@ -72,6 +78,18 @@ function sshSecretKey(target: SshSecretTarget): string {
 export function sshPasswordSecretPath(secretDirectory: string, target: SshSecretTarget): string {
   const digest = createHash("sha256").update(sshSecretKey(target)).digest("hex").slice(0, 32);
   return join(secretDirectory, `${digest}.${process.pid}.${SECRET_FILE_EXTENSION}`);
+}
+
+/** 代理口令单独一个文件：同一台主机的 SSH 口令与代理口令可能同时存在。 */
+export function sshProxyPasswordSecretPath(
+  secretDirectory: string,
+  target: SshSecretTarget,
+): string {
+  const digest = createHash("sha256")
+    .update(`ssh-proxy-secret:v1\u0000${sshSecretKey(target)}`)
+    .digest("hex")
+    .slice(0, 32);
+  return join(secretDirectory, `${digest}.${process.pid}.proxy.${SECRET_FILE_EXTENSION}`);
 }
 
 const ownedSecretFiles = new Set<string>();
@@ -122,7 +140,8 @@ async function sweepStaleSshPasswordSecrets(secretDirectory: string): Promise<vo
         }
         return;
       }
-      const owner = /\.(\d+)\.secret$/u.exec(name);
+      // 凭据文件名形如 `<digest>.<pid>.<kind>.secret`（kind 缺省是 ssh 口令）。
+      const owner = /\.(\d+)(?:\.[a-z]+)?\.secret$/u.exec(name);
       if (!owner) return;
       const pid = Number(owner[1]);
       if (!Number.isSafeInteger(pid) || pid === process.pid || isProcessAlive(pid)) return;
@@ -146,11 +165,53 @@ export async function writeSshPasswordSecret(
   return filePath;
 }
 
+/** 写入代理口令，返回代理隧道可读的路径。无代理认证时调用方不应写这个文件。 */
+export async function writeSshProxyPasswordSecret(
+  secretDirectory: string,
+  target: SshSecretTarget,
+  password: string,
+): Promise<string> {
+  const filePath = sshProxyPasswordSecretPath(secretDirectory, target);
+  await atomicWritePrivateTextFile(filePath, `${password}\n`);
+  ownedSecretFiles.add(filePath);
+  installSecretCleanup();
+  void sweepStaleSshPasswordSecrets(secretDirectory).catch(() => undefined);
+  return filePath;
+}
+
+/**
+ * 从 spec 还原代理端点：口令从 0600 文件读，不进 env、不进命令行。
+ */
+export async function resolveSshProxyEndpoint(
+  spec: SshRemoteSpec,
+): Promise<SshProxyEndpoint | undefined> {
+  const proxy = spec.proxy;
+  if (!proxy) return undefined;
+  if (!spec.proxyPasswordFile) return { ...proxy };
+  const raw = await readFile(spec.proxyPasswordFile, "utf8").catch(() => undefined);
+  // 写入时保留了结尾换行；Go/OpenSSH 风格的代理实现不接受行尾空白。
+  return raw === undefined ? { ...proxy } : { ...proxy, password: raw.replace(/\r?\n$/u, "") };
+}
+
+/**
+ * 取这条 spec 要连的本地隧道端点；没配代理时返回 undefined（直连）。
+ *
+ * ssh 与 scp 都调这里：同一个 `target + proxy` 复用同一个本地 listener。
+ */
+export async function sshTunnelEndpoint(
+  spec: SshRemoteSpec,
+): Promise<SshTunnelEndpoint | undefined> {
+  const proxy = await resolveSshProxyEndpoint(spec);
+  if (!proxy) return undefined;
+  return await ensureSshProxyForwarder(proxy, { host: spec.host, port: spec.port ?? 22 });
+}
+
 export function sshSpecFromConnectTarget(
   target: SshSecretTarget & {
     sshConfigAlias?: string;
     password?: string;
     platform?: SshRemotePlatform;
+    proxy?: SshProxyEndpoint;
   },
   remotePath: string,
   options?: { passwordSecretDirectory?: string },
@@ -165,6 +226,19 @@ export function sshSpecFromConnectTarget(
     typeof target.password === "string" && secretDirectory
       ? sshPasswordSecretPath(secretDirectory, target)
       : undefined;
+  // 代理口令同样只落文件；代理端点本身（含用户名）可以明文下发。
+  const proxyRest = target.proxy
+    ? {
+        kind: target.proxy.kind,
+        host: target.proxy.host,
+        ...(target.proxy.port ? { port: target.proxy.port } : {}),
+        ...(target.proxy.username !== undefined ? { username: target.proxy.username } : {}),
+      }
+    : undefined;
+  const proxyPasswordFile =
+    typeof target.proxy?.password === "string" && secretDirectory
+      ? sshProxyPasswordSecretPath(secretDirectory, target)
+      : undefined;
   return {
     host: target.host,
     username: target.username,
@@ -173,6 +247,8 @@ export function sshSpecFromConnectTarget(
     ...(alias ? { alias } : {}),
     ...(target.platform ? { platform: target.platform } : {}),
     ...(passwordFile ? { passwordFile } : {}),
+    ...(proxyRest ? { proxy: proxyRest } : {}),
+    ...(proxyPasswordFile ? { proxyPasswordFile } : {}),
   };
 }
 
@@ -279,7 +355,7 @@ function sshPasswordFile(spec: SshRemoteSpec): string | undefined {
   return passwordFile ? passwordFile : undefined;
 }
 
-export function sshDestinationArgs(spec: SshRemoteSpec): string[] {
+export function sshDestinationArgs(spec: SshRemoteSpec, tunnel?: SshTunnelEndpoint): string[] {
   const hasPassword = sshPasswordFile(spec) !== undefined;
   const args = [
     "-T",
@@ -304,6 +380,20 @@ export function sshDestinationArgs(spec: SshRemoteSpec): string[] {
       "-o",
       "NumberOfPasswordPrompts=1",
     );
+  }
+  // 走代理时 ssh 只连本地转发端口，真实主机名只留给 HostKeyAlias：
+  // known_hosts 仍按远端主机记账，否则所有代理主机共用一个 127.0.0.1 条目。
+  if (tunnel) {
+    args.push("-o", `HostKeyAlias=${spec.host}`);
+    const tunneledAlias = spec.alias?.trim();
+    if (tunneledAlias) {
+      // 别名模式下命令行不能出现目标主机名：`user@host` 会覆盖 -o HostName，
+      // 把连接拉回真实地址绕开代理。
+      args.push("-o", `HostName=${tunnel.host}`, "-o", `Port=${tunnel.port}`, tunneledAlias);
+    } else {
+      args.push("-p", String(tunnel.port), `${spec.username}@${tunnel.host}`);
+    }
+    return args;
   }
   const alias = spec.alias?.trim();
   if (alias) {
@@ -378,7 +468,8 @@ export async function spawnSsh(
   remoteCommand: string,
   stdio: "pipe" | ["ignore", "pipe", "pipe"] = "pipe",
 ): Promise<ChildProcess> {
-  return spawn("ssh", [...sshDestinationArgs(spec), remoteCommand], {
+  const tunnel = await sshTunnelEndpoint(spec);
+  return spawn("ssh", [...sshDestinationArgs(spec, tunnel), remoteCommand], {
     windowsHide: true,
     stdio,
     env: await sshAskpassEnv(spec),

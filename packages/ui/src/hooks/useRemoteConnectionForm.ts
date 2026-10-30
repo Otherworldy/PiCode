@@ -4,6 +4,7 @@ import type {
   RemoteAssetInstallMode,
   RemoteTarget,
   SSHConfigAliasOption,
+  SshProxyKind,
   WSLDistro,
 } from "@zcode/shared";
 import { DEFAULT_REMOTE_ASSET_INSTALL_MODE } from "@zcode/shared";
@@ -51,6 +52,12 @@ export function useRemoteConnectionForm({
     DEFAULT_REMOTE_ASSET_INSTALL_MODE,
   );
   const [password, setPassword] = useState("");
+  // 代理是选填项：kind 为空表示直连，否则按对应协议建隧道。
+  const [proxyKind, setProxyKind] = useState<"" | SshProxyKind>("");
+  const [proxyHost, setProxyHost] = useState("");
+  const [proxyPort, setProxyPort] = useState("");
+  const [proxyUsername, setProxyUsername] = useState("");
+  const [proxyPassword, setProxyPassword] = useState("");
   const [privateKeyPath, setPrivateKeyPathState] = useState("");
   const [privateKeyPassphrase, setPrivateKeyPassphrase] = useState("");
   const [wslDistro, setWslDistro] = useState("");
@@ -332,6 +339,11 @@ export function useRemoteConnectionForm({
     sshAuthMethod,
     assetInstallMode,
     password,
+    proxyKind,
+    proxyHost,
+    proxyPort,
+    proxyUsername,
+    proxyPassword,
     privateKeyPath,
     privateKeyPassphrase,
     wslDistro,
@@ -353,6 +365,11 @@ export function useRemoteConnectionForm({
     setSshAuthMethod,
     setAssetInstallMode,
     setPassword,
+    setProxyKind,
+    setProxyHost,
+    setProxyPort,
+    setProxyUsername,
+    setProxyPassword,
     setPrivateKeyPath,
     setPrivateKeyPassphrase,
     setWslDistro,

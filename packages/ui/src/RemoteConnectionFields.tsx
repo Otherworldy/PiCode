@@ -6,6 +6,7 @@ import type {
   RemoteTarget,
   RemoteWorkspaceSessionEntry,
   SSHConfigAliasOption,
+  SshProxyKind,
   WSLDistro,
 } from "@zcode/shared";
 import { AlertTriangleIcon, CheckIcon, ChevronDownIcon, LoaderIcon, Plus } from "lucide-react";
@@ -51,6 +52,7 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 
 const DEFAULT_WSL_DISTRO_VALUE = "__default_wsl_distro__";
 const NO_SSH_CONFIG_ALIAS_VALUE = "__ssh_config_alias_none__";
+const NO_PROXY_VALUE = "__no_proxy__";
 
 function formatSshConfigAliasSummary(aliasOption: SSHConfigAliasOption): string {
   const host = aliasOption.host?.trim() || aliasOption.alias;
@@ -67,6 +69,11 @@ export function RemoteConnectionFields({
   sshAuthMethod,
   assetInstallMode: _assetInstallMode,
   password,
+  proxyKind,
+  proxyHost,
+  proxyPort,
+  proxyUsername,
+  proxyPassword,
   privateKeyPath,
   privateKeyPassphrase,
   wslDistro,
@@ -91,6 +98,11 @@ export function RemoteConnectionFields({
   setSshAuthMethod,
   setAssetInstallMode: _setAssetInstallMode,
   setPassword,
+  setProxyKind,
+  setProxyHost,
+  setProxyPort,
+  setProxyUsername,
+  setProxyPassword,
   setPrivateKeyPath,
   setPrivateKeyPassphrase,
   setWslDistro,
@@ -105,6 +117,11 @@ export function RemoteConnectionFields({
   sshAuthMethod: SSHAuthMethod;
   assetInstallMode: RemoteAssetInstallMode;
   password: string;
+  proxyKind: "" | SshProxyKind;
+  proxyHost: string;
+  proxyPort: string;
+  proxyUsername: string;
+  proxyPassword: string;
   privateKeyPath: string;
   privateKeyPassphrase: string;
   wslDistro: string;
@@ -129,6 +146,11 @@ export function RemoteConnectionFields({
   setSshAuthMethod: (value: SSHAuthMethod) => void;
   setAssetInstallMode: (value: RemoteAssetInstallMode) => void;
   setPassword: (value: string) => void;
+  setProxyKind: (value: "" | SshProxyKind) => void;
+  setProxyHost: (value: string) => void;
+  setProxyPort: (value: string) => void;
+  setProxyUsername: (value: string) => void;
+  setProxyPassword: (value: string) => void;
   setPrivateKeyPath: (value: string) => void;
   setPrivateKeyPassphrase: (value: string) => void;
   setWslDistro: (value: string) => void;
@@ -481,6 +503,98 @@ export function RemoteConnectionFields({
               />
             </div>
           )}
+
+          <div className="space-y-3 rounded-lg border border-border/60 p-3">
+            <div>
+              <label className="mb-1 block text-ui-base text-foreground-subtle">
+                {intl.formatMessage({ id: "ssh.proxy" })}
+              </label>
+              <Select
+                value={proxyKind || NO_PROXY_VALUE}
+                onValueChange={(value) =>
+                  setProxyKind(value === NO_PROXY_VALUE ? "" : (value as SshProxyKind))
+                }
+              >
+                <SelectTrigger className="h-9 text-ui-base">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_PROXY_VALUE}>
+                    {intl.formatMessage({ id: "ssh.proxy.none" })}
+                  </SelectItem>
+                  <SelectItem value="socks5">
+                    {intl.formatMessage({ id: "ssh.proxy.socks5" })}
+                  </SelectItem>
+                  <SelectItem value="http">
+                    {intl.formatMessage({ id: "ssh.proxy.http" })}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {proxyKind ? (
+              <>
+                <div className="grid grid-cols-[1fr_88px] gap-2">
+                  <div>
+                    <label className="mb-1 block text-ui-base text-foreground-subtle">
+                      {intl.formatMessage({ id: "ssh.proxyHost" })}
+                    </label>
+                    <Input
+                      size="lg"
+                      className="h-9 text-ui-base"
+                      value={proxyHost}
+                      onChange={(e) => setProxyHost(e.target.value)}
+                      placeholder={intl.formatMessage({ id: "ssh.proxyHostPlaceholder" })}
+                      autoCapitalize="none"
+                      spellCheck={false}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-ui-base text-foreground-subtle">
+                      {intl.formatMessage({ id: "ssh.proxyPort" })}
+                    </label>
+                    <Input
+                      size="lg"
+                      className="h-9 text-ui-base"
+                      value={proxyPort}
+                      onChange={(e) => setProxyPort(e.target.value)}
+                      placeholder={proxyKind === "socks5" ? "1080" : "8080"}
+                      inputMode="numeric"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="mb-1 block text-ui-base text-foreground-subtle">
+                      {intl.formatMessage({ id: "ssh.proxyUsername" })}
+                    </label>
+                    <Input
+                      size="lg"
+                      className="h-9 text-ui-base"
+                      value={proxyUsername}
+                      onChange={(e) => setProxyUsername(e.target.value)}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-ui-base text-foreground-subtle">
+                      {intl.formatMessage({ id: "ssh.proxyPassword" })}
+                    </label>
+                    <Input
+                      size="lg"
+                      className="h-9 text-ui-base"
+                      type="password"
+                      value={proxyPassword}
+                      onChange={(e) => setProxyPassword(e.target.value)}
+                      autoComplete="off"
+                    />
+                  </div>
+                </div>
+                <p className="text-ui-sm text-foreground-subtle">
+                  {intl.formatMessage({ id: "ssh.proxyHint" })}
+                </p>
+              </>
+            ) : null}
+          </div>
 
           <p className="text-ui-base text-foreground-subtle">
             {intl.formatMessage({ id: "ssh.localRuntime" })}

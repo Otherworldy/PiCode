@@ -48,3 +48,65 @@ describe("empty SSH password in workspace history", () => {
     expect(restored).not.toHaveProperty("password");
   });
 });
+
+describe("SSH proxy in workspace history", () => {
+  const proxiedTarget = {
+    kind: "ssh",
+    host: "82.118.28.109",
+    port: 49615,
+    username: "root",
+    proxy: { kind: "socks5", host: "127.0.0.1", port: 7897, username: "alice", password: "pw" },
+  } as const;
+
+  it("stores the proxy endpoint without its password", () => {
+    const mutation = buildRemoteWorkspaceSessionMutation({
+      remoteSessions: [],
+      workspacePath: "/root",
+      target: proxiedTarget,
+      lastConnectionStatus: "connected",
+      touchOpenedAt: false,
+    });
+
+    const snapshot = mutation.entry.target;
+    expect(snapshot.kind === "ssh" ? snapshot.proxy : undefined).toEqual({
+      kind: "socks5",
+      host: "127.0.0.1",
+      port: 7897,
+      username: "alice",
+    });
+    expect(JSON.stringify(mutation.entry)).not.toContain("pw");
+  });
+
+  it("saves the proxy password under its own credential key", () => {
+    const mutation = buildRemoteWorkspaceSessionMutation({
+      remoteSessions: [],
+      workspacePath: "/root",
+      target: proxiedTarget,
+      lastConnectionStatus: "connected",
+      touchOpenedAt: false,
+    });
+
+    const snapshot = mutation.entry.target;
+    const key = snapshot.kind === "ssh" ? snapshot.proxyPasswordCredentialKey : undefined;
+    expect(key).toBeTruthy();
+    expect(mutation.credentialsToSave).toContainEqual({ key, value: "pw" });
+  });
+
+  it("restores the proxy with the stored password", () => {
+    const restored = createRemoteTargetFromSnapshot(
+      {
+        kind: "ssh",
+        host: "82.118.28.109",
+        port: 49615,
+        username: "root",
+        proxy: { kind: "http", host: "proxy.local", port: 8080 },
+        proxyPasswordCredentialKey: "k",
+      },
+      { password: null, privateKeyPassphrase: null, proxyPassword: "pw" },
+    );
+
+    expect(restored).toMatchObject({
+      proxy: { kind: "http", host: "proxy.local", port: 8080, password: "pw" },
+    });
+  });
+});
