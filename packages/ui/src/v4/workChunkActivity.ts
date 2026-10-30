@@ -1,5 +1,6 @@
 import type { AssistantWorkRow } from "@/v4/conversationTurnRenderUnits.js";
 import { isVisibleAssistantWorkRow } from "@/v4/conversationTurnRenderUnits.js";
+import { isProcessEventText } from "@/v4/processEventText.js";
 
 /**
  * 运行中工作块标题报的活动类别。
@@ -155,7 +156,11 @@ export function resolveWorkActivity(
       : { activity: "thinking", preparing: false };
   }
   return {
-    activity: lastVisible.kind === "assistantText" ? "answer" : "thinking",
+    // process 通知借 assistantText 行承载，但它不是在写答案。
+    activity:
+      lastVisible.kind === "assistantText" && !isProcessEventText(lastVisible.text)
+        ? "answer"
+        : "thinking",
     preparing: false,
   };
 }

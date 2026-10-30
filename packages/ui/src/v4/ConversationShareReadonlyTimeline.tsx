@@ -15,6 +15,7 @@ import {
   useState,
 } from "react";
 import {
+  ActivityIcon,
   BotIcon,
   ChevronRightIcon,
   FilePenLineIcon,
@@ -62,6 +63,7 @@ import {
   type ConversationTurnRenderUnit,
 } from "@/v4/conversationTurnRenderUnits.js";
 import type { AssistantWorkRow, ConversationTurnFlowItem } from "@/v4/conversationTurnFlowItems.js";
+import { processEventSummary } from "@/v4/processEventText.js";
 import type { ConversationTurnWorkSegment } from "@/v4/conversationTurnWorkSegments.js";
 import { formatConversationWorkDuration } from "@/v4/conversationWorkDuration.js";
 import { normalizeConversationShareMarkdown } from "@/v4/conversationShareMarkdown.js";
@@ -264,6 +266,20 @@ const AssistantTextPresentation = memo(function AssistantTextPresentation({
     () => normalizeConversationShareMarkdown(row.text, artifactNames),
     [artifactNames, row.text],
   );
+  const processSummary = processEventSummary(row.text);
+  if (processSummary) {
+    // 分享页与桌面同一口径：process 通知是一行状态，不是正文 markdown。
+    return (
+      <div data-conversation-share-row-kind="assistantText" className="group/assistant-row">
+        <div className="flex min-w-0 max-w-full items-center gap-2 text-ui-base">
+          <ActivityIcon className="size-4 shrink-0 text-foreground-subtlest" aria-hidden="true" />
+          <span className="min-w-0 truncate text-foreground-subtle" title={processSummary}>
+            {processSummary}
+          </span>
+        </div>
+      </div>
+    );
+  }
   return (
     <div data-conversation-share-row-kind="assistantText" className="group/assistant-row">
       <div data-conversation-selectable="true" className="w-full text-ui-base">

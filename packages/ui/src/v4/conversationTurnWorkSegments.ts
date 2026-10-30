@@ -11,6 +11,7 @@ import {
 import { isPluginUiPinnedToolRow, type PluginUiRowPinResolver } from "@/plugin-ui/index.js";
 import { buildConversationFlowItems } from "@/v4/conversationTurnFlowItems.js";
 import type { AssistantWorkRow, ConversationTurnFlowItem } from "@/v4/conversationTurnFlowItems.js";
+import { isAssistantBodyTextRow } from "@/v4/processEventText.js";
 
 export interface ConversationTurnWorkStatus {
   state: "running" | "completed" | "interrupted";
@@ -131,10 +132,6 @@ function isUserInputRow(row: ConversationRow): row is UserInputRow {
   return row.kind === "userInput";
 }
 
-function isAssistantTextRow(row: ConversationRow): row is AssistantTextRow {
-  return row.kind === "assistantText";
-}
-
 function isAssistantWorkRow(row: ConversationRow): row is AssistantWorkRow {
   return row.kind !== "turnHeader" && row.kind !== "userInput";
 }
@@ -216,10 +213,12 @@ export function buildConversationTurnWorkSegments(options: {
     const productLatestAssistantTextRow = options.latestAssistantTextRow
       ? segmentFlowRows.find((row) => row.rowId === options.latestAssistantTextRow?.rowId)
       : undefined;
+    // 能当「这一段的最终正文」提溜出折叠的只能是真正文；process 通知跟在工具后面时
+    // 不能把前面的工具块顶出去，否则一轮工作被通知切成好几段。
     const visibleAssistantTextRow =
-      productLatestAssistantTextRow && isAssistantTextRow(productLatestAssistantTextRow)
+      productLatestAssistantTextRow && isAssistantBodyTextRow(productLatestAssistantTextRow)
         ? productLatestAssistantTextRow
-        : segmentCompleted && lastSegmentFlowRow && isAssistantTextRow(lastSegmentFlowRow)
+        : segmentCompleted && lastSegmentFlowRow && isAssistantBodyTextRow(lastSegmentFlowRow)
           ? lastSegmentFlowRow
           : undefined;
     const visibleAssistantIndex = visibleAssistantTextRow

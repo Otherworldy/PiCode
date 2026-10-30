@@ -5,6 +5,7 @@ import type {
   UserInputRow,
 } from "@zcode/shared/zcode-protocol-v4";
 import type { ConversationCuaGroupRenderItem } from "@/v4/conversationCuaGroups.js";
+import { isAssistantBodyTextRow } from "@/v4/processEventText.js";
 
 export type AssistantWorkRow = Exclude<ConversationRow, TurnHeaderRow | UserInputRow>;
 
@@ -58,29 +59,8 @@ function isUserInputRow(row: ConversationRow): row is UserInputRow {
   return row.kind === "userInput";
 }
 
-function isAssistantTextRow(row: ConversationRow): row is AssistantTextRow {
-  return row.kind === "assistantText";
-}
-
 function isAssistantWorkRow(row: ConversationRow): row is AssistantWorkRow {
   return row.kind !== "turnHeader" && row.kind !== "userInput";
-}
-
-/** Pi process 插件的 custom message。它不是模型正文，不能拿来切开折叠。 */
-export function isProcessEventText(text: string): boolean {
-  const trimmed = text.trim();
-  return trimmed.startsWith("<process_event") && trimmed.includes("</process_event>");
-}
-
-export function processEventSummary(text: string): string | null {
-  if (!isProcessEventText(text)) return null;
-  const summary = /<summary>([\s\S]*?)<\/summary>/.exec(text)?.[1]?.trim();
-  if (summary) return summary;
-  const line = text
-    .split("\n")
-    .map((item) => item.trim())
-    .find((item) => item.length > 0 && !item.startsWith("<"));
-  return line ?? null;
 }
 
 function staysOutsideWorkFold(row: AssistantWorkRow): boolean {
@@ -155,14 +135,9 @@ export function buildConversationFlowItems(options: {
     // 这里只保留真实 flow；boundary 由 TurnGroup 在全部 turn-local 附属 UI 之后统一收尾。
     if (tailRowIds.has(row.rowId)) continue;
     // 正文是折叠边界：中间回复也留在折叠外，把前后工具切成各自的块。
-    // process 通知除外，它跟在工具后面，留在同一块里。
+    // process 通知不是正文（`isAssistantBodyTextRow`），它跟在工具后面留在同一块里。
     // 工具回合常带一段 "\n\n"。空白不是正文，切开会让连续终端各自成一块。
-    if (
-      isAssistantTextRow(row) &&
-      !tailRowIds.has(row.rowId) &&
-      !options.timelineOnly &&
-      !isProcessEventText(row.text)
-    ) {
+    if (isAssistantBodyTextRow(row) && !tailRowIds.has(row.rowId) && !options.timelineOnly) {
       if (!row.text.trim()) continue;
       items.push({
         kind: "assistantText",

@@ -1,6 +1,9 @@
 import type { ConversationAssistantWorkRenderItem } from "@/v4/conversationAssistantWorkItems.js";
 
-/** 工作块或正文。正文是块边界：它不进限高容器，否则读正文也要在框里滚。 */
+import { isAssistantBodyTextRow } from "@/v4/processEventText.js";
+
+/** 工作块或正文。正文是块边界：它不进限高容器，否则读正文也要在框里滚。
+ * process 通知虽然也是 assistantText 行，但它不是正文，跟工具一样留在块里。 */
 export type ConversationAssistantWorkRenderChunk =
   | {
       kind: "text";
@@ -28,7 +31,7 @@ export function chunkAssistantWorkRenderItems(
     pending = [];
   };
   for (const item of items) {
-    if (item.kind === "row" && item.row.kind === "assistantText") {
+    if (item.kind === "row" && isAssistantBodyTextRow(item.row)) {
       flush();
       chunks.push({ kind: "text", key: item.key, item });
       continue;

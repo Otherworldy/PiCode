@@ -144,6 +144,31 @@ test("blank assistant text does not split consecutive terminal calls", () => {
   );
 });
 
+test("process 通知不当正文：不切块、不抢最终正文", () => {
+  const notice = (rowId: number): ConversationRow => ({
+    rowId,
+    turnId: "t1",
+    createdAt: rowId,
+    createdAtSeq: rowId,
+    kind: "assistantText",
+    text: '<process_event type="lifecycle" kind="failed">\n  <summary>Process "dev" failed.</summary>\n</process_event>',
+    state: "complete",
+  });
+  const unit = buildConversationTurnRenderUnits([
+    header("completedSuccess"),
+    bash(2),
+    notice(3),
+    bash(4),
+  ])[0];
+  const folded = unit?.workSegments?.[0]?.flowItems.filter(isSeparatelyFoldedFlowItem) ?? [];
+  assert.equal(folded.length, 1);
+  assert.equal(
+    unit?.assistantTextRows.some((row) => row.rowId === 3),
+    false,
+  );
+  assert.equal(unit?.latestAssistantTextRow, undefined);
+});
+
 test("real assistant text still splits the surrounding tools", () => {
   const said = (rowId: number): ConversationRow => ({
     rowId,

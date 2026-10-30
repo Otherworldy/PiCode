@@ -2,7 +2,7 @@ import { GenUiMessageResponse } from "@/gen-ui/index.js";
 /* oxlint-disable eslint(max-lines) -- v4 逐行 row 渲染分发集中收口（每种 row 一个 memo 叶子 + timelineMarker 分隔线），拆分会打散行类型对照。 */
 import { compactFailureText } from "@/v4/compactFailureText.js";
 import { ConversationCappedScroll } from "@/v4/ConversationCappedScroll.js";
-import { processEventSummary } from "@/v4/conversationTurnFlowItems.js";
+import { processEventSummary } from "@/v4/processEventText.js";
 import {
   ResumeHereAfterText,
   ResumeHereButton,
@@ -13,6 +13,7 @@ import {
 } from "@/v4/ResumeHereMenu.js";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIcon,
   ArchiveIcon,
   ArrowRightLeftIcon,
   ArrowUpIcon,
@@ -1979,9 +1980,16 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
       : undefined;
   const processSummary = processEventSummary(row.text);
   if (processSummary) {
+    // process 插件的状态通知折在工作块里，与「思考」「终端」同一个图标列：
+    // 只占一行，长了截断，悬停看全文。它不是正文，所以不排队正文的间距、动作行和 markdown 渲染。
     return (
       <RowShell rowId={row.rowId} className="group/assistant-row">
-        <p className="w-full text-ui-base text-foreground-subtle">{processSummary}</p>
+        <div className="flex min-w-0 max-w-full items-center gap-2 text-ui-base">
+          <ActivityIcon className="size-4 shrink-0 text-foreground-subtlest" aria-hidden="true" />
+          <span className="min-w-0 truncate text-foreground-subtle" title={processSummary}>
+            {processSummary}
+          </span>
+        </div>
       </RowShell>
     );
   }

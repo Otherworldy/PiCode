@@ -25,7 +25,8 @@
 - 后面的块标题同样写出这一块的工具次数和时长，始终有箭头，可以单独收起。
 - 工作已经结束的工具区默认收起。轮次还在跑时，只展开最后一块、且后面还没有 assistant 正文的工具区；正文一出现，前面的工具区就收起。用户仍可手动展开已结束的块。轮次结束后全部默认收起。
 - `ask_user_question` 留在折叠外，收起工作块时问卷还在。
-- `<process_event>` 通知不是正文：不切开折叠，只显示 summary。
+- `<process_event>` 通知（Pi process 插件的 `pi.sendMessage` custom message）借 `assistantText` 行承载，但**不是正文**：它不切开折叠、不当最终答复的动作挂点、不进分享/复制的正文拼接，也不把块标题改成「正在回答」。「这是不是正文」只认 `v4/processEventText.ts` 的 `isAssistantBodyTextRow`，不要在别处再写 `kind === "assistantText"`。
+- 通知折进工作块里，当一条状态行：图标列与「思考」「终端」对齐（`ActivityIcon` + 一行 subtle 色文本），只显示 `<summary>`；长了截断，悬停看全文。原始 XML（`command`/`exit_code`/`matched_line`）不上屏。分享页的只读时间线同一口径。
 - 纯 Computer Use response 里的正文仍留在 CUA 分组内，不用它切开分组。
 - 压缩分隔线，以及折叠区外的插件 UI 卡片，不进这些块。
 - 分段时长与整轮同一口径：`workSegments[].activeMs` 同样排除等待，运行中用 `workSegments[].waitedMs` 加 `waitingSince` 扣。
@@ -101,8 +102,6 @@ TTFT 由投影在收到首个文本或思考增量时用本机时钟打点，Pi 
 `usage` 四项全零的调用整次跳过，不占步数也不占 token——包括冷恢复合成的零用量 `ModelComplete` 占位事件，否则重开一次历史会话步数就白涨一轮。累计量单调递增，不因轮被中断或失败回退。历史会话若 jsonl 里本来就没写 `usage`（早期会话），累计值从 0 起算，不拿上下文水位反推。
 
 # 分支摘要
-
-
 
 ## 行为
 

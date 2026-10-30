@@ -311,4 +311,32 @@ describe("工作块折叠标题的工时口径", () => {
     // 这一轮没有工具调用：轮尾只剩时长。
     expect(loadingSlotLabel(html)).toBe("用时 14 分 6 秒");
   });
+
+  it("process 通知留在同一块里当状态行，不切开工作区也不上屏原始 XML", () => {
+    const notice: ConversationRow = {
+      rowId: 3,
+      turnId: "t1",
+      createdAt: STARTED_AT + 2_000,
+      createdAtSeq: 3,
+      kind: "assistantText",
+      text: '<process_event type="log_match" kind="log_match">\n  <summary>Process "dev" matched log pattern "ready" on stdout.</summary>\n  <matched_line>ready</matched_line>\n</process_event>',
+      state: "complete",
+    };
+    const html = renderTurn([
+      runningHeader(),
+      toolRow(2, STARTED_AT + 1_000, STARTED_AT + 1_400),
+      notice,
+      toolRow(4, STARTED_AT + 840_000, STARTED_AT + 845_000, { status: "running" }),
+    ]);
+
+    // 还是同一块：没有因为通知再切一个「调用 N 次工具」出来。
+    expect(html).toContain(`${TRIGGER_PREFIX}t1"`);
+    expect(html).not.toContain(`${TRIGGER_PREFIX}t1:chunk-1"`);
+    // 只画 summary，且带自己的图标列。
+    expect(html).toContain("matched log pattern &quot;ready&quot; on stdout.");
+    expect(html).toContain("lucide-activity");
+    // 原始 XML 不上屏。
+    expect(html).not.toContain("process_event");
+    expect(html).not.toContain("matched_line");
+  });
 });

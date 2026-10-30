@@ -123,6 +123,22 @@ test("没有在跑的工具时回到思考或正文", () => {
   });
 });
 
+test("process 通知当块尾时不算在写答案", () => {
+  const notice: AssistantWorkRow = {
+    rowId: 3,
+    turnId: "t1",
+    createdAt: 3,
+    createdAtSeq: 3,
+    kind: "assistantText",
+    text: '<process_event type="lifecycle">\n  <summary>Process "dev" ended.</summary>\n</process_event>',
+    state: "complete",
+  };
+  assert.deepEqual(resolveWorkActivity([textRow(2), notice], { stageRunning: true }), {
+    activity: "thinking",
+    preparing: false,
+  });
+});
+
 test("一块里什么都没有时不给活动", () => {
   assert.equal(resolveWorkActivity([], { stageRunning: true }), null);
 });

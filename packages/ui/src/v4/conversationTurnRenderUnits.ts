@@ -9,6 +9,7 @@ import type {
   WorkflowLaunchMeta,
 } from "@zcode/shared/zcode-protocol-v4";
 import type { AssistantWorkRow, ConversationTurnFlowItem } from "@/v4/conversationTurnFlowItems.js";
+import { isAssistantBodyTextRow } from "@/v4/processEventText.js";
 import type { PluginUiRowPinResolver } from "@/plugin-ui/index.js";
 import {
   isWorkflowLaunchUserInputRow,
@@ -91,10 +92,6 @@ interface DraftTurnRenderUnit {
   assistantWorkRows: AssistantWorkRow[];
   hookInvocations: HookInvocationRow[];
   orderedRows: ConversationRow[];
-}
-
-function isAssistantTextRow(row: ConversationRow): row is AssistantTextRow {
-  return row.kind === "assistantText";
 }
 
 function isTurnHeaderRow(row: ConversationRow): row is TurnHeaderRow {
@@ -282,14 +279,15 @@ function materializeDraftUnit(
     : options.sessionPhase === "completedInterrupted";
 
   // product turn 的最终正文仍是唯一 action target；视觉工作段只改变折叠边界。
-  const assistantTextRows = flowRows.filter(isAssistantTextRow);
+  // process 通知不算正文：否则通知会变成轮尾动作的挂点，把工作块顶出去。
+  const assistantTextRows = flowRows.filter(isAssistantBodyTextRow);
   const actionAssistantTextRow = assistantTextRows.find(
     (row) => row.actions?.canFork === true || row.actions?.canRetry === true,
   );
   const lastFlowRow = flowRows.at(-1);
   const latestAssistantTextRow =
     actionAssistantTextRow ??
-    (!isRunning && lastFlowRow && isAssistantTextRow(lastFlowRow) ? lastFlowRow : undefined);
+    (!isRunning && lastFlowRow && isAssistantBodyTextRow(lastFlowRow) ? lastFlowRow : undefined);
   const workDurationMs = resolveConversationTurnWorkDurationMs(draft.header, options, isRunning);
   const workStatus = resolveConversationTurnWorkStatus(
     draft.header,

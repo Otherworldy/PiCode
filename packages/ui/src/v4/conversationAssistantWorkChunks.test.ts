@@ -3,9 +3,19 @@ import test from "node:test";
 import { chunkAssistantWorkRenderItems } from "./conversationAssistantWorkChunks.js";
 import type { ConversationAssistantWorkRenderItem } from "./conversationAssistantWorkItems.js";
 
-const text = (key: string) =>
-  ({ kind: "row", key, row: { kind: "assistantText", rowId: 1 } }) as unknown as
+const text = (key: string, body = "正文") =>
+  ({ kind: "row", key, row: { kind: "assistantText", rowId: 1, text: body } }) as unknown as
     ConversationAssistantWorkRenderItem;
+const processEvent = (key: string) =>
+  ({
+    kind: "row",
+    key,
+    row: {
+      kind: "assistantText",
+      rowId: 3,
+      text: '<process_event type="lifecycle">\n  <summary>Process "dev" failed.</summary>\n</process_event>',
+    },
+  }) as unknown as ConversationAssistantWorkRenderItem;
 const tool = (key: string) =>
   ({ kind: "row", key, row: { kind: "toolCall", rowId: 2 } }) as unknown as
     ConversationAssistantWorkRenderItem;
@@ -58,4 +68,13 @@ test("连续正文各自成块，不合并", () => {
 test("块 key 取首项 key，展开重渲染后身份不变", () => {
   const chunks = chunkAssistantWorkRenderItems([tool("a"), tool("b")]);
   assert.equal(chunks[0]?.key, "work:a");
+});
+
+test("process 通知不是正文，不能把工作块切成两段", () => {
+  const chunks = chunkAssistantWorkRenderItems([tool("a"), processEvent("p1"), tool("b")]);
+  assert.deepEqual(
+    chunks.map((chunk) => chunk.kind),
+    ["work"],
+  );
+  assert.equal(chunks[0]?.kind === "work" && chunks[0].items.length, 3);
 });

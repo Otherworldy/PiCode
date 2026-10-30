@@ -1,4 +1,5 @@
 import type { ConversationRow, SessionPhase } from "@zcode/shared/zcode-protocol-v4";
+import { isAssistantBodyTextRow } from "@/v4/processEventText.js";
 
 interface AssistantPreviewPptxCompletedTurn {
   turnId: string;
@@ -50,7 +51,7 @@ export function resolveLatestCompletedAssistantPreviewTurn(
     .reverse()
     .find(
       (row): row is Extract<ConversationRow, { kind: "assistantText" }> =>
-        row.kind === "assistantText" && row.turnId === latestHeader.turnId,
+        isAssistantBodyTextRow(row) && row.turnId === latestHeader.turnId,
     );
   if (!latestAssistant || latestAssistant.state !== "complete") return null;
 
