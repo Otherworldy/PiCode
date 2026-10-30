@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.19.6](https://github.com/Otherworldy/PiCode/compare/v3.19.5...v3.19.6) (2026-10-30)
+
+### Features
+
+* **ssh:** 远程连接支持 SOCKS5 与 HTTP CONNECT 代理 ([f4fada1](https://github.com/Otherworldy/PiCode/commit/f4fada103984825e87e2a9946d883a1ecd7517a2))
+  * Host 进程内建本地转发器（127.0.0.1 随机端口）完成 SOCKS5（含用户名密码
+  * ssh/scp 走代理时改连本地端口，远端主机名只留给 HostKeyAlias：known_hosts
+  * 代理口令与 SSH 口令同一套：0600 私有文件 + spec 只带路径，历史快照只存
+  * 向导新增选填代理区（类型/地址/端口/用户名/密码），脏端点只丢字段退回直连
+  * validation 的 sshConnectOptionsSchema 补 proxy 字段：Zod 会剥离未声明字段，
+
+
+### Bug Fixes
+
+* **v4:** 回退到此处后输入框的图片/视频附件仍显示缩略图 ([72f5075](https://github.com/Otherworldy/PiCode/commit/72f507593162e90f0909678bfdaf049cffc476ef))
+
+* **v4:** process 通知按状态行折进工作块，不再切开时间线 ([874f07a](https://github.com/Otherworldy/PiCode/commit/874f07afac598fa31b8693c508a71230f99b1c88))
+
 ## [3.19.5](https://github.com/Otherworldy/PiCode/compare/v3.19.4...v3.19.5) (2026-10-29)
 
 ### Features
