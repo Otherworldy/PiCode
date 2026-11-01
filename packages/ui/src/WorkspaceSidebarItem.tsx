@@ -10,6 +10,7 @@ import {
 } from "react";
 import {
   CheckIcon,
+  Brain,
   CircleAlert,
   Cloud,
   CopyIcon,
@@ -62,6 +63,7 @@ import { ReconnectingRemoteWorkspaceLogTooltip } from "@/WorkspaceSidebar/Reconn
 import { cn } from "@/components/lib/utils.js";
 import {
   TID_WORKSPACE_CLOSE,
+  TID_WORKSPACE_MEMORY,
   TID_WORKSPACE_RENAME,
   TID_WORKSPACE_FILE_TREE_BUTTON,
   TID_WORKSPACE_ITEM,
@@ -88,6 +90,7 @@ import { refreshSharedSkillStoreForWorkspace } from "@/lib/skillStoreRefresh.js"
 import { refreshWorkspacePluginCapabilitiesAfterRemoteSync } from "@/lib/remotePluginSyncRefresh.js";
 import { useMcpStore } from "@/store/mcpStore.js";
 import { TaskRowActionButton } from "@/workspace-grouped-tasks/task-row-action-button.js";
+import { WorkspaceMemoryDialog } from "@/WorkspaceSidebar/WorkspaceMemoryDialog.js";
 import { WorkspaceProjectMcpDialog } from "@/WorkspaceSidebar/WorkspaceProjectMcpDialog.js";
 import { WorkspaceSystemPromptDialog } from "@/WorkspaceSidebar/WorkspaceSystemPromptDialog.js";
 import { releaseWorkspaceRuntimeAfterProjectRemoval } from "@/lib/workspaceRuntimeRelease.js";
@@ -275,6 +278,7 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
   const [remotePluginSyncOpen, setRemotePluginSyncOpen] = useState(false);
   const [systemPromptOpen, setSystemPromptOpen] = useState(false);
   const [projectMcpOpen, setProjectMcpOpen] = useState(false);
+  const [workspaceMemoryOpen, setWorkspaceMemoryOpen] = useState(false);
   const [workspaceRowHovered, setWorkspaceRowHovered] = useState(false);
   const [workspaceRowFocusWithin, setWorkspaceRowFocusWithin] = useState(false);
   const [workspaceActionMenuOpen, setWorkspaceActionMenuOpen] = useState(false);
@@ -1005,6 +1009,21 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
                             {intl.formatMessage({ id: "workspaceSidebar.rename" })}
                           </DropdownMenuItem>
                           <DropdownMenuItem
+                            data-testid={testId(TID_WORKSPACE_MEMORY, tab.workspacePath)}
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                            }}
+                            onSelect={(event) => {
+                              event.preventDefault();
+                              setWorkspaceActionMenuOpen(false);
+                              setWorkspaceMemoryOpen(true);
+                            }}
+                          >
+                            <Brain className="h-3.5 w-3.5" />
+                            {intl.formatMessage({ id: "workspaceSidebar.memory" })}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
                             data-testid={testId(TID_WORKSPACE_CLOSE, tab.workspacePath)}
                             onMouseDown={(event) => {
                               event.preventDefault();
@@ -1257,6 +1276,17 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
           onOpenChange={setProjectMcpOpen}
           open
           workspaceIdentity={tab.workspaceIdentity}
+          workspaceLabel={workspaceSidebarLabel}
+          workspacePath={tab.workspacePath}
+        />
+      ) : null}
+      {workspaceMemoryOpen ? (
+        <WorkspaceMemoryDialog
+          memoryService={services.memoryService}
+          onOpenChange={setWorkspaceMemoryOpen}
+          open
+          remote={isRemoteWorkspace}
+          workspaceIdentity={tab.workspaceIdentity ?? undefined}
           workspaceLabel={workspaceSidebarLabel}
           workspacePath={tab.workspacePath}
         />

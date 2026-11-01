@@ -1,4 +1,4 @@
-import { ensureAppDataDir } from "@zcode/shared/node";
+import { ensureAppDataDir, isWorkspaceMemoryMarkdownTarget } from "@zcode/shared/node";
 import { querySessionDebug } from "./session-debug.js";
 import {
   zcodeProtocolMethods,
@@ -341,6 +341,19 @@ export class ZCodeProtocolAgentServer {
             });
             if (result.decision === "allow") return "allow";
             if (result.decision === "deny") return "deny";
+            // 记忆是宿主预创建的项目目录，写普通 Markdown 不应每次弹确认。
+            // 仍然保留 plan mode、显式 deny/ask 与工具自报的 alwaysAsk。
+            if (
+              hosted.memoryEnabled &&
+              (mapped === "Write" || mapped === "Edit") &&
+              !result.alwaysAsk &&
+              result.ruleId !== "mode.plan.nonReadOnly" &&
+              result.ruleId !== "rule.project.ask" &&
+              result.ruleId !== "hook.PreToolUse.ask" &&
+              (await isWorkspaceMemoryMarkdownTarget(hosted.workspacePath, piToolPath(args)))
+            ) {
+              return "allow";
+            }
             return (await hosted.requestConfirm(mapped, result.reason ?? `Allow ${mapped}?`, args))
               ? "allow"
               : "deny";
@@ -996,4 +1009,12 @@ export class ZCodeProtocolAgentServer {
     }
     pending.requestKeys.clear();
   }
+}
+
+/** Pi 的 write/edit 输入字段在不同版本里叫 path 或 file_path。 */
+function piToolPath(args: unknown): string {
+  if (!args || typeof args !== "object") return "";
+  const record = args as Record<string, unknown>;
+  const value = record.path ?? record.file_path;
+  return typeof value === "string" ? value : "";
 }

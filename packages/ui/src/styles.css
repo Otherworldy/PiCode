@@ -185,6 +185,7 @@ body {
   --color-sidebar: var(--color-neutral-100);
   --color-surface: color-mix(in oklab, var(--color-neutral-950) 3%, transparent);
   --color-surface-hover: color-mix(in oklab, var(--color-neutral-950) 5%, transparent);
+  --color-editor-surface: color-mix(in oklab, var(--color-foreground) 6%, transparent);
   --color-markdown-inline-code: var(--color-tag);
   --color-card: var(--color-white);
   --color-card-selected: var(--color-neutral-200);

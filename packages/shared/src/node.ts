@@ -83,6 +83,27 @@ export {
   isAppDataDirName,
 } from "./node/appDataDir.js";
 export {
+  PI_PROJECT_DIR_NAME,
+  WORKSPACE_MEMORY_DIR_NAME,
+  WORKSPACE_MEMORY_INDEX_FILE_NAME,
+  WORKSPACE_MEMORY_ITEM_FILE_PATTERN,
+  WORKSPACE_MEMORY_MAX_INDEX_BYTES,
+  WORKSPACE_MEMORY_MAX_ITEM_BYTES,
+  assertWorkspaceMemoryRootTrusted,
+  ensureWorkspaceMemoryGitExcluded,
+  ensureWorkspaceMemoryRoot,
+  isWorkspaceMemoryFileName,
+  isWorkspaceMemoryItemFileName,
+  isWorkspaceMemoryMarkdownTarget,
+  isWorkspaceMemorySupported,
+  readWorkspaceMemoryEnabled,
+  readWorkspaceMemoryModel,
+  resolveWorkspaceMemoryRoot,
+  setWorkspaceMemoryEnabled,
+  setWorkspaceMemoryModel,
+  type WorkspaceMemoryModelConfig,
+} from "./node/workspaceMemory.js";
+export {
   AGENT_APPEND_SYSTEM_PROMPT_FILE_NAME,
   AGENT_SYSTEM_PROMPT_FILE_NAME,
   AGENT_SYSTEM_PROMPT_MAX_BYTES,

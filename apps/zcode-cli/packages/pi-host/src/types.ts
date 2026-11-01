@@ -331,6 +331,12 @@ export interface CreatePiSessionInput {
   /** 子会话不挂 codemode、tool_search、MCP。对话分叉即使有 parentSessionId 也不要设。 */
   omitHostExtensions?: boolean;
   loadExtensions: boolean;
+  /** 本地工作区且项目开关打开时注入工作区记忆。 */
+  memoryEnabled?: boolean;
+  /** 记忆根目录。worktree 会话仍跟随 workspacePath，不是 cwd。 */
+  memoryRoot?: string;
+  /** 记忆开关所在的项目根目录，用于每轮重新读取 zcode.json。 */
+  memoryWorkspacePath?: string;
   checkPermission?: ToolPermissionCheck;
 }
 

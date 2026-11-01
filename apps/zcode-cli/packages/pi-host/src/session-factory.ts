@@ -1,5 +1,6 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { readWorkspaceMemoryEnabled } from "@zcode/shared/node";
 import type {
   CreateAgentSessionOptions,
   CreateAgentSessionResult,
@@ -29,6 +30,7 @@ import { readPiContextUsage } from "./context-breakdown.js";
 import { createPermissionExtension } from "./permission-gate.js";
 import { createUiDesignMode } from "./ui-design-mode.js";
 import { createPlanReviewSignalExtension, takePlanDecision } from "./plan-review-signal.js";
+import { createWorkspaceMemoryExtension } from "./workspace-memory.js";
 import { captureAbandonedBranch, summarizeAbandonedBranch } from "./branch-summary.js";
 import {
   contextEventsOf,
@@ -460,6 +462,15 @@ export function createSdkSessionFactory(
             ]
           : []),
         ...(processes?.factories ?? []),
+        // 必须放最后：handler 要用其它扩展写完的完整 system prompt。
+        ...(input.memoryEnabled === true && input.memoryRoot
+          ? [
+              createWorkspaceMemoryExtension({
+                root: input.memoryRoot,
+                enabled: () => readWorkspaceMemoryEnabled(input.memoryWorkspacePath ?? input.cwd),
+              }),
+            ]
+          : []),
       ],
       ...(sshProjectSystemPrompt !== undefined
         ? { systemPromptOverride: () => sshProjectSystemPrompt }

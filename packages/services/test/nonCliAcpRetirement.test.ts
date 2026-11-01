@@ -12,11 +12,7 @@ import {
 } from "@zcode/shared";
 import { TaskIndexRepo } from "../src/session/taskIndexRepo.js";
 import { createZCodeTaskServiceAdapter } from "../src/zcode-agent/zcodeTaskServiceAdapter.js";
-import {
-  getLegacyTaskSessionSnapshotPath,
-  getZCodeDataRootDir,
-  setDataBaseDir,
-} from "../src/paths.js";
+import { getLegacyTaskSessionSnapshotPath, setDataBaseDir } from "../src/paths.js";
 import { createMemoryService } from "../src/memory/memoryService.js";
 import { parseLegacyTaskSessionFile } from "../src/session/legacyTaskSessionFile.js";
 import { createProviderConfigRuntime } from "../src/model-provider/providerConfigRuntime.js";
@@ -34,32 +30,31 @@ const meta = {
 
 test("current Project Memory catalog and files remain readable", async () => {
   const dir = await mkdtemp(join(tmpdir(), "zcode-current-memory-"));
-  setDataBaseDir(dir);
   try {
-    const workspaceId = "example-0123456789abcdef";
-    const memoryRoot = join(
-      getZCodeDataRootDir(),
-      "cli",
-      "memories",
-      "projects",
-      workspaceId,
-      "memory",
-    );
+    const workspacePath = join(dir, "workspace");
+    const memoryRoot = join(workspacePath, ".pi", "memory");
     await mkdir(memoryRoot, { recursive: true });
     await writeFile(join(memoryRoot, "MEMORY.md"), "# Project memory\n");
     await writeFile(join(memoryRoot, "workflow.md"), "Use the current project workflow.\n");
     const service = createMemoryService();
-    const catalog = await service.listProjectMemories();
+    const catalog = await service.listProjectMemories({
+      workspaces: [{ workspacePath }],
+    });
     assert.equal(catalog.length, 1);
-    assert.equal(catalog[0]?.id, workspaceId);
+    assert.equal(catalog[0]?.id, workspacePath);
+    assert.equal(catalog[0]?.enabled, true);
     assert.deepEqual(
       catalog[0]?.files.map((file) => file.name),
       ["MEMORY.md", "workflow.md"],
     );
-    const file = await service.readProjectMemoryFile({ workspaceId, fileName: "workflow.md" });
+    const file = await service.readProjectMemoryFile({ workspacePath, fileName: "workflow.md" });
     assert.equal(file.content, "Use the current project workflow.\n");
+
+    await service.setWorkspaceMemoryEnabled({ workspacePath, enabled: false });
+    assert.equal(await service.getWorkspaceMemoryEnabled({ workspacePath }), false);
+    const disabled = await service.listProjectMemories({ workspaces: [{ workspacePath }] });
+    assert.equal(disabled[0]?.enabled, false);
   } finally {
-    setDataBaseDir(null);
     await rm(dir, { recursive: true, force: true });
   }
 });

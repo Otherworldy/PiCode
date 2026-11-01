@@ -1,4 +1,16 @@
-import { readFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { constants as fsConstants } from "node:fs";
+import { resolveProjectMemoryRoot } from "@zcode/core";
+import {
+  ensureAppDataDir,
+  ensureWorkspaceMemoryRoot,
+  isWorkspaceMemoryFileName,
+  isWorkspaceMemorySupported,
+  readWorkspaceMemoryEnabled,
+  resolveWorkspaceMemoryRoot,
+} from "@zcode/shared/node";
 import {
   createInMemorySessionEventStore,
   createRootTraceContext,
@@ -105,14 +117,13 @@ export async function bindHostedSession(
   }
   const record: ZCodeProtocolSessionRecord = {
     app,
-    memoryEnabled: false,
+    memoryEnabled: hosted.memoryEnabled,
     nativeSearchEnhancementsEnabled: false,
     modelContextBudgetStrategy: "legacy",
     createdAt: summary?.createdAt ?? Date.now(),
-    eventStore: context.deps.createSessionEventStore?.(sessionId) ?? createInMemorySessionEventStore(),
-    ...(hosted.parentSessionId
-      ? { parentSessionId: hosted.parentSessionId as SessionId }
-      : {}),
+    eventStore:
+      context.deps.createSessionEventStore?.(sessionId) ?? createInMemorySessionEventStore(),
+    ...(hosted.parentSessionId ? { parentSessionId: hosted.parentSessionId as SessionId } : {}),
     // 子代理 jsonl 在父目录的 picode-subagent 下。挂上类型后 sessions-index 不会收它。
     ...(isPicodeSubagentSessionFile(hosted.sessionFile)
       ? { taskType: "subagent_child" as const }
@@ -148,7 +159,8 @@ export async function bindHostedSession(
       workspaceId: workspace.workspaceKey,
       ...(hosted.parentSessionId ? { parentSessionId: hosted.parentSessionId } : {}),
       title,
-      titleSource: snapshot.meta.titleSource === "default" ? "generated" : snapshot.meta.titleSource,
+      titleSource:
+        snapshot.meta.titleSource === "default" ? "generated" : snapshot.meta.titleSource,
       phase: snapshot.control.phase === "draft" ? "completedSuccess" : snapshot.control.phase,
       sessionEnded: snapshot.control.sessionEnded,
       hasBackgroundWork: snapshot.backgroundWorks.some((work) => work.status === "running"),
@@ -218,22 +230,120 @@ export async function createPiSessionRecord(
 ): Promise<ZCodeProtocolSessionRecord> {
   const registry = context.piHost;
   if (!registry) throw new Error("pi-host registry missing");
+  const memoryEnabled = await resolvePiSessionMemoryEnabled(context, params.workspace);
   const hosted = await registry.create({
     workspaceIdentity: params.workspace.workspaceIdentity,
     workspacePath: params.workspace.workspacePath,
     workingDirectory: params.workingDirectory,
     sessionId: params.sessionId ?? createSessionId(),
     parentSessionId: params.parentSessionId,
+    memoryEnabled,
     ...(params.openReadMs !== undefined ? { openReadMs: params.openReadMs } : {}),
     ...(params.storedSession ? { storedSession: params.storedSession } : {}),
+  });
+  context.logger?.info("workspace memory hosted", {
+    sessionId: hosted.sessionId,
+    memoryEnabled: hosted.memoryEnabled,
+    workspacePath: params.workspace.workspacePath,
   });
   return bindHostedSession(context, hosted, params.workspace);
 }
 
-export async function listPiStoredSummaries(
-  registry: HostSessionRegistry,
-  workspaceId: string,
-) {
+/** 每个 workspace 只尝试一次旧数据迁移，避免每次打开会话都扫旧目录。 */
+const migratedWorkspaceMemory = new Set<string>();
+
+/**
+ * Pi 主路径的记忆开关：远端工作区一律关闭；本地读项目 `zcode.json`。
+ * 打开时顺手创建目录，并把旧全局目录里的 .md 惰性复制过来。
+ */
+async function resolvePiSessionMemoryEnabled(
+  context: ZCodeProtocolAgentServerContext,
+  workspace: ZCodeWorkspaceRef,
+): Promise<boolean> {
+  if (!isWorkspaceMemorySupported(workspace.workspaceIdentity)) {
+    context.logger?.info("workspace memory resolve", {
+      reason: "remote workspace",
+      workspaceIdentity: workspace.workspaceIdentity,
+      workspacePath: workspace.workspacePath,
+    });
+    return false;
+  }
+  try {
+    if (!(await readWorkspaceMemoryEnabled(workspace.workspacePath))) {
+      context.logger?.info("workspace memory resolve", {
+        reason: "project switch off",
+        workspacePath: workspace.workspacePath,
+      });
+      return false;
+    }
+    const key = workspace.workspaceIdentity?.trim() || workspace.workspacePath;
+    const newRoot = resolveWorkspaceMemoryRoot(workspace.workspacePath);
+    const shouldMigrate =
+      !migratedWorkspaceMemory.has(key) && (await isWorkspaceMemoryRootEmpty(newRoot));
+    await ensureWorkspaceMemoryRoot(workspace.workspacePath);
+    if (shouldMigrate) {
+      migratedWorkspaceMemory.add(key);
+      await migrateLegacyWorkspaceMemory(workspace);
+    }
+    context.logger?.info("workspace memory resolve", {
+      reason: "enabled",
+      workspacePath: workspace.workspacePath,
+      memoryRoot: newRoot,
+    });
+  } catch (error) {
+    context.logger?.warn("workspace memory root unavailable", {
+      error: error instanceof Error ? error.message : String(error),
+      workspacePath: workspace.workspacePath,
+    });
+    return false;
+  }
+  return true;
+}
+
+/** 目录不存在或还没有任何记忆 Markdown。已有 items 但缺 index 也算“已有记忆”，不再灌旧索引。 */
+async function isWorkspaceMemoryRootEmpty(memoryRoot: string): Promise<boolean> {
+  try {
+    const entries = await readdir(memoryRoot);
+    return !entries.some((entry) => entry.endsWith(".md"));
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * 旧数据在全局数据目录里，目录名是 identity/path 的 hash，无法反向枚举。
+ * 只能在打开某个 workspace 时按同一规则重算旧路径，复制到项目内；旧目录保留。
+ */
+async function migrateLegacyWorkspaceMemory(workspace: ZCodeWorkspaceRef): Promise<void> {
+  const newRoot = resolveWorkspaceMemoryRoot(workspace.workspacePath);
+  const oldRoot = resolveProjectMemoryRoot({
+    cliStorageRoot: join(ensureAppDataDir(homedir()), "cli"),
+    workspaceIdentity: workspace.workspaceIdentity,
+    workspacePath: workspace.workspacePath,
+  });
+  let entries;
+  try {
+    entries = await readdir(oldRoot, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  await mkdir(newRoot, { recursive: true });
+  for (const entry of entries) {
+    if (!entry.isFile() || entry.isSymbolicLink()) continue;
+    if (!isWorkspaceMemoryFileName(entry.name)) continue;
+    try {
+      await copyFile(
+        join(oldRoot, entry.name),
+        join(newRoot, entry.name),
+        fsConstants.COPYFILE_EXCL,
+      );
+    } catch {
+      // 同名文件已经存在或复制失败：保留新旧两份，不阻塞会话创建。
+    }
+  }
+}
+
+export async function listPiStoredSummaries(registry: HostSessionRegistry, workspaceId: string) {
   const listed = await registry.list(workspaceId);
   return listed.map((item) => ({
     sessionId: item.sessionId,

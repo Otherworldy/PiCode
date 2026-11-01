@@ -1211,6 +1211,8 @@ export function createConversationV4Gateway(
       const child = await context.piHost.create({
         workspaceIdentity: record.workspace.workspaceIdentity,
         workspacePath: record.workspace.workspacePath,
+        // 侧聊是一次性提问，不参与项目记忆抽取。
+        memoryEnabled: false,
       });
       const childRecord = await bindHostedSession(context, child, record.workspace);
       context.sessions.set(childRecord.app.sessionId, childRecord);

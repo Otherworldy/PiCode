@@ -6,6 +6,11 @@ import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import type { ConversationDelta, DeliveryProfileName } from "@zcode/shared/zcode-protocol-v4";
 import {
+  readWorkspaceMemoryEnabled,
+  readWorkspaceMemoryModel,
+  resolveWorkspaceMemoryRoot,
+} from "@zcode/shared/node";
+import {
   CommandBridge,
   piHostBlocksResidency,
   suppressesExtensionNotice,
@@ -17,10 +22,7 @@ import { ExtensionUiHost } from "./extension-ui-host.js";
 import { HostQueue } from "./host-queue.js";
 import { workspaceKey } from "./identity.js";
 import { readPiJsonl, shouldApplyStoredSessionTitle } from "./jsonl-history.js";
-import {
-  readSessionHeaderId,
-  sessionFileNameMatches,
-} from "./session-file-lookup.js";
+import { readSessionHeaderId, sessionFileNameMatches } from "./session-file-lookup.js";
 import {
   deliverPlannotatorSessionUrl,
   forgetPlannotatorSessionUrls,
@@ -53,6 +55,15 @@ import { mapThought } from "./model-delegate.js";
 import { PiToV4Projector } from "./projector.js";
 import type { ToolPermissionCheck } from "./permission-gate.js";
 import { scheduleLiveSessionTitleSummary } from "./session-title-live.js";
+import { completePiPrompt } from "./session-factory.js";
+import {
+  applyWorkspaceMemoryPatch,
+  buildWorkspaceMemoryExtractionPrompt,
+  buildWorkspaceMemoryTranscript,
+  parseWorkspaceMemoryPatch,
+  readWorkspaceMemoryFiles,
+  readWorkspaceMemoryIndex,
+} from "./workspace-memory.js";
 import {
   countRealUserMessages,
   createSessionFirstGate,
@@ -83,6 +94,8 @@ export interface HostedSession {
   readonly sessionFile: string;
   readonly parentSessionId?: string;
   readonly workId?: string;
+  /** 本会话是否启用了工作区记忆；远端和子会话为 false。 */
+  readonly memoryEnabled: boolean;
   readonly projector: PiToV4Projector;
   readonly queue: HostQueue;
   readonly ui: ExtensionUiHost;
@@ -226,6 +239,14 @@ export interface RegistryOptions {
     modelId: string;
     system: string;
     prompt: string;
+  }) => Promise<string | null>;
+  /** 工作区记忆抽取的模型调用。测试注入，缺省走 Pi 模型目录。 */
+  completeMemoryPrompt?: (request: {
+    providerId: string;
+    modelId: string;
+    system: string;
+    prompt: string;
+    signal?: AbortSignal;
   }) => Promise<string | null>;
   /** 自动标题开关。测试注入，缺省读 `~/.pi/agent/zcode-title-summary.json`。 */
   readTitleSummarySettings?: () => Promise<TitleSummarySettings>;
@@ -420,6 +441,8 @@ export class HostSessionRegistry {
     parentSessionId?: string;
     viaRegistry?: boolean;
     omitHostExtensions?: boolean;
+    /** 本地工作区且项目开关打开时启用记忆注入与抽取。 */
+    memoryEnabled?: boolean;
     /**
      * 调用方在这次 create 之前已经花在 find 上的时间。
      * 冷恢复把找到的文件从 storedSession 传进来，这里不再扫第二遍。
@@ -444,6 +467,7 @@ export class HostSessionRegistry {
         parentSessionId: input.parentSessionId ?? stored.parentSessionId,
         viaRegistry: input.viaRegistry,
         omitHostExtensions: input.omitHostExtensions,
+        memoryEnabled: input.memoryEnabled,
         priorReadMs,
       });
     }
@@ -461,6 +485,7 @@ export class HostSessionRegistry {
           parentSessionId: input.parentSessionId ?? stored.parentSessionId,
           viaRegistry: input.viaRegistry,
           omitHostExtensions: input.omitHostExtensions,
+          memoryEnabled: input.memoryEnabled,
           priorReadMs,
         });
       }
@@ -479,6 +504,7 @@ export class HostSessionRegistry {
       parentSessionId: input.parentSessionId,
       viaRegistry: input.viaRegistry,
       omitHostExtensions: input.omitHostExtensions,
+      memoryEnabled: input.memoryEnabled,
       priorReadMs,
     });
   }
@@ -509,6 +535,7 @@ export class HostSessionRegistry {
         sessionFile: branched.sessionFile,
         parentSessionId: parentId,
         viaRegistry: true,
+        memoryEnabled: parent.memoryEnabled,
       });
       // 分叉文件的 jsonl 只留到分叉点。此刻数出的真实用户消息就是分叉前的历史。
       child.markForkTitlePlaceholder(
@@ -532,6 +559,7 @@ export class HostSessionRegistry {
       workspacePath: parent.workspacePath,
       sessionFile,
       viaRegistry: true,
+      memoryEnabled: parent.memoryEnabled,
     });
     await hosted.navigateTree(entryId);
     // 裁到分叉点之后才开始数，否则会把父会话后面的消息算进来。
@@ -735,6 +763,7 @@ export class HostSessionRegistry {
     parentSessionId?: string;
     viaRegistry?: boolean;
     omitHostExtensions?: boolean;
+    memoryEnabled?: boolean;
     priorReadMs?: number;
   }): Promise<HostedSession> {
     const live = this.sessions.get(input.sessionId);
@@ -747,6 +776,9 @@ export class HostSessionRegistry {
       parentSessionId: input.parentSessionId,
       omitHostExtensions: input.omitHostExtensions,
       loadExtensions: this.options.loadExtensions ?? true,
+      memoryEnabled: input.memoryEnabled === true,
+      memoryRoot: resolveWorkspaceMemoryRoot(input.workspacePath),
+      memoryWorkspacePath: input.workspacePath,
       checkPermission: async (request) => {
         const check = this.toolChecks.get(input.sessionId);
         if (!check) return "allow";
@@ -763,6 +795,7 @@ export class HostSessionRegistry {
       parentSessionId: input.parentSessionId,
       viaRegistry: input.viaRegistry ?? Boolean(input.parentSessionId),
       workId: input.parentSessionId ? input.sessionId : undefined,
+      memoryEnabled: input.memoryEnabled === true,
     });
     const registered = await this.register(hosted, input.priorReadMs ?? 0);
     this.options.onConversationOpenTiming?.({
@@ -999,6 +1032,7 @@ export class HostSessionRegistry {
       parentSessionId?: string;
       viaRegistry: boolean;
       workId?: string;
+      memoryEnabled: boolean;
     },
   ): HostedSession {
     const queue = new HostQueue();
@@ -1102,8 +1136,7 @@ export class HostSessionRegistry {
             extensionRuntime.depth = Math.max(0, extensionRuntime.depth - 1);
             extensionRuntime.command = "";
             // 作废状态只属于这条命令；留到命令结束之后会把后续工具提问全部静默取消。
-            extensionRuntime.dismissed =
-              extensionRuntime.depth > 0 ? outerDismissed : false;
+            extensionRuntime.dismissed = extensionRuntime.depth > 0 ? outerDismissed : false;
             emit(projector.setExtensionCommandActive(extensionRuntime.depth > 0));
           }
         },
@@ -1441,6 +1474,10 @@ export class HostSessionRegistry {
             stopSubagentPoll();
             void publishSubagents();
           }
+          // 记忆抽取只跟主轮次结束走一次；agent_settled 会紧随 agent_end 再发一次。
+          if (event.type === "agent_end" && !event.willRetry) {
+            scheduleWorkspaceMemoryExtraction();
+          }
           // 上一轮的 agent_end 可能先于 isStreaming 落下。这时 prompt 会抛
           // "already processing"，没人接的 rejection 会把 agent 进程打退出。
           if (pi.isStreaming || pi.isCompacting || pi.isIdle === false) return;
@@ -1459,6 +1496,65 @@ export class HostSessionRegistry {
       }
     });
     let summarizingBranch = false;
+    const workspaceMemoryRoot = resolveWorkspaceMemoryRoot(meta.workspacePath);
+    let memoryExtractionController: AbortController | undefined;
+    let memoryExtractionRunning = false;
+    // 记忆抽取是 turn 后的旁路：失败、超时、输出非法都不影响本轮结果。
+    const scheduleWorkspaceMemoryExtraction = () => {
+      if (!meta.memoryEnabled || memoryExtractionRunning) return;
+      const model = pi.currentModel;
+      if (!model) return;
+      const transcript = buildWorkspaceMemoryTranscript(projector.getSnapshot().rows.window);
+      if (!transcript.trim()) return;
+      memoryExtractionRunning = true;
+      const controller = new AbortController();
+      memoryExtractionController = controller;
+      const timeout = setTimeout(() => controller.abort(), 60_000);
+      void (async () => {
+        try {
+          if (!(await readWorkspaceMemoryEnabled(meta.workspacePath))) return;
+          const [index, files] = await Promise.all([
+            readWorkspaceMemoryIndex(workspaceMemoryRoot),
+            readWorkspaceMemoryFiles(workspaceMemoryRoot),
+          ]);
+          const prompt = buildWorkspaceMemoryExtractionPrompt({ transcript, index, files });
+          const complete = this.options.completeMemoryPrompt ?? completePiPrompt;
+          // 项目可以单独指定抽取模型；没配或模型已从目录删除时回退当前会话模型。
+          const configuredModel = await readWorkspaceMemoryModel(meta.workspacePath).catch(
+            () => null,
+          );
+          const runCompletion = (target: { providerId: string; modelId: string }) =>
+            complete({
+              providerId: target.providerId,
+              modelId: target.modelId,
+              system: "You maintain persistent workspace memory. Return only the requested JSON.",
+              prompt,
+              signal: controller.signal,
+            });
+          let response = await runCompletion(
+            configuredModel ?? { providerId: model.providerId, modelId: model.modelId },
+          );
+          if (!response && configuredModel) {
+            response = await runCompletion({
+              providerId: model.providerId,
+              modelId: model.modelId,
+            });
+          }
+          if (!response || controller.signal.aborted) return;
+          const patch = parseWorkspaceMemoryPatch(response);
+          if (!patch) return;
+          await applyWorkspaceMemoryPatch(workspaceMemoryRoot, patch, { expectedIndex: index });
+        } catch (error) {
+          if (!controller.signal.aborted) {
+            console.warn("pi-host workspace memory extraction failed", error);
+          }
+        } finally {
+          clearTimeout(timeout);
+          memoryExtractionRunning = false;
+          if (memoryExtractionController === controller) memoryExtractionController = undefined;
+        }
+      })();
+    };
     extensionRuntime.uiReady = Promise.resolve(
       pi.bindUi?.(createHostExtensionUi(ui, handleUi)),
     ).catch(() => undefined);
@@ -1480,6 +1576,7 @@ export class HostSessionRegistry {
       sessionFile: meta.sessionFile,
       parentSessionId: meta.parentSessionId,
       workId: meta.workId,
+      memoryEnabled: meta.memoryEnabled,
       projector,
       queue,
       ui,
@@ -1770,6 +1867,7 @@ export class HostSessionRegistry {
       },
       dispose: () => {
         if (disposing) return disposing;
+        memoryExtractionController?.abort();
         flushPendingTitleName();
         titleGate.close();
         if (contextTimer) clearTimeout(contextTimer);

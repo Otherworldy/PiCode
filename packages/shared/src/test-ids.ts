@@ -201,6 +201,19 @@ export const TID_WORKSPACE_ITEM = "workspace-item";
 export const TID_WORKSPACE_CLOSE = "workspace-close";
 /** 侧边栏重命名项目菜单项 */
 export const TID_WORKSPACE_RENAME = "workspace-rename";
+/** 侧边栏项目记忆菜单项 */
+export const TID_WORKSPACE_MEMORY = "workspace-memory";
+/** 项目记忆对话框里的开关 */
+export const TID_WORKSPACE_MEMORY_SWITCH = "workspace-memory-switch";
+export const TID_WORKSPACE_MEMORY_CREATE = "workspace-memory-create";
+export const TID_WORKSPACE_MEMORY_EDIT = "workspace-memory-edit";
+export const TID_WORKSPACE_MEMORY_DELETE = "workspace-memory-delete";
+export const TID_WORKSPACE_MEMORY_DELETE_CONFIRM = "workspace-memory-delete-confirm";
+export const TID_WORKSPACE_MEMORY_EDITOR = "workspace-memory-editor";
+export const TID_WORKSPACE_MEMORY_EDITOR_NAME = "workspace-memory-editor-name";
+export const TID_WORKSPACE_MEMORY_EDITOR_CONTENT = "workspace-memory-editor-content";
+export const TID_WORKSPACE_MEMORY_EDITOR_SAVE = "workspace-memory-editor-save";
+export const TID_WORKSPACE_MEMORY_EDITOR_CANCEL = "workspace-memory-editor-cancel";
 /** 项目视图里的对话二级分区 */
 export const TID_CONVERSATION_SECTION = "conversation-section";
 /** 项目视图里的项目二级分区 */

@@ -1233,6 +1233,7 @@ const enUS: Record<string, string> = {
   "workspaceSidebar.searchArchivedTasksPlaceholder": "Search archived tasks...",
   "workspaceSidebar.closeTaskSearch": "Close task search",
   "workspaceSidebar.remove": "Remove",
+  "workspaceSidebar.memory": "Project memory",
   "workspaceSidebar.rename": "Rename project",
   "workspaceSidebar.removeRunningWorkspace.title": "Remove a running project?",
   "workspaceSidebar.removeRunningWorkspace.description":
@@ -1845,12 +1846,37 @@ const enUS: Record<string, string> = {
   "settings.systemPrompt.systemSaveFailed": "Couldn't save the system prompt",
   "settings.systemPrompt.systemLoadFailed": "Couldn't read the system prompt",
   "settings.memory": "Memory",
+  "settings.memory.extractionModel": "Extraction model",
+  "settings.memory.extractionModelDescription":
+    "Used to curate memory after each turn. Leave empty to follow the session model.",
+  "settings.memory.viewer.missingIndex": "Not created yet",
+  "settings.memory.viewer.create": "New",
+  "settings.memory.viewer.deleteFile": "Delete {name}",
+  "settings.memory.viewer.save": "Save",
+  "settings.memory.viewer.cancel": "Cancel",
+  "settings.memory.viewer.fileNamePlaceholder": "File name, for example build-command.md",
+  "settings.memory.viewer.fileContentPlaceholder":
+    "Markdown content. MEMORY.md is the index; each other file records one fact.",
+  "settings.memory.viewer.invalidFileName": "Use lowercase letters or digits, and end with .md.",
+  "settings.memory.viewer.fileExists": "A memory file with this name already exists.",
+  "settings.memory.viewer.discardTitle": "Discard unsaved changes?",
+  "settings.memory.viewer.discardDescription": "The current edits are not saved and will be lost.",
+  "settings.memory.viewer.discard": "Discard",
+  "settings.memory.viewer.keepEditing": "Keep editing",
+  "settings.memory.viewer.deleteTitle": "Delete memory file?",
+  "settings.memory.viewer.deleteDescription": "This deletes {name} and cannot be undone.",
+  "settings.memory.viewer.deleteConfirm": "Delete",
+  "settings.memory.extractionModelFollow": "Follow session model",
   "settings.memory.workspaceMemory": "Workspace Memory",
   "settings.memoryDescription":
     "Save and reuse long-term context in workspaces. Applies to new sessions and may increase model requests and token costs.",
   "settings.memory.viewer.disabled": "Enable Workspace Memory to view saved memories.",
   "settings.memory.viewer.localOnly":
     "Memory details are available only in the local desktop app. Open Memory settings there to view them.",
+  "settings.memory.viewer.noActiveWorkspace":
+    "Open a local workspace to configure workspace memory for that project.",
+  "settings.memory.viewer.remoteUnsupported":
+    "Workspace memory is only available for local projects; remote workspaces are not supported yet.",
   "settings.memory.viewer.title": "Saved workspace memories",
   "settings.memory.viewer.description": "Browse memories saved by workspace on this device.",
   "settings.memory.viewer.projectsDescription":
