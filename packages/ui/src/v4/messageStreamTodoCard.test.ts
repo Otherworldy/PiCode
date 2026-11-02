@@ -22,5 +22,7 @@ test("show todos builds the plannotator checklist for the composer drawer", () =
   );
   assert.equal(shown?.completedCount, 1);
   assert.equal(shown?.activeTitle, "画自行车");
+  // 抽屉头部的状态点跟着当前步骤走，不能固定成一个形状。
+  assert.equal(shown?.activeStatus, "in_progress");
   assert.equal(buildComposerTodo(true, []), null);
 });

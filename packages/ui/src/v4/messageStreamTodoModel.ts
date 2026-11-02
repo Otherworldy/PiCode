@@ -5,6 +5,8 @@ export interface ComposerTodoModel {
   steps: ZCodePlanStep[];
   completedCount: number;
   activeTitle: string;
+  /** 头部状态点跟随的那一步；抽屉头用图形而不只是标题来表达“在跑”。 */
+  activeStatus: ZCodePlanStep["status"];
 }
 
 /** 开关打开且当前快照能解析出 Plannotator 清单时，输入框上方才有抽屉。 */
@@ -34,5 +36,6 @@ export function buildComposerTodo(
     steps,
     completedCount,
     activeTitle: active?.title ?? "",
+    activeStatus: active?.status ?? "pending",
   };
 }

@@ -22,14 +22,12 @@ import {
 } from "react";
 import {
   ActivityIcon,
-  ArrowRightIcon,
   BotIcon,
   CheckCircle2Icon,
   ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   CircleCheckBigIcon,
-  CircleIcon,
   EllipsisIcon,
   FileDiffIcon,
   GitBranchIcon,
@@ -63,6 +61,11 @@ import type {
   WorkflowRunState,
 } from "@zcode/shared/zcode-protocol-v4";
 import { cn } from "@/components/lib/utils.js";
+import {
+  stripTodoStepEmphasis,
+  TodoStepGlyph,
+  todoStepTextClass,
+} from "@/components/TodoStepGlyph.js";
 import { Button } from "@/components/ui/button.js";
 import {
   RUN_STATUS_DOT,
@@ -656,31 +659,6 @@ function GoalStatusSection({
   );
 }
 
-function PlanStatusIcon({ status }: { status: PlanState["items"][number]["status"] }) {
-  if (status === "completed") {
-    return (
-      <CheckCircle2Icon
-        aria-hidden
-        className="mt-0.5 size-3.5 shrink-0 text-[var(--color-success)]"
-      />
-    );
-  }
-  if (status === "inProgress") {
-    return (
-      <ArrowRightIcon
-        aria-hidden
-        className="mt-0.5 size-3.5 shrink-0 text-[var(--color-foreground)]"
-      />
-    );
-  }
-  return (
-    <CircleIcon
-      aria-hidden
-      className="mt-0.5 size-3.5 shrink-0 text-[var(--color-foreground-subtlest)]"
-    />
-  );
-}
-
 const COMPACT_TODO_THRESHOLD = 6;
 const TODO_FOCUS_WINDOW_SIZE = 3;
 
@@ -723,26 +701,27 @@ function getStatusPanelTodoFocusWindow(items: PlanState["items"]): StatusPanelTo
 }
 
 function PlanStatusItemRows({ items }: { items: PlanState["items"] }) {
-  return items.map((item) => (
-    <li
-      key={item.id}
-      data-plan-status={item.status}
-      className="flex min-h-8 items-start gap-2 rounded-lg px-2 py-1.5 text-ui-base hover:bg-[var(--color-hover)]"
-    >
-      <PlanStatusIcon status={item.status} />
-      <span
-        title={item.content}
-        className={cn(
-          "line-clamp-2 min-w-0 flex-1 break-words leading-5",
-          item.status === "completed"
-            ? "text-[var(--color-foreground-subtlest)] line-through"
-            : "text-[var(--color-foreground)]",
-        )}
+  return items.map((item) => {
+    const stepText = stripTodoStepEmphasis(item.content);
+    return (
+      <li
+        key={item.id}
+        data-plan-status={item.status}
+        className="flex min-h-8 items-start gap-2 rounded-lg px-2 py-1.5 text-ui-base hover:bg-[var(--color-hover)]"
       >
-        {item.content}
-      </span>
-    </li>
-  ));
+        <TodoStepGlyph status={item.status} className="mt-0.5" />
+        <span
+          title={stepText}
+          className={cn(
+            "line-clamp-2 min-w-0 flex-1 break-words leading-5",
+            todoStepTextClass(item.status),
+          )}
+        >
+          {stepText}
+        </span>
+      </li>
+    );
+  });
 }
 
 const TodoPreviewTrigger = forwardRef<
@@ -956,6 +935,18 @@ function PlanStatusSection({
   const plan = model.plan;
   if (!plan) return null;
   const isCompleted = plan.totalCount > 0 && plan.completedCount >= plan.totalCount;
+  // 「2/5」分不出「还剩几个没开始」和「有几个在跑」；按状态分段，零分段不渲染。
+  const inProgressCount = plan.items.filter((item) => item.status === "inProgress").length;
+  const progressSegments = [
+    { id: "chat.statusPanel.todoCountDone", count: plan.completedCount },
+    { id: "chat.statusPanel.todoCountActive", count: inProgressCount },
+    {
+      id: "chat.statusPanel.todoCountPending",
+      count: plan.totalCount - plan.completedCount - inProgressCount,
+    },
+  ]
+    .filter((segment) => segment.count > 0)
+    .map((segment) => intl.formatMessage({ id: segment.id }, { count: String(segment.count) }));
 
   return (
     <StatusSection
@@ -965,11 +956,11 @@ function PlanStatusSection({
       trailing={() => (
         <span
           className={cn(
-            "tabular-nums",
+            "truncate tabular-nums",
             isCompleted ? "text-[var(--color-success)]" : "text-[var(--color-foreground-subtle)]",
           )}
         >
-          {plan.completedCount}/{plan.totalCount}
+          {progressSegments.join(" · ")}
         </span>
       )}
     >
@@ -1787,9 +1778,9 @@ function StatusSummaryRow({
           : BotIcon;
   const summaryMetric = currentPlanItem ? (
     <StatusSummaryMetric
-      icon={<ArrowRightIcon className="size-4 text-[var(--color-foreground)]" />}
+      icon={<TodoStepGlyph status={currentPlanItem.status} className="size-4" />}
     >
-      <span className="min-w-0 truncate">{currentPlanItem.content}</span>
+      <span className="min-w-0 truncate">{stripTodoStepEmphasis(currentPlanItem.content)}</span>
     </StatusSummaryMetric>
   ) : goalTitle && isActiveGoal ? (
     <StatusSummaryMetric icon={<GoalIcon className="size-4 text-[var(--color-foreground)]" />}>
@@ -1815,7 +1806,7 @@ function StatusSummaryRow({
     </StatusSummaryMetric>
   ) : completedPlanItem ? (
     <StatusSummaryMetric icon={<CheckCircle2Icon className="size-4 text-[var(--color-success)]" />}>
-      <span className="min-w-0 truncate">{completedPlanItem.content}</span>
+      <span className="min-w-0 truncate">{stripTodoStepEmphasis(completedPlanItem.content)}</span>
     </StatusSummaryMetric>
   ) : model.plan ? (
     <StatusSummaryMetric

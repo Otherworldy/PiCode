@@ -925,6 +925,49 @@ body {
   }
 }
 
+/* 待办「进行中」步骤：环形轨道不动，弧线随旋转生长收缩。 */
+.todo-step-spin {
+  transform-origin: center;
+  animation: todo-step-spin 1.4s linear infinite;
+}
+
+.todo-step-arc {
+  stroke-dasharray: 10 40;
+  animation: todo-step-arc 1.4s ease-in-out infinite;
+}
+
+@keyframes todo-step-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes todo-step-arc {
+  0%,
+  100% {
+    stroke-dasharray: 10 40;
+    stroke-dashoffset: 0;
+  }
+
+  50% {
+    stroke-dasharray: 18 40;
+    stroke-dashoffset: -4;
+  }
+}
+
+/* 减少动效时停在静态弧上：退化成空环会和「待办」撞语义。 */
+@media (prefers-reduced-motion: reduce) {
+  .todo-step-spin,
+  .todo-step-arc {
+    animation: none;
+  }
+
+  .todo-step-arc {
+    stroke-dasharray: 12 40;
+    stroke-dashoffset: -2;
+  }
+}
+
 @keyframes zcode-stream-text-in {
   0% {
     opacity: 0;

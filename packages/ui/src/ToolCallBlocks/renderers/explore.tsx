@@ -4,6 +4,7 @@ import { extractPlanStepsFromToolInput, extractPlanStepsFromToolOutput } from "@
 import { ToolCallBlock } from "@/ToolCallBlocks.js";
 import { ToolSnapshotFieldNotice } from "@/ToolCallBlocks/ToolSnapshotFieldNotice.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { stripTodoStepEmphasis } from "@/components/TodoStepGlyph.js";
 import { getExecuteSecondaryText } from "@/ToolCallBlocks/renderers/execute.js";
 import { buildReadSummary, ReadFileChip } from "@/ToolCallBlocks/renderers/read.js";
 import { getSearchPrimaryText } from "@/ToolCallBlocks/renderers/search.js";
@@ -271,7 +272,9 @@ function getTodoChildSummary(
     id: isComplete ? "chat.toolCall.todo.updated" : "chat.toolCall.todo.updating",
   });
   const progressText = `${completedCount}/${plan.length}`;
-  const primaryText = activeStep?.title ? `${progressText} · ${activeStep.title}` : progressText;
+  // 子行里同样只显示纯文字：模型常把整步写成 `**Step 1: …**`。
+  const stepTitle = activeStep?.title ? stripTodoStepEmphasis(activeStep.title) : null;
+  const primaryText = stepTitle ? `${progressText} · ${stepTitle}` : progressText;
 
   return {
     animationKey: `todo:${childToolCall.toolId}:${completedCount}:${plan.length}:${activeStep?.id ?? "none"}:${activeStep?.title ?? ""}`,
@@ -281,7 +284,7 @@ function getTodoChildSummary(
         <span className="min-w-0 truncate">{primaryText}</span>
       </span>
     ),
-    title: activeStep?.title ?? childToolCall.title,
+    title: stepTitle ?? childToolCall.title,
   };
 }
 
