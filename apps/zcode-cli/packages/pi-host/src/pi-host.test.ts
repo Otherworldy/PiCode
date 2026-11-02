@@ -2409,3 +2409,90 @@ test("list 与冷打开都从 jsonl header 还原分叉来源", async () => {
   assert.equal(opened.parentSessionId, "sess_parent");
   await rm(root, { recursive: true, force: true });
 });
+
+test("关掉的扩展命令回执不再从快照里弹回来", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-notice-"));
+  const fakes = new Map<string, FakePiSession>();
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async (input) => {
+      const fake = new FakePiSession(input.sessionId, input.sessionFile);
+      fakes.set(input.sessionId, fake);
+      return fake;
+    },
+  });
+  const hosted = await registry.create({ workspacePath: root });
+  const fake = fakes.get(hosted.sessionId);
+  assert.ok(fake);
+  // 客户端要靠这条增量收掉已经在别的端/别的时刻打开的弹窗，只改快照不发帧不够。
+  const cleared: Array<string | null> = [];
+  hosted.onDeltas((deltas) => {
+    for (const delta of deltas) {
+      if (delta.op === "state.updated" && "extensionNotice" in delta.patch) {
+        cleared.push(delta.patch.extensionNotice?.id ?? null);
+      }
+    }
+  });
+  fake.slashCommands = [
+    { name: "pi-models", description: "update models", inputHint: "/pi-models", source: "extension" },
+  ];
+  // 命令跑到一半停住：弹窗是在命令跑着的时候攒出来的，后台再放它结束。
+  let finishCommand: (() => void) | undefined;
+  fake.prompt = () =>
+    new Promise((resolve) => {
+      finishCommand = () => resolve(true);
+    });
+  void hosted.bridge.admitSend({
+    text: "/pi-models",
+    clientId: "c",
+    commandId: "1",
+    delivery: "startNow",
+    streaming: false,
+  });
+  for (let i = 0; i < 20 && !hosted.projector.getSnapshot().extensionCommandActive; i += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.equal(hosted.projector.getSnapshot().extensionCommandActive, true);
+  const notify = (message: string) =>
+    fake.emit({
+      type: "extension_ui_request",
+      id: "n1",
+      method: "notify",
+      message,
+      notifyType: "info",
+    });
+  notify("lens: 已更新 13 个模型");
+  const first = hosted.projector.getSnapshot().extensionNotice;
+  assert.equal(first?.text, "lens: 已更新 13 个模型");
+
+  // 关掉就是把这条回执从快照里清掉。只在界面上藏起来的话，切回会话会重新弹一次。
+  assert.equal(hosted.dismissExtensionNotice(first!.id), true);
+  assert.equal(hosted.projector.getSnapshot().extensionNotice, null);
+  assert.equal(cleared.at(-1), null);
+  // 重复关闭是无害幂等，不能改别人的回执。
+  assert.equal(hosted.dismissExtensionNotice(first!.id), false);
+
+  // 命令还在跑时又来了输出：另开一个弹窗，只带关掉之后的内容。
+  notify("lens: 已更新 14 个模型");
+  const second = hosted.projector.getSnapshot().extensionNotice;
+  assert.ok(second);
+  assert.notEqual(second.id, first!.id);
+  assert.equal(second.text, "lens: 已更新 14 个模型");
+
+  // 命令跑完、会话回到空闲：这条回执仍挂在快照上，切回会话会再弹——
+  // 也就是说「关掉才清」是唯一的清空时机，关框必须真的走到宿主。
+  finishCommand?.();
+  for (let i = 0; i < 20 && hosted.projector.getSnapshot().extensionCommandActive; i += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.equal(hosted.projector.getSnapshot().extensionCommandActive, false);
+  assert.equal(hosted.projector.getSnapshot().extensionNotice?.id, second.id);
+  // 命令跑完之后再关（真实操作里最常见的那条路）同样能把快照清干净。
+  assert.equal(hosted.dismissExtensionNotice(second.id), true);
+  assert.equal(hosted.projector.getSnapshot().extensionNotice, null);
+  assert.equal(cleared.at(-1), null);
+
+  await hosted.dispose();
+  await rm(root, { recursive: true, force: true });
+});

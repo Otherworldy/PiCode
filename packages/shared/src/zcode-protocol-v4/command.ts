@@ -243,6 +243,11 @@ export const commandPayloadSchemas = {
   snoozeInteractionAutoResolution: z.object({
     interactionId: z.string(),
   }),
+  // 扩展命令的回执弹窗被关掉。快照是它的唯一所有者，不关只会在切回会话时重新弹。
+  // noticeId 对不上（重复关闭 / 已换成别的回执）按幂等成功收口。
+  dismissExtensionNotice: z.object({
+    noticeId: z.string().min(1),
+  }),
   switchModelConfig: z.object({
     provider: z.string(),
     model: z.string(),

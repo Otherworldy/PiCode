@@ -11,6 +11,7 @@ import { sessionFlowHandlers } from "./session-flow.js";
 import { sessionMgmtHandlers } from "./session-mgmt.js";
 import { selectionSideSessionHandlers } from "./selection-side-session.js";
 import { assistantFeedbackHandlers } from "./assistant-feedback.js";
+import { extensionNoticeHandlers } from "./extension-notice.js";
 import { sessionTreeHandlers } from "./session-tree.js";
 
 export const NATIVE_HANDLERS = {
@@ -24,5 +25,6 @@ export const NATIVE_HANDLERS = {
   ...forkEditRetryHandlers,
   ...fileRewindHandlers,
   ...assistantFeedbackHandlers,
+  ...extensionNoticeHandlers,
   ...sessionTreeHandlers,
 } as const;
