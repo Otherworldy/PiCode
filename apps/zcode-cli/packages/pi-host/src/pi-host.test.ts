@@ -12,7 +12,12 @@ import { HostQueue } from "./host-queue.js";
 import { PluginViewRegistry } from "./plugin-adapters/registry.js";
 import { mapPiToolName } from "./presentation.js";
 import { PiToV4Projector } from "./projector.js";
-import { isPlannotatorReviewDismissed, takePlanDecision } from "./plan-review-signal.js";
+import {
+  isAnnotationReviewDone,
+  isAnnotationReviewNotice,
+  isPlannotatorReviewDismissed,
+  takePlanDecision,
+} from "./plan-review-signal.js";
 import { gateTool } from "./permission-gate.js";
 import { HostSessionRegistry } from "./session-registry.js";
 import { contextUsagePublish } from "./types.js";
@@ -511,6 +516,13 @@ test("plannotator feedback stays a user message", () => {
   assert.deepEqual(users, [feedback]);
   assert.equal(isPlannotatorReviewDismissed("Annotation closed (no feedback)."), true);
   assert.equal(isPlannotatorReviewDismissed("Annotation opened"), false);
+  // 只有 Done（批准 / 空批注）算收口；直接关掉页面、代码审查、计划审查都不关 UI 设计模式。
+  assert.equal(isAnnotationReviewDone("Annotation approved."), true);
+  assert.equal(isAnnotationReviewDone("Annotation closed (no feedback)."), true);
+  assert.equal(isAnnotationReviewDone("Annotation session closed."), false);
+  assert.equal(isAnnotationReviewDone("Code review closed (no feedback)."), false);
+  assert.equal(isAnnotationReviewNotice("Annotation session closed."), true);
+  assert.equal(isAnnotationReviewNotice("Annotation opened"), false);
 });
 
 test("PLANNOTATOR_BROWSER=none 时审查页地址从通知进内置浏览器", async () => {
@@ -2495,4 +2507,57 @@ test("关掉的扩展命令回执不再从快照里弹回来", async () => {
 
   await hosted.dispose();
   await rm(root, { recursive: true, force: true });
+});
+
+test("UI 设计模式的审查 done 后自动关掉模式", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  const fakes = new Map<string, FakePiSession>();
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async (input) => {
+      const fake = new FakePiSession(input.sessionId, input.sessionFile);
+      fakes.set(input.sessionId, fake);
+      return fake;
+    },
+  });
+  try {
+    const hosted = await registry.create({ workspacePath: root });
+    const fake = fakes.get(hosted.sessionId);
+    assert.ok(fake);
+    const notify = (message: string) => {
+      fake.emit({
+        type: "extension_ui_request",
+        id: "n1",
+        method: "notify",
+        message,
+        notifyType: "info",
+      });
+    };
+    hosted.setUiDesignMode(true);
+    assert.equal(hosted.isUiDesignMode(), true);
+
+    // 用户直接关掉审查页：不是 done，模式留着。
+    fake.designReviewSettles = true;
+    notify("Annotation session closed.");
+    assert.equal(hosted.isUiDesignMode(), true);
+
+    // 收口的不属于本模式打开的那次审查：批准也不关。
+    fake.designReviewSettles = false;
+    notify("Annotation approved.");
+    assert.equal(hosted.isUiDesignMode(), true);
+
+    // 批准本模式自己去打开的那次审查：自动关，状态跟着清。
+    fake.designReviewSettles = true;
+    notify("Annotation approved.");
+    assert.equal(hosted.isUiDesignMode(), false);
+    assert.deepEqual(fake.uiDesignStatusEvents, [true, false]);
+
+    // 关掉之后就没了配对，再收口也不会重复关。
+    fake.designReviewSettles = false;
+    notify("Annotation closed (no feedback).");
+    assert.deepEqual(fake.uiDesignStatusEvents, [true, false]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

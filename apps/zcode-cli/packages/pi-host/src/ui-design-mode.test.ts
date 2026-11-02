@@ -197,3 +197,53 @@ test("ending without html continues once, then a later write does not", async ()
   assert.equal(opened, 1);
   assert.equal(await handlers.get("turn_end")?.(textEnd), undefined);
 });
+
+test("only the mode's own annotate call pairs a review, and one open settles once", async () => {
+  const handlers = new Map<string, (event: Record<string, unknown>, ctx?: object) => unknown>();
+  const mode = createUiDesignMode(cwd);
+  mode.extension.factory({
+    on(event: string, handler: (event: Record<string, unknown>, ctx?: object) => unknown) {
+      handlers.set(event, handler);
+    },
+  } as never);
+  // 模式没开时调 annotate 不配对。
+  await handlers.get("tool_result")?.(
+    { toolName: "plannotator", isError: false, input: { action: "annotate", target: "a.md" } },
+    {},
+  );
+  assert.equal(mode.settleReview(), false);
+
+  mode.setEnabled(true);
+  await handlers.get("tool_result")?.(
+    {
+      toolName: "plannotator",
+      isError: false,
+      input: { action: "annotate", target: "designs/card.html" },
+    },
+    {},
+  );
+  // 一次打开只配一次收口；第二次收口不再关模式。
+  assert.equal(mode.settleReview(), true);
+  assert.equal(mode.settleReview(), false);
+});
+
+test("turning the mode off drops the pairing", async () => {
+  const handlers = new Map<string, (event: Record<string, unknown>, ctx?: object) => unknown>();
+  const mode = createUiDesignMode(cwd);
+  mode.setEnabled(true);
+  mode.extension.factory({
+    on(event: string, handler: (event: Record<string, unknown>, ctx?: object) => unknown) {
+      handlers.set(event, handler);
+    },
+  } as never);
+  await handlers.get("tool_result")?.(
+    {
+      toolName: "plannotator",
+      isError: false,
+      input: { action: "annotate", target: "designs/card.html" },
+    },
+    {},
+  );
+  mode.setEnabled(false);
+  assert.equal(mode.settleReview(), false);
+});

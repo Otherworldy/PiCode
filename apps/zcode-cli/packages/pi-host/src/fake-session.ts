@@ -37,6 +37,22 @@ export class FakePiSession implements PiSessionPort {
   registeredTools: string[] = [];
   activeTools: string[] = [];
   toolLoadoutCalls: string[][] = [];
+  uiDesignMode = false;
+  /** UI 设计模式报告的“上次收口属于本模式打开的那次审查”值。 */
+  designReviewSettles = false;
+  uiDesignStatusEvents: boolean[] = [];
+  setUiDesignMode(enabled: boolean): void {
+    this.uiDesignMode = enabled;
+    this.uiDesignStatusEvents.push(enabled);
+  }
+  isUiDesignMode(): boolean {
+    return this.uiDesignMode;
+  }
+  settleDesignReview(): boolean {
+    const settled = this.designReviewSettles;
+    this.designReviewSettles = false;
+    return settled;
+  }
   get toolLoadout() {
     return {
       getToolDefinition: (name: string) =>

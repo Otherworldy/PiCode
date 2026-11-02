@@ -138,8 +138,16 @@ export function createUiDesignMode(
   extension: InlineExtension;
   setEnabled(enabled: boolean): void;
   isEnabled(): boolean;
+  /**
+   * annotate 审查收口时调用：这次收口是否属于本模式自己打开的那次审查。
+   * 无论结果如何都清掉配对，一次打开只配一次收口。
+   */
+  settleReview(): boolean;
 } {
   let enabled = false;
+  // 模型在模式内打开过、还没收口的审查。不跟 `reviewOpened` 一样每轮重置：
+  // 审查页一直开着的时候用户可能先发几条消息，done 的就是最早那次打开。
+  let designReviewOpen = false;
   return {
     extension: {
       name: "picode-ui-design",
@@ -155,6 +163,7 @@ export function createUiDesignMode(
         pi.on("tool_result", (event) => {
           if (uiDesignReviewOpened(enabled, event.toolName, event.isError, event.input)) {
             reviewOpened = true;
+            designReviewOpen = true;
             onReviewOpened();
             return;
           }
@@ -214,8 +223,15 @@ export function createUiDesignMode(
     },
     setEnabled(next) {
       enabled = next;
+      // 模式关掉之后就不存在「本模式的审查」，下一次收口不该再关一次。
+      if (!next) designReviewOpen = false;
     },
     isEnabled: () => enabled,
+    settleReview() {
+      const open = designReviewOpen;
+      designReviewOpen = false;
+      return open;
+    },
   };
 }
 

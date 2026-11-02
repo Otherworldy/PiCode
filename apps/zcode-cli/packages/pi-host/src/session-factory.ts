@@ -800,6 +800,7 @@ export function createSdkSessionFactory(
         uiDesign.setEnabled(enabled);
       },
       isUiDesignMode: () => uiDesign.isEnabled(),
+      settleDesignReview: () => uiDesign.settleReview(),
       // 插件把 `plannotator` 的激活放在自己的 `session_start` 里，而绑 UI 是异步的；
       // 会话重放、阶段恢复也会重算激活列表。发送前用它把工具补回去。
       toolLoadout: {

@@ -309,6 +309,8 @@ export interface PiSessionPort {
   setFollowUpMode?(mode: "all" | "one-at-a-time"): void;
   setUiDesignMode?(enabled: boolean): void;
   isUiDesignMode?(): boolean;
+  /** annotate 审查收口：这次是否本模式自己打开的那次，并清掉配对。 */
+  settleDesignReview?(): boolean;
   /** 声明给模型的激活工具列表。发送前用来把插件工具补回去。 */
   toolLoadout?: ToolLoadoutPort;
   readonly sessionName?: string;

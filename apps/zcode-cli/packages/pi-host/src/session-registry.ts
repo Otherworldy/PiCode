@@ -17,7 +17,12 @@ import {
   type SubmissionModel,
 } from "./command-bridge.js";
 import { createHostExtensionUi } from "./extension-ui-bridge.js";
-import { isPlannotatorReviewDismissed, textOfMessageContent } from "./plan-review-signal.js";
+import {
+  isAnnotationReviewDone,
+  isAnnotationReviewNotice,
+  isPlannotatorReviewDismissed,
+  textOfMessageContent,
+} from "./plan-review-signal.js";
 import { ExtensionUiHost } from "./extension-ui-host.js";
 import { HostQueue } from "./host-queue.js";
 import { workspaceKey } from "./identity.js";
@@ -1173,6 +1178,19 @@ export class HostSessionRegistry {
         publishContext();
       }, 250);
     };
+    // UI 设计模式的唯一写入口：同时翻会话内存状态和 `ui-design` 状态键。
+    // 勾选、约束提示词和关掉模式后的写入限制都读这一个键。
+    const applyUiDesignMode = (enabled: boolean) => {
+      if (!pi.setUiDesignMode) return;
+      pi.setUiDesignMode(enabled);
+      handleUi({
+        type: "extension_ui_request",
+        id: randomUUID(),
+        method: "setStatus",
+        statusKey: UI_DESIGN_STATUS_KEY,
+        statusText: enabled ? UI_DESIGN_STATUS_TEXT : undefined,
+      });
+    };
     const handleUi = (event: Extract<PiHostEvent, { type: "extension_ui_request" }>) => {
       // dismiss 只属于扩展命令：命令外（工具发起的提问）一律照常弹给界面。
       if (
@@ -1225,6 +1243,12 @@ export class HostSessionRegistry {
             // 会话固定端口时前后两轮审查同地址，关掉之后要能再开一次。
             forgetPlannotatorSessionUrls(meta.sessionId);
             emit(projector.finishOpenPlanReview());
+          }
+          // UI 设计模式：本模式自己打开的审查被批准、或 Done 且没留批注，模式就该退场，
+          // 否则 `ui_design` 提示词一直限制产品代码。直接关掉页面不算 done，只清配对。
+          if (isAnnotationReviewNotice(effect.message)) {
+            const settledByDesign = pi.settleDesignReview?.() === true;
+            if (settledByDesign && isAnnotationReviewDone(effect.message)) applyUiDesignMode(false);
           }
         }
         if (effect.kind === "title") emit(projector.setTitle(effect.title, "generated"));
@@ -1877,17 +1901,7 @@ export class HostSessionRegistry {
       },
       setCollaborationMode,
       isUiDesignMode: () => pi.isUiDesignMode?.() ?? false,
-      setUiDesignMode: (enabled) => {
-        if (!pi.setUiDesignMode) return;
-        pi.setUiDesignMode(enabled);
-        handleUi({
-          type: "extension_ui_request",
-          id: randomUUID(),
-          method: "setStatus",
-          statusKey: UI_DESIGN_STATUS_KEY,
-          statusText: enabled ? UI_DESIGN_STATUS_TEXT : undefined,
-        });
-      },
+      setUiDesignMode: applyUiDesignMode,
       requestConfirm: async (toolName, reason, args) => {
         if (sessionAllowed.has(toolName)) return true;
         const id = `perm:${randomUUID()}`;
