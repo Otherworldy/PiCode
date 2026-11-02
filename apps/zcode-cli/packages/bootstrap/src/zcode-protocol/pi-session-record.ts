@@ -253,7 +253,7 @@ export async function createPiSessionRecord(
 const migratedWorkspaceMemory = new Set<string>();
 
 /**
- * Pi 主路径的记忆开关：远端工作区一律关闭；本地读项目 `zcode.json`。
+ * Pi 主路径的记忆开关：远端工作区一律关闭；本地读项目 `.pi/picode.json`。
  * 打开时顺手创建目录，并把旧全局目录里的 .md 惰性复制过来。
  */
 async function resolvePiSessionMemoryEnabled(

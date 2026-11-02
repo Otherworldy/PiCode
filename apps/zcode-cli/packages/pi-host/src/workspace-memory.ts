@@ -3,6 +3,9 @@ import { join } from "node:path";
 import type { InlineExtension } from "@earendil-works/pi-coding-agent";
 import {
   WORKSPACE_MEMORY_INDEX_FILE_NAME,
+  WORKSPACE_MEMORY_INDEX_MAX_CHARS,
+  WORKSPACE_MEMORY_INDEX_MAX_LINES,
+  WORKSPACE_MEMORY_INDEX_READ_MAX_BYTES,
   WORKSPACE_MEMORY_MAX_INDEX_BYTES,
   WORKSPACE_MEMORY_MAX_ITEM_BYTES,
   assertWorkspaceMemoryRootTrusted,
@@ -13,8 +16,23 @@ import {
 /** 记忆段在完整 prompt 里的起始标记；每轮先剪掉旧段，避免 force prompt 越积越长。 */
 const WORKSPACE_MEMORY_PROMPT_MARKER = "<!-- zcode:workspace-memory -->";
 
-/** 抽取 prompt 里最多带多少现有记忆正文，避免长历史项目把请求撑爆。 */
-const WORKSPACE_MEMORY_PROMPT_MAX_BYTES = 256 * 1024;
+/**
+ * 抽取频率闸门：距上次抽取经过 N 个 turn 或 T 毫秒后，才允许下一次抽取。
+ * 逐个 turn 都抽会把「改错别字」这类短轮次也写成一条记忆。
+ */
+export const WORKSPACE_MEMORY_EXTRACTION_MIN_TURNS = 3;
+export const WORKSPACE_MEMORY_EXTRACTION_MIN_INTERVAL_MS = 10 * 60_000;
+
+/** 频率闸门：攒够 turn 数或等够时间，才允许下一次抽取。 */
+export function shouldRunWorkspaceMemoryExtraction(input: {
+  turnsSinceLast: number;
+  elapsedMs: number;
+}): boolean {
+  return (
+    input.turnsSinceLast >= WORKSPACE_MEMORY_EXTRACTION_MIN_TURNS ||
+    input.elapsedMs >= WORKSPACE_MEMORY_EXTRACTION_MIN_INTERVAL_MS
+  );
+}
 
 const MEMORY_USAGE = [
   "This is your persistent workspace memory. Each memory is one Markdown file holding one fact.",
@@ -24,20 +42,16 @@ const MEMORY_USAGE = [
   "Check existing files before adding a duplicate; update or delete memories that turn out to be wrong.",
   "Do not save what the repository already records (code structure, past fixes, git history, AGENTS.md).",
 ].join("\n");
-
-export interface WorkspaceMemoryExtractionFile {
-  name: string;
-  content: string;
-}
-
 export interface WorkspaceMemoryPatch {
   writes: Array<{ file: string; content: string }>;
+  /** 追加到已有文件末尾。预览被截断的文件只能走这条路。 */
+  appends: Array<{ file: string; content: string }>;
   deletes: string[];
   index?: string;
 }
 
 export function buildWorkspaceMemorySection(root: string, indexContent: string | null): string {
-  const index = indexContent?.trim();
+  const index = indexContent ? formatWorkspaceMemoryIndex(indexContent) : "";
   return [
     `${WORKSPACE_MEMORY_PROMPT_MARKER}\nYou have a persistent file-based workspace memory at \`${root}/\`.`,
     MEMORY_USAGE,
@@ -87,23 +101,50 @@ export async function readWorkspaceMemoryIndex(root: string): Promise<string | n
     await assertWorkspaceMemoryRootTrusted(root);
     const metadata = await lstat(path);
     if (!metadata.isFile() || metadata.isSymbolicLink()) return null;
-    if (metadata.size > WORKSPACE_MEMORY_MAX_INDEX_BYTES) return null;
+    // 只防超大文件卡住注入；注入量由 formatWorkspaceMemoryIndex 的软上限控制。
+    if (metadata.size > WORKSPACE_MEMORY_INDEX_READ_MAX_BYTES) return null;
     return await readFile(path, "utf-8");
   } catch {
     return null;
   }
 }
 
-function parseMemoryFrontmatter(content: string): { name?: string; description?: string } {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content);
-  if (!match) return {};
-  const block = match[1] ?? "";
-  const name = /^name:\s*(.+)$/m.exec(block)?.[1]?.trim();
-  const description = /^description:\s*(.+)$/m.exec(block)?.[1]?.trim();
-  return {
-    ...(name ? { name } : {}),
-    ...(description ? { description } : {}),
-  };
+/**
+ * 索引注入预算：超行数或字符数就截断，并追加一句 WARNING 让模型自己压缩。
+ *
+ * 旧实现在超过 32 KiB 时直接返回 null，模型看到的是「索引是空的」——
+ * 记忆明明存在却不可见，而且没有任何提示要求整理。截断 + WARNING 让膨胀变成
+ * 模型下一轮能自己修的问题。
+ */
+export function formatWorkspaceMemoryIndex(content: string): string {
+  const trimmed = stripIndexFrontmatter(content).trim();
+  if (!trimmed) return "";
+  const lines = trimmed.split("\n");
+  const lineTruncated = lines.length > WORKSPACE_MEMORY_INDEX_MAX_LINES;
+  const charTruncated = trimmed.length > WORKSPACE_MEMORY_INDEX_MAX_CHARS;
+  if (!lineTruncated && !charTruncated) return trimmed;
+
+  let truncated = lineTruncated
+    ? lines.slice(0, WORKSPACE_MEMORY_INDEX_MAX_LINES).join("\n")
+    : trimmed;
+  if (truncated.length > WORKSPACE_MEMORY_INDEX_MAX_CHARS) {
+    const lastNewline = truncated.lastIndexOf("\n", WORKSPACE_MEMORY_INDEX_MAX_CHARS);
+    truncated = truncated.slice(
+      0,
+      lastNewline > 0 ? lastNewline : WORKSPACE_MEMORY_INDEX_MAX_CHARS,
+    );
+  }
+  const size = lineTruncated
+    ? `${lines.length} lines (limit ${WORKSPACE_MEMORY_INDEX_MAX_LINES})`
+    : `${trimmed.length} chars (limit ${WORKSPACE_MEMORY_INDEX_MAX_CHARS})`;
+  return `${truncated}\n\n> WARNING: MEMORY.md is ${size}; only part of it was loaded. Merge or delete stale entries and keep one line per memory.`;
+}
+
+/** 索引文件开头可能被手写 frontmatter；它不该占用注入预算。 */
+function stripIndexFrontmatter(content: string): string {
+  if (!content.startsWith("---")) return content;
+  const end = content.indexOf("\n---", 3);
+  return end < 0 ? content : content.slice(end + 4);
 }
 
 /** 模型只返回 writes 时，从现有条目补一份索引，避免记忆永远不可见。 */
@@ -128,66 +169,19 @@ export async function rebuildWorkspaceMemoryIndex(root: string): Promise<string 
   return lines.length > 0 ? `${lines.join("\n")}\n` : null;
 }
 
-export async function readWorkspaceMemoryFiles(
-  root: string,
-): Promise<WorkspaceMemoryExtractionFile[]> {
-  let entries;
-  try {
-    await assertWorkspaceMemoryRootTrusted(root);
-    entries = await readdir(root, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  const files: WorkspaceMemoryExtractionFile[] = [];
-  entries.sort((left, right) => left.name.localeCompare(right.name, "en"));
-  let totalBytes = 0;
-  for (const entry of entries) {
-    if (!entry.isFile() || entry.isSymbolicLink()) continue;
-    if (!isWorkspaceMemoryItemFileName(entry.name)) continue;
-    try {
-      const path = join(root, entry.name);
-      const metadata = await lstat(path);
-      if (!metadata.isFile() || metadata.isSymbolicLink()) continue;
-      if (metadata.size > WORKSPACE_MEMORY_MAX_ITEM_BYTES) continue;
-      if (totalBytes + metadata.size > WORKSPACE_MEMORY_PROMPT_MAX_BYTES) break;
-      totalBytes += metadata.size;
-      files.push({ name: entry.name, content: await readFile(path, "utf-8") });
-    } catch {
-      // 并发删除或不可读：本次抽取跳过这个文件。
-    }
-  }
-  return files;
-}
-
-export function buildWorkspaceMemoryExtractionPrompt(input: {
-  transcript: string;
-  index: string | null;
-  files: readonly WorkspaceMemoryExtractionFile[];
-}): string {
-  const existing = input.files
-    .map((file) => `<file name="${file.name}">\n${file.content}\n</file>`)
-    .join("\n");
-  return [
-    "You maintain the persistent workspace memory for this project.",
-    "Only use the conversation below. Do not investigate the repository, run tools, or verify code.",
-    "Update existing memories instead of duplicating them. Delete memories that are now wrong.",
-    "Return ONLY a JSON object with this shape:",
-    '{"writes":[{"file":"kebab-case.md","content":"---\\nname: ...\\ndescription: ...\\ntype: project\\n---\\n..."}],"deletes":["old.md"],"index":"- [Title](file.md) — hook\\n"}',
-    "Rules:",
-    "- Omit keys you do not need. An empty update is fine.",
-    "- `file` must be a lowercase .md filename, never MEMORY.md, no directories.",
-    "- `index` is the complete new MEMORY.md body; one pointer line per memory, no content.",
-    "- Keep each file under 64 KiB and the index under 32 KiB.",
-    "",
-    `<current_index>\n${input.index ?? "(empty)"}\n</current_index>`,
-    existing
-      ? `<current_files>\n${existing}\n</current_files>`
-      : "<current_files>(none)</current_files>",
-    "",
-    "<conversation>",
-    input.transcript,
-    "</conversation>",
-  ].join("\n");
+/**
+ * 索引重建时的 frontmatter 提取：name 作标题，description 作悬停。
+ */
+function parseMemoryFrontmatter(content: string): { name?: string; description?: string } {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content);
+  if (!match) return {};
+  const block = match[1] ?? "";
+  const name = /^name:\s*(.+)$/m.exec(block)?.[1]?.trim();
+  const description = /^description:\s*(.+)$/m.exec(block)?.[1]?.trim();
+  return {
+    ...(name ? { name } : {}),
+    ...(description ? { description } : {}),
+  };
 }
 
 function extractJsonObject(text: string): unknown {
@@ -236,62 +230,88 @@ export function parseWorkspaceMemoryPatch(text: string): WorkspaceMemoryPatch | 
     }
   }
 
+  const appends: Array<{ file: string; content: string }> = [];
+  if (parsed.appends !== undefined) {
+    if (!Array.isArray(parsed.appends)) return null;
+    for (const item of parsed.appends) {
+      if (!isRecord(item)) return null;
+      const file = typeof item.file === "string" ? item.file.trim() : "";
+      const content = typeof item.content === "string" ? item.content : "";
+      if (!isWorkspaceMemoryItemFileName(file)) return null;
+      if (Buffer.byteLength(content, "utf-8") > WORKSPACE_MEMORY_MAX_ITEM_BYTES) return null;
+      appends.push({ file, content });
+    }
+  }
+
   let index: string | undefined;
   if (parsed.index !== undefined) {
     if (typeof parsed.index !== "string") return null;
+    // 超预算的索引不在这里判死：写入时改落紧凑重建索引，避免整次抽取白跑。
     if (Buffer.byteLength(parsed.index, "utf-8") > WORKSPACE_MEMORY_MAX_INDEX_BYTES) return null;
     index = parsed.index;
   }
 
-  if (writes.length === 0 && deletes.length === 0 && index === undefined) return null;
-  return { writes, deletes, ...(index !== undefined ? { index } : {}) };
+  if (writes.length === 0 && appends.length === 0 && deletes.length === 0 && index === undefined) {
+    return null;
+  }
+  return { writes, appends, deletes, ...(index !== undefined ? { index } : {}) };
 }
 
 export async function applyWorkspaceMemoryPatch(
   root: string,
   patch: WorkspaceMemoryPatch,
-  options: { expectedIndex?: string | null } = {},
+  options: { expectedIndex?: string | null; truncatedFiles?: readonly string[] } = {},
 ): Promise<void> {
   await mkdir(root, { recursive: true });
   await assertWorkspaceMemoryRootTrusted(root);
+  // 预览被截断的文件模型没看全，整份重写会把尾部内容抹掉；这类只能 appends。
+  const truncated = new Set(options.truncatedFiles ?? []);
   for (const file of patch.writes) {
+    if (truncated.has(file.file)) continue;
     await atomicWritePrivateTextFile(join(root, file.file), file.content);
+  }
+  for (const file of patch.appends) {
+    const existing = await readFile(join(root, file.file), "utf-8").catch(() => null);
+    const separator = existing && !existing.endsWith("\n") ? "\n" : "";
+    const next = `${existing ?? ""}${separator}${file.content}`;
+    if (Buffer.byteLength(next, "utf-8") > WORKSPACE_MEMORY_MAX_ITEM_BYTES) continue;
+    await atomicWritePrivateTextFile(join(root, file.file), next);
   }
   for (const file of patch.deletes) {
     await rm(join(root, file), { force: true });
   }
-  if (patch.index !== undefined) {
+  // 索引写入：模型给的索引超出注入预算时不落盘，改用条目重建的紧凑索引。
+  // 否则一次抽取就能把索引写成模型自己再也看不全的样子。
+  const proposedIndex =
+    patch.index !== undefined && !isWorkspaceMemoryIndexOverBudget(patch.index)
+      ? patch.index
+      : undefined;
+  if (proposedIndex !== undefined) {
     // 模型读 index 与写回之间，主模型可能已经手工追加了指针行。
     // 当前值与抽取快照不一致时只保留并发写入，不用旧快照整份覆盖。
     if (options.expectedIndex !== undefined) {
       const current = await readWorkspaceMemoryIndex(root);
       if (current !== options.expectedIndex) return;
     }
-    await atomicWritePrivateTextFile(join(root, WORKSPACE_MEMORY_INDEX_FILE_NAME), patch.index);
-  } else {
-    const current = await readWorkspaceMemoryIndex(root);
-    if (current === null || current.trim() === "") {
-      const rebuilt = await rebuildWorkspaceMemoryIndex(root);
-      if (rebuilt) {
-        await atomicWritePrivateTextFile(join(root, WORKSPACE_MEMORY_INDEX_FILE_NAME), rebuilt);
-      }
+    await atomicWritePrivateTextFile(join(root, WORKSPACE_MEMORY_INDEX_FILE_NAME), proposedIndex);
+    return;
+  }
+  const current = await readWorkspaceMemoryIndex(root);
+  if (patch.index !== undefined || current === null || current.trim() === "") {
+    const rebuilt =
+      (await rebuildWorkspaceMemoryIndex(root)) ?? (current && current.trim() ? current : null);
+    if (rebuilt) {
+      await atomicWritePrivateTextFile(join(root, WORKSPACE_MEMORY_INDEX_FILE_NAME), rebuilt);
     }
   }
 }
 
-/** 从投影行里取本轮对话，供抽取 prompt 使用。 */
-export function buildWorkspaceMemoryTranscript(
-  rows: ReadonlyArray<{ kind: string; text?: string; turnId?: string }>,
-): string {
-  const lastTurnId = [...rows].reverse().find((row) => row.kind === "turnHeader")?.turnId;
-  const selected = lastTurnId ? rows.filter((row) => row.turnId === lastTurnId) : rows;
-  const lines: string[] = [];
-  for (const row of selected) {
-    if (row.kind === "userInput" && row.text?.trim()) {
-      lines.push(`User: ${row.text.trim()}`);
-    } else if (row.kind === "assistantText" && row.text?.trim()) {
-      lines.push(`Assistant: ${row.text.trim()}`);
-    }
-  }
-  return lines.join("\n\n");
+/** 索引是否超出注入预算（行数或字符数）。 */
+function isWorkspaceMemoryIndexOverBudget(content: string): boolean {
+  const trimmed = content.trim();
+  if (!trimmed) return false;
+  return (
+    trimmed.split("\n").length > WORKSPACE_MEMORY_INDEX_MAX_LINES ||
+    trimmed.length > WORKSPACE_MEMORY_INDEX_MAX_CHARS
+  );
 }

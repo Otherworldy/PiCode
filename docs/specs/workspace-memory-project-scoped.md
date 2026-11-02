@@ -17,7 +17,7 @@
 ## 目标
 
 1. 记忆文件存到 `<workspacePath>/.pi/memory/`，跟随项目，不再集中到 app 数据目录。
-2. 开关改为项目配置 `<workspacePath>/zcode.json` 的 `features.memory`，缺省关闭。
+2. 开关改为项目配置 `<workspacePath>/.pi/picode.json` 的 `features.memory`，缺省关闭。
 3. Pi 主路径：每个 turn 注入 `MEMORY.md`；turn 结束后台抽取并写入项目目录。
 4. 记忆文件默认被本仓库忽略，不进入 `git status` / diff。
 5. 旧全局记忆在首次打开项目时惰性迁移。
@@ -32,16 +32,20 @@
 
 ## 状态所有者
 
-| 状态               | 所有者                                     | 说明                                    |
-| ------------------ | ------------------------------------------ | --------------------------------------- |
-| 记忆文件内容       | Pi Host session（写入）                    | `<workspace>/.pi/memory/*.md`           |
-| 记忆读取 / 编辑 UI | `IMemoryService`                           | 读写记忆文件与项目开关                  |
-| 项目开关           | `<workspace>/zcode.json` `features.memory` | 唯一写入入口 `updateJsonConfigFile`     |
-| 启用判定           | Pi extension 每轮读 `zcode.json`           | 只有显式 `features.memory: true` 才开启 |
-| 自动抽取调度       | `HostSessionRegistry`                      | 每个 session 同时最多一个 in-flight     |
-| 旧数据迁移         | `createPiSessionRecord`                    | 本地 workspace 首次创建时惰性复制       |
+| 状态               | 所有者                                          | 说明                                    |
+| ------------------ | ----------------------------------------------- | --------------------------------------- |
+| 记忆文件内容       | Pi Host session（写入）                         | `<workspace>/.pi/memory/*.md`           |
+| 记忆读取 / 编辑 UI | `IMemoryService`                                | 读写记忆文件与项目开关                  |
+| 项目开关           | `<workspace>/.pi/picode.json` `features.memory` | 唯一写入入口 `updateJsonConfigFile`     |
+| 启用判定           | Pi extension 每轮读 `.pi/picode.json`           | 只有显式 `features.memory: true` 才开启 |
+| 自动抽取调度       | `HostSessionRegistry`                           | 每个 session 同时最多一个 in-flight     |
+| 旧数据迁移         | `createPiSessionRecord`                         | 本地 workspace 首次创建时惰性复制       |
 
 全局 app 设置 `memoryEnabled` 不再参与判定，设置页不再暴露；字段保留仅为兼容旧 `setting.json`。
+旧版把这份配置写在项目根 `zcode.json`。读取 `.pi/picode.json` 不存在时会先把旧文件内容复制过去（旧文件保留），已有项目不需要手动改配置。
+
+迁移是一次性的：`.pi/picode.json` 一旦存在，根目录 `zcode.json` 就不再被读取，继续编辑旧文件不会生效。workspace hooks 的自动发现也走同一条迁移路径，`configFileKind` 新增 `picode.json`；发现范围是工作区到 git 根之间的每一层，祖先目录的 `zcode.json` 同样会被复制成该目录的 `.pi/picode.json`，否则上游 hooks 会静默消失。
+
 项目开关在每个 turn 重新读取，关闭后下一轮即停止注入与抽取，不必重开会话。
 
 ## 存储布局
@@ -72,7 +76,7 @@ memory.use === true        → 开启（CLI 兼容）
 否则                       → 关闭
 ```
 
-- 开关只写 `<workspace>/zcode.json`，只改 `features.memory`，保留其它键。
+- 开关只写 `<workspace>/.pi/picode.json`，只改 `features.memory`，保留其它键。
 - 读写必须走 `updateJsonConfigFile`（文件锁 + 原子写），不新增裸 `writeFile`。
 - 全局 `memoryEnabled` 字段保留但忽略；旧值不迁移成项目开关，避免把“全局开”批量写进所有项目。
 - Pi extension 与抽取调度在每个 turn 重新读开关；关闭后下一轮删除已注入的 section 并停止抽取。
@@ -103,13 +107,27 @@ before_agent_start
 
 ```text
 turnDone
+  → 频率闸门：距上次抽取 >= 3 个 turn，或距上次抽取已过 10 分钟
   → 条件：创建时 enabled && 本地 && 无 in-flight && 当前开关仍为开
-  → 只取本轮 turnId 的用户/助手消息 + MEMORY.md + 文件清单
+  → 门禁 1：本轮主模型已 Write/Edit 过记忆文件 → 跳过（避免双写）
+  → 门禁 2：本轮没有 >= 3 个词的真实用户输入 → 跳过
+  → 只取本轮 turnId 的用户/助手消息 + MEMORY.md + 记忆 manifest
   → completePiPrompt(当前模型, 提取 prompt)
   → 解析 JSON patch
   → 校验并原子写入 .pi/memory
   → 结束（失败只记日志，不影响 turn）
 ```
+
+抽取频率与门禁（对应「记忆不要每轮都长」）：
+
+| 约束           | 值                         | 理由                                     |
+| -------------- | -------------------------- | ---------------------------------------- |
+| 最小 turn 间隔 | 3                          | 短轮次（改错别字、单句追问）不值得抽取   |
+| 最小时间间隔   | 10 分钟                    | 长时间空闲的会话也要有一次收敛机会       |
+| 直接写入门禁   | 本轮已写记忆则跳过抽取     | 主模型 Write 与抽取会写同一事实的两份    |
+| 用户散文门禁   | 真实用户消息累计 >= 3 个词 | 工具回执、后台结果、合成消息不该触发抽取 |
+
+两个门禁只影响本次调度：frequency 计数照常推进，不因跳过而回退。
 
 - 同一 session 同时只跑一个抽取；`dispose` 时 abort。
 - 超时 60s。
@@ -125,6 +143,38 @@ turnDone
   ```
 - 非法文件名、超限内容、JSON 解析失败 → 整次放弃，不写半成品。
 - 抽取 prompt 明确：只使用本轮对话，不调查代码，不重复已有内容。
+
+### 抽取输入是 manifest，不是全文
+
+抽取请求里每条现有记忆只带「文件名 + description + 前 30 行预览」，不再拼全部正文：
+
+```text
+### github-actions-ci.md   (2.1KB, 2026-11-01)
+description: CI 只跑 pnpm test，不跑 build
+<前 30 行>
+
+### node-version-24.md   (truncated, 48 more lines, 2026-10-28)
+description: 必须用 Node 24，mise 已固定
+<前 30 行>
+```
+
+- 单文件预算：`WORKSPACE_MEMORY_PREVIEW_LINES = 30`；
+- 整个 manifest 预算：48 KiB，按 mtime 降序，超预算的剩余文件只计数不展开；
+- 最多 200 个文件。
+
+预览被截断（`truncated`）的文件**不允许整体重写**：模型看不到尾部，`writes` 会把后半段丢掉。
+修改这类文件只能 `appends` 追加或 `deletes` 删除。
+
+### 索引注入预算
+
+`MEMORY.md` 每次注入都经过 `formatWorkspaceMemoryIndex`：
+
+- 200 行 / 25,000 字符上限；
+- 超限截断，并在末尾追加 `> WARNING: MEMORY.md is too long ...` 提示模型压缩；
+- 读取上限 1 MiB（防止被外部写入的超大文件卡住），注入内容永远受上面两个上限约束。
+
+写入侧同样度量：模型返回的 `index` 超预算时**不落盘**，改用条目重建的紧凑索引
+（每个记忆一行，天然有界）。这样索引不会因为一次抽取变成不可用状态。
 
 ### 权限
 
@@ -178,7 +228,7 @@ setWorkspaceMemoryEnabled(
 
 - 远端 ref 返回空 / `false`，不读本机同名路径。
 - 入口：侧栏每个项目行的「更多」→「项目记忆」。
-  - 对话框只读写这个项目自己的 `zcode.json` 和 `.pi/memory`，不依赖当前活动工作区。
+  - 对话框只读写这个项目自己的 `.pi/picode.json` 和 `.pi/memory`，不依赖当前活动工作区。
   - 顶部是开关和抽取模型，下面是该项目的记忆文件和打开操作。
   - 点击文件在对话框内查看和编辑，可新建、删除；手动保存，`MEMORY.md` 也可编辑。
   - 有未保存修改时，关闭对话框或取消编辑先确认放弃。
@@ -188,7 +238,7 @@ setWorkspaceMemoryEnabled(
 
 ## 抽取模型
 
-项目可以单独指定抽取模型，写在同一份 `<workspace>/zcode.json`：
+项目可以单独指定抽取模型，写在同一份 `<workspace>/.pi/picode.json`：
 
 ```json
 {
@@ -246,6 +296,11 @@ if <workspace>/.pi/memory 不存在或还没有任何 .md:
 10. 配置 `features.memoryModel` 后，抽取调用该模型；模型不存在时回退会话模型，抽取仍能完成。
 11. 在对话框新建、编辑、删除记忆文件后立即生效；关闭未保存的编辑会先确认放弃。
 12. 索引缺失时列表显示 `MEMORY.md`「尚未创建」，点击可创建；抽取只写条目时自动补索引。
+13. 连续 2 个短轮次不触发抽取；第 3 个 turn 结束才触发。
+14. 本轮主模型已写入记忆文件时，抽取被跳过（不会出现两份同一事实）。
+15. 只有工具回执 / 后台结果、没有真实用户文本的轮次不触发抽取。
+16. 抽取请求的现有记忆部分是 manifest（文件名 + description + 前 30 行），不是全文。
+17. `MEMORY.md` 超过 200 行时注入被截断且带 WARNING；抽取返回超预算索引时不落盘，改重建紧凑索引。
 
 ## 失败语义
 

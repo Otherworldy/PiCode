@@ -5,6 +5,11 @@ import { promisify } from "node:util";
 import { isRemoteWorkspaceIdentity } from "../remote-workspace-identity.js";
 import { atomicWritePrivateTextFile, withFileLock } from "./privateFilePersistence.js";
 import { updateJsonConfigFile } from "./userCliConfigFile.js";
+import {
+  migrateLegacyWorkspaceConfig,
+  readWorkspaceConfigText,
+  resolveWorkspaceConfigPath,
+} from "./workspaceConfig.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -14,7 +19,16 @@ export const WORKSPACE_MEMORY_DIR_NAME = "memory";
 export const WORKSPACE_MEMORY_INDEX_FILE_NAME = "MEMORY.md";
 export const WORKSPACE_MEMORY_ITEM_FILE_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}\.md$/;
 export const WORKSPACE_MEMORY_MAX_ITEM_BYTES = 64 * 1024;
+/** 索引写入上限（UI 编辑与抽取落盘共用）。 */
 export const WORKSPACE_MEMORY_MAX_INDEX_BYTES = 32 * 1024;
+/**
+ * 索引注入预算。超过后截断并附 WARNING 提示模型压缩；
+ * 不再像以前那样整份丢弃，否则模型会以为记忆不存在。
+ */
+export const WORKSPACE_MEMORY_INDEX_MAX_LINES = 200;
+export const WORKSPACE_MEMORY_INDEX_MAX_CHARS = 25_000;
+/** 索引读取上限：只防超大文件卡住注入，与上面的注入预算无关。 */
+export const WORKSPACE_MEMORY_INDEX_READ_MAX_BYTES = 1024 * 1024;
 
 /** Windows 设备名不能作为文件名；抽取模型可能刚好生成 con.md。 */
 const WINDOWS_RESERVED_FILE_STEMS = new Set([
@@ -72,22 +86,15 @@ export async function assertWorkspaceMemoryRootTrusted(memoryRoot: string): Prom
 }
 
 /**
- * 读取 `<workspace>/zcode.json` 的记忆开关。
+ * 读取 `<workspace>/.pi/picode.json` 的记忆开关（旧 `zcode.json` 会惰性迁移过来）。
  *
  * 记忆默认关闭：只有显式 `features.memory: true`（或旧格式 `memory.use: true`）
  * 才开启。文件缺失、JSON 损坏或字段不完整都按关闭处理，避免升级后悄悄开始
  * 往用户项目里写记忆。权限/IO 错误向上抛，由调用方决定是关记忆还是显示错误。
  */
 export async function readWorkspaceMemoryEnabled(workspacePath: string): Promise<boolean> {
-  let raw: string;
-  try {
-    raw = await readFile(join(resolve(workspacePath), "zcode.json"), "utf-8");
-  } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
-      return false;
-    }
-    throw error;
-  }
+  const raw = await readWorkspaceConfigText(workspacePath);
+  if (raw === null) return false;
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
@@ -110,7 +117,8 @@ export async function setWorkspaceMemoryEnabled(
   workspacePath: string,
   enabled: boolean,
 ): Promise<void> {
-  const configPath = join(resolve(workspacePath), "zcode.json");
+  await migrateLegacyWorkspaceConfig(workspacePath);
+  const configPath = resolveWorkspaceConfigPath(workspacePath);
   await updateJsonConfigFile(configPath, (current) => {
     const features = isRecord(current.features) ? current.features : {};
     if (features.memory === enabled) return null;
@@ -129,21 +137,14 @@ export interface WorkspaceMemoryModelConfig {
 }
 
 /**
- * 读取 `<workspace>/zcode.json` 的记忆抽取模型。
+ * 读取 `<workspace>/.pi/picode.json` 的记忆抽取模型。
  * 缺失、字段不完整或 JSON 损坏都返回 null，由调用方回退会话模型。
  */
 export async function readWorkspaceMemoryModel(
   workspacePath: string,
 ): Promise<WorkspaceMemoryModelConfig | null> {
-  let raw: string;
-  try {
-    raw = await readFile(join(resolve(workspacePath), "zcode.json"), "utf-8");
-  } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
-      return null;
-    }
-    throw error;
-  }
+  const raw = await readWorkspaceConfigText(workspacePath);
+  if (raw === null) return null;
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
@@ -165,7 +166,8 @@ export async function setWorkspaceMemoryModel(
   workspacePath: string,
   model: WorkspaceMemoryModelConfig | null,
 ): Promise<void> {
-  const configPath = join(resolve(workspacePath), "zcode.json");
+  await migrateLegacyWorkspaceConfig(workspacePath);
+  const configPath = resolveWorkspaceConfigPath(workspacePath);
   await updateJsonConfigFile(configPath, (current) => {
     const features = isRecord(current.features) ? { ...current.features } : {};
     const currentModel = isRecord(features.memoryModel) ? features.memoryModel : null;

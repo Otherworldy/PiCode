@@ -56,7 +56,7 @@ export interface IMemoryService {
   /** 删除一个项目记忆 Markdown 文件。 */
   deleteProjectMemoryFile(params: ProjectMemoryWorkspaceRef & { fileName: string }): Promise<void>;
 
-  /** 读取项目配置 `<workspace>/zcode.json` 的记忆开关。 */
+  /** 读取项目配置 `<workspace>/.pi/picode.json` 的记忆开关。 */
   getWorkspaceMemoryEnabled(params: ProjectMemoryWorkspaceRef): Promise<boolean>;
 
   /** 读取项目配置的记忆抽取模型；null 表示跟随会话模型。 */

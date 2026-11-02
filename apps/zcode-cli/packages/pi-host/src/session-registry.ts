@@ -58,12 +58,17 @@ import { scheduleLiveSessionTitleSummary } from "./session-title-live.js";
 import { completePiPrompt } from "./session-factory.js";
 import {
   applyWorkspaceMemoryPatch,
+  parseWorkspaceMemoryPatch,
+  readWorkspaceMemoryIndex,
+  shouldRunWorkspaceMemoryExtraction,
+} from "./workspace-memory.js";
+import {
   buildWorkspaceMemoryExtractionPrompt,
   buildWorkspaceMemoryTranscript,
-  parseWorkspaceMemoryPatch,
-  readWorkspaceMemoryFiles,
-  readWorkspaceMemoryIndex,
-} from "./workspace-memory.js";
+  containsDirectWorkspaceMemoryWrite,
+  containsEligibleWorkspaceMemoryUserProse,
+  readWorkspaceMemoryManifest,
+} from "./workspace-memory-extraction.js";
 import {
   countRealUserMessages,
   createSessionFirstGate,
@@ -164,6 +169,11 @@ export interface HostedSession {
   setUiDesignMode(enabled: boolean): void;
   isUiDesignMode(): boolean;
   publishUi(): void;
+  /**
+   * 关掉扩展命令的回执弹窗。快照是这条回执的所有者，界面不自己记「已关」，
+   * 否则切走再切回来会从快照里重新弹一遍。返回 false = 已经没有这条（重复关闭）。
+   */
+  dismissExtensionNotice(noticeId: string): boolean;
   dispose(): void | Promise<void>;
   onDeltas(listener: (deltas: ConversationDelta[]) => void): () => void;
   onNotify(
@@ -1476,6 +1486,7 @@ export class HostSessionRegistry {
           }
           // 记忆抽取只跟主轮次结束走一次；agent_settled 会紧随 agent_end 再发一次。
           if (event.type === "agent_end" && !event.willRetry) {
+            memoryTurnsSinceExtraction += 1;
             scheduleWorkspaceMemoryExtraction();
           }
           // 上一轮的 agent_end 可能先于 isStreaming 落下。这时 prompt 会抛
@@ -1499,13 +1510,31 @@ export class HostSessionRegistry {
     const workspaceMemoryRoot = resolveWorkspaceMemoryRoot(meta.workspacePath);
     let memoryExtractionController: AbortController | undefined;
     let memoryExtractionRunning = false;
+    // 抽取频率闸门：3 个 turn 或 10 分钟，先到者触发。窗口从会话创建开始算。
+    let memoryTurnsSinceExtraction = 0;
+    let memoryLastExtractionAt = Date.now();
     // 记忆抽取是 turn 后的旁路：失败、超时、输出非法都不影响本轮结果。
     const scheduleWorkspaceMemoryExtraction = () => {
       if (!meta.memoryEnabled || memoryExtractionRunning) return;
       const model = pi.currentModel;
       if (!model) return;
-      const transcript = buildWorkspaceMemoryTranscript(projector.getSnapshot().rows.window);
+      const rows = projector.getSnapshot().rows.window;
+      const transcript = buildWorkspaceMemoryTranscript(rows);
       if (!transcript.trim()) return;
+      // 主模型本轮已直接写过记忆时不再抽取：两条写入路径会留下同一事实的两份。
+      if (containsDirectWorkspaceMemoryWrite(rows, workspaceMemoryRoot)) return;
+      // 只有工具回执 / 后台结果 / 合成消息的轮次不值得抽取。
+      if (!containsEligibleWorkspaceMemoryUserProse(rows)) return;
+      if (
+        !shouldRunWorkspaceMemoryExtraction({
+          turnsSinceLast: memoryTurnsSinceExtraction,
+          elapsedMs: Date.now() - memoryLastExtractionAt,
+        })
+      ) {
+        return;
+      }
+      memoryTurnsSinceExtraction = 0;
+      memoryLastExtractionAt = Date.now();
       memoryExtractionRunning = true;
       const controller = new AbortController();
       memoryExtractionController = controller;
@@ -1513,11 +1542,11 @@ export class HostSessionRegistry {
       void (async () => {
         try {
           if (!(await readWorkspaceMemoryEnabled(meta.workspacePath))) return;
-          const [index, files] = await Promise.all([
+          const [index, manifest] = await Promise.all([
             readWorkspaceMemoryIndex(workspaceMemoryRoot),
-            readWorkspaceMemoryFiles(workspaceMemoryRoot),
+            readWorkspaceMemoryManifest(workspaceMemoryRoot),
           ]);
-          const prompt = buildWorkspaceMemoryExtractionPrompt({ transcript, index, files });
+          const prompt = buildWorkspaceMemoryExtractionPrompt({ transcript, index, manifest });
           const complete = this.options.completeMemoryPrompt ?? completePiPrompt;
           // 项目可以单独指定抽取模型；没配或模型已从目录删除时回退当前会话模型。
           const configuredModel = await readWorkspaceMemoryModel(meta.workspacePath).catch(
@@ -1543,7 +1572,10 @@ export class HostSessionRegistry {
           if (!response || controller.signal.aborted) return;
           const patch = parseWorkspaceMemoryPatch(response);
           if (!patch) return;
-          await applyWorkspaceMemoryPatch(workspaceMemoryRoot, patch, { expectedIndex: index });
+          await applyWorkspaceMemoryPatch(workspaceMemoryRoot, patch, {
+            expectedIndex: index,
+            truncatedFiles: manifest.filter((entry) => entry.truncated).map((entry) => entry.name),
+          });
         } catch (error) {
           if (!controller.signal.aborted) {
             console.warn("pi-host workspace memory extraction failed", error);
@@ -1826,6 +1858,16 @@ export class HostSessionRegistry {
         emit(projector.replaceInteractions(snap.pending));
         emit(projector.replaceWidgets(snap.widgets));
         emit(projector.replaceStatuses(snap.statuses));
+      },
+      dismissExtensionNotice: (noticeId) => {
+        const current = projector.getSnapshot().extensionNotice;
+        if (!current || current.id !== noticeId) return false;
+        emit(projector.setExtensionNotice(null));
+        // 镜像跟快照一起清：已经收起的那段不再参与累积，命令还在跑时之后的 notify
+        // 另开一个新弹窗。不清就是两处事实不一致，以后谁把读点挪出命令运行期，旧回执就会复活。
+        extensionRuntime.noticeId = "";
+        extensionRuntime.noticeText = "";
+        return true;
       },
       sessionAllows: sessionAllowed,
       applyAccessFrom: (source) => {

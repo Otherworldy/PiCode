@@ -86,6 +86,9 @@ export {
   PI_PROJECT_DIR_NAME,
   WORKSPACE_MEMORY_DIR_NAME,
   WORKSPACE_MEMORY_INDEX_FILE_NAME,
+  WORKSPACE_MEMORY_INDEX_MAX_CHARS,
+  WORKSPACE_MEMORY_INDEX_MAX_LINES,
+  WORKSPACE_MEMORY_INDEX_READ_MAX_BYTES,
   WORKSPACE_MEMORY_ITEM_FILE_PATTERN,
   WORKSPACE_MEMORY_MAX_INDEX_BYTES,
   WORKSPACE_MEMORY_MAX_ITEM_BYTES,
@@ -103,6 +106,16 @@ export {
   setWorkspaceMemoryModel,
   type WorkspaceMemoryModelConfig,
 } from "./node/workspaceMemory.js";
+export {
+  LEGACY_WORKSPACE_CONFIG_FILE_NAME,
+  migrateLegacyWorkspaceConfig,
+  migrateLegacyWorkspaceConfigSync,
+  readWorkspaceConfigText,
+  resolveLegacyWorkspaceConfigPath,
+  resolveWorkspaceConfigPath,
+  WORKSPACE_CONFIG_DIR_NAME,
+  WORKSPACE_CONFIG_FILE_NAME,
+} from "./node/workspaceConfig.js";
 export {
   AGENT_APPEND_SYSTEM_PROMPT_FILE_NAME,
   AGENT_SYSTEM_PROMPT_FILE_NAME,

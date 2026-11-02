@@ -14,6 +14,11 @@ import {
 } from "@zcode/shared/node";
 import { createMemoryService } from "../src/memory/memoryService.js";
 
+async function writeWorkspaceConfig(workspacePath: string, text: string): Promise<void> {
+  await mkdir(join(workspacePath, ".pi"), { recursive: true });
+  await writeFile(join(workspacePath, ".pi", "picode.json"), text);
+}
+
 async function withWorkspace(run: (workspacePath: string) => Promise<void>): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), "zcode-workspace-memory-"));
   try {
@@ -33,26 +38,31 @@ test("workspace memory root is inside the project .pi directory", () => {
 test("memory switch defaults to disabled and only explicit true enables it", async () => {
   await withWorkspace(async (workspacePath) => {
     assert.equal(await readWorkspaceMemoryEnabled(workspacePath), false);
-    await writeFile(
-      join(workspacePath, "zcode.json"),
-      JSON.stringify({ features: { memory: true } }),
-    );
+    await writeWorkspaceConfig(workspacePath, JSON.stringify({ features: { memory: true } }));
     assert.equal(await readWorkspaceMemoryEnabled(workspacePath), true);
-    await writeFile(
-      join(workspacePath, "zcode.json"),
-      JSON.stringify({ features: { memory: false } }),
-    );
+    await writeWorkspaceConfig(workspacePath, JSON.stringify({ features: { memory: false } }));
     assert.equal(await readWorkspaceMemoryEnabled(workspacePath), false);
-    await writeFile(join(workspacePath, "zcode.json"), JSON.stringify({ memory: { use: true } }));
+    await writeWorkspaceConfig(workspacePath, JSON.stringify({ memory: { use: true } }));
     assert.equal(await readWorkspaceMemoryEnabled(workspacePath), true);
-    await writeFile(join(workspacePath, "zcode.json"), "{ broken");
+    await writeWorkspaceConfig(workspacePath, "{ broken");
     assert.equal(await readWorkspaceMemoryEnabled(workspacePath), false);
+  });
+});
+
+test("legacy root zcode.json is copied to .pi/picode.json on read", async () => {
+  await withWorkspace(async (workspacePath) => {
+    const legacyText = JSON.stringify({ features: { memory: true } });
+    await writeFile(join(workspacePath, "zcode.json"), legacyText);
+    assert.equal(await readWorkspaceMemoryEnabled(workspacePath), true);
+    assert.equal(await readFile(join(workspacePath, ".pi", "picode.json"), "utf-8"), legacyText);
+    assert.equal(await readFile(join(workspacePath, "zcode.json"), "utf-8"), legacyText);
   });
 });
 
 test("setWorkspaceMemoryEnabled preserves other project config keys", async () => {
   await withWorkspace(async (workspacePath) => {
-    const configPath = join(workspacePath, "zcode.json");
+    await mkdir(join(workspacePath, ".pi"), { recursive: true });
+    const configPath = join(workspacePath, ".pi", "picode.json");
     await writeFile(
       configPath,
       JSON.stringify({ features: { memory: true, skill: false }, theme: "x" }),
@@ -166,7 +176,8 @@ pnpm -r build`;
 
 test("workspace memory model is stored per project and can be cleared", async () => {
   await withWorkspace(async (workspacePath) => {
-    const configPath = join(workspacePath, "zcode.json");
+    await mkdir(join(workspacePath, ".pi"), { recursive: true });
+    const configPath = join(workspacePath, ".pi", "picode.json");
     await writeFile(
       configPath,
       JSON.stringify({ features: { memory: true, skill: false }, theme: "x" }),

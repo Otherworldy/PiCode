@@ -335,7 +335,7 @@ export interface CreatePiSessionInput {
   memoryEnabled?: boolean;
   /** 记忆根目录。worktree 会话仍跟随 workspacePath，不是 cwd。 */
   memoryRoot?: string;
-  /** 记忆开关所在的项目根目录，用于每轮重新读取 zcode.json。 */
+  /** 记忆开关所在的项目根目录，用于每轮重新读取 .pi/picode.json。 */
   memoryWorkspacePath?: string;
   checkPermission?: ToolPermissionCheck;
 }

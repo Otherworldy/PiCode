@@ -1,4 +1,10 @@
 import { ensureAppDataDir, isAppDataDirName } from "./node/appDataDir.js";
+import {
+  migrateLegacyWorkspaceConfig,
+  migrateLegacyWorkspaceConfigSync,
+  WORKSPACE_CONFIG_DIR_NAME,
+  WORKSPACE_CONFIG_FILE_NAME,
+} from "./node/workspaceConfig.js";
 import { existsSync, statSync } from "node:fs";
 import { access, readFile, stat } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
@@ -18,7 +24,11 @@ export const WORKSPACE_HOOK_EVENT_NAMES = [
 ] as const;
 
 export type WorkspaceHookEventName = (typeof WORKSPACE_HOOK_EVENT_NAMES)[number];
-export type WorkspaceHookConfigFileKind = "zcode.json" | ".zcode/config.json" | "explicit";
+export type WorkspaceHookConfigFileKind =
+  | "picode.json"
+  | "zcode.json"
+  | ".zcode/config.json"
+  | "explicit";
 
 const positiveNumberSchema = z.number().finite().positive();
 
@@ -174,7 +184,7 @@ export function resolveWorkspaceHookConfiguredGates(input: {
  */
 function buildWorkspaceHookCandidatePaths(directories: readonly string[]): string[] {
   return directories.flatMap((directory) => [
-    join(directory, "zcode.json"),
+    join(directory, WORKSPACE_CONFIG_DIR_NAME, WORKSPACE_CONFIG_FILE_NAME),
     join(ensureAppDataDir(directory), "config.json"),
   ]);
 }
@@ -210,7 +220,9 @@ export function discoverWorkspaceHookConfigPaths(input: {
   explicitProjectConfigPath?: string;
 }): WorkspaceHookConfigPathRef[] {
   const start = resolve(input.workingDirectory);
-  const refs = buildWorkspaceHookCandidatePaths(getProjectConfigDirectories(start))
+  const directories = getProjectConfigDirectories(start);
+  for (const directory of directories) migrateLegacyWorkspaceConfigSync(directory);
+  const refs = buildWorkspaceHookCandidatePaths(directories)
     .filter((path) => existsSync(path))
     .map((path) => ({ path, explicitProjectConfig: false }));
 
@@ -233,13 +245,19 @@ export function createWorkspaceHookSourceInput(input: {
   const configDirectory = dirname(canonicalPath);
   return {
     canonicalPath,
-    baseDir: isAppDataDirName(basename(configDirectory)) ? dirname(configDirectory) : configDirectory,
+    baseDir:
+      isAppDataDirName(basename(configDirectory)) ||
+      basename(configDirectory) === WORKSPACE_CONFIG_DIR_NAME
+        ? dirname(configDirectory)
+        : configDirectory,
     discoveryOrder: input.discoveryOrder,
     configFileKind: explicitProjectConfig
       ? "explicit"
-      : basename(canonicalPath) === "zcode.json"
-        ? "zcode.json"
-        : ".zcode/config.json",
+      : basename(canonicalPath) === WORKSPACE_CONFIG_FILE_NAME
+        ? "picode.json"
+        : basename(canonicalPath) === "zcode.json"
+          ? "zcode.json"
+          : ".zcode/config.json",
     explicitProjectConfig,
     editable:
       !explicitProjectConfig &&
@@ -281,9 +299,9 @@ async function discoverWorkspaceHookConfigPathsAsync(input: {
   explicitProjectConfigPath?: string;
 }): Promise<WorkspaceHookConfigPathRef[]> {
   const start = resolve(input.workingDirectory);
-  const candidates = buildWorkspaceHookCandidatePaths(
-    await getProjectConfigDirectoriesAsync(start),
-  );
+  const directories = await getProjectConfigDirectoriesAsync(start);
+  for (const directory of directories) await migrateLegacyWorkspaceConfig(directory);
+  const candidates = buildWorkspaceHookCandidatePaths(directories);
   const refs: WorkspaceHookConfigPathRef[] = [];
   for (const path of candidates) {
     if (await pathExists(path)) refs.push({ path, explicitProjectConfig: false });
