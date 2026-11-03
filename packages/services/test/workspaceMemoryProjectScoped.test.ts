@@ -160,16 +160,16 @@ pnpm -r build`;
     assert.deepEqual(
       emptied[0]?.files.map((file) => file.name),
       ["MEMORY.md"],
-    assert.doesNotMatch(
-      await readFile(join(workspacePath, ".pi", "memory", "MEMORY.md"), "utf-8"),
-      /build-command\.md/,
-    );
     );
     assert.doesNotMatch(
       await readFile(join(workspacePath, ".pi", "memory", "MEMORY.md"), "utf-8"),
       /build-command\.md/,
     );
     assert.equal(emptied[0]?.files[0]?.missing, undefined);
+    assert.doesNotMatch(
+      await readFile(join(workspacePath, ".pi", "memory", "MEMORY.md"), "utf-8"),
+      /build-command\.md/,
+    );
     await assert.rejects(() =>
       service.writeProjectMemoryFile({
         workspacePath,
@@ -327,8 +327,8 @@ test("expiry days round-trips and only touches features.memoryExpiryDays", async
       workspacePath,
       JSON.stringify({ features: { memory: true, memoryModel: { provider: "p", model: "m" } } }),
     );
-    // 未配置时给默认 90 天，而不是 undefined。
-    assert.equal(await service.getWorkspaceMemoryExpiryDays({ workspacePath }), 90);
+    // 未配置时给默认值（0 = 只按 expires），而不是 undefined。
+    assert.equal(await service.getWorkspaceMemoryExpiryDays({ workspacePath }), 0);
 
     await service.setWorkspaceMemoryExpiryDays({ workspacePath, days: 30 });
     assert.equal(await service.getWorkspaceMemoryExpiryDays({ workspacePath }), 30);
@@ -343,7 +343,7 @@ test("expiry days round-trips and only touches features.memoryExpiryDays", async
 
     // null 删除配置，回到默认。
     await service.setWorkspaceMemoryExpiryDays({ workspacePath, days: null });
-    assert.equal(await service.getWorkspaceMemoryExpiryDays({ workspacePath }), 90);
+    assert.equal(await service.getWorkspaceMemoryExpiryDays({ workspacePath }), 0);
     const cleared = JSON.parse(await readFile(join(workspacePath, ".pi", "picode.json"), "utf-8"));
     assert.equal("memoryExpiryDays" in cleared.features, false);
     assert.equal(cleared.features.memory, true);
@@ -358,7 +358,7 @@ test("expiry days config ignores invalid values", async () => {
         workspacePath,
         JSON.stringify({ features: { memoryExpiryDays: value } }),
       );
-      assert.equal(await service.getWorkspaceMemoryExpiryDays({ workspacePath }), 90);
+      assert.equal(await service.getWorkspaceMemoryExpiryDays({ workspacePath }), 0);
     }
     // 小数向下取整，避免 UI 显示 30 实际存 30.7。
     await writeWorkspaceConfig(

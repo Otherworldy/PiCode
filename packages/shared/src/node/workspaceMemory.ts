@@ -262,8 +262,8 @@ export const WORKSPACE_MEMORY_SOURCES = [
 export const WORKSPACE_MEMORY_DEFAULT_CATEGORY: WorkspaceMemoryCategory = "project";
 export const WORKSPACE_MEMORY_DEFAULT_TYPE: WorkspaceMemoryType = "fact";
 export const WORKSPACE_MEMORY_DEFAULT_SOURCE: WorkspaceMemorySource = "assistant";
-/** 默认闲置阈值：90 天没被确认/改动就移到 `.expired`。 */
-export const WORKSPACE_MEMORY_DEFAULT_EXPIRY_DAYS = 90;
+/** 默认闲置阈值：0 表示不按闲置时间清理，只按 `expires` 显式到期。 */
+export const WORKSPACE_MEMORY_DEFAULT_EXPIRY_DAYS = 0;
 /** 过期文件的回收目录（子目录，不参与注入、列表与对账）。 */
 export const WORKSPACE_MEMORY_EXPIRED_DIR_NAME = ".expired";
 

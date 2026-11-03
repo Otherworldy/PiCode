@@ -108,10 +108,10 @@ frontmatter 写歪而消失。索引指针行格式不变（`- [Title](file.md) 
 ### 过期与清理
 
 ```text
-过期判定（单文件）：
-  if expires 存在且 <= 今天            → 过期
-  else if max(lastConfirmed, mtime) <= 今天 - 90 天 → 过期
-  else                                 → 保留
+过期判定（单文件，expiryDays = features.memoryExpiryDays ?? 0）：
+  if expires 存在且 <= 今天                          → 过期
+  else if expiryDays > 0 且 max(lastConfirmed, mtime) <= 今天 - expiryDays → 过期
+  else                                               → 保留
 
 清理时机：
   会话创建时（preparePiWorkspaceMemory，开关为开）
@@ -119,10 +119,12 @@ frontmatter 写歪而消失。索引指针行格式不变（`- [Title](file.md) 
   两者都只在本地工作区、开关为开时执行
 ```
 
-- 默认闲置阈值 `WORKSPACE_MEMORY_DEFAULT_EXPIRY_DAYS = 90`；项目可在
-  `.pi/picode.json` 用 `features.memoryExpiryDays` 覆盖，`0` 表示关闭自动清理。
+- 默认闲置阈值 `WORKSPACE_MEMORY_DEFAULT_EXPIRY_DAYS = 0`：**默认只按 `expires` 清理**，
+  不按闲置时间自动归档。理由是「长期没编辑」不等于「事实失效」——一条一年没动的
+  偏好仍然成立，而 `.expired/` 在 UI 里不可见，用户不会发现它被收走了。
+  需要自动整理的项目在项目记忆弹窗里显式选天数（7 / 30 / 90 / 180 / 365）。
 - 阈值在项目记忆弹窗里可视化配置（`WorkspaceMemoryExpirySelect`，预设 7 / 30 / 90 / 180 / 365
-  天 + 「不按闲置清理」）；写入只改 `features.memoryExpiryDays`，`null` 删除配置回到默认。
+  天 + 「不按闲置清理」）；写入只改 `features.memoryExpiryDays`，`null` 删除配置回到默认（0）。
   配置里是预设外的值（例如手写 45）时补一项显示，避免选择器变成空值。
 - 过期文件移动到 `.pi/memory/.expired/<name>.md`，不直接 `rm`：误判可恢复，
   且 `.expired` 是子目录，`readdir` 的 `isFile()` 过滤、注入、对账都看不到它，
@@ -142,8 +144,8 @@ memory.use === true        → 开启（CLI 兼容）
 ```
 
 - 开关只写 `<workspace>/.pi/picode.json`，只改 `features.memory`，保留其它键。
-- 全局 `memoryEnabled` 字段保留但忽略；旧值不迁移成项目开关，避免把“全局开”批量写进所有项目。
 - 读写必须走 `updateJsonConfigFile`（文件锁 + 原子写），不新增裸 `writeFile`。
+- 全局 `memoryEnabled` 字段保留但忽略；旧值不迁移成项目开关，避免把“全局开”批量写进所有项目。
 - 开关只有一个事实源，就是 `.pi/picode.json`：注入扩展、抽取调度、写记忆免确认各自
   在用到的那一刻 `readWorkspaceMemoryEnabled(workspacePath)`，不缓存成会话状态。
   会话创建时读到的值只用于建目录和迁移，不参与后续判定。
@@ -171,6 +173,7 @@ before_agent_start
 - 不用 `sections.workspace_memory`：lens/deepseek 实测只改 sections 时，后续 system 消息
   被 provider 丢弃，模型看不到。追加到完整 prompt 并放到最后注册，其他扩展的 section 不会丢。
 - 远端不注册扩展；开关关闭时删除 `forceSystemPrompt`。
+
 ### 直接写入归一
 
 主模型用 Write/Edit 直接写记忆是主路径，但它不守字段契约：实测会写 `type: convention`
@@ -193,7 +196,6 @@ tool_result (Write | Edit, isError=false)
 - 已经合规的文件一字不改（幂等），不会反复改写磁盘。
 - `MEMORY.md` 本身不参与归一（索引由对账维护）；记忆关闭时不执行。
 
-
 ### 抽取
 
 `HostSessionRegistry` 在 `turnDone`（`agent_settled` 或 `agent_end && !willRetry`）后调度：
@@ -201,9 +203,9 @@ tool_result (Write | Edit, isError=false)
 ```text
   → 能力位为真（本地、非侧聊） && 无 in-flight && 当前开关为开（此刻重读 .pi/picode.json）
   → 取「上次抽取游标之后」的 rows（切片作为后续所有步骤的唯一区间）
+turnDone
   → 能力位为真（本地、非侧聊） && 无 in-flight && 当前开关为开（此刻重读 .pi/picode.json）
   → 取「上次抽取游标之后」的 rows（切片作为后续所有步骤的唯一区间）
-turnDone
   → 频率闸门：距上次抽取 >= 3 个 turn，或距上次抽取已过 10 分钟
   → 门禁 1：刚结束的这一轮主模型已 Write/Edit 过记忆文件 → 跳过（避免双写）
   → 门禁 2：这段区间里没有 >= 3 个词的真实用户输入 → 跳过
@@ -213,8 +215,8 @@ turnDone
   → completePiPrompt(抽取模型, 提取 prompt)
   → 解析 JSON patch
   → 游标推进到本次 transcript 实际覆盖到的最后一个 turn
-  → 游标推进到本次 transcript 实际覆盖到的最后一个 turn
   → 校验并原子写入 .pi/memory
+  → 游标推进到本次 transcript 实际覆盖到的最后一个 turn
   → 结束（失败只记日志，不影响 turn）
 ```
 
@@ -225,8 +227,8 @@ turnDone
 | 最小 turn 间隔 | 3                          | 短轮次（改错别字、单句追问）不值得抽取   |
 | 最小时间间隔   | 10 分钟                    | 长时间空闲的会话也要有一次收敛机会       |
 | 直接写入门禁   | 最近一轮已写记忆则跳过抽取 | 主模型 Write 与抽取会写同一事实的两份    |
-
 | 用户散文门禁   | 真实用户消息累计 >= 3 个词 | 工具回执、后台结果、合成消息不该触发抽取 |
+
 门禁与 transcript 必须看**同一个抽取区间**（游标切片），否则一次历史直接写入会把
 整个会话后续的抽取永久关掉。直接写入门禁再收窄到「刚结束的这一轮」：区间里更早的
 写入已经落盘，拿它拦后续抽取同样会把会话卡死。相对路径按 `workspacePath` 解析，
@@ -238,8 +240,8 @@ turnDone
 不是按记忆根：主模型写 `src/index.ts` 不是在写记忆。
 
 - 同一 session 同时只跑一个抽取；`dispose` 时 abort。
-- 抽取成功后才推进游标；解析失败、写入异常时保留这段对话，下次重抽。
 - 超时 60s。
+- 抽取成功后才推进游标；解析失败、写入异常时保留这段对话，下次重抽。
 - 24k 上限按 turn 从**区间开头**往后拼，超了就停在断点，游标只推进到实际覆盖到的
   最后一个完整 turn。不从尾部裁：尾部裁会把没喂过的早期 turn 标成“已抽取”。
   单个 turn 自己就超 24k 时只取它的前 24k，并让游标越过它。
@@ -457,8 +459,8 @@ if <workspace>/.pi/memory 不存在或还没有任何 .md:
 21. 抽取只返回 `writes` / `deletes` 不给 `index` 时，`MEMORY.md` 自动补上新文件指针、
     剔除已删文件指针；索引快照过期时同样对账。
     项目里还没有 `MEMORY.md` 时，新建的第一条记忆也要生成索引并出现在下一轮注入里。
-    项目里还没有 `MEMORY.md` 时，新建的第一条记忆也要生成索引并出现在下一轮注入里。
 22. 在对话框删除条目后，`MEMORY.md` 里指向它的指针行一并消失；新建条目自动补指针。
+    项目里还没有 `MEMORY.md` 时，新建的第一条记忆也要生成索引并出现在下一轮注入里。
 
 23. frontmatter 带 `category: ui`：查看器列表显示该分类标记，索引注入内容不变。
 24. 缺 `category` / `type` / `lastConfirmed` 的旧记忆文件：正常注入、正常参与抽取，
@@ -471,6 +473,7 @@ if <workspace>/.pi/memory 不存在或还没有任何 .md:
 28. 配了阈值但 `features.memory: false` 的项目：不清理（清理和记忆同开同关）。
 29. 在项目记忆弹窗把「自动清理」改成 30 天：`.pi/picode.json` 的 `features.memoryExpiryDays`
     变成 30，同一文件里的 `features.memory` 与 `features.memoryModel` 保持不变；
+    改成「不按闲置清理」时存 0，带 `expires` 的记忆仍会到期。
 30. 主模型在会话里用相对路径（`src/index.ts`）写过任何普通文件：抽取不被跳过；
     只有写 `.pi/memory/*.md` 才跳过。
 31. 主模型在第 1 轮直接写过记忆：第 4、7 轮仍然照常抽取（门禁只看刚结束的那一轮）。
@@ -485,7 +488,6 @@ if <workspace>/.pi/memory 不存在或还没有任何 .md:
 36. 主模型写 `MEMORY.md` 或 `.pi/memory` 之外的文件：不做归一，也不改索引。
 37. 主模型写了记忆文件却没补指针行：抽取开始前先对账，抽取看到的是补全后的索引，
     不会因为“索引里没有”而删掉这个文件。
-    改成「不按闲置清理」时存 0，带 `expires` 的记忆仍会到期。
 
 ## 失败语义
 
@@ -494,5 +496,5 @@ if <workspace>/.pi/memory 不存在或还没有任何 .md:
 - 抽取模型调用失败 / 超时 / 输出非法：放弃本次，日志 `debug`/`warn`，不影响 turn。
 - 迁移复制失败：保留旧目录，日志 `warn`，不阻塞 session 创建。
 - 清理失败（`.expired` 不可写、文件被占用）：跳过该文件，日志 `warn`，不影响注入与抽取。
-- 直接写入归一失败（文件被占用、超限）：跳过本次，日志 `warn`，保留模型写的原样。
 - frontmatter 字段非法：按缺省值解析，不丢记忆、不中断注入。
+- 直接写入归一失败（文件被占用、超限）：跳过本次，日志 `warn`，保留模型写的原样。

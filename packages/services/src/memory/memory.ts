@@ -80,7 +80,7 @@ export interface IMemoryService {
   /** 读取项目配置的记忆过期阈值（天）；`0` 表示只保留 `expires` 显式到期。 */
   getWorkspaceMemoryExpiryDays(params: ProjectMemoryWorkspaceRef): Promise<number>;
 
-  /** 写入项目配置的记忆过期阈值；`null` 恢复默认 90 天。 */
+  /** 写入项目配置的记忆过期阈值；`null` 删除配置，回到默认（只按 `expires`）。 */
   setWorkspaceMemoryExpiryDays(
     params: ProjectMemoryWorkspaceRef & { days: number | null },
   ): Promise<void>;

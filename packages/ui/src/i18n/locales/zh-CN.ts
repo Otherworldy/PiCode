@@ -1763,7 +1763,7 @@ const zhCN: Record<string, string> = {
   "settings.memory.extractionModelFollow": "跟随会话模型",
   "settings.memory.expiryDays": "自动清理",
   "settings.memory.expiryDaysDescription":
-    "超过这个时间没被确认或改动的记忆会移到 .pi/memory/.expired，索引里一并移除。",
+    "超过这个时间没被确认或改动的记忆会移到 .pi/memory/.expired，索引里一并移除。默认不按闲置时间清理，只清理带到期日期的记忆。",
   "settings.memory.expiryDaysValue": "{days} 天",
   "settings.memory.expiryDaysNever": "不按闲置清理",
   "settings.memory.workspaceMemory": "工作区记忆",

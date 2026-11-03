@@ -10,7 +10,7 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 /** `0` = 只保留 frontmatter `expires` 的显式到期，不再按闲置天数清理。 */
 export const WORKSPACE_MEMORY_NEVER_EXPIRE_DAYS = 0;
 
-/** 预设阈值（天）。默认 90 与 `WORKSPACE_MEMORY_DEFAULT_EXPIRY_DAYS` 一致。 */
+/** 预设阈值（天）。默认值（0 = 不按闲置清理）不在预设里，单独列在最后。 */
 export const WORKSPACE_MEMORY_EXPIRY_PRESETS = [7, 30, 90, 180, 365] as const;
 
 export function toWorkspaceMemoryExpiryValue(days: number): string {

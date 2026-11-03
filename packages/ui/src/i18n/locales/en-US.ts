@@ -1874,7 +1874,7 @@ const enUS: Record<string, string> = {
   "settings.memory.extractionModelFollow": "Follow session model",
   "settings.memory.expiryDays": "Auto-clean",
   "settings.memory.expiryDaysDescription":
-    "Memories not confirmed or changed within this window move to .pi/memory/.expired and drop out of the index.",
+    "Memories not confirmed or changed within this window move to .pi/memory/.expired and drop out of the index. Idle cleanup is off by default; only memories with an expiry date are removed.",
   "settings.memory.expiryDaysValue": "{days} days",
   "settings.memory.expiryDaysNever": "Never by idle time",
   "settings.memory.workspaceMemory": "Workspace Memory",

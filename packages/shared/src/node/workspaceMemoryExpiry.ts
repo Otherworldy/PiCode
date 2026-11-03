@@ -63,7 +63,7 @@ export function resolveWorkspaceMemoryExpiry(input: {
     : { expired: false, anchorMs };
 }
 
-/** 项目配置 `features.memoryExpiryDays`；缺省或非法时用 90 天，`0` 表示关闭。 */
+/** 项目配置 `features.memoryExpiryDays`；缺省或非法时用默认值（0 = 只按 expires）。 */
 export async function readWorkspaceMemoryExpiryDays(workspacePath: string): Promise<number> {
   const raw = await readWorkspaceConfigText(workspacePath);
   if (raw === null) return WORKSPACE_MEMORY_DEFAULT_EXPIRY_DAYS;
@@ -85,7 +85,7 @@ export async function readWorkspaceMemoryExpiryDays(workspacePath: string): Prom
 
 /**
  * 写入项目记忆过期阈值：只改 `features.memoryExpiryDays`，保留项目配置里的其它键。
- * `null` 删除配置回到默认 90 天；`0` 表示只保留 `expires` 显式到期。
+ * `null` 删除配置回到默认（不按闲置时间清理）；`0` 与默认等价。
  */
 export async function setWorkspaceMemoryExpiryDays(
   workspacePath: string,
