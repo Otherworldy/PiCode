@@ -70,6 +70,8 @@ export function MemorySettingsViewer({
       { count },
     );
   const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase();
+  // 索引占位行（missing）不算一条记忆，否则空项目会显示“1 条记忆”。
+  const existingFileCount = selectedWorkspace?.files.filter((file) => !file.missing).length ?? 0;
   const visibleFiles = useMemo(
     () =>
       selectedWorkspace?.files.filter((file) =>
@@ -127,7 +129,7 @@ export function MemorySettingsViewer({
             data-testid={TID_SETTINGS_MEMORY_COUNT}
             className="shrink-0 text-ui-sm text-foreground-subtle"
           >
-            {formatMemoryCount(selectedWorkspace.files.length)}
+            {formatMemoryCount(existingFileCount)}
           </span>
         </div>
         <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">

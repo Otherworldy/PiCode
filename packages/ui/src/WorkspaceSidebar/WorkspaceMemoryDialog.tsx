@@ -14,16 +14,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.js";
+import { TID_WORKSPACE_MEMORY_DELETE_CONFIRM } from "@zcode/shared";
+import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { useZCodeSessionService } from "@/hooks/useZCodeSessionService.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import {
   MemorySettingsViewer,
   type MemoryViewerLoadingState,
 } from "@/settings/MemorySettingsViewer.js";
-import {
-  WorkspaceMemoryDeleteDialog,
-  WorkspaceMemoryDiscardDialog,
-} from "./WorkspaceMemoryConfirmDialogs.js";
 import {
   isValidWorkspaceMemoryFileName,
   WorkspaceMemoryEditor,
@@ -81,15 +79,13 @@ export function WorkspaceMemoryDialog({
   const [editor, setEditor] = useState<WorkspaceMemoryEditorState | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
   const [editorSaving, setEditorSaving] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<ProjectMemoryFileSummary | null>(null);
-  const [discardOpen, setDiscardOpen] = useState(false);
-  const [discardAction, setDiscardAction] = useState<"close" | "cancel">("cancel");
 
   const workspaceRef = useMemo(
     () => ({ workspacePath, ...(workspaceIdentity ? { workspaceIdentity } : {}) }),
     [workspaceIdentity, workspacePath],
   );
 
+  const requestConfirmation = useConfirmDialog();
   const config = useWorkspaceMemoryConfig({ memoryService, open, remote, workspaceRef });
 
   const editorDirty = editor
@@ -126,8 +122,6 @@ export function WorkspaceMemoryDialog({
       setActionError(null);
       setEditor(null);
       setEditorError(null);
-      setDeleteTarget(null);
-      setDiscardOpen(false);
       return;
     }
     if (remote) {
@@ -217,16 +211,26 @@ export function WorkspaceMemoryDialog({
   }, []);
 
   const requestDiscard = useCallback(
-    (action: "close" | "cancel") => {
-      if (!editorDirty) {
-        if (action === "close") onOpenChange(false);
-        else closeEditor();
+    async (action: "close" | "cancel") => {
+      if (editorDirty) {
+        // 丢弃草稿不可撤销，走全站统一的危险色确认框。
+        const confirmed = await requestConfirmation({
+          title: intl.formatMessage({ id: "settings.memory.viewer.discardTitle" }),
+          description: intl.formatMessage({ id: "settings.memory.viewer.discardDescription" }),
+          confirmLabel: intl.formatMessage({ id: "settings.memory.viewer.discard" }),
+          cancelLabel: intl.formatMessage({ id: "settings.memory.viewer.keepEditing" }),
+          confirmVariant: "destructive",
+        });
+        if (!confirmed) return;
+      }
+      if (action === "close") {
+        closeEditor();
+        onOpenChange(false);
         return;
       }
-      setDiscardAction(action);
-      setDiscardOpen(true);
+      closeEditor();
     },
-    [closeEditor, editorDirty, onOpenChange],
+    [closeEditor, editorDirty, intl, onOpenChange, requestConfirmation],
   );
 
   const handleOpenChange = useCallback(
@@ -235,20 +239,10 @@ export function WorkspaceMemoryDialog({
         onOpenChange(true);
         return;
       }
-      requestDiscard("close");
+      void requestDiscard("close");
     },
     [onOpenChange, requestDiscard],
   );
-
-  const confirmDiscard = useCallback(() => {
-    setDiscardOpen(false);
-    if (discardAction === "close") {
-      closeEditor();
-      onOpenChange(false);
-      return;
-    }
-    closeEditor();
-  }, [closeEditor, discardAction, onOpenChange]);
 
   const saveEditor = useCallback(async () => {
     if (!editor) return;
@@ -278,128 +272,129 @@ export function WorkspaceMemoryDialog({
     }
   }, [editor, intl, memoryService, refreshCatalog, summary, workspaceRef]);
 
-  const confirmDelete = useCallback(async () => {
-    if (!deleteTarget) return;
-    try {
-      await memoryService.deleteProjectMemoryFile({
-        ...workspaceRef,
-        fileName: deleteTarget.name,
+  const requestDelete = useCallback(
+    async (file: ProjectMemoryFileSummary) => {
+      // 删除记忆文件不可恢复，走全站统一的危险色确认框。
+      const confirmed = await requestConfirmation({
+        testId: TID_WORKSPACE_MEMORY_DELETE_CONFIRM,
+        title: intl.formatMessage({ id: "settings.memory.viewer.deleteTitle" }),
+        description: intl.formatMessage(
+          { id: "settings.memory.viewer.deleteDescription" },
+          { name: file.name },
+        ),
+        confirmLabel: intl.formatMessage({ id: "settings.memory.viewer.deleteConfirm" }),
+        cancelLabel: intl.formatMessage({ id: "common.cancel" }),
+        confirmVariant: "destructive",
       });
-      setDeleteTarget(null);
-      setActionError(null);
-      await refreshCatalog();
-    } catch (error) {
-      setDeleteTarget(null);
-      setActionError(getErrorMessage(error));
-    }
-  }, [deleteTarget, memoryService, refreshCatalog, workspaceRef]);
+      if (!confirmed) return;
+      try {
+        await memoryService.deleteProjectMemoryFile({
+          ...workspaceRef,
+          fileName: file.name,
+        });
+        setActionError(null);
+        await refreshCatalog();
+      } catch (error) {
+        setActionError(getErrorMessage(error));
+      }
+    },
+    [intl, memoryService, refreshCatalog, requestConfirmation, workspaceRef],
+  );
 
   return (
-    <>
-      <Dialog onOpenChange={handleOpenChange} open={open}>
-        <DialogContent
-          className={`flex max-h-[calc(100vh-4rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0${editor ? " h-[min(40rem,calc(100vh-4rem))]" : ""}`}
-        >
-          <DialogHeader className="gap-1 border-b border-border px-4 py-3 pr-12">
-            <div className="flex min-w-0 items-center gap-3">
-              <DialogTitle>{intl.formatMessage({ id: "workspaceSidebar.memory" })}</DialogTitle>
-              <DialogDescription className="truncate font-mono text-ui-sm">
-                {editor ? editor.fileName || "—" : workspaceLabel}
-              </DialogDescription>
-            </div>
-          </DialogHeader>
+    <Dialog onOpenChange={handleOpenChange} open={open}>
+      <DialogContent
+        className={`flex max-h-[calc(100vh-4rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0${editor ? " h-[min(40rem,calc(100vh-4rem))]" : ""}`}
+      >
+        <DialogHeader className="gap-1 border-b border-border px-4 py-3 pr-12">
+          <div className="flex min-w-0 items-center gap-3">
+            <DialogTitle>{intl.formatMessage({ id: "workspaceSidebar.memory" })}</DialogTitle>
+            <DialogDescription className="truncate font-mono text-ui-sm">
+              {editor ? editor.fileName || "—" : workspaceLabel}
+            </DialogDescription>
+          </div>
+        </DialogHeader>
 
-          {editor ? (
-            <WorkspaceMemoryEditor
-              editor={editor}
-              error={editorError}
-              saving={editorSaving}
-              onCancel={() => requestDiscard("cancel")}
-              onChange={(patch) => {
-                setEditor((current) => (current ? { ...current, ...patch } : current));
+        {editor ? (
+          <WorkspaceMemoryEditor
+            editor={editor}
+            error={editorError}
+            saving={editorSaving}
+            onCancel={() => {
+              void requestDiscard("cancel");
+            }}
+            onChange={(patch) => {
+              setEditor((current) => (current ? { ...current, ...patch } : current));
+            }}
+            onSave={() => {
+              void saveEditor();
+            }}
+          />
+        ) : (
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+            <WorkspaceMemorySettingsRows
+              disabled={remote || config.enabledLoading}
+              enabled={config.enabled}
+              expiryDays={config.expiryDays}
+              memoryModel={config.memoryModel}
+              modelOptions={modelOptions}
+              onEnabledChange={(checked) => {
+                void handleMemoryEnabledChange(checked);
               }}
-              onSave={() => {
-                void saveEditor();
+              onExpiryDaysChange={(days) => {
+                void handleExpiryDaysChange(days);
+              }}
+              onModelChange={(value) => {
+                void handleModelChange(value);
               }}
             />
-          ) : (
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-              <WorkspaceMemorySettingsRows
-                disabled={remote || config.enabledLoading}
-                enabled={config.enabled}
-                expiryDays={config.expiryDays}
-                memoryModel={config.memoryModel}
-                modelOptions={modelOptions}
-                onEnabledChange={(checked) => {
-                  void handleMemoryEnabledChange(checked);
+
+            {[config.switchError, config.modelError, config.expiryError, actionError]
+              .filter((message): message is string => Boolean(message))
+              .map((message) => (
+                <Alert key={message}>
+                  <AlertDescription>{message}</AlertDescription>
+                </Alert>
+              ))}
+
+            {remote ? (
+              <div className="rounded-xl border border-dashed border-border bg-transparent px-4 py-8 text-center text-ui-base text-foreground-subtle">
+                {intl.formatMessage({ id: "settings.memory.viewer.remoteUnsupported" })}
+              </div>
+            ) : (
+              <MemorySettingsViewer
+                catalogError={catalogError}
+                catalogState={catalogState}
+                selectedWorkspace={summary}
+                workspaces={summary ? [summary] : []}
+                onCreateFile={openNewFile}
+                onDeleteFile={(file) => {
+                  void requestDelete(file);
                 }}
-                onExpiryDaysChange={(days) => {
-                  void handleExpiryDaysChange(days);
+                onEditFile={(file) => {
+                  void openExistingFile(file);
                 }}
-                onModelChange={(value) => {
-                  void handleModelChange(value);
-                }}
+                onRefresh={refreshCatalog}
+                onScopeKeyChange={() => {}}
+                showScopeSelector={false}
               />
+            )}
+          </div>
+        )}
 
-              {[config.switchError, config.modelError, config.expiryError, actionError]
-                .filter((message): message is string => Boolean(message))
-                .map((message) => (
-                  <Alert key={message}>
-                    <AlertDescription>{message}</AlertDescription>
-                  </Alert>
-                ))}
-
-              {remote ? (
-                <div className="rounded-xl border border-dashed border-border bg-transparent px-4 py-8 text-center text-ui-base text-foreground-subtle">
-                  {intl.formatMessage({ id: "settings.memory.viewer.remoteUnsupported" })}
-                </div>
-              ) : (
-                <MemorySettingsViewer
-                  catalogError={catalogError}
-                  catalogState={catalogState}
-                  selectedWorkspace={summary}
-                  workspaces={summary ? [summary] : []}
-                  onCreateFile={openNewFile}
-                  onDeleteFile={setDeleteTarget}
-                  onEditFile={(file) => {
-                    void openExistingFile(file);
-                  }}
-                  onRefresh={refreshCatalog}
-                  onScopeKeyChange={() => {}}
-                  showScopeSelector={false}
-                />
-              )}
-            </div>
-          )}
-
-          {editor ? null : (
-            <DialogFooter className="border-t border-border px-4 py-3 sm:justify-end">
-              <Button
-                onClick={() => handleOpenChange(false)}
-                size="lg"
-                type="button"
-                variant="outline"
-              >
-                {intl.formatMessage({ id: "common.close" })}
-              </Button>
-            </DialogFooter>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <WorkspaceMemoryDiscardDialog
-        open={discardOpen}
-        onDiscard={confirmDiscard}
-        onOpenChange={setDiscardOpen}
-      />
-
-      <WorkspaceMemoryDeleteDialog
-        fileName={deleteTarget?.name ?? null}
-        onCancel={() => setDeleteTarget(null)}
-        onConfirm={() => {
-          void confirmDelete();
-        }}
-      />
-    </>
+        {editor ? null : (
+          <DialogFooter className="border-t border-border px-4 py-3 sm:justify-end">
+            <Button
+              onClick={() => handleOpenChange(false)}
+              size="lg"
+              type="button"
+              variant="outline"
+            >
+              {intl.formatMessage({ id: "common.close" })}
+            </Button>
+          </DialogFooter>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -2,6 +2,7 @@ import type { WorkspaceMemoryModelRef } from "@zcode/services";
 import { TID_WORKSPACE_MEMORY_SWITCH } from "@zcode/shared";
 import { Switch } from "@/components/ui/switch.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { SettingsGroupCard, SettingsRow } from "@/settings/SettingsPageParts.js";
 import { WorkspaceMemoryExpirySelect } from "./WorkspaceMemoryExpirySelect.js";
 import {
   toWorkspaceMemoryModelValue,
@@ -44,58 +45,45 @@ export function WorkspaceMemorySettingsRows({
         ]
       : modelOptions;
   return (
-    <>
-      <div className="flex items-start justify-between gap-4 rounded-xl border border-border px-4 py-3">
-        <div className="min-w-0 space-y-1">
-          <p className="text-ui-base font-medium text-foreground">
-            {intl.formatMessage({ id: "settings.memory.workspaceMemory" })}
-          </p>
-          <p className="text-ui-sm text-foreground-subtle">
-            {intl.formatMessage({ id: "settings.memoryDescription" })}
-          </p>
-        </div>
-        <Switch
-          aria-label={intl.formatMessage({ id: "settings.memory.workspaceMemory" })}
-          checked={enabled}
-          data-testid={TID_WORKSPACE_MEMORY_SWITCH}
-          disabled={disabled}
-          onCheckedChange={onEnabledChange}
-        />
-      </div>
-
-      <div className="flex items-start justify-between gap-4 rounded-xl border border-border px-4 py-3">
-        <div className="min-w-0 space-y-1">
-          <p className="text-ui-base font-medium text-foreground">
-            {intl.formatMessage({ id: "settings.memory.extractionModel" })}
-          </p>
-          <p className="text-ui-sm text-foreground-subtle">
-            {intl.formatMessage({ id: "settings.memory.extractionModelDescription" })}
-          </p>
-        </div>
-        <WorkspaceMemoryModelSelect
-          disabled={disabled}
-          options={visibleModelOptions}
-          value={selectedModelValue}
-          onChange={onModelChange}
-        />
-      </div>
-
-      <div className="flex items-start justify-between gap-4 rounded-xl border border-border px-4 py-3">
-        <div className="min-w-0 space-y-1">
-          <p className="text-ui-base font-medium text-foreground">
-            {intl.formatMessage({ id: "settings.memory.expiryDays" })}
-          </p>
-          <p className="text-ui-sm text-foreground-subtle">
-            {intl.formatMessage({ id: "settings.memory.expiryDaysDescription" })}
-          </p>
-        </div>
-        <WorkspaceMemoryExpirySelect
-          disabled={disabled || expiryDays === null}
-          value={expiryDays}
-          onChange={onExpiryDaysChange}
-        />
-      </div>
-    </>
+    <SettingsGroupCard>
+      <SettingsRow
+        control={
+          <Switch
+            aria-label={intl.formatMessage({ id: "settings.memory.workspaceMemory" })}
+            checked={enabled}
+            data-testid={TID_WORKSPACE_MEMORY_SWITCH}
+            disabled={disabled}
+            onCheckedChange={onEnabledChange}
+          />
+        }
+        description={intl.formatMessage({ id: "settings.memoryDescription" })}
+        label={intl.formatMessage({ id: "settings.memory.workspaceMemory" })}
+      />
+      <SettingsRow
+        control={
+          <WorkspaceMemoryModelSelect
+            disabled={disabled}
+            options={visibleModelOptions}
+            value={selectedModelValue}
+            onChange={onModelChange}
+          />
+        }
+        controlLayout="wide"
+        description={intl.formatMessage({ id: "settings.memory.extractionModelDescription" })}
+        label={intl.formatMessage({ id: "settings.memory.extractionModel" })}
+      />
+      <SettingsRow
+        control={
+          <WorkspaceMemoryExpirySelect
+            disabled={disabled || expiryDays === null}
+            value={expiryDays}
+            onChange={onExpiryDaysChange}
+          />
+        }
+        description={intl.formatMessage({ id: "settings.memory.expiryDaysDescription" })}
+        label={intl.formatMessage({ id: "settings.memory.expiryDays" })}
+      />
+    </SettingsGroupCard>
   );
 }
 

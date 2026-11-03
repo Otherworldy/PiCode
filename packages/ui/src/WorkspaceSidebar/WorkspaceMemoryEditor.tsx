@@ -54,13 +54,14 @@ export function WorkspaceMemoryEditor({
           placeholder={intl.formatMessage({
             id: "settings.memory.viewer.fileNamePlaceholder",
           })}
+          size="lg"
           value={editor.fileName}
           onChange={(event) => onChange({ fileName: event.target.value })}
         />
       ) : null}
       <Textarea
         data-testid={TID_WORKSPACE_MEMORY_EDITOR_CONTENT}
-        className="min-h-0 flex-1 resize-none rounded-xl border border-border bg-editor-surface p-3 font-mono text-ui-sm"
+        className="min-h-0 flex-1 resize-none rounded-lg border border-input-border bg-input p-2.5 font-mono text-ui-base hover:border-input-border-hover focus-visible:border-input-border-focused focus-visible:bg-input-focused focus-visible:ring-0"
         placeholder={intl.formatMessage({
           id: "settings.memory.viewer.fileContentPlaceholder",
         })}

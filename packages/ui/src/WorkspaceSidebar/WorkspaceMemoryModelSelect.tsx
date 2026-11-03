@@ -38,7 +38,7 @@ export function WorkspaceMemoryModelSelect({
   const { intl } = useZCodeIntl();
   return (
     <Select disabled={disabled} value={value} onValueChange={onChange}>
-      <SelectTrigger className="w-64 shrink-0" size="lg">
+      <SelectTrigger className="w-full" size="lg">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

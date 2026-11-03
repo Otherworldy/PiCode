@@ -36,7 +36,7 @@ export function WorkspaceMemoryExpirySelect({
   if (value === null) {
     return (
       <Select disabled value="__loading__">
-        <SelectTrigger className="w-64 shrink-0" size="lg">
+        <SelectTrigger className="w-full" size="lg">
           <SelectValue placeholder="—" />
         </SelectTrigger>
         <SelectContent>
@@ -63,7 +63,7 @@ export function WorkspaceMemoryExpirySelect({
         if (days !== null) onChange(days);
       }}
     >
-      <SelectTrigger className="w-64 shrink-0" size="lg">
+      <SelectTrigger className="w-full" size="lg">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
