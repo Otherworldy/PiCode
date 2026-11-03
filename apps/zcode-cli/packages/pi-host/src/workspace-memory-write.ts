@@ -36,9 +36,12 @@ export async function normalizeWorkspaceMemoryWrite(input: {
     fileName,
     ...(input.today !== undefined ? { today: input.today } : {}),
   });
-  if (!normalized.changed) return null;
-  await atomicWritePrivateTextFile(target, normalized.content);
+  if (normalized.changed) {
+    await atomicWritePrivateTextFile(target, normalized.content);
+  }
   // 文件与索引是两条写入路径：模型漏了指针行时，这里补上，否则新记忆永远不注入。
+  // 即使文件本身已经合规（`changed === false`）也要跑一次对账：合规的新文件同样
+  // 可能没进索引，对账幂等，已存在指针时不会写盘。
   await reconcileWorkspaceMemoryIndex(input.memoryRoot);
-  return fileName;
+  return normalized.changed ? fileName : null;
 }

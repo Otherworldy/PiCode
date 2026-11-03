@@ -295,6 +295,8 @@ export interface WorkspaceMemoryTranscript {
   coveredUntilTurnId?: string;
   /** 因为超出字符预算而停在断点，下一次从 `coveredUntilTurnId` 继续。 */
   truncated: boolean;
+  /** 单个 turn 自己就超预算：只取了它的开头，尾部被丢，调用方需要留下可观测的痕迹。 */
+  oversizedTurnId?: string;
 }
 
 /**
@@ -338,6 +340,7 @@ export function buildWorkspaceMemoryTranscript(
   const kept: string[] = [];
   let coveredUntilTurnId: string | undefined;
   let truncated = false;
+  let oversizedTurnId: string | undefined;
   for (const block of blocks) {
     const text = block.lines.join("\n\n");
     if (kept.length > 0 && used + text.length + 2 > maxChars) {
@@ -348,6 +351,7 @@ export function buildWorkspaceMemoryTranscript(
       // 单个 turn 就比整个预算还大：只能取它开头这一段，并让游标越过它。
       kept.push(text.slice(0, maxChars));
       coveredUntilTurnId = block.turnId;
+      oversizedTurnId = block.turnId;
       truncated = true;
       break;
     }
@@ -357,5 +361,10 @@ export function buildWorkspaceMemoryTranscript(
   }
   // 没截断时，游标停在区间里最后一个 turn 上（含没有文本的 turn）。
   if (!truncated) coveredUntilTurnId = turnIds.at(-1) ?? coveredUntilTurnId;
-  return { text: kept.join("\n\n"), coveredUntilTurnId, truncated };
+  return {
+    text: kept.join("\n\n"),
+    coveredUntilTurnId,
+    truncated,
+    ...(oversizedTurnId !== undefined ? { oversizedTurnId } : {}),
+  };
 }

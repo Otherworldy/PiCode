@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import test from "node:test";
 import { createWorkspaceMemoryExtension } from "./workspace-memory.js";
 import { normalizeWorkspaceMemoryWrite } from "./workspace-memory-write.js";
@@ -75,10 +75,15 @@ test("direct write keeps valid fields, unknown keys and stays idempotent", async
       target: join(root, "deploy.md"),
       today: "2026-11-03",
     });
-    // 全字段合法：一字不改，也不再补索引（对账在落盘路径上）。
+    // 全字段合法：文件一字不改。
     assert.equal(changed, null);
     assert.equal(await readFile(join(root, "deploy.md"), "utf-8"), original);
     assert.match(original, /tags: infra/);
+    // 但索引仍要对账：合规的新文件同样可能没指针行，不补就永远不注入。
+    assert.match(
+      (await readFile(join(root, "MEMORY.md"), "utf-8")) ?? "",
+      /- \[deploy\]\(deploy\.md\) — 部署方式：docker compose/,
+    );
   });
 });
 

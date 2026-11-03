@@ -30,6 +30,13 @@ V4 Desktop 主路径已切到 Pi Host，既不读 `MEMORY.md` 也不在 turn 结
   删字段会让旧 payload 校验失败，因此保留为兼容字段。
 - CLI 全局 `features.memory` / `memory.use` 配置键（`~/.PiCode/config.json`）：
   runtime 已不再读取，键本身保留为配置文件格式。项目级开关走 `.pi/picode.json`。
+- worktree 会话的路径对齐：记忆根与相对路径基准都是 `workspacePath`。worktree 里模型
+  写的相对路径落到 worktree 而不是 workspace，等于不归一、也不拦抽取；只有写绝对路径
+  到 `.pi/memory/<item>.md` 才命中。
+- 条目级期望版本与事务：多条写入路径（模型直写、抽取、UI）同时改同一文件时是
+  last-writer-wins；索引对账幂等，丢一行指针会被下一个触发点补回。上锁或版本号
+  的复杂度与丢一行的代价不相称。
+- 会话关闭时补抽最后一轮：关闭时只兜清过期文件，不为了抽完尾段拦住退出。
 
 ## 状态所有者
 
@@ -183,7 +190,7 @@ tool_result (Write | Edit, isError=false)
   → 目标解析：相对路径按 workspacePath，必须落在 .pi/memory/<item>.md
   → 读文件，normalizeWorkspaceMemoryItem 补全/纠正 frontmatter
   → 内容有变化时原子写回
-  → reconcileWorkspaceMemoryIndex 补指针行
+  → reconcileWorkspaceMemoryIndex 补指针行（无变化也跑一次）
 ```
 
 - 只补/改 frontmatter 的 8 个规范字段；正文与未知字段（`tags:` 等）原样保留。
@@ -191,6 +198,7 @@ tool_result (Write | Edit, isError=false)
 - 枚举写歪回退缺省（`project` / `fact` / `assistant`）；`confirmed` 非 `true` 即 `false`。
 - `lastConfirmed` 缺失或日期非法时写当天 UTC 日期；`expires` 写歪时删掉这一行。
 - 已经合规的文件一字不改（幂等），不会反复改写磁盘。
+- 对账与改写分开：文件合规但没进索引时仍要补指针行，否则这条记忆永远不注入。
 - `MEMORY.md` 本身不参与归一（索引由对账维护）；记忆关闭时不执行。
 
 ### 抽取
@@ -208,9 +216,10 @@ turnDone
   → 按 turn 从头拼区间内的用户/助手消息，单个 turn 不切开，超 24k 就停在断点
     + MEMORY.md + 记忆 manifest + 今天的日期
   → completePiPrompt(抽取模型, 提取 prompt)
-  → 解析 JSON patch
+  → 解析 JSON patch（空更新 `{}` 也是合法结果：没变化就是一次成功抽取）
   → 校验并原子写入 .pi/memory
   → 游标推进到本次 transcript 实际覆盖到的最后一个 turn
+  → 游标后面还有 turn（被截断，或抽取期间又来了新 turn）→ 绕过频率闸门续抽
   → 结束（失败只记日志，不影响 turn）
 ```
 
@@ -233,9 +242,15 @@ turnDone
 - 超时 60s。
 - 抽取成功后才推进游标；解析失败、写入异常时保留这段对话，下次重抽。
   游标滚出投影窗口时退化为整窗重抽，宁可多抽不漏抽。
+- **空更新是成功**：prompt 明确允许模型对「这轮没有值得记的」返回 `{}`。把它当失败会让
+  游标停在原地，抽取永远重跑同一段 24k 前缀，后面新说的话再也没机会进去。
+- **续抽**：本次成功后若游标后面还有 turn（本轮被截断，或抽取期间又来了新 turn），
+  立即绕过频率闸门再跑一轮，最多连续 3 轮。否则只能等下一个 3 轮 / 10 分钟闸门，
+  用户停在这里尾段就永远不抽。每轮游标必然前进，链条会自然收敛。
 - 24k 上限按 turn 从**区间开头**往后拼，超了就停在断点，游标只推进到实际覆盖到的
   最后一个完整 turn。不从尾部裁：尾部裁会把没喂过的早期 turn 标成“已抽取”。
-  单个 turn 自己就超 24k 时只取它的前 24k，并让游标越过它。
+  单个 turn 自己就超 24k 时只取它的前 24k，让游标越过它，并记一条 `warn`（turnId +
+  字符数）——行为不改，但静默丢掉的那部分至少可观测。
 - `patch` 部分条目被跳过（截断文件禁整份写、append 超 64 KiB）时，调用方拿到
   `skipped` 列表并记 `warn`；只有“什么都没落盘”时才不推进游标，避免重复 append。
 - `index` 是整份替换。写回前比对抽取开始时的索引快照；期间主模型已改过索引时不写回
@@ -256,7 +271,7 @@ turnDone
     "index": "- [Workflow](workflow.md) — ...\n"
   }
   ```
-- 非法文件名、超限内容、JSON 解析失败 → 整次放弃，不写半成品。
+- 非法文件名、超限内容、JSON 解析失败 → 整次放弃，不写半成品（空 `{}` 不算失败）。
 - 抽取 prompt 明确：只使用本轮对话，不调查代码，不重复已有内容。
 - 抽取 prompt 必带字段与禁抽规则见下节；`writes` 的 frontmatter 缺字段时按缺省处理。
 
@@ -469,6 +484,13 @@ if <workspace>/.pi/memory 不存在或还没有任何 .md:
 36. 主模型写 `MEMORY.md` 或 `.pi/memory` 之外的文件：不做归一，也不改索引。
 37. 主模型写了记忆文件却没补指针行：抽取开始前先对账，抽取看到的是补全后的索引，
     不会因为“索引里没有”而删掉这个文件。
+38. 抽取模型返回 `{}`（这轮没有值得记的）：算成功，游标推进；下一轮只带新 turn，
+    不再重发上一段对话。
+39. 区间被 24k 截断，或抽取期间又来了新 turn：本次落盘后立即续抽尾段，不等 3 轮 /
+    10 分钟闸门；尾段抽完就停，不会空转。
+40. 主模型写的记忆文件 frontmatter 全合规但没进索引：文件一字不改，`MEMORY.md` 仍会
+    补上指针行（对账与改写分开）。
+41. 单个 turn 自己就超 24k：只喂它的前 24k、游标记为已覆盖，并记一条 `warn`（turnId + 字符数）。
 
 ## 失败语义
 

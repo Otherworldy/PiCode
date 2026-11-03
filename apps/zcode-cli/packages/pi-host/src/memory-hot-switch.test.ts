@@ -153,3 +153,91 @@ test("extraction starts on the next turns after enabling memory in a live sessio
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("an empty patch is a successful extraction and moves the cursor", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-memory-"));
+  const workspacePath = join(root, "workspace");
+  await mkdir(workspacePath, { recursive: true });
+  await writeProjectSwitch(workspacePath, true);
+  try {
+    const pi = new FakePiSession("s");
+    Object.assign(pi, {
+      currentModel: { providerId: "p", modelId: "m" },
+      listModels: () => [{ providerId: "p", modelId: "m" }],
+    });
+    const prompts: string[] = [];
+    const registry = new HostSessionRegistry({
+      storageRoot: root,
+      nativeSessionsRoot: join(root, "pi-sessions"),
+      createSession: async () => pi,
+      completeMemoryPrompt: async (request) => {
+        prompts.push(request.prompt);
+        // 前一段对话没有值得记的内容：模型返回空更新，这是合法结果。
+        return "{}";
+      },
+    });
+    await registry.create({ workspacePath, memoryEnabled: true, memoryEnabledAtCreation: true });
+
+    for (let index = 0; index < 3; index += 1) {
+      emitTurn(pi, index, `部署脚本改动需要重新生成 manifest ${index}`);
+    }
+    await waitFor(() => prompts.length === 1);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    for (let index = 3; index < 6; index += 1) {
+      emitTurn(pi, index, `部署脚本改动需要重新生成 manifest ${index}`);
+    }
+    await waitFor(() => prompts.length === 2);
+    // 游标已推进：第二轮不再重发上一段，只带新 turn。
+    assert.doesNotMatch(prompts[1] ?? "", /manifest 0/);
+    assert.doesNotMatch(prompts[1] ?? "", /manifest 2/);
+    assert.match(prompts[1] ?? "", /manifest 5/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a truncated transcript is followed by an immediate continuation", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-memory-"));
+  const workspacePath = join(root, "workspace");
+  await mkdir(workspacePath, { recursive: true });
+  await writeProjectSwitch(workspacePath, true);
+  try {
+    const pi = new FakePiSession("s");
+    Object.assign(pi, {
+      currentModel: { providerId: "p", modelId: "m" },
+      listModels: () => [{ providerId: "p", modelId: "m" }],
+    });
+    const prompts: string[] = [];
+    const registry = new HostSessionRegistry({
+      storageRoot: root,
+      nativeSessionsRoot: join(root, "pi-sessions"),
+      createSession: async () => pi,
+      completeMemoryPrompt: async (request) => {
+        prompts.push(request.prompt);
+        return JSON.stringify({
+          writes: [
+            { file: "big.md", content: "---\nname: Big\ndescription: 大段\ntype: fact\n---\n" },
+          ],
+        });
+      },
+    });
+    await registry.create({ workspacePath, memoryEnabled: true, memoryEnabledAtCreation: true });
+
+    // 两个 turn 各 20k：预算 24k 只装得下第一个，第二个要等续抽。
+    emitTurn(pi, 0, `部署 脚本 改动 ${"x".repeat(20_000)} FIRST`);
+    emitTurn(pi, 1, `部署 脚本 改动 ${"y".repeat(20_000)} SECOND`);
+    emitTurn(pi, 2, "部署 脚本 改动 收尾");
+
+    // 不等下一个 3 轮 / 10 分钟闸门：本次结束后就该续抽被截断的尾段。
+    await waitFor(() => prompts.length >= 2, 4000);
+    assert.match(prompts[0] ?? "", /FIRST/);
+    assert.doesNotMatch(prompts[0] ?? "", /SECOND/);
+    assert.match(prompts[1] ?? "", /SECOND/);
+    // 尾段抽完就停，不会空转。
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.equal(prompts.length, 2);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

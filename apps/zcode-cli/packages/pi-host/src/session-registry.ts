@@ -402,6 +402,11 @@ function assertBranchSummaryIdle(projector: PiToV4Projector): void {
  */
 const MAX_SUMMARY_READ_BYTES = 1024 * 1024;
 const SUMMARY_READ_CONCURRENCY = 4;
+/**
+ * 连续续抽上限。截断或抽取期间又来了新 turn 时，本次结束后立即续抽，不等频率闸门；
+ * 每轮游标必然前进，链条会自然收敛，这个上限只防病态输入把循环拉得过长。
+ */
+const WORKSPACE_MEMORY_EXTRACTION_CHAIN_LIMIT = 3;
 
 interface SessionFileHead {
   content: string;
@@ -1561,6 +1566,8 @@ export class HostSessionRegistry {
     const workspaceMemoryRoot = resolveWorkspaceMemoryRoot(meta.workspacePath);
     let memoryExtractionController: AbortController | undefined;
     let memoryExtractionRunning = false;
+    // 连续续抽计数：正常调度时清零，续抽时累加。
+    let memoryExtractionChain = 0;
     // 读开关是异步的：先占位再开始，避免同一轮重复调度。
     let memoryExtractionScheduling = false;
     // 抽取频率闸门：3 个 turn 或 10 分钟，先到者触发。窗口从会话创建开始算。
@@ -1570,7 +1577,7 @@ export class HostSessionRegistry {
     // 只喂最后一轮会把闸门窗口中间几轮里用户交代的规则永久漏掉。
     let memoryExtractionCursor: string | undefined;
     // 记忆抽取是 turn 后的旁路：失败、超时、输出非法都不影响本轮结果。
-    const scheduleWorkspaceMemoryExtraction = async () => {
+    const scheduleWorkspaceMemoryExtraction = async (options: { force?: boolean } = {}) => {
       // 能力位不随开关变；开关每轮重读，不缓存成会话状态（缓存的旧值会让
       // “中途打开开关”只对注入生效）。
       if (!meta.memoryCapable || memoryExtractionRunning || memoryExtractionScheduling) return;
@@ -1585,6 +1592,13 @@ export class HostSessionRegistry {
         const rows = selectWorkspaceMemoryExtractionRows(window, memoryExtractionCursor);
         const transcript = buildWorkspaceMemoryTranscript(rows);
         if (!transcript.text.trim()) return;
+        if (transcript.oversizedTurnId !== undefined) {
+          // 单个 turn 自己就超预算：只喂了它的开头，尾部抽不到。行为不改，但要让丢失可见。
+          console.warn("pi-host workspace memory turn exceeds transcript budget", {
+            turnId: transcript.oversizedTurnId,
+            chars: transcript.text.length,
+          });
+        }
         // 本区间里主模型已直接写过记忆时不再抽取：两条写入路径会留下同一事实的两份。
         // 只看刚结束的那一轮：历史里的写入已经落盘，再拿它拦后续抽取会把整场会话卡住。
         if (
@@ -1598,6 +1612,7 @@ export class HostSessionRegistry {
         // 只有工具回执 / 后台结果 / 合成消息的区间不值得抽取。
         if (!containsEligibleWorkspaceMemoryUserProse(rows)) return;
         if (
+          !options.force &&
           !shouldRunWorkspaceMemoryExtraction({
             turnsSinceLast: memoryTurnsSinceExtraction,
             elapsedMs: Date.now() - memoryLastExtractionAt,
@@ -1605,6 +1620,8 @@ export class HostSessionRegistry {
         ) {
           return;
         }
+        // 只有正常调度才重置连续续抽计数，否则上限形同虚设。
+        if (!options.force) memoryExtractionChain = 0;
         memoryTurnsSinceExtraction = 0;
         memoryLastExtractionAt = Date.now();
         memoryExtractionRunning = true;
@@ -1612,6 +1629,8 @@ export class HostSessionRegistry {
         memoryExtractionController = controller;
         const timeout = setTimeout(() => controller.abort(), 60_000);
         void (async () => {
+          let continueChain = false;
+          const cursorBefore = memoryExtractionCursor;
           try {
             // 主模型可能刚直接写过记忆却没补索引行：先对账，让抽取看到的索引与磁盘一致，
             // 否则抽取会把「索引里没有」误判成可以删。
@@ -1673,7 +1692,18 @@ export class HostSessionRegistry {
             // 游标推进到 transcript 实际覆盖到的 turn，不是窗口最后一个：被字符预算
             // 截除的轮次下次还要抽。
             if (applied > 0 || skipped.length === 0) {
+              const advanced =
+                transcript.coveredUntilTurnId !== undefined &&
+                transcript.coveredUntilTurnId !== cursorBefore;
               memoryExtractionCursor = transcript.coveredUntilTurnId ?? memoryExtractionCursor;
+              // 游标后面还有 turn（本轮被截断，或抽取期间又来了新 turn）：立即续抽，
+              // 否则只能等下一个 3 轮 / 10 分钟闸门——用户停在这里，尾段就永远不抽。
+              continueChain =
+                advanced &&
+                selectWorkspaceMemoryExtractionRows(
+                  projector.getSnapshot().rows.window,
+                  memoryExtractionCursor,
+                ).some((row) => row.turnId !== undefined);
             }
             // 抽取刚确认过的记忆会被刷新 lastConfirmed，这里顺手清掉确实过期的。
             const { removed } = await pruneExpiredWorkspaceMemories(workspaceMemoryRoot, {
@@ -1696,6 +1726,18 @@ export class HostSessionRegistry {
             memoryExtractionRunning = false;
             if (memoryExtractionController === controller) memoryExtractionController = undefined;
           }
+          if (!continueChain) {
+            memoryExtractionChain = 0;
+            return;
+          }
+          if (memoryExtractionChain >= WORKSPACE_MEMORY_EXTRACTION_CHAIN_LIMIT) {
+            console.warn("pi-host workspace memory extraction chain capped", {
+              limit: WORKSPACE_MEMORY_EXTRACTION_CHAIN_LIMIT,
+            });
+            return;
+          }
+          memoryExtractionChain += 1;
+          void scheduleWorkspaceMemoryExtraction({ force: true }).catch(() => undefined);
         })();
       } finally {
         memoryExtractionScheduling = false;

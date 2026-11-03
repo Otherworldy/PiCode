@@ -226,7 +226,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** 解析并校验模型返回的补丁；任何非法字段都让整次抽取失败。 */
+/**
+ * 解析并校验模型返回的补丁；任何非法字段都让整次抽取失败。
+ *
+ * 空更新（`{}` 或三个数组都空且无 `index`）是合法结果，不是失败：prompt 明确允许
+ * 模型对「这轮没有值得记的」返回空 patch。判成失败会让游标停在原地，抽取永远重跑
+ * 同一段前缀，后面新说的话再也没机会进模型。
+ */
 export function parseWorkspaceMemoryPatch(text: string): WorkspaceMemoryPatch | null {
   const parsed = extractJsonObject(text);
   if (!isRecord(parsed)) return null;
@@ -275,9 +281,6 @@ export function parseWorkspaceMemoryPatch(text: string): WorkspaceMemoryPatch | 
     index = parsed.index;
   }
 
-  if (writes.length === 0 && appends.length === 0 && deletes.length === 0 && index === undefined) {
-    return null;
-  }
   return { writes, appends, deletes, ...(index !== undefined ? { index } : {}) };
 }
 

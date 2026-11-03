@@ -86,6 +86,13 @@ test("patch parser accepts fenced JSON and rejects unsafe file names", () => {
   assert.equal(parseWorkspaceMemoryPatch('{"writes":[{"file":"MEMORY.md","content":"x"}]}'), null);
   assert.equal(parseWorkspaceMemoryPatch('{"writes":[{"file":"UPPER.md","content":"x"}]}'), null);
   assert.equal(parseWorkspaceMemoryPatch("not json"), null);
+  // 空更新是合法结果，不是解析失败：判成失败会让游标停住，抽取永远重跑同一段。
+  assert.deepEqual(parseWorkspaceMemoryPatch("{}"), { writes: [], appends: [], deletes: [] });
+  assert.deepEqual(parseWorkspaceMemoryPatch('{"writes":[],"deletes":[]}'), {
+    writes: [],
+    appends: [],
+    deletes: [],
+  });
 });
 
 test("appends extend an existing file without a full rewrite", async () => {
@@ -346,6 +353,18 @@ test("transcript covers every turn since the last extraction", () => {
   assert.match(rest.text, /Node 版本锁 24/);
   assert.doesNotMatch(rest.text, /docker compose/);
   assert.doesNotMatch(rest.text, /测试用 pnpm/);
+  // 单个 turn 自己就超预算：只取其开头，并把它标记出来供调用方记 warn。
+  const oversized = buildWorkspaceMemoryTranscript(
+    [
+      { kind: "turnHeader", turnId: "t9" },
+      { kind: "userInput", turnId: "t9", text: "x".repeat(200) },
+    ],
+    { maxChars: 50 },
+  );
+  assert.equal(oversized.truncated, true);
+  assert.equal(oversized.oversizedTurnId, "t9");
+  assert.equal(oversized.coveredUntilTurnId, "t9");
+  assert.equal(oversized.text.length, 50);
 });
 
 test("index reconciliation drops dead links and adds missing pointers", async () => {
@@ -449,7 +468,9 @@ test("memory extension appends the index to the rendered prompt and clears when 
         disabledHandlers.push(handler);
       },
     };
-    createWorkspaceMemoryExtension({ root, workspacePath: root, enabled: false })(disabledPi as never);
+    createWorkspaceMemoryExtension({ root, workspacePath: root, enabled: false })(
+      disabledPi as never,
+    );
     const disabledOptions: Record<string, unknown> = { forceSystemPrompt: "stale" };
     await disabledHandlers[0]?.({ systemPrompt: "BASE", systemPromptOptions: disabledOptions });
     assert.equal(disabledOptions.forceSystemPrompt, undefined);
