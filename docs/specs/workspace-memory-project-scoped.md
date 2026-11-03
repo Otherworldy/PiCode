@@ -146,9 +146,6 @@ memory.use === true        → 开启（CLI 兼容）
 - 开关只写 `<workspace>/.pi/picode.json`，只改 `features.memory`，保留其它键。
 - 读写必须走 `updateJsonConfigFile`（文件锁 + 原子写），不新增裸 `writeFile`。
 - 全局 `memoryEnabled` 字段保留但忽略；旧值不迁移成项目开关，避免把“全局开”批量写进所有项目。
-- 开关只有一个事实源，就是 `.pi/picode.json`：注入扩展、抽取调度、写记忆免确认各自
-  在用到的那一刻 `readWorkspaceMemoryEnabled(workspacePath)`，不缓存成会话状态。
-  会话创建时读到的值只用于建目录和迁移，不参与后续判定。
 - Pi extension 与抽取调度在每个 turn 重新读开关；关闭后下一轮删除已注入的 section 并停止抽取。
 - 开关只有一个事实源，就是 `.pi/picode.json`：注入扩展、抽取调度、写记忆免确认各自
   在用到的那一刻 `readWorkspaceMemoryEnabled(workspacePath)`，不缓存成会话状态。
@@ -201,8 +198,6 @@ tool_result (Write | Edit, isError=false)
 `HostSessionRegistry` 在 `turnDone`（`agent_settled` 或 `agent_end && !willRetry`）后调度：
 
 ```text
-  → 能力位为真（本地、非侧聊） && 无 in-flight && 当前开关为开（此刻重读 .pi/picode.json）
-  → 取「上次抽取游标之后」的 rows（切片作为后续所有步骤的唯一区间）
 turnDone
   → 能力位为真（本地、非侧聊） && 无 in-flight && 当前开关为开（此刻重读 .pi/picode.json）
   → 取「上次抽取游标之后」的 rows（切片作为后续所有步骤的唯一区间）
@@ -214,7 +209,6 @@ turnDone
     + MEMORY.md + 记忆 manifest + 今天的日期
   → completePiPrompt(抽取模型, 提取 prompt)
   → 解析 JSON patch
-  → 游标推进到本次 transcript 实际覆盖到的最后一个 turn
   → 校验并原子写入 .pi/memory
   → 游标推进到本次 transcript 实际覆盖到的最后一个 turn
   → 结束（失败只记日志，不影响 turn）
@@ -229,10 +223,6 @@ turnDone
 | 直接写入门禁   | 最近一轮已写记忆则跳过抽取 | 主模型 Write 与抽取会写同一事实的两份    |
 | 用户散文门禁   | 真实用户消息累计 >= 3 个词 | 工具回执、后台结果、合成消息不该触发抽取 |
 
-门禁与 transcript 必须看**同一个抽取区间**（游标切片），否则一次历史直接写入会把
-整个会话后续的抽取永久关掉。直接写入门禁再收窄到「刚结束的这一轮」：区间里更早的
-写入已经落盘，拿它拦后续抽取同样会把会话卡死。相对路径按 `workspacePath` 解析，
-不是按记忆根：主模型写 `src/index.ts` 不是在写记忆。
 两个门禁只影响本次调度：frequency 计数照常推进，不因跳过而回退。
 门禁与 transcript 必须看**同一个抽取区间**（游标切片），否则一次历史直接写入会把
 整个会话后续的抽取永久关掉。直接写入门禁再收窄到「刚结束的这一轮」：区间里更早的
@@ -242,11 +232,6 @@ turnDone
 - 同一 session 同时只跑一个抽取；`dispose` 时 abort。
 - 超时 60s。
 - 抽取成功后才推进游标；解析失败、写入异常时保留这段对话，下次重抽。
-- 24k 上限按 turn 从**区间开头**往后拼，超了就停在断点，游标只推进到实际覆盖到的
-  最后一个完整 turn。不从尾部裁：尾部裁会把没喂过的早期 turn 标成“已抽取”。
-  单个 turn 自己就超 24k 时只取它的前 24k，并让游标越过它。
-- `patch` 部分条目被跳过（截断文件禁整份写、append 超 64 KiB）时，调用方拿到
-  `skipped` 列表并记 `warn`；只有“什么都没落盘”时才不推进游标，避免重复 append。
   游标滚出投影窗口时退化为整窗重抽，宁可多抽不漏抽。
 - 24k 上限按 turn 从**区间开头**往后拼，超了就停在断点，游标只推进到实际覆盖到的
   最后一个完整 turn。不从尾部裁：尾部裁会把没喂过的早期 turn 标成“已抽取”。
@@ -254,9 +239,6 @@ turnDone
 - `patch` 部分条目被跳过（截断文件禁整份写、append 超 64 KiB）时，调用方拿到
   `skipped` 列表并记 `warn`；只有“什么都没落盘”时才不推进游标，避免重复 append。
 - `index` 是整份替换。写回前比对抽取开始时的索引快照；期间主模型已改过索引时不写回
-- 对账发生在读取 prompt 输入之前：抽取看到的索引与磁盘一致，才不会把“索引里没有”
-  误判成“可以删”。抽取 prompt 另外写明 `deletes` 只用于错的、过期的或已合并的记忆，
-  不能仅因为某文件不在 `<current_index>` 里就删它。
   模型索引，只落 item 文件，但仍对索引做一次对账。
 - 对账发生在读取 prompt 输入之前：抽取看到的索引与磁盘一致，才不会把“索引里没有”
   误判成“可以删”。抽取 prompt 另外写明 `deletes` 只用于错的、过期的或已合并的记忆，
@@ -458,7 +440,6 @@ if <workspace>/.pi/memory 不存在或还没有任何 .md:
     抽取成功后游标推进，下一次只带新 turn。
 21. 抽取只返回 `writes` / `deletes` 不给 `index` 时，`MEMORY.md` 自动补上新文件指针、
     剔除已删文件指针；索引快照过期时同样对账。
-    项目里还没有 `MEMORY.md` 时，新建的第一条记忆也要生成索引并出现在下一轮注入里。
 22. 在对话框删除条目后，`MEMORY.md` 里指向它的指针行一并消失；新建条目自动补指针。
     项目里还没有 `MEMORY.md` 时，新建的第一条记忆也要生成索引并出现在下一轮注入里。
 

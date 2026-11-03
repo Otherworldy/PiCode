@@ -161,10 +161,6 @@ pnpm -r build`;
       emptied[0]?.files.map((file) => file.name),
       ["MEMORY.md"],
     );
-    assert.doesNotMatch(
-      await readFile(join(workspacePath, ".pi", "memory", "MEMORY.md"), "utf-8"),
-      /build-command\.md/,
-    );
     assert.equal(emptied[0]?.files[0]?.missing, undefined);
     assert.doesNotMatch(
       await readFile(join(workspacePath, ".pi", "memory", "MEMORY.md"), "utf-8"),
