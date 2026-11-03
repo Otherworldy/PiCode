@@ -1,5 +1,124 @@
 # Changelog
 
+## [3.20.0](https://github.com/Otherworldy/PiCode/compare/v3.19.6...v3.20.0) (2026-11-03)
+
+### Features
+
+* **memory:** 工作区记忆改为项目级存储并迁移到侧栏项目菜单 ([6d28d90](https://github.com/Otherworldy/PiCode/commit/6d28d904c56338564aa591a97e38af9af0bd5cd0))
+  * 记忆存放在 <workspace>/.pi/memory，MEMORY.md 作索引，单条记忆一个 .md
+  * 开关改为 zcode.json features.memory，默认关闭；远端工作区不注入、不抽取
+  * 新增项目级抽取模型 features.memoryModel，留空跟随会话模型
+  * 侧栏项目菜单新增「项目记忆」，支持查看、新建、编辑、删除
+  * 注入改用 forceSystemPrompt 追加，抽取在 agent_end 后旁路执行
+
+* **memory:** 记忆加入语义 frontmatter、过期清理与有界抽取修正 ([a8b924f](https://github.com/Otherworldy/PiCode/commit/a8b924f824356cb2ff6d5f19c4e426edd8b2efb5))
+  * 游标：memoryExtractionCursor 记录上次成功抽取覆盖的最后一个 turnId，
+  * 索引对账：reconcileWorkspaceMemoryIndex 剔除死链、按 frontmatter 补孤儿
+  * 热开启：注入扩展改按「能力位」（本地且非侧聊/远端）注册，开关由 getter
+  * prompt 增加必填字段与禁止清单（临时任务状态、仓库已记录的事实、会话内短期
+
+* **memory:** 默认不按闲置时间清理，只按 expires 到期 ([9102806](https://github.com/Otherworldy/PiCode/commit/9102806b84f7e95dae5e87350462d3abec33186c))
+
+* **memory:** 项目配置迁到 .pi/picode.json，记忆抽取改为有界输入 ([3a7365b](https://github.com/Otherworldy/PiCode/commit/3a7365bf82159c3879d918d4dbd7c3c7eb2ebc89))
+  * 新增 packages/shared/src/node/workspaceConfig.ts，项目配置统一落在 <workspace>/.pi/picode.json
+  * 旧根目录 zcode.json 在读取时一次性复制到新路径，旧文件保留；写入前先迁移
+  * workspace hooks 的发现候选路径同步改到 .pi/picode.json，configFileKind 新增 picode.json
+  * 抽取 prompt 的现有记忆部分改成 manifest：文件名 + description + 前 30 行预览，
+  * 预览被截断的文件禁止整份重写，新增 appends 字段供追加
+  * MEMORY.md 注入改为 200 行 / 25000 字符截断 + WARNING，不再整份丢弃
+  * 读取上限放宽到 1 MiB，超预算的模型索引不落盘，改重建紧凑索引
+  * 距上次抽取满 3 个 turn 或满 10 分钟才允许下一次
+  * 本轮主模型已写记忆则跳过抽取；无真实用户散文（< 3 词）的轮次不抽
+
+* **memory:** 主模型直写记忆后归一 frontmatter 并补索引行 ([5b9ae3a](https://github.com/Otherworldy/PiCode/commit/5b9ae3ad99d531439eaa1d89402c3617e8760f87))
+  * shared 新增 normalizeWorkspaceMemoryItem：只补/改 frontmatter 的 8 个规范字段，
+  * 记忆扩展挂 tool_result 钩子，只处理 .pi/memory/<item>.md；落盘后对账补指针行。
+  * 抽取开始前先对账索引，再读 MEMORY.md 与 manifest：否则主模型刚写、还没进索引的
+
+* **ui:** 待办统一状态图形，头部改为按状态分段计数 ([74256bd](https://github.com/Otherworldy/PiCode/commit/74256bd5e43448eced69aed5f00d874d79ab96ec))
+  * 新增 packages/ui/src/components/TodoStepGlyph.tsx 作为唯一实现：完成=实心绿盘白勾，
+  * 进行中的弧用正文色、轨道降到 0.2 不透明度，比待办的灰环更重；减少动效时停在静态弧上，
+  * 图形带 role="img" + aria-label（已完成/进行中/未开始），状态不再只靠颜色和删除线
+  * in_progress（ZCodePlanStep）与 inProgress（V4 PlanItem）由组件同时接受，调用方不转写
+  * 删掉三份重复的 TodoStatusIcon / todoTextClasses，以及状态面板的 PlanStatusIcon
+  * 状态面板区块标题「进程」改为「待办」，右侧从 2/5 换成「已完成 N · 进行中 N ·
+  * 输入框待办抽屉收起时，在展开箭头后显示当前步骤的状态点；ComposerTodoModel 新增
+  * stripTodoStepEmphasis 去掉行内成对的 **…** 和 __…__。加粗对里不允许再出现 *，
+  * 工具卡标题、探索子行、摘要胶囊同样清洗；纯展示，不写回快照和工具输出
+
+* **ui:** 项目记忆弹窗可视化配置过期阈值并显示分类 ([cb4a513](https://github.com/Otherworldy/PiCode/commit/cb4a5133801e618cb2426ced32fb8598c02e080d))
+  * 新增 WorkspaceMemoryExpirySelect：预设 7/30/90/180/365 天 +「不按闲置清理」。
+  * 记忆列表在文件名右侧显示 frontmatter 的 category 标记。
+  * 三项项目级配置（开关/抽取模型/过期阈值）的「乐观更新 + 失败回滚 + 打开时重读」
+
+
+### Bug Fixes
+
+* 远端 Built-in 配置与 Pi 1.5 MCP OAuth 的协议兼容 ([8437a19](https://github.com/Otherworldy/PiCode/commit/8437a19a48ed76c2d0948346862b39ed195adc26))
+  * zhipuAccountModeDataSchema 与 zcodeProviderAccountAccessSchema 补 highspeed。
+  * 派生代理 Provider（off-peak / highspeed）不参与三套餐可用性查询：
+  * 协议 MCP OAuth schema 补 clientRegistration（auto/dcr/cimd）。
+
+* **memory:** 抽取写入也按契约归一，重复 frontmatter 键只留一行 ([aebc097](https://github.com/Otherworldy/PiCode/commit/aebc097899e392a3c6c894c01aa120533723f490))
+  * normalizeWorkspaceMemoryItem 对已知键去重，值取最后一次（模型常见笔误），
+  * applyWorkspaceMemoryPatch 在写 writes 之前跑同一个归一：重复键、漏字段、
+  * spec 补这条归一范围与场景 42。
+
+* **memory:** 空 patch 算抽取成功，截断与迟到 turn 立即续抽 ([76eee76](https://github.com/Otherworldy/PiCode/commit/76eee763da6cc7e437dffb6febff195936d9584a))
+  * 空更新（`{}` 或三个数组都空）不再判成解析失败：prompt 明确允许模型对「这轮没有
+  * 抽取成功后若游标后面还有 turn（本轮被截断，或抽取期间又来了新 turn），绕过频率
+  * 单个 turn 自己超 24k 时仍只喂前 24k，但返回 oversizedTurnId 并记 warn，让丢掉的部分
+  * 直接写入归一后无条件对账索引：文件 frontmatter 已合规（changed=false）时也要补指针行，
+  * 顺手删掉 write 测试里未使用的 resolve 导入。
+  * spec 补空更新、续抽、超大 turn 的可观测性，加场景 38–41 与 worktree / 条目版本等已知边界。
+
+* **memory:** 热开关、门禁区间与截断游标按实时状态判定 ([35e5975](https://github.com/Otherworldy/PiCode/commit/35e59750664a5850d39fd811e1cb3e45a3b886a8))
+  * 开关只有 .pi/picode.json 一个事实源：注入、抽取调度、写记忆免确认各自在用到时
+  * 抽取门禁、transcript 与游标共用同一份游标切片；直接写入门禁收窄到刚结束的
+  * transcript 按 turn 从区间开头拼，超 24k 停在断点并返回 coveredUntilTurnId，
+  * 索引缺失但磁盘已有条目时按条目生成索引；抽取 prompt 注入当天日期。
+  * 抽取模型只有“模型不存在”才回退会话模型；patch 部分跳过时记 warn 且不乱推游标。
+
+* **memory:** 项目记忆弹窗对齐设置页控件与全站确认框 ([284306b](https://github.com/Otherworldy/PiCode/commit/284306bb063353ebd685c004f10dfbd45d76461b))
+  * 三项设置改用 SettingsGroupCard + SettingsRow，控件统一 size="lg"，
+  * 删除记忆文件和放弃未保存修改改用全站 useConfirmDialog
+  * 编辑器文件名输入 size="lg"，正文编辑框换成设置页的 input 边框/底色 token。
+  * 条目计数不再把“尚未创建”的索引占位行算成一条记忆。
+
+* UI 设计模式的审查 done 后自动关掉模式 ([54dcebb](https://github.com/Otherworldy/PiCode/commit/54dcebb4f6eeb90e8f4e3350bc3f0007b99a032b))
+  * 配对只认模型在模式内调用 `annotate` 成功的那一次；任一条 annotate 收口
+  * `setUiDesignMode` 的实现提成 `applyUiDesignMode`，UI 命令和自动关闭共用同
+  * 已知边界：插件批注路径不发通知（直接发 follow-up 消息），那次配对会留到
+
+* **v4:** 关掉的扩展命令回执不再随切会话重新弹出 ([28a972b](https://github.com/Otherworldy/PiCode/commit/28a972b91c46be58e32bc80b04adaaafb8e358df))
+  * 新增 V4 命令 dismissExtensionNotice：快照是回执的唯一所有者，关掉要交回宿主；
+  * 宿主清空快照同时清掉扩展命令的累积镜像，命令还在跑时之后的 notify 另开一个
+  * 弹窗关闭先本地乐观收起再发命令，被拒或传输失败只记 debug，不重开
+  * pi-host 单测覆盖：清空增量确实投递、重复关闭幂等、同一命令后续输出换新 id、
+
+
+### Chores
+
+* **pi:** 升级内嵌 Pi SDK 到 1.5.0 ([d482de4](https://github.com/Otherworldy/PiCode/commit/d482de460a93bc22cfe530a61665ff2d5bc7aa27))
+  * pi-ai / pi-coding-agent / pi-mcp 由 1.4.0 提到 1.5.0，新增传递依赖 pi-schema
+  * 已核对本仓库未使用 TypeBox 扩展能力，工具参数改用 pi-schema 校验后
+  * CreateAgentSessionOptions / AgentSession / SettingsManager / PackageManager
+
+
+### Documentation
+
+* **memory:** 去掉 spec 与测试里因分批暂存产生的重复段落 ([43b8493](https://github.com/Otherworldy/PiCode/commit/43b8493dbc90b095481348d1bcefc4ee72c245fc))
+
+
+### Refactorings
+
+* **memory:** 删除 apps/zcode-cli 旧工作区记忆栈 ([f8b3d99](https://github.com/Otherworldy/PiCode/commit/f8b3d99d25e2ff0df57e7834aa40fd131d326e2d))
+  * core/src/memory/{extraction,memory-agent-loop,index-content,directory,
+  * core/src/runtime/helpers/project-memory{,-agent,-extraction}.ts
+  * core/src/subagent/persistent-memory{,-prompt}.ts
+  * core/src/tool/executor/memory-file-permission.ts
+  * core/src/context/sections/memory.ts（零消费者的旧注入段）
+
 ## [3.19.6](https://github.com/Otherworldy/PiCode/compare/v3.19.5...v3.19.6) (2026-10-30)
 
 ### Features
