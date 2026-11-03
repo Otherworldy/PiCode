@@ -8,7 +8,9 @@ import {
   ensureWorkspaceMemoryRoot,
   isWorkspaceMemoryFileName,
   isWorkspaceMemorySupported,
+  pruneExpiredWorkspaceMemories,
   readWorkspaceMemoryEnabled,
+  readWorkspaceMemoryExpiryDays,
   resolveWorkspaceMemoryRoot,
 } from "@zcode/shared/node";
 import {
@@ -230,19 +232,26 @@ export async function createPiSessionRecord(
 ): Promise<ZCodeProtocolSessionRecord> {
   const registry = context.piHost;
   if (!registry) throw new Error("pi-host registry missing");
-  const memoryEnabled = await resolvePiSessionMemoryEnabled(context, params.workspace);
+  // 能力位与开关分开：能力位决定是否注册注入扩展，开关每轮由扩展重读。
+  // 只有开关在创建时会顺手建目录并迁移旧全局记忆，之后改开关不再重开会话。
+  const memoryCapable = isWorkspaceMemorySupported(params.workspace.workspaceIdentity);
+  const memoryEnabledAtCreation = memoryCapable
+    ? await preparePiWorkspaceMemory(context, params.workspace)
+    : false;
   const hosted = await registry.create({
     workspaceIdentity: params.workspace.workspaceIdentity,
     workspacePath: params.workspace.workspacePath,
     workingDirectory: params.workingDirectory,
     sessionId: params.sessionId ?? createSessionId(),
     parentSessionId: params.parentSessionId,
-    memoryEnabled,
+    memoryEnabled: memoryCapable,
+    memoryEnabledAtCreation,
     ...(params.openReadMs !== undefined ? { openReadMs: params.openReadMs } : {}),
     ...(params.storedSession ? { storedSession: params.storedSession } : {}),
   });
   context.logger?.info("workspace memory hosted", {
     sessionId: hosted.sessionId,
+    memoryCapable,
     memoryEnabled: hosted.memoryEnabled,
     workspacePath: params.workspace.workspacePath,
   });
@@ -253,21 +262,13 @@ export async function createPiSessionRecord(
 const migratedWorkspaceMemory = new Set<string>();
 
 /**
- * Pi 主路径的记忆开关：远端工作区一律关闭；本地读项目 `.pi/picode.json`。
- * 打开时顺手创建目录，并把旧全局目录里的 .md 惰性复制过来。
+ * 读本地项目 `.pi/picode.json` 的开关，打开时顺手建目录并把旧全局目录里的 .md
+ * 惰性复制过来。返回创建那一刻的开关值，只作为会话初始值。
  */
-async function resolvePiSessionMemoryEnabled(
+async function preparePiWorkspaceMemory(
   context: ZCodeProtocolAgentServerContext,
   workspace: ZCodeWorkspaceRef,
 ): Promise<boolean> {
-  if (!isWorkspaceMemorySupported(workspace.workspaceIdentity)) {
-    context.logger?.info("workspace memory resolve", {
-      reason: "remote workspace",
-      workspaceIdentity: workspace.workspaceIdentity,
-      workspacePath: workspace.workspacePath,
-    });
-    return false;
-  }
   try {
     if (!(await readWorkspaceMemoryEnabled(workspace.workspacePath))) {
       context.logger?.info("workspace memory resolve", {
@@ -284,6 +285,17 @@ async function resolvePiSessionMemoryEnabled(
     if (shouldMigrate) {
       migratedWorkspaceMemory.add(key);
       await migrateLegacyWorkspaceMemory(workspace);
+    }
+    // 过期记忆在打开会话时顺手清一次：只在开关为开、本地工作区时跑到这里。
+    const { removed } = await pruneExpiredWorkspaceMemories(newRoot, {
+      expiryDays: await readWorkspaceMemoryExpiryDays(workspace.workspacePath),
+    });
+    if (removed.length > 0) {
+      context.logger?.info("workspace memory pruned", {
+        count: removed.length,
+        files: removed,
+        workspacePath: workspace.workspacePath,
+      });
     }
     context.logger?.info("workspace memory resolve", {
       reason: "enabled",

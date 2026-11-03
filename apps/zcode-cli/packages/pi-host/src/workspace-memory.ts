@@ -10,7 +10,10 @@ import {
   WORKSPACE_MEMORY_MAX_ITEM_BYTES,
   assertWorkspaceMemoryRootTrusted,
   atomicWritePrivateTextFile,
+  formatWorkspaceMemoryPointerLine,
   isWorkspaceMemoryItemFileName,
+  parseWorkspaceMemoryFrontmatter,
+  reconcileWorkspaceMemoryIndex,
 } from "@zcode/shared/node";
 
 /** 记忆段在完整 prompt 里的起始标记；每轮先剪掉旧段，避免 force prompt 越积越长。 */
@@ -161,27 +164,16 @@ export async function rebuildWorkspaceMemoryIndex(root: string): Promise<string 
   for (const entry of entries) {
     if (!entry.isFile() || !isWorkspaceMemoryItemFileName(entry.name)) continue;
     const content = await readFile(join(root, entry.name), "utf-8").catch(() => "");
-    const { name, description } = parseMemoryFrontmatter(content);
-    const title = name || entry.name.slice(0, -".md".length);
-    const hook = description?.replace(/\s+/g, " ").trim();
-    lines.push(hook ? `- [${title}](${entry.name}) — ${hook}` : `- [${title}](${entry.name})`);
+    const { name, description } = parseWorkspaceMemoryFrontmatter(content);
+    lines.push(
+      formatWorkspaceMemoryPointerLine({
+        fileName: entry.name,
+        title: name || entry.name.slice(0, -".md".length),
+        ...(description ? { description } : {}),
+      }),
+    );
   }
   return lines.length > 0 ? `${lines.join("\n")}\n` : null;
-}
-
-/**
- * 索引重建时的 frontmatter 提取：name 作标题，description 作悬停。
- */
-function parseMemoryFrontmatter(content: string): { name?: string; description?: string } {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content);
-  if (!match) return {};
-  const block = match[1] ?? "";
-  const name = /^name:\s*(.+)$/m.exec(block)?.[1]?.trim();
-  const description = /^description:\s*(.+)$/m.exec(block)?.[1]?.trim();
-  return {
-    ...(name ? { name } : {}),
-    ...(description ? { description } : {}),
-  };
 }
 
 function extractJsonObject(text: string): unknown {
@@ -288,12 +280,17 @@ export async function applyWorkspaceMemoryPatch(
       : undefined;
   if (proposedIndex !== undefined) {
     // 模型读 index 与写回之间，主模型可能已经手工追加了指针行。
-    // 当前值与抽取快照不一致时只保留并发写入，不用旧快照整份覆盖。
+    // 当前值与抽取快照不一致时不用旧快照整份覆盖，但已经改过的文件仍要跟索引对账。
     if (options.expectedIndex !== undefined) {
       const current = await readWorkspaceMemoryIndex(root);
-      if (current !== options.expectedIndex) return;
+      if (current !== options.expectedIndex) {
+        await reconcileWorkspaceMemoryIndex(root);
+        return;
+      }
     }
     await atomicWritePrivateTextFile(join(root, WORKSPACE_MEMORY_INDEX_FILE_NAME), proposedIndex);
+    // 模型漏写指针、或删文件没删指针时补上：否则新文件永远不注入，死链一直留着。
+    await reconcileWorkspaceMemoryIndex(root);
     return;
   }
   const current = await readWorkspaceMemoryIndex(root);
@@ -304,6 +301,9 @@ export async function applyWorkspaceMemoryPatch(
       await atomicWritePrivateTextFile(join(root, WORKSPACE_MEMORY_INDEX_FILE_NAME), rebuilt);
     }
   }
+  // 只返回 writes / deletes 没给索引时，索引里既不会多出新文件的指针，
+  // 也不会少掉已删文件的指针。落盘后统一对账一次。
+  await reconcileWorkspaceMemoryIndex(root);
 }
 
 /** 索引是否超出注入预算（行数或字符数）。 */

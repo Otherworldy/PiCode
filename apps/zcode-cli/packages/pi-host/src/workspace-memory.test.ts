@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -13,8 +13,16 @@ import {
   shouldRunWorkspaceMemoryExtraction,
 } from "./workspace-memory.js";
 import {
+  WORKSPACE_MEMORY_EXPIRED_DIR_NAME,
+  parseWorkspaceMemoryFrontmatter,
+  pruneExpiredWorkspaceMemories,
+  reconcileWorkspaceMemoryIndex,
+  resolveWorkspaceMemoryExpiry,
+} from "@zcode/shared/node";
+import {
   buildWorkspaceMemoryExtractionPrompt,
   buildWorkspaceMemoryTranscript,
+  lastWorkspaceMemoryTurnId,
   containsDirectWorkspaceMemoryWrite,
   containsEligibleWorkspaceMemoryUserProse,
   readWorkspaceMemoryManifest,
@@ -281,6 +289,96 @@ test("patch without index rebuilds it from written items", async () => {
   });
 });
 
+test("transcript covers every turn since the last extraction", () => {
+  const rows = [
+    { kind: "turnHeader", turnId: "t1" },
+    { kind: "userInput", turnId: "t1", text: "部署用 docker compose" },
+    { kind: "assistantText", turnId: "t1", text: "好" },
+    { kind: "turnHeader", turnId: "t2" },
+    { kind: "userInput", turnId: "t2", text: "Node 版本锁 24" },
+    { kind: "assistantText", turnId: "t2", text: "已记" },
+    { kind: "turnHeader", turnId: "t3" },
+    { kind: "userInput", turnId: "t3", text: "测试用 pnpm" },
+  ];
+  // 首次抽取（无游标）拿全部 turn，不能只剩最后一条。
+  const all = buildWorkspaceMemoryTranscript(rows);
+  assert.match(all, /docker compose/);
+  assert.match(all, /Node 版本锁 24/);
+  assert.match(all, /测试用 pnpm/);
+  // 已抽过 t2：只留下 t3，不重复抽。
+  const after = buildWorkspaceMemoryTranscript(rows, { afterTurnId: "t2" });
+  assert.doesNotMatch(after, /docker compose/);
+  assert.doesNotMatch(after, /Node 版本锁 24/);
+  assert.match(after, /测试用 pnpm/);
+  // 游标已经滚出窗口：退化为整窗重抽，宁可多抽不漏抽。
+  const rolled = buildWorkspaceMemoryTranscript(rows, { afterTurnId: "t0" });
+  assert.match(rolled, /docker compose/);
+  assert.equal(lastWorkspaceMemoryTurnId(rows), "t3");
+  // 超长时丢最早内容，保留最近的。
+  const capped = buildWorkspaceMemoryTranscript(rows, { maxChars: 20 });
+  assert.match(capped, /earlier turns omitted/);
+  assert.match(capped, /pnpm/);
+});
+
+test("index reconciliation drops dead links and adds missing pointers", async () => {
+  await withRoot(async (root) => {
+    await writeFile(
+      join(root, "kept.md"),
+      "---\nname: Kept\ndescription: 还在\ntype: project\n---\n\nbody\n",
+    );
+    await writeFile(
+      join(root, "orphan.md"),
+      "---\nname: Orphan\ndescription: 新条目\n---\n\nbody\n",
+    );
+    await writeFile(
+      join(root, "MEMORY.md"),
+      "# 索引\n- [Kept](kept.md) — 还在\n- [Gone](gone.md) — 已删\n\n尾注\n",
+    );
+    await reconcileWorkspaceMemoryIndex(root);
+    const index = (await readWorkspaceMemoryIndex(root)) ?? "";
+    assert.match(index, /索引/); // 非指针行原样保留
+    assert.match(index, /kept\.md/);
+    assert.doesNotMatch(index, /gone\.md/); // 死链被剔除
+    assert.match(index, /- \[Orphan\]\(orphan\.md\) — 新条目/); // 孤儿补上指针
+    assert.match(index, /尾注/);
+    // 幂等：再对账一次内容不变。
+    const once = index;
+    await reconcileWorkspaceMemoryIndex(root);
+    assert.equal(await readWorkspaceMemoryIndex(root), once);
+  });
+});
+
+test("index reconciliation leaves projects without an index alone", async () => {
+  await withRoot(async (root) => {
+    await writeFile(join(root, "a.md"), "---\nname: A\n---\n");
+    assert.equal(await reconcileWorkspaceMemoryIndex(root), null);
+    await assert.rejects(readFile(join(root, "MEMORY.md"), "utf-8"));
+  });
+});
+
+test("patch that writes a file without an index still gets a pointer", async () => {
+  await withRoot(async (root) => {
+    await writeFile(join(root, "MEMORY.md"), "- [Old](old.md) — 旧\n");
+    await writeFile(join(root, "old.md"), "---\nname: Old\ndescription: 旧\n---\n");
+    const patch = parseWorkspaceMemoryPatch(
+      JSON.stringify({
+        writes: [
+          {
+            file: "fresh.md",
+            content: "---\nname: Fresh\ndescription: 新事实\n---\n",
+          },
+        ],
+        deletes: ["old.md"],
+      }),
+    );
+    assert.ok(patch);
+    await applyWorkspaceMemoryPatch(root, patch);
+    const index = (await readWorkspaceMemoryIndex(root)) ?? "";
+    assert.match(index, /- \[Fresh\]\(fresh\.md\) — 新事实/);
+    assert.doesNotMatch(index, /old\.md/);
+  });
+});
+
 test("memory extension appends the index to the rendered prompt and clears when disabled", async () => {
   await withRoot(async (root) => {
     await writeFile(join(root, "MEMORY.md"), "- [A](a.md) — a");
@@ -331,5 +429,155 @@ test("stale extraction snapshot does not overwrite a newer index", async () => {
       { expectedIndex: "older\n" },
     );
     assert.equal(await readFile(join(root, "MEMORY.md"), "utf-8"), "newer\n");
+  });
+});
+
+test("frontmatter defaults stay lenient for old or broken files", () => {
+  const plain = parseWorkspaceMemoryFrontmatter("no frontmatter at all");
+  assert.equal(plain.category, "project");
+  assert.equal(plain.type, "fact");
+  assert.equal(plain.source, "assistant");
+  assert.equal(plain.confirmed, false);
+  assert.equal(plain.lastConfirmed, undefined);
+
+  const broken = parseWorkspaceMemoryFrontmatter(
+    [
+      "---",
+      "name: A",
+      "category: nonsense",
+      "type: Nonsense",
+      "confirmed: yes",
+      "lastConfirmed: 14/02/2026",
+      "expires: 2026-13-01",
+      "---",
+      "",
+    ].join("\n"),
+  );
+  assert.equal(broken.name, "A");
+  assert.equal(broken.category, "project");
+  assert.equal(broken.type, "fact");
+  assert.equal(broken.confirmed, false);
+  assert.equal(broken.lastConfirmed, undefined);
+  assert.equal(broken.expires, undefined);
+
+  const full = parseWorkspaceMemoryFrontmatter(
+    [
+      "---",
+      "name: A",
+      "category: UI",
+      "type: constraint",
+      "source: user",
+      "confirmed: true",
+      "lastConfirmed: 2026-02-14",
+      "expires: 2026-06-01",
+      "---",
+      "",
+    ].join("\n"),
+  );
+  assert.equal(full.category, "ui");
+  assert.equal(full.type, "constraint");
+  assert.equal(full.source, "user");
+  assert.equal(full.confirmed, true);
+  assert.equal(full.lastConfirmed, "2026-02-14");
+  assert.equal(full.expires, "2026-06-01");
+});
+
+test("expiry prefers expires, then max(lastConfirmed, mtime)", () => {
+  const now = Date.UTC(2026, 5, 1);
+  const day = 24 * 60 * 60 * 1000;
+
+  // 昨天确认过、mtime 是 120 天前：取较新值，不过期。
+  assert.equal(
+    resolveWorkspaceMemoryExpiry({
+      content: "---\nname: A\nlastConfirmed: 2026-05-31\n---\n",
+      mtimeMs: now - 120 * day,
+      now,
+      expiryDays: 90,
+    }).expired,
+    false,
+  );
+
+  // 没有任何日期线索、mtime 早于阈值：过期。
+  const idle = resolveWorkspaceMemoryExpiry({
+    content: "---\nname: A\n---\n",
+    mtimeMs: now - 100 * day,
+    now,
+    expiryDays: 90,
+  });
+  assert.equal(idle.expired, true);
+  assert.equal(idle.reason, "idle");
+
+  // expires 已过：即使昨天刚确认也过期。
+  const explicit = resolveWorkspaceMemoryExpiry({
+    content: "---\nname: A\nlastConfirmed: 2026-05-31\nexpires: 2026-05-20\n---\n",
+    mtimeMs: now - day,
+    now,
+    expiryDays: 90,
+  });
+  assert.equal(explicit.expired, true);
+  assert.equal(explicit.reason, "expires");
+
+  // 关闭闲置规则后只剩 expires 生效。
+  assert.equal(
+    resolveWorkspaceMemoryExpiry({
+      content: "---\nname: A\n---\n",
+      mtimeMs: now - 100 * day,
+      now,
+      expiryDays: 0,
+    }).expired,
+    false,
+  );
+});
+
+test("pruning moves expired items out of memory and index", async () => {
+  await withRoot(async (root) => {
+    const now = Date.UTC(2026, 5, 1);
+    const day = 24 * 60 * 60 * 1000;
+    await writeFile(join(root, "stale.md"), "---\nname: Stale\ndescription: old\n---\nbody\n");
+    await writeFile(join(root, "fresh.md"), "---\nname: Fresh\nlastConfirmed: 2026-05-31\n---\n");
+    const old = new Date(now - 200 * day);
+    await utimes(join(root, "stale.md"), old, old);
+    await writeFile(
+      join(root, "MEMORY.md"),
+      "- [Stale](stale.md) — old\n- [Fresh](fresh.md) — new\n",
+    );
+
+    const { removed } = await pruneExpiredWorkspaceMemories(root, { now, expiryDays: 90 });
+    assert.deepEqual(removed, ["stale.md"]);
+    await assert.rejects(readFile(join(root, "stale.md"), "utf-8"));
+    assert.match(
+      await readFile(join(root, WORKSPACE_MEMORY_EXPIRED_DIR_NAME, "stale.md"), "utf-8"),
+      /name: Stale/,
+    );
+    assert.doesNotMatch(await readFile(join(root, "MEMORY.md"), "utf-8"), /stale\.md/);
+    assert.match(await readFile(join(root, "MEMORY.md"), "utf-8"), /fresh\.md/);
+  });
+});
+
+test("extraction prompt states the frontmatter contract and what not to write", () => {
+  const prompt = buildWorkspaceMemoryExtractionPrompt({
+    transcript: "User: use Node 24\n",
+    index: null,
+    manifest: [],
+  });
+  for (const field of ["category", "type", "source", "confirmed", "lastConfirmed"]) {
+    assert.match(prompt, new RegExp(`- ${field}:`));
+  }
+  assert.match(prompt, /transient task state/);
+  assert.match(prompt, /project \| todo \| extension \| ui \| protocol/);
+  assert.match(prompt, /preference \| constraint \| decision \| fact/);
+});
+
+test("manifest carries the category for existing memories", async () => {
+  await withRoot(async (root) => {
+    await writeFile(join(root, "ui-theme.md"), "---\nname: Theme\ncategory: ui\n---\nbody\n");
+    const manifest = await readWorkspaceMemoryManifest(root);
+    assert.equal(manifest[0]?.category, "ui");
+    const prompt = buildWorkspaceMemoryExtractionPrompt({
+      transcript: "User: hi\n",
+      index: null,
+      manifest,
+    });
+    assert.match(prompt, /### ui-theme\.md \(\d+ bytes, ui, updated/);
   });
 });

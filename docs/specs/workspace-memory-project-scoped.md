@@ -2,17 +2,13 @@
 
 ## 背景
 
-当前 Project Memory 存在两套事实：
-
-- 写入 / 注入 / 抽取在旧 `AgentRuntime`（`apps/zcode-cli/packages/core`）里，存储根为
-  `<dataRoot>/cli/memories/projects/<slug>-<hash>/memory`。
-- V4 Desktop 主路径已经切到 Pi Host（`v4-bridge.createSessionRecord → createPiSessionRecord`）。
-  Pi 会话既不读 `MEMORY.md`，也不在 turn 结束后抽取；`pi-session-record.ts` 还把
-  `memoryEnabled` 写死为 `false`。自动抽取的唯一调用点随 `cut turn-loop`（3360794）删除。
-
-结果是设置页仍有开关和查看器、历史文件还能读，但新会话不会使用也不会生成记忆。
-
-本次把记忆改成**项目内文件 + 项目级开关**，并接回 Pi 主路径。远端工作区暂不支持。
+改造前 Project Memory 有两套事实：写入/注入/抽取在旧 `AgentRuntime`
+（`apps/zcode-cli/packages/core`），存储根为 `<dataRoot>/cli/memories/projects/<slug>-<hash>/memory`；
+V4 Desktop 主路径已切到 Pi Host，既不读 `MEMORY.md` 也不在 turn 结束后抽取。
+旧栈的抽取链（`memory/extraction.ts`、`memory-agent-loop.ts`、`memory/recall/`、
+`runtime/helpers/project-memory*`）、旧注入段（`context/sections/memory.ts`）、旧索引格式化器
+（`memory/index-content.ts`）与子代理持久记忆（`subagent/persistent-memory*`）已整条删除，
+现在只有一套实现。`memory/project-root.ts` 保留，只服务旧全局目录的惰性迁移。
 
 ## 目标
 
@@ -27,8 +23,13 @@
 
 - 远端（SSH / WSL / Docker）记忆读写。
 - 团队共享或提交记忆。
-- 一次性删除旧 `core/src/memory` 代码；旧路径保留为 legacy，迁移完成后再清理。
-- 子代理持久记忆（`.PiCode/agent-memory`）的改造。
+- 子代理 profile 的 `memory: user|project|local` 字段（frontmatter 契约与诊断码，
+  随旧栈下线已无消费者，但删字段等于改用户配置格式）的清理。
+- 协议层 `modelExecution.memoryExtraction` 字段：runtime 已不再读它（旧抽取调度器已删），
+  但 `packages/shared` 的 zod `.strict()` 也用它校验历史持久化的 intent，
+  删字段会让旧 payload 校验失败，因此保留为兼容字段。
+- CLI 全局 `features.memory` / `memory.use` 配置键（`~/.PiCode/config.json`）：
+  runtime 已不再读取，键本身保留为配置文件格式。项目级开关走 `.pi/picode.json`。
 
 ## 状态所有者
 
@@ -39,6 +40,8 @@
 | 项目开关           | `<workspace>/.pi/picode.json` `features.memory` | 唯一写入入口 `updateJsonConfigFile`     |
 | 启用判定           | Pi extension 每轮读 `.pi/picode.json`           | 只有显式 `features.memory: true` 才开启 |
 | 自动抽取调度       | `HostSessionRegistry`                           | 每个 session 同时最多一个 in-flight     |
+| 抽取游标           | `HostSessionRegistry`                           | 上次抽取覆盖到的最后一个 turnId         |
+| 索引与文件对账     | `reconcileWorkspaceMemoryIndex`（shared）       | 抽取落盘与 UI 增删后各对账一次          |
 | 旧数据迁移         | `createPiSessionRecord`                         | 本地 workspace 首次创建时惰性复制       |
 
 全局 app 设置 `memoryEnabled` 不再参与判定，设置页不再暴露；字段保留仅为兼容旧 `setting.json`。
@@ -47,6 +50,10 @@
 迁移是一次性的：`.pi/picode.json` 一旦存在，根目录 `zcode.json` 就不再被读取，继续编辑旧文件不会生效。workspace hooks 的自动发现也走同一条迁移路径，`configFileKind` 新增 `picode.json`；发现范围是工作区到 git 根之间的每一层，祖先目录的 `zcode.json` 同样会被复制成该目录的 `.pi/picode.json`，否则上游 hooks 会静默消失。
 
 项目开关在每个 turn 重新读取，关闭后下一轮即停止注入与抽取，不必重开会话。
+
+会话创建时只把开关值当初始快照；注入扩展按“能力位”注册，不按开关注册。
+能力位 = 本地工作区且非侧聊/子会话，远端与侧聊不注册扩展。所以用户在正在进行的
+会话里打开开关，下一轮就恢复注入与抽取，不需要新建会话。
 
 ## 存储布局
 
@@ -65,6 +72,63 @@
 4. 单文件读取上限沿用 5 MiB；抽取写入上限 64 KiB/文件、32 KiB 索引。
 5. 索引缺失时 catalog 仍返回一行 `MEMORY.md`（`missing: true`），点击可创建；抽取写回 patch
    没带 `index` 时，若索引缺失或为空，按现有条目自动重建。
+
+### Frontmatter 契约
+
+每条记忆的 frontmatter 在原有 `name` / `description` 之外，新增 4 组轻量语义字段。
+全部可缺省，旧文件不迁移、不改写：
+
+```yaml
+---
+name: 必须用 Node 24            # 索引指针行的标题
+description: mise 已固定，CI 也用 24   # 索引指针行的 hook
+category: project               # project | todo | extension | ui | protocol
+type: constraint                # preference | constraint | decision | fact
+source: user                    # user | assistant | code
+confirmed: true                 # 用户明确说过 / 只是模型推断
+lastConfirmed: 2026-02-14       # 最近一次被确认的日期，参与过期判定
+expires: 2026-06-01             # 可选：显式失效日期
+---
+```
+
+| 字段 | 缺省 | 用途 |
+| --- | --- | --- |
+| `category` | `project` | 主题分类，为后续按类检索/分组预留；未知值按缺省处理，不报错 |
+| `type` | `fact` | 语义类型：偏好、约束、决策、事实 |
+| `source` | `assistant` | 来源：用户明说 / 模型推断 / 代码事实 |
+| `confirmed` | `false` | 是否经用户确认；`false` 表示模型推断，出现冲突时优先牺牲它 |
+| `lastConfirmed` | 文件 mtime | 最近确认日期，过期判定取它与 mtime 的较新值 |
+| `expires` | 无 | 显式失效日期，优先于闲置天数 |
+
+解析一律宽容：字段缺失、枚举值非法、日期格式不对都退回缺省，不让一条记忆因为
+frontmatter 写歪而消失。索引指针行格式不变（`- [Title](file.md) — hook`），
+`category` 只存 frontmatter，不占索引注入预算。
+
+### 过期与清理
+
+```text
+过期判定（单文件）：
+  if expires 存在且 <= 今天            → 过期
+  else if max(lastConfirmed, mtime) <= 今天 - 90 天 → 过期
+  else                                 → 保留
+
+清理时机：
+  会话创建时（preparePiWorkspaceMemory，开关为开）
+  抽取落盘成功后（applyWorkspaceMemoryPatch 之后）
+  两者都只在本地工作区、开关为开时执行
+```
+
+- 默认闲置阈值 `WORKSPACE_MEMORY_DEFAULT_EXPIRY_DAYS = 90`；项目可在
+  `.pi/picode.json` 用 `features.memoryExpiryDays` 覆盖，`0` 表示关闭自动清理。
+- 阈值在项目记忆弹窗里可视化配置（`WorkspaceMemoryExpirySelect`，预设 7 / 30 / 90 / 180 / 365
+  天 + 「不按闲置清理」）；写入只改 `features.memoryExpiryDays`，`null` 删除配置回到默认。
+  配置里是预设外的值（例如手写 45）时补一项显示，避免选择器变成空值。
+- 过期文件移动到 `.pi/memory/.expired/<name>.md`，不直接 `rm`：误判可恢复，
+  且 `.expired` 是子目录，`readdir` 的 `isFile()` 过滤、注入、对账都看不到它，
+  不会重新出现在索引或提示词里。
+- 清理后调用一次 `reconcileWorkspaceMemoryIndex`，让索引里的指针行一起消失。
+- 查看器打开列表时**不做**清理：UI 只是只读快照，不在用户没操作时删文件。
+- 清理结果写 `info` 日志（`workspace memory pruned`，含文件数与原因分布）。
 
 ## 开关与优先级
 
@@ -108,10 +172,11 @@ before_agent_start
 ```text
 turnDone
   → 频率闸门：距上次抽取 >= 3 个 turn，或距上次抽取已过 10 分钟
-  → 条件：创建时 enabled && 本地 && 无 in-flight && 当前开关仍为开
+  → 条件：能力位为真（本地、非侧聊） && 无 in-flight && 当前开关为开（每轮重读）
   → 门禁 1：本轮主模型已 Write/Edit 过记忆文件 → 跳过（避免双写）
   → 门禁 2：本轮没有 >= 3 个词的真实用户输入 → 跳过
-  → 只取本轮 turnId 的用户/助手消息 + MEMORY.md + 记忆 manifest
+  → 取「上次抽取游标之后」的全部 turn 的用户/助手消息（上限 24k 字符）
+    + MEMORY.md + 记忆 manifest
   → completePiPrompt(当前模型, 提取 prompt)
   → 解析 JSON patch
   → 校验并原子写入 .pi/memory
@@ -131,8 +196,13 @@ turnDone
 
 - 同一 session 同时只跑一个抽取；`dispose` 时 abort。
 - 超时 60s。
-- `index` 是整份替换。写回前比对抽取开始时的索引快照；期间主模型已改过索引时跳过
-  索引写入，只落 item 文件，避免旧快照覆盖刚追加的指针行。
+- 抽取成功后才推进游标；解析失败、写入异常时保留这段对话，下次重抽。
+  游标滚出投影窗口时退化为整窗重抽，宁可多抽不漏抽。
+- `index` 是整份替换。写回前比对抽取开始时的索引快照；期间主模型已改过索引时不写回
+  模型索引，只落 item 文件，但仍对索引做一次对账。
+- 落盘后统一调用 `reconcileWorkspaceMemoryIndex`：剔除指向已不存在文件的指针行，
+  给磁盘上存在但索引里没有的条目补一行（标题取 frontmatter `name`，悬停取 `description`）。
+  索引缺失时不创建，避免空项目凭空多出 `MEMORY.md`。
 - 模型输出必须是 JSON：
   ```json
   {
@@ -143,6 +213,22 @@ turnDone
   ```
 - 非法文件名、超限内容、JSON 解析失败 → 整次放弃，不写半成品。
 - 抽取 prompt 明确：只使用本轮对话，不调查代码，不重复已有内容。
+- 抽取 prompt 必带字段与禁抽规则见下节；`writes` 的 frontmatter 缺字段时按缺省处理。
+
+### 抽取写什么、不写什么
+
+`writes` 的 frontmatter 必须按契约填 `category` / `type` / `source` / `confirmed` /
+`lastConfirmed`；更新已有记忆时 `lastConfirmed` 刷新为当天，否则它会被闲置规则清掉。
+
+默认**不抽取**的内容（写进 prompt 的禁止清单）：
+
+- 临时任务状态：正在跑的步骤、当前进度、一次性命令结果、临时分支/端口/进程；
+- 能从仓库得到的事实：目录结构、依赖版本、git 历史、`AGENTS.md` 已有规则；
+- 会话内的短期上下文：本轮改了哪个文件、刚报的错、待用户回应的问题。
+
+可以通过「一句话能说清、下一周仍然成立」这个判据自查；不满足就不写。
+`type: preference` / `constraint` 来自用户明说；`type: decision` 需要写明为什么这么定，
+只记结论不记理由的决策等于没记。
 
 ### 抽取输入是 manifest，不是全文
 
@@ -301,6 +387,27 @@ if <workspace>/.pi/memory 不存在或还没有任何 .md:
 15. 只有工具回执 / 后台结果、没有真实用户文本的轮次不触发抽取。
 16. 抽取请求的现有记忆部分是 manifest（文件名 + description + 前 30 行），不是全文。
 17. `MEMORY.md` 超过 200 行时注入被截断且带 WARNING；抽取返回超预算索引时不落盘，改重建紧凑索引。
+18. 在已有会话里打开项目开关：下一轮就注入 `MEMORY.md`，抽取也会执行，写记忆不再弹确认；
+    不需要新建会话。（关闭同理，从下一轮停止。）
+19. 侧聊与子会话即使项目开关打开也不注入、不抽取。
+20. 第 1、2 轮交代的规则在第 3 轮触发抽取时仍出现在 `<conversation>` 里；
+    抽取成功后游标推进，下一次只带新 turn。
+21. 抽取只返回 `writes` / `deletes` 不给 `index` 时，`MEMORY.md` 自动补上新文件指针、
+    剔除已删文件指针；索引快照过期时同样对账。
+22. 在对话框删除条目后，`MEMORY.md` 里指向它的指针行一并消失；新建条目自动补指针。
+
+23. frontmatter 带 `category: ui`：查看器列表显示该分类标记，索引注入内容不变。
+24. 缺 `category` / `type` / `lastConfirmed` 的旧记忆文件：正常注入、正常参与抽取，
+    按缺省值处理，不被删除、不被改写。
+25. 记忆 mtime 早于 90 天且无 `lastConfirmed`：会话创建时被移到 `.pi/memory/.expired/`，
+    `MEMORY.md` 里的指针行随之消失，列表里不再出现。
+26. 记忆带 `lastConfirmed` 为昨天、mtime 为 120 天前：不过期（取较新值）。
+27. `expires` 已过期的记忆即使昨天刚确认也清理；`features.memoryExpiryDays: 0` 时
+    90 天规则不生效，只剩 `expires` 生效。
+28. 超过 90 天但 `features.memory: false` 的项目：不清理（清理和记忆同开同关）。
+29. 在项目记忆弹窗把「自动清理」改成 30 天：`.pi/picode.json` 的 `features.memoryExpiryDays`
+    变成 30，同一文件里的 `features.memory` 与 `features.memoryModel` 保持不变；
+    改成「不按闲置清理」时存 0，带 `expires` 的记忆仍会到期。
 
 ## 失败语义
 
@@ -308,3 +415,5 @@ if <workspace>/.pi/memory 不存在或还没有任何 .md:
 - 记忆目录不可创建：本 session 关闭记忆，日志 `warn`，不影响对话。
 - 抽取模型调用失败 / 超时 / 输出非法：放弃本次，日志 `debug`/`warn`，不影响 turn。
 - 迁移复制失败：保留旧目录，日志 `warn`，不阻塞 session 创建。
+- 清理失败（`.expired` 不可写、文件被占用）：跳过该文件，日志 `warn`，不影响注入与抽取。
+- frontmatter 字段非法：按缺省值解析，不丢记忆、不中断注入。

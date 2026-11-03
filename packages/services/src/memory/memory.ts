@@ -1,4 +1,5 @@
 import { ServiceChannels } from "@zcode/shared";
+import type { WorkspaceMemoryCategory } from "@zcode/shared/node";
 import { createServiceDescriptor } from "../descriptors.js";
 
 export const PROJECT_MEMORY_PREVIEW_LIMIT_EXCEEDED_ERROR_CODE =
@@ -21,6 +22,8 @@ export interface ProjectMemoryFileSummary {
   /** 已由 MemoryService 校验并限制在项目 `.pi/memory` 内的实际路径。 */
   path: string;
   kind: "index" | "item";
+  /** 条目 frontmatter 的主题分类；索引与缺省文件不带。 */
+  category?: WorkspaceMemoryCategory;
   size: number;
   updatedAt: number;
   /** 索引文件不存在时由 catalog 补出的占位条目，点击可创建。 */
@@ -72,6 +75,14 @@ export interface IMemoryService {
   /** 写入项目配置的记忆开关，只改 `features.memory`。 */
   setWorkspaceMemoryEnabled(
     params: ProjectMemoryWorkspaceRef & { enabled: boolean },
+  ): Promise<void>;
+
+  /** 读取项目配置的记忆过期阈值（天）；`0` 表示只保留 `expires` 显式到期。 */
+  getWorkspaceMemoryExpiryDays(params: ProjectMemoryWorkspaceRef): Promise<number>;
+
+  /** 写入项目配置的记忆过期阈值；`null` 恢复默认 90 天。 */
+  setWorkspaceMemoryExpiryDays(
+    params: ProjectMemoryWorkspaceRef & { days: number | null },
   ): Promise<void>;
 }
 

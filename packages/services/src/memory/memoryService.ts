@@ -1,17 +1,23 @@
 import {
+  WORKSPACE_MEMORY_DEFAULT_EXPIRY_DAYS,
   WORKSPACE_MEMORY_MAX_INDEX_BYTES,
   WORKSPACE_MEMORY_MAX_ITEM_BYTES,
   atomicWritePrivateTextFile,
   ensureWorkspaceMemoryRoot,
   isWorkspaceMemoryFileName,
   isWorkspaceMemorySupported,
+  parseWorkspaceMemoryFrontmatter,
   readWorkspaceMemoryEnabled,
+  readWorkspaceMemoryExpiryDays,
   readWorkspaceMemoryModel,
+  reconcileWorkspaceMemoryIndex,
   resolveWorkspaceMemoryRoot,
   setWorkspaceMemoryEnabled as writeWorkspaceMemoryEnabled,
+  setWorkspaceMemoryExpiryDays as writeWorkspaceMemoryExpiryDays,
   setWorkspaceMemoryModel as writeWorkspaceMemoryModel,
+  type WorkspaceMemoryCategory,
 } from "@zcode/shared/node";
-import { lstat, readdir, realpath, unlink } from "node:fs/promises";
+import { lstat, readdir, readFile, realpath, unlink } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type {
@@ -40,6 +46,12 @@ function isNotFoundError(error: unknown): boolean {
 
 function isRegularFileLike(metadata: { isFile(): boolean; isSymbolicLink(): boolean }): boolean {
   return metadata.isFile() && !metadata.isSymbolicLink();
+}
+
+/** 列表只用于展示分类；读不到或 frontmatter 缺失都按缺省分类处理。 */
+async function readMemoryCategory(filePath: string): Promise<WorkspaceMemoryCategory> {
+  const content = await readFile(filePath, "utf-8").catch(() => "");
+  return parseWorkspaceMemoryFrontmatter(content).category;
 }
 
 function compareProjectMemoryFiles(
@@ -76,10 +88,12 @@ async function readWorkspaceCatalog(
     try {
       const metadata = await lstat(filePath);
       if (!isRegularFileLike(metadata)) continue;
+      const kind = entry.name === PROJECT_MEMORY_INDEX_FILE_NAME ? "index" : "item";
       files.push({
         name: entry.name,
         path: filePath,
-        kind: entry.name === PROJECT_MEMORY_INDEX_FILE_NAME ? "index" : "item",
+        kind,
+        ...(kind === "item" ? { category: await readMemoryCategory(filePath) } : {}),
         size: metadata.size,
         updatedAt: metadata.mtimeMs,
       });
@@ -203,6 +217,10 @@ export function createMemoryService(): IMemoryService {
       await requireContainedMemoryFile(params, params.fileName);
     }
     await atomicWritePrivateTextFile(filePath, params.content);
+    // UI 新建/改写条目后同步索引：否则新文件不会出现在注入的 MEMORY.md 里。
+    if (params.fileName !== PROJECT_MEMORY_INDEX_FILE_NAME) {
+      await reconcileWorkspaceMemoryIndex(resolveWorkspaceMemoryRoot(params.workspacePath));
+    }
   }
 
   async function deleteProjectMemoryFile(
@@ -216,6 +234,10 @@ export function createMemoryService(): IMemoryService {
     }
     const filePath = await requireContainedMemoryFile(params, params.fileName);
     await unlink(filePath);
+    // 删了文件就把指向它的指针行一起清掉，否则主模型下一轮还会看到这条死链。
+    if (params.fileName !== PROJECT_MEMORY_INDEX_FILE_NAME) {
+      await reconcileWorkspaceMemoryIndex(resolveWorkspaceMemoryRoot(params.workspacePath));
+    }
   }
 
   async function getWorkspaceMemoryEnabled(params: ProjectMemoryWorkspaceRef): Promise<boolean> {
@@ -250,6 +272,22 @@ export function createMemoryService(): IMemoryService {
     await writeWorkspaceMemoryModel(params.workspacePath, params.model);
   }
 
+  async function getWorkspaceMemoryExpiryDays(params: ProjectMemoryWorkspaceRef): Promise<number> {
+    if (!isWorkspaceMemorySupported(params.workspaceIdentity)) {
+      return WORKSPACE_MEMORY_DEFAULT_EXPIRY_DAYS;
+    }
+    return readWorkspaceMemoryExpiryDays(params.workspacePath);
+  }
+
+  async function setWorkspaceMemoryExpiryDays(
+    params: ProjectMemoryWorkspaceRef & { days: number | null },
+  ): Promise<void> {
+    if (!isWorkspaceMemorySupported(params.workspaceIdentity)) {
+      throw new Error("Project Memory is only available for local workspaces");
+    }
+    await writeWorkspaceMemoryExpiryDays(params.workspacePath, params.days);
+  }
+
   return {
     listProjectMemories,
     readProjectMemoryFile,
@@ -257,7 +295,9 @@ export function createMemoryService(): IMemoryService {
     deleteProjectMemoryFile,
     getWorkspaceMemoryEnabled,
     getWorkspaceMemoryModel,
+    getWorkspaceMemoryExpiryDays,
     setWorkspaceMemoryEnabled,
     setWorkspaceMemoryModel,
+    setWorkspaceMemoryExpiryDays,
   };
 }

@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { access, lstat, mkdir, readFile, realpath } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { isRemoteWorkspaceIdentity } from "../remote-workspace-identity.js";
 import { atomicWritePrivateTextFile, withFileLock } from "./privateFilePersistence.js";
@@ -233,23 +233,104 @@ export async function ensureWorkspaceMemoryRoot(workspacePath: string): Promise<
   return memoryRoot;
 }
 
-/** 判断 Write/Edit 的目标是否是可自动放行的记忆 Markdown。 */
-export async function isWorkspaceMemoryMarkdownTarget(
-  workspacePath: string,
-  filePath: string,
-): Promise<boolean> {
-  const root = resolveWorkspaceMemoryRoot(workspacePath);
-  const target = resolve(workspacePath, filePath);
-  if (normalizePathForCompare(dirname(target)) !== normalizePathForCompare(root)) return false;
-  if (!isWorkspaceMemoryFileName(basename(target))) return false;
-  try {
-    await assertWorkspaceMemoryRootTrusted(root);
-    const targetMetadata = await lstat(target).catch(() => null);
-    if (targetMetadata && (!targetMetadata.isFile() || targetMetadata.isSymbolicLink())) {
-      return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
+/** 记忆分类：主题维度，为后续按类检索/分组预留。 */
+export type WorkspaceMemoryCategory = "project" | "todo" | "extension" | "ui" | "protocol";
+/** 记忆语义类型：这一条是偏好、约束、决策还是一般事实。 */
+export type WorkspaceMemoryType = "preference" | "constraint" | "decision" | "fact";
+/** 来源：用户明说 / 模型推断 / 代码事实。 */
+export type WorkspaceMemorySource = "user" | "assistant" | "code";
+
+export const WORKSPACE_MEMORY_CATEGORIES = [
+  "project",
+  "todo",
+  "extension",
+  "ui",
+  "protocol",
+] as const satisfies readonly WorkspaceMemoryCategory[];
+export const WORKSPACE_MEMORY_TYPES = [
+  "preference",
+  "constraint",
+  "decision",
+  "fact",
+] as const satisfies readonly WorkspaceMemoryType[];
+export const WORKSPACE_MEMORY_SOURCES = [
+  "user",
+  "assistant",
+  "code",
+] as const satisfies readonly WorkspaceMemorySource[];
+
+export const WORKSPACE_MEMORY_DEFAULT_CATEGORY: WorkspaceMemoryCategory = "project";
+export const WORKSPACE_MEMORY_DEFAULT_TYPE: WorkspaceMemoryType = "fact";
+export const WORKSPACE_MEMORY_DEFAULT_SOURCE: WorkspaceMemorySource = "assistant";
+/** 默认闲置阈值：90 天没被确认/改动就移到 `.expired`。 */
+export const WORKSPACE_MEMORY_DEFAULT_EXPIRY_DAYS = 90;
+/** 过期文件的回收目录（子目录，不参与注入、列表与对账）。 */
+export const WORKSPACE_MEMORY_EXPIRED_DIR_NAME = ".expired";
+
+export interface WorkspaceMemoryFrontmatter {
+  name?: string;
+  description?: string;
+  category: WorkspaceMemoryCategory;
+  type: WorkspaceMemoryType;
+  source: WorkspaceMemorySource;
+  confirmed: boolean;
+  /** `YYYY-MM-DD`：最近一次被确认的日期，与 mtime 取较新值参与过期判定。 */
+  lastConfirmed?: string;
+  /** `YYYY-MM-DD`：显式失效日期，优先于闲置天数。 */
+  expires?: string;
+}
+
+/** 只认 `YYYY-MM-DD`，转成 UTC 零点毫秒；其它格式一律当没写。 */
+export function parseDateOnly(value: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1) return null;
+  if (date.getUTCDate() !== day) return null;
+  return date.getTime();
+}
+
+function pickEnum<T extends string>(
+  value: string | undefined,
+  allowed: readonly T[],
+  fallback: T,
+): T {
+  const normalized = value?.trim().toLowerCase();
+  return allowed.find((item) => item === normalized) ?? fallback;
+}
+
+/**
+ * 解析 frontmatter。索引重建、对账、抽取与过期判定共用。
+ *
+ * 一律宽容：字段缺失、枚举值写歪、日期格式不对都退回缺省，不让一条记忆因为
+ * frontmatter 有问题而从注入里消失。
+ */
+export function parseWorkspaceMemoryFrontmatter(content: string): WorkspaceMemoryFrontmatter {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content);
+  const block = match?.[1] ?? "";
+  const field = (key: string): string | undefined => {
+    const value = new RegExp(`^${key}:\\s*(.+)$`, "m").exec(block)?.[1]?.trim();
+    return value ? value.replace(/^["']|["']$/g, "") : undefined;
+  };
+  const name = field("name");
+  const description = field("description");
+  const lastConfirmed = field("lastConfirmed");
+  const expires = field("expires");
+  return {
+    ...(name ? { name } : {}),
+    ...(description ? { description } : {}),
+    category: pickEnum(
+      field("category"),
+      WORKSPACE_MEMORY_CATEGORIES,
+      WORKSPACE_MEMORY_DEFAULT_CATEGORY,
+    ),
+    type: pickEnum(field("type"), WORKSPACE_MEMORY_TYPES, WORKSPACE_MEMORY_DEFAULT_TYPE),
+    source: pickEnum(field("source"), WORKSPACE_MEMORY_SOURCES, WORKSPACE_MEMORY_DEFAULT_SOURCE),
+    confirmed: field("confirmed")?.toLowerCase() === "true",
+    ...(lastConfirmed && parseDateOnly(lastConfirmed) !== null ? { lastConfirmed } : {}),
+    ...(expires && parseDateOnly(expires) !== null ? { expires } : {}),
+  };
 }

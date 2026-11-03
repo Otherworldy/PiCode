@@ -463,7 +463,9 @@ export function createSdkSessionFactory(
           : []),
         ...(processes?.factories ?? []),
         // 必须放最后：handler 要用其它扩展写完的完整 system prompt。
-        ...(input.memoryEnabled === true && input.memoryRoot
+        // 只在没有记忆根的会话（侧聊、远端）跳过；本地会话一律注册，
+        // 开关由 enabled 回调每轮重读，用户中途打开不必重开会话。
+        ...(input.memoryRoot
           ? [
               createWorkspaceMemoryExtension({
                 root: input.memoryRoot,

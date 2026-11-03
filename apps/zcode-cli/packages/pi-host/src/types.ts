@@ -333,7 +333,10 @@ export interface CreatePiSessionInput {
   /** 子会话不挂 codemode、tool_search、MCP。对话分叉即使有 parentSessionId 也不要设。 */
   omitHostExtensions?: boolean;
   loadExtensions: boolean;
-  /** 本地工作区且项目开关打开时注入工作区记忆。 */
+  /**
+   * 本会话是否允许使用工作区记忆（本地工作区、非侧聊）。
+   * 这只是能力位：项目开关每轮由扩展读 .pi/picode.json 决定，不受这里影响。
+   */
   memoryEnabled?: boolean;
   /** 记忆根目录。worktree 会话仍跟随 workspacePath，不是 cwd。 */
   memoryRoot?: string;

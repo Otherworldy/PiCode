@@ -1,11 +1,18 @@
 import { lstat, readdir, readFile } from "node:fs/promises";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import {
+  WORKSPACE_MEMORY_CATEGORIES,
   WORKSPACE_MEMORY_MAX_ITEM_BYTES,
+  WORKSPACE_MEMORY_SOURCES,
+  WORKSPACE_MEMORY_TYPES,
   assertWorkspaceMemoryRootTrusted,
   isWorkspaceMemoryItemFileName,
+  parseWorkspaceMemoryFrontmatter,
+  type WorkspaceMemoryCategory,
 } from "@zcode/shared/node";
 
+/** 单次抽取携带的对话字符上限：超出时丢最早的轮次，保住最近的事实。 */
+export const WORKSPACE_MEMORY_TRANSCRIPT_MAX_CHARS = 24_000;
 /** 抽取 prompt 里最多带多少现有记忆 manifest，避免长历史项目把请求撑爆。 */
 const WORKSPACE_MEMORY_MANIFEST_MAX_BYTES = 48 * 1024;
 /** manifest 里每个文件只带前 N 行预览；正文靠实际写入，不靠模型背诵。 */
@@ -16,23 +23,13 @@ const WORKSPACE_MEMORY_MANIFEST_MAX_FILES = 200;
 export interface WorkspaceMemoryManifestEntry {
   name: string;
   description?: string;
+  /** 主题分类：抽取模型据此判断该并到哪个文件，而不是每类各写一条。 */
+  category: WorkspaceMemoryCategory;
   preview: string;
   /** 预览被截断：模型看不到尾部，因此不允许整体重写这个文件。 */
   truncated: boolean;
   bytes: number;
   updatedAt: number;
-}
-
-function parseMemoryFrontmatter(content: string): { name?: string; description?: string } {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content);
-  if (!match) return {};
-  const block = match[1] ?? "";
-  const name = /^name:\s*(.+)$/m.exec(block)?.[1]?.trim();
-  const description = /^description:\s*(.+)$/m.exec(block)?.[1]?.trim();
-  return {
-    ...(name ? { name } : {}),
-    ...(description ? { description } : {}),
-  };
 }
 
 /**
@@ -82,10 +79,11 @@ export async function readWorkspaceMemoryManifest(
         : content;
       if (totalBytes + preview.length > WORKSPACE_MEMORY_MANIFEST_MAX_BYTES) break;
       totalBytes += preview.length;
-      const { description } = parseMemoryFrontmatter(content);
+      const { description, category } = parseWorkspaceMemoryFrontmatter(content);
       manifest.push({
         name: candidate.name,
         ...(description ? { description } : {}),
+        category,
         preview,
         truncated,
         bytes: candidate.bytes,
@@ -187,7 +185,7 @@ export function buildWorkspaceMemoryExtractionPrompt(input: {
 }): string {
   const existing = input.manifest
     .map((entry) => {
-      const meta = `${entry.bytes} bytes, updated ${new Date(entry.updatedAt).toISOString()}`;
+      const meta = `${entry.bytes} bytes, ${entry.category}, updated ${new Date(entry.updatedAt).toISOString()}`;
       const head = entry.truncated
         ? `### ${entry.name} (truncated, ${meta})`
         : `### ${entry.name} (${meta})`;
@@ -200,7 +198,7 @@ export function buildWorkspaceMemoryExtractionPrompt(input: {
     "Only use the conversation below. Do not investigate the repository, run tools, or verify code.",
     "Update existing memories instead of duplicating them. Delete memories that are now wrong.",
     "Return ONLY a JSON object with this shape:",
-    '{"writes":[{"file":"kebab-case.md","content":"---\nname: ...\ndescription: ...\ntype: project\n---\n..."}],"appends":[{"file":"existing.md","content":"..."}],"deletes":["old.md"],"index":"- [Title](file.md) — hook\n"}',
+    '{"writes":[{"file":"kebab-case.md","content":"---\\nname: ...\\ndescription: ...\\ncategory: project\\ntype: constraint\\nsource: user\\nconfirmed: true\\nlastConfirmed: 2026-02-14\\n---\\n..."}],"appends":[{"file":"existing.md","content":"..."}],"deletes":["old.md"],"index":"- [Title](file.md) — hook\\n"}',
     "Rules:",
     "- Omit keys you do not need. An empty update is fine.",
     "- `file` must be a lowercase .md filename, never MEMORY.md, no directories.",
@@ -208,6 +206,18 @@ export function buildWorkspaceMemoryExtractionPrompt(input: {
     "- `appends` adds text to the end of an existing file. Use it for files marked `truncated`, which you cannot see in full.",
     "- `index` is the complete new MEMORY.md body; one pointer line per memory, no content.",
     "- Keep each file under 64 KiB and the index under 200 lines.",
+    "- Every `writes` frontmatter must carry: name, description, category, type, source, confirmed, lastConfirmed.",
+    `- category: one of ${WORKSPACE_MEMORY_CATEGORIES.join(" | ")} — the topic. Reuse the file already in that topic instead of making a second one.`,
+    `- type: one of ${WORKSPACE_MEMORY_TYPES.join(" | ")} — preference/constraint came from the user, decision records why, fact is everything else.`,
+    `- source: one of ${WORKSPACE_MEMORY_SOURCES.join(" | ")} — who this came from, not what it is about.`,
+    "- confirmed: true only when the user said it explicitly; a guess from you stays false.",
+    "- lastConfirmed: today's date (YYYY-MM-DD). Refresh it whenever you rewrite or re-confirm an existing memory; stale memories get expired.",
+    "- expires: optional YYYY-MM-DD, only for facts that really stop being true on a date.",
+    "Do NOT write:",
+    "- transient task state: current step, progress, one-off command output, temp branch/port/process;",
+    "- anything the repository already records: layout, dependency versions, git history, rules already in AGENTS.md;",
+    "- session-local context: which file just changed, the error just fixed, the question awaiting the user.",
+    "Self-check: if it will not still be true next week, or it takes more than one sentence, do not write it.",
     "",
     `<current_index>\n${input.index ?? "(empty)"}\n</current_index>`,
     existing
@@ -220,19 +230,54 @@ export function buildWorkspaceMemoryExtractionPrompt(input: {
   ].join("\n");
 }
 
-/** 从投影行里取本轮对话，供抽取 prompt 使用。 */
+/** 投影窗口内的 turn 顺序，用于给抽取游标定位。 */
+export function listWorkspaceMemoryTurnIds(
+  rows: ReadonlyArray<{ kind: string; turnId?: string }>,
+): string[] {
+  const ids: string[] = [];
+  for (const row of rows) {
+    if (row.kind !== "turnHeader" || !row.turnId) continue;
+    if (ids[ids.length - 1] === row.turnId) continue;
+    ids.push(row.turnId);
+  }
+  return ids;
+}
+
+/** 窗口里最后一个 turn 的 id，抽取成功后用它推进游标。 */
+export function lastWorkspaceMemoryTurnId(
+  rows: ReadonlyArray<{ kind: string; turnId?: string }>,
+): string | undefined {
+  return listWorkspaceMemoryTurnIds(rows).at(-1);
+}
+
+/**
+ * 取「上次抽取之后」的全部对话，供抽取 prompt 使用。
+ *
+ * 抽取不是每轮都跑（3 轮 / 10 分钟闸门），所以要覆盖自上次抽取以来的所有 turn；
+ * 只喂最后一轮会把中间轮次里用户交代的规则永久漏掉。窗口滚过游标时退化为整窗重抽。
+ */
 export function buildWorkspaceMemoryTranscript(
   rows: ReadonlyArray<{ kind: string; text?: string; turnId?: string }>,
+  options: { afterTurnId?: string; maxChars?: number } = {},
 ): string {
-  const lastTurnId = [...rows].reverse().find((row) => row.kind === "turnHeader")?.turnId;
-  const selected = lastTurnId ? rows.filter((row) => row.turnId === lastTurnId) : rows;
+  const turnIds = listWorkspaceMemoryTurnIds(rows);
+  const cursorIndex = options.afterTurnId === undefined ? -1 : turnIds.indexOf(options.afterTurnId);
   const lines: string[] = [];
-  for (const row of selected) {
+  for (const row of rows) {
+    if (cursorIndex >= 0 && row.turnId !== undefined) {
+      const index = turnIds.indexOf(row.turnId);
+      // 游标之前的 turn 已经抽过；游标不在窗口里（index 为 -1）时整窗重抽。
+      if (index >= 0 && index <= cursorIndex) continue;
+    }
     if (row.kind === "userInput" && row.text?.trim()) {
       lines.push(`User: ${row.text.trim()}`);
     } else if (row.kind === "assistantText" && row.text?.trim()) {
       lines.push(`Assistant: ${row.text.trim()}`);
     }
   }
-  return lines.join("\n\n");
+  const maxChars = options.maxChars ?? WORKSPACE_MEMORY_TRANSCRIPT_MAX_CHARS;
+  const transcript = lines.join("\n\n");
+  if (transcript.length <= maxChars) return transcript;
+  // 从头部裁：越靠后的轮次越接近当前事实。
+  return `…(earlier turns omitted)\n\n${transcript.slice(transcript.length - maxChars)}`;
 }

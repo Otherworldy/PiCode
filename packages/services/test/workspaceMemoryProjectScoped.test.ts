@@ -174,6 +174,32 @@ pnpm -r build`;
   });
 });
 
+test("editing memory files keeps MEMORY.md in sync with the directory", async () => {
+  await withWorkspace(async (workspacePath) => {
+    const service = createMemoryService();
+    const memoryRoot = resolveWorkspaceMemoryRoot(workspacePath);
+    await ensureWorkspaceMemoryRoot(workspacePath);
+    await writeFile(join(memoryRoot, "MEMORY.md"), "- [Build](build-command.md) — pnpm build\n");
+    await writeFile(
+      join(memoryRoot, "build-command.md"),
+      "---\nname: Build\ndescription: pnpm build\n---\n",
+    );
+    // UI 新建条目：没人手工补指针，也要能进索引，否则永远注入不到。
+    await service.writeProjectMemoryFile({
+      workspacePath,
+      fileName: "deploy.md",
+      content: "---\nname: Deploy\ndescription: docker compose\n---\n",
+    });
+    let index = await readFile(join(memoryRoot, "MEMORY.md"), "utf-8");
+    assert.match(index, /- \[Deploy\]\(deploy\.md\) — docker compose/);
+    // UI 删除条目：指向它的指针行要一起清掉，否则主模型下一轮还看得到死链。
+    await service.deleteProjectMemoryFile({ workspacePath, fileName: "build-command.md" });
+    index = await readFile(join(memoryRoot, "MEMORY.md"), "utf-8");
+    assert.doesNotMatch(index, /build-command\.md/);
+    assert.match(index, /deploy\.md/);
+  });
+});
+
 test("workspace memory model is stored per project and can be cleared", async () => {
   await withWorkspace(async (workspacePath) => {
     await mkdir(join(workspacePath, ".pi"), { recursive: true });
@@ -255,6 +281,89 @@ test("symlinked memory root is rejected", async () => {
     assert.equal(
       await isWorkspaceMemoryMarkdownTarget(workspacePath, join(memoryRoot, "scratch.md")),
       false,
+    );
+  });
+});
+
+test("catalog exposes the frontmatter category of item files", async () => {
+  await withWorkspace(async (workspacePath) => {
+    const service = createMemoryService();
+    await service.writeProjectMemoryFile({
+      workspacePath,
+      fileName: "theme.md",
+      content: "---\nname: Theme\ncategory: ui\n---\nbody\n",
+    });
+    await service.writeProjectMemoryFile({
+      workspacePath,
+      fileName: "plain.md",
+      content: "# Plain\n\nno frontmatter\n",
+    });
+    const catalog = await service.listProjectMemories({ workspaces: [{ workspacePath }] });
+    const files = catalog[0]?.files ?? [];
+    assert.equal(files.find((file) => file.name === "theme.md")?.category, "ui");
+    // 缺 frontmatter 的旧文件按缺省分类展示，不报错也不丢。
+    assert.equal(files.find((file) => file.name === "plain.md")?.category, "project");
+    assert.equal(files.find((file) => file.name === "MEMORY.md")?.category, undefined);
+  });
+});
+
+test("expiry days round-trips and only touches features.memoryExpiryDays", async () => {
+  await withWorkspace(async (workspacePath) => {
+    const service = createMemoryService();
+    await writeWorkspaceConfig(
+      workspacePath,
+      JSON.stringify({ features: { memory: true, memoryModel: { provider: "p", model: "m" } } }),
+    );
+    // 未配置时给默认 90 天，而不是 undefined。
+    assert.equal(await service.getWorkspaceMemoryExpiryDays({ workspacePath }), 90);
+
+    await service.setWorkspaceMemoryExpiryDays({ workspacePath, days: 30 });
+    assert.equal(await service.getWorkspaceMemoryExpiryDays({ workspacePath }), 30);
+    const saved = JSON.parse(await readFile(join(workspacePath, ".pi", "picode.json"), "utf-8"));
+    assert.equal(saved.features.memoryExpiryDays, 30);
+    assert.equal(saved.features.memory, true);
+    assert.deepEqual(saved.features.memoryModel, { provider: "p", model: "m" });
+
+    // 0 表示只保留 expires 显式到期，不是"未配置"。
+    await service.setWorkspaceMemoryExpiryDays({ workspacePath, days: 0 });
+    assert.equal(await service.getWorkspaceMemoryExpiryDays({ workspacePath }), 0);
+
+    // null 删除配置，回到默认。
+    await service.setWorkspaceMemoryExpiryDays({ workspacePath, days: null });
+    assert.equal(await service.getWorkspaceMemoryExpiryDays({ workspacePath }), 90);
+    const cleared = JSON.parse(await readFile(join(workspacePath, ".pi", "picode.json"), "utf-8"));
+    assert.equal("memoryExpiryDays" in cleared.features, false);
+    assert.equal(cleared.features.memory, true);
+  });
+});
+
+test("expiry days config ignores invalid values", async () => {
+  await withWorkspace(async (workspacePath) => {
+    const service = createMemoryService();
+    for (const value of [-5, "30", null, true]) {
+      await writeWorkspaceConfig(
+        workspacePath,
+        JSON.stringify({ features: { memoryExpiryDays: value } }),
+      );
+      assert.equal(await service.getWorkspaceMemoryExpiryDays({ workspacePath }), 90);
+    }
+    // 小数向下取整，避免 UI 显示 30 实际存 30.7。
+    await writeWorkspaceConfig(workspacePath, JSON.stringify({ features: { memoryExpiryDays: 30.7 } }));
+    assert.equal(await service.getWorkspaceMemoryExpiryDays({ workspacePath }), 30);
+  });
+});
+
+test("remote workspaces report the default expiry and reject writes", async () => {
+  await withWorkspace(async (workspacePath) => {
+    const service = createMemoryService();
+    const workspaceIdentity = "remote:ssh:host:22:user:/srv/app";
+    assert.equal(
+      await service.getWorkspaceMemoryExpiryDays({ workspacePath, workspaceIdentity }),
+      90,
+    );
+    await assert.rejects(
+      service.setWorkspaceMemoryExpiryDays({ workspacePath, workspaceIdentity, days: 30 }),
+      /local workspaces/,
     );
   });
 });

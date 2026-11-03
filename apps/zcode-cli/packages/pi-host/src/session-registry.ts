@@ -6,7 +6,9 @@ import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import type { ConversationDelta, DeliveryProfileName } from "@zcode/shared/zcode-protocol-v4";
 import {
+  pruneExpiredWorkspaceMemories,
   readWorkspaceMemoryEnabled,
+  readWorkspaceMemoryExpiryDays,
   readWorkspaceMemoryModel,
   resolveWorkspaceMemoryRoot,
 } from "@zcode/shared/node";
@@ -72,6 +74,7 @@ import {
   buildWorkspaceMemoryTranscript,
   containsDirectWorkspaceMemoryWrite,
   containsEligibleWorkspaceMemoryUserProse,
+  lastWorkspaceMemoryTurnId,
   readWorkspaceMemoryManifest,
 } from "./workspace-memory-extraction.js";
 import {
@@ -104,7 +107,12 @@ export interface HostedSession {
   readonly sessionFile: string;
   readonly parentSessionId?: string;
   readonly workId?: string;
-  /** 本会话是否启用了工作区记忆；远端和子会话为 false。 */
+  /** 本会话是否允许使用工作区记忆；远端和侧聊为 false。不随项目开关变化。 */
+  readonly memoryCapable: boolean;
+  /**
+   * 项目记忆开关的当前值。每轮开始前重读 .pi/picode.json，
+   * 用户在会话中途打开或关闭都对下一轮生效。
+   */
   readonly memoryEnabled: boolean;
   readonly projector: PiToV4Projector;
   readonly queue: HostQueue;
@@ -456,8 +464,10 @@ export class HostSessionRegistry {
     parentSessionId?: string;
     viaRegistry?: boolean;
     omitHostExtensions?: boolean;
-    /** 本地工作区且项目开关打开时启用记忆注入与抽取。 */
+    /** 本会话是否允许使用记忆（本地工作区、非侧聊）。 */
     memoryEnabled?: boolean;
+    /** 创建时的项目开关值，只作初始值；之后每轮重读。 */
+    memoryEnabledAtCreation?: boolean;
     /**
      * 调用方在这次 create 之前已经花在 find 上的时间。
      * 冷恢复把找到的文件从 storedSession 传进来，这里不再扫第二遍。
@@ -483,6 +493,7 @@ export class HostSessionRegistry {
         viaRegistry: input.viaRegistry,
         omitHostExtensions: input.omitHostExtensions,
         memoryEnabled: input.memoryEnabled,
+        memoryEnabledAtCreation: input.memoryEnabledAtCreation,
         priorReadMs,
       });
     }
@@ -501,6 +512,7 @@ export class HostSessionRegistry {
           viaRegistry: input.viaRegistry,
           omitHostExtensions: input.omitHostExtensions,
           memoryEnabled: input.memoryEnabled,
+          memoryEnabledAtCreation: input.memoryEnabledAtCreation,
           priorReadMs,
         });
       }
@@ -520,6 +532,7 @@ export class HostSessionRegistry {
       viaRegistry: input.viaRegistry,
       omitHostExtensions: input.omitHostExtensions,
       memoryEnabled: input.memoryEnabled,
+      memoryEnabledAtCreation: input.memoryEnabledAtCreation,
       priorReadMs,
     });
   }
@@ -550,7 +563,8 @@ export class HostSessionRegistry {
         sessionFile: branched.sessionFile,
         parentSessionId: parentId,
         viaRegistry: true,
-        memoryEnabled: parent.memoryEnabled,
+        memoryEnabled: parent.memoryCapable,
+        memoryEnabledAtCreation: parent.memoryEnabled,
       });
       // 分叉文件的 jsonl 只留到分叉点。此刻数出的真实用户消息就是分叉前的历史。
       child.markForkTitlePlaceholder(
@@ -574,7 +588,8 @@ export class HostSessionRegistry {
       workspacePath: parent.workspacePath,
       sessionFile,
       viaRegistry: true,
-      memoryEnabled: parent.memoryEnabled,
+      memoryEnabled: parent.memoryCapable,
+      memoryEnabledAtCreation: parent.memoryEnabled,
     });
     await hosted.navigateTree(entryId);
     // 裁到分叉点之后才开始数，否则会把父会话后面的消息算进来。
@@ -779,6 +794,7 @@ export class HostSessionRegistry {
     viaRegistry?: boolean;
     omitHostExtensions?: boolean;
     memoryEnabled?: boolean;
+    memoryEnabledAtCreation?: boolean;
     priorReadMs?: number;
   }): Promise<HostedSession> {
     const live = this.sessions.get(input.sessionId);
@@ -792,8 +808,13 @@ export class HostSessionRegistry {
       omitHostExtensions: input.omitHostExtensions,
       loadExtensions: this.options.loadExtensions ?? true,
       memoryEnabled: input.memoryEnabled === true,
-      memoryRoot: resolveWorkspaceMemoryRoot(input.workspacePath),
-      memoryWorkspacePath: input.workspacePath,
+      // 没有记忆根的会话不注册注入扩展：侧聊和远端不该被注入 MEMORY.md。
+      ...(input.memoryEnabled === true
+        ? {
+            memoryRoot: resolveWorkspaceMemoryRoot(input.workspacePath),
+            memoryWorkspacePath: input.workspacePath,
+          }
+        : {}),
       checkPermission: async (request) => {
         const check = this.toolChecks.get(input.sessionId);
         if (!check) return "allow";
@@ -810,7 +831,8 @@ export class HostSessionRegistry {
       parentSessionId: input.parentSessionId,
       viaRegistry: input.viaRegistry ?? Boolean(input.parentSessionId),
       workId: input.parentSessionId ? input.sessionId : undefined,
-      memoryEnabled: input.memoryEnabled === true,
+      memoryCapable: input.memoryEnabled === true,
+      memoryEnabled: input.memoryEnabled === true && input.memoryEnabledAtCreation === true,
     });
     const registered = await this.register(hosted, input.priorReadMs ?? 0);
     this.options.onConversationOpenTiming?.({
@@ -1047,6 +1069,7 @@ export class HostSessionRegistry {
       parentSessionId?: string;
       viaRegistry: boolean;
       workId?: string;
+      memoryCapable: boolean;
       memoryEnabled: boolean;
     },
   ): HostedSession {
@@ -1531,19 +1554,26 @@ export class HostSessionRegistry {
       }
     });
     let summarizingBranch = false;
+    // 项目开关的当前值：创建时是配置快照，每轮 prompt 前重读。
+    let memoryEnabled = meta.memoryEnabled;
     const workspaceMemoryRoot = resolveWorkspaceMemoryRoot(meta.workspacePath);
     let memoryExtractionController: AbortController | undefined;
     let memoryExtractionRunning = false;
     // 抽取频率闸门：3 个 turn 或 10 分钟，先到者触发。窗口从会话创建开始算。
     let memoryTurnsSinceExtraction = 0;
     let memoryLastExtractionAt = Date.now();
+    // 抽取游标：上次抽取覆盖到的最后一个 turn。抽取要喂「自上次以来的全部对话」，
+    // 只喂最后一轮会把闸门窗口中间几轮里用户交代的规则永久漏掉。
+    let memoryExtractionCursor: string | undefined;
     // 记忆抽取是 turn 后的旁路：失败、超时、输出非法都不影响本轮结果。
     const scheduleWorkspaceMemoryExtraction = () => {
-      if (!meta.memoryEnabled || memoryExtractionRunning) return;
+      if (!memoryEnabled || memoryExtractionRunning) return;
       const model = pi.currentModel;
       if (!model) return;
       const rows = projector.getSnapshot().rows.window;
-      const transcript = buildWorkspaceMemoryTranscript(rows);
+      const transcript = buildWorkspaceMemoryTranscript(rows, {
+        afterTurnId: memoryExtractionCursor,
+      });
       if (!transcript.trim()) return;
       // 主模型本轮已直接写过记忆时不再抽取：两条写入路径会留下同一事实的两份。
       if (containsDirectWorkspaceMemoryWrite(rows, workspaceMemoryRoot)) return;
@@ -1600,6 +1630,18 @@ export class HostSessionRegistry {
             expectedIndex: index,
             truncatedFiles: manifest.filter((entry) => entry.truncated).map((entry) => entry.name),
           });
+          // 只有真正落盘才推进游标：解析失败或写入异常时保留这段对话，下次重抽。
+          memoryExtractionCursor = lastWorkspaceMemoryTurnId(rows) ?? memoryExtractionCursor;
+          // 抽取刚确认过的记忆会被刷新 lastConfirmed，这里顺手清掉确实过期的。
+          const { removed } = await pruneExpiredWorkspaceMemories(workspaceMemoryRoot, {
+            expiryDays: await readWorkspaceMemoryExpiryDays(meta.workspacePath).catch(() => 90),
+          });
+          if (removed.length > 0) {
+            console.info("pi-host workspace memory pruned", {
+              count: removed.length,
+              files: removed,
+            });
+          }
         } catch (error) {
           if (!controller.signal.aborted) {
             console.warn("pi-host workspace memory extraction failed", error);
@@ -1632,7 +1674,10 @@ export class HostSessionRegistry {
       sessionFile: meta.sessionFile,
       parentSessionId: meta.parentSessionId,
       workId: meta.workId,
-      memoryEnabled: meta.memoryEnabled,
+      memoryCapable: meta.memoryCapable,
+      get memoryEnabled() {
+        return memoryEnabled;
+      },
       projector,
       queue,
       ui,
@@ -1659,7 +1704,16 @@ export class HostSessionRegistry {
           runningSubagents: snapshot.subagents?.running.length ?? 0,
         });
       },
-      prompt: (text) => pi.prompt(text),
+      // 开关随时可改：每轮开始前重读项目配置，权限判定、注入与抽取都看到最新值。
+      // 能力位为 false 的会话（侧聊、远端）永远不重读，避免读到本地同名目录。
+      prompt: async (text) => {
+        if (meta.memoryCapable) {
+          memoryEnabled = await readWorkspaceMemoryEnabled(meta.workspacePath).catch(
+            () => memoryEnabled,
+          );
+        }
+        return pi.prompt(text);
+      },
       waitTurn: () => pi.waitTurn?.() ?? Promise.resolve(),
       abort: async () => {
         // 只有扩展命令跑着时，停止才作废这次命令剩下的提问。普通轮次里置位会一直

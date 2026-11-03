@@ -97,15 +97,36 @@ export {
   ensureWorkspaceMemoryRoot,
   isWorkspaceMemoryFileName,
   isWorkspaceMemoryItemFileName,
-  isWorkspaceMemoryMarkdownTarget,
   isWorkspaceMemorySupported,
+  parseWorkspaceMemoryFrontmatter,
   readWorkspaceMemoryEnabled,
   readWorkspaceMemoryModel,
   resolveWorkspaceMemoryRoot,
   setWorkspaceMemoryEnabled,
   setWorkspaceMemoryModel,
+  WORKSPACE_MEMORY_CATEGORIES,
+  WORKSPACE_MEMORY_DEFAULT_EXPIRY_DAYS,
+  WORKSPACE_MEMORY_EXPIRED_DIR_NAME,
+  WORKSPACE_MEMORY_SOURCES,
+  WORKSPACE_MEMORY_TYPES,
+  type WorkspaceMemoryCategory,
+  type WorkspaceMemoryFrontmatter,
   type WorkspaceMemoryModelConfig,
+  type WorkspaceMemorySource,
+  type WorkspaceMemoryType,
 } from "./node/workspaceMemory.js";
+export {
+  formatWorkspaceMemoryPointerLine,
+  isWorkspaceMemoryMarkdownTarget,
+  reconcileWorkspaceMemoryIndex,
+} from "./node/workspaceMemoryIndex.js";
+export {
+  pruneExpiredWorkspaceMemories,
+  readWorkspaceMemoryExpiryDays,
+  resolveWorkspaceMemoryExpiry,
+  setWorkspaceMemoryExpiryDays,
+  type WorkspaceMemoryExpiryVerdict,
+} from "./node/workspaceMemoryExpiry.js";
 export {
   LEGACY_WORKSPACE_CONFIG_FILE_NAME,
   migrateLegacyWorkspaceConfig,
