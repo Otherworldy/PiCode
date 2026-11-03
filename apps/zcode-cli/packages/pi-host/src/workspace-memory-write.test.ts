@@ -146,3 +146,38 @@ test("memory extension normalizes Write tool results into the memory root", asyn
     );
   });
 });
+
+test("duplicate frontmatter keys collapse to one line", async () => {
+  await withWorkspace(async ({ workspacePath, root }) => {
+    // 真机上抽取模型写出过两行完全相同的 description；归一后只能留一行。
+    await writeFile(
+      join(root, "dup.md"),
+      [
+        "---",
+        "name: dup",
+        "description: 第一句",
+        "description: 第二句",
+        "category: project",
+        "type: fact",
+        "source: user",
+        "confirmed: true",
+        "lastConfirmed: 2026-11-01",
+        "---",
+        "",
+        "正文。",
+        "",
+      ].join("\n"),
+    );
+    await normalizeWorkspaceMemoryWrite({
+      workspacePath,
+      memoryRoot: root,
+      target: join(root, "dup.md"),
+      today: "2026-11-03",
+    });
+    const content = await readFile(join(root, "dup.md"), "utf-8");
+    assert.equal(content.match(/^description:/gmu)?.length, 1);
+    // 值取最后一次，正文原样保留。
+    assert.match(content, /^description: 第二句$/mu);
+    assert.match(content, /正文。/);
+  });
+});

@@ -103,12 +103,15 @@ test("appends extend an existing file without a full rewrite", async () => {
       deletes: [],
       index: "- [Workflow](workflow.md) — flow\n",
     });
+    const firstWrite = await readFile(join(root, "workflow.md"), "utf-8");
+    // 抽取写入也按契约归一：模型只给了正文，落盘时补全 frontmatter。
+    assert.match(firstWrite, /^---\nname: workflow\ndescription: Workflow\n/);
     await applyWorkspaceMemoryPatch(root, {
       writes: [],
       appends: [{ file: "workflow.md", content: "extra fact" }],
       deletes: [],
     });
-    assert.equal(await readFile(join(root, "workflow.md"), "utf-8"), "# Workflow\nextra fact");
+    assert.equal(await readFile(join(root, "workflow.md"), "utf-8"), `${firstWrite}extra fact`);
   });
 });
 
@@ -133,10 +136,10 @@ test("applying a patch writes memory files and the index", async () => {
       index: "- [Workflow](workflow.md) — flow\n",
     });
     assert.equal(await readWorkspaceMemoryIndex(root), "- [Workflow](workflow.md) — flow\n");
-    assert.deepEqual(
-      (await readWorkspaceMemoryManifest(root)).map((entry) => [entry.name, entry.preview]),
-      [["workflow.md", "# Workflow\n"]],
-    );
+    const [entry] = await readWorkspaceMemoryManifest(root);
+    assert.equal(entry?.name, "workflow.md");
+    // 抽取写入也按契约归一：模型只给了正文，落盘时补全 frontmatter。
+    assert.match(entry?.preview ?? "", /^---\nname: workflow\ndescription: Workflow\n/);
 
     await applyWorkspaceMemoryPatch(root, {
       writes: [],

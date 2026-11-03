@@ -12,6 +12,7 @@ import {
   atomicWritePrivateTextFile,
   formatWorkspaceMemoryPointerLine,
   isWorkspaceMemoryItemFileName,
+  normalizeWorkspaceMemoryItem,
   parseWorkspaceMemoryFrontmatter,
   reconcileWorkspaceMemoryIndex,
 } from "@zcode/shared/node";
@@ -304,7 +305,10 @@ export async function applyWorkspaceMemoryPatch(
       skipped.push(`write:${file.file}`);
       continue;
     }
-    await atomicWritePrivateTextFile(join(root, file.file), file.content);
+    // 抽取模型和主模型一样会写歪（真机出过重复 `description`、漏字段、枚举外取值），
+    // 落盘前统一成契约，否则坏 frontmatter 会直接进注入与索引。
+    const normalized = normalizeWorkspaceMemoryItem(file.content, { fileName: file.file });
+    await atomicWritePrivateTextFile(join(root, file.file), normalized.content);
     applied += 1;
   }
   for (const file of patch.appends) {

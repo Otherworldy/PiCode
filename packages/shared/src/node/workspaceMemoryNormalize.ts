@@ -109,6 +109,8 @@ export function normalizeWorkspaceMemoryItem(
       if (line.trim()) lines.push(line);
       continue;
     }
+    // 同一键写两行是模型的常见笔误（真机出过重复 description）：只保留一行，值取最后一次。
+    if (seen.has(key)) continue;
     seen.add(key);
     const value = values[key as ItemKey];
     if (value === undefined) continue;

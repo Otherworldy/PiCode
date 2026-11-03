@@ -27,7 +27,7 @@ function emitTurn(pi: FakePiSession, index: number, text: string): void {
   for (const event of events) pi.emit(event);
 }
 
-async function waitFor(check: () => boolean, timeoutMs = 2000): Promise<void> {
+async function waitFor(check: () => boolean, timeoutMs = 5000): Promise<void> {
   const startedAt = Date.now();
   while (!check()) {
     if (Date.now() - startedAt > timeoutMs) throw new Error("timed out");

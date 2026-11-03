@@ -198,6 +198,9 @@ tool_result (Write | Edit, isError=false)
 - 枚举写歪回退缺省（`project` / `fact` / `assistant`）；`confirmed` 非 `true` 即 `false`。
 - `lastConfirmed` 缺失或日期非法时写当天 UTC 日期；`expires` 写歪时删掉这一行。
 - 已经合规的文件一字不改（幂等），不会反复改写磁盘。
+- 同一个键写了多行（真机出过重复 `description`）只保留一行，值取最后一次。
+- 抽取 `writes` 落盘前也走同一个归一：抽取模型和主模型一样会写歪，
+  重复键、漏字段、枚举外取值不能直接进注入与索引。
 - 对账与改写分开：文件合规但没进索引时仍要补指针行，否则这条记忆永远不注入。
 - `MEMORY.md` 本身不参与归一（索引由对账维护）；记忆关闭时不执行。
 
@@ -491,6 +494,7 @@ if <workspace>/.pi/memory 不存在或还没有任何 .md:
 40. 主模型写的记忆文件 frontmatter 全合规但没进索引：文件一字不改，`MEMORY.md` 仍会
     补上指针行（对账与改写分开）。
 41. 单个 turn 自己就超 24k：只喂它的前 24k、游标记为已覆盖，并记一条 `warn`（turnId + 字符数）。
+42. 抽取 patch 的 `writes` 内容字段不全或重复写键：落盘后是补全过的契约 frontmatter，重复键只剩一行。
 
 ## 失败语义
 
