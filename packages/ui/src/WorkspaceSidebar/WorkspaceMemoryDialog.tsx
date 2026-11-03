@@ -3,7 +3,6 @@ import type {
   IMemoryService,
   ProjectMemoryFileSummary,
   ProjectMemoryWorkspaceSummary,
-  WorkspaceMemoryModelRef,
 } from "@zcode/services";
 import { Alert, AlertDescription } from "@/components/ui/alert.js";
 import { Button } from "@/components/ui/button.js";
@@ -32,6 +31,7 @@ import {
 } from "./WorkspaceMemoryEditor.js";
 import { fromWorkspaceMemoryModelValue } from "./WorkspaceMemoryModelSelect.js";
 import { WorkspaceMemorySettingsRows } from "./WorkspaceMemorySettingsRows.js";
+import { useWorkspaceMemoryConfig } from "./useWorkspaceMemoryConfig.js";
 import { useWorkspaceMemoryModelOptions } from "./useWorkspaceMemoryModelOptions.js";
 
 type WorkspaceMemoryService = Pick<
@@ -44,6 +44,8 @@ type WorkspaceMemoryService = Pick<
   | "setWorkspaceMemoryEnabled"
   | "getWorkspaceMemoryModel"
   | "setWorkspaceMemoryModel"
+  | "getWorkspaceMemoryExpiryDays"
+  | "setWorkspaceMemoryExpiryDays"
 >;
 
 function getErrorMessage(error: unknown): string {
@@ -71,13 +73,10 @@ export function WorkspaceMemoryDialog({
   const { intl } = useZCodeIntl();
   const session = useZCodeSessionService(workspacePath, null, workspaceIdentity ?? null);
   const requestIdRef = useRef(0);
-  const [enabled, setEnabled] = useState(false);
-  const [enabledLoading, setEnabledLoading] = useState(true);
-  const [switchError, setSwitchError] = useState<string | null>(null);
-  const [memoryModel, setMemoryModel] = useState<WorkspaceMemoryModelRef | null>(null);
-  const [modelError, setModelError] = useState<string | null>(null);
   const [catalogState, setCatalogState] = useState<MemoryViewerLoadingState>("idle");
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  /** 文件读写/删除的失败提示；配置项的失败由 hook 各自维护。 */
+  const [actionError, setActionError] = useState<string | null>(null);
   const [summary, setSummary] = useState<ProjectMemoryWorkspaceSummary | undefined>(undefined);
   const [editor, setEditor] = useState<WorkspaceMemoryEditorState | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
@@ -91,27 +90,24 @@ export function WorkspaceMemoryDialog({
     [workspaceIdentity, workspacePath],
   );
 
+  const config = useWorkspaceMemoryConfig({ memoryService, open, remote, workspaceRef });
+
   const editorDirty = editor
     ? editor.isNew
       ? editor.content.length > 0 || editor.fileName.length > 0
       : editor.content !== editor.originalContent
     : false;
 
-  const refresh = useCallback(async () => {
+  /** 只刷新文件列表；三项项目级配置由 useWorkspaceMemoryConfig 自己维护。 */
+  const refreshCatalog = useCallback(async () => {
     if (remote) return;
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     setCatalogState("loading");
     setCatalogError(null);
     try {
-      const [nextEnabled, nextModel, result] = await Promise.all([
-        memoryService.getWorkspaceMemoryEnabled(workspaceRef),
-        memoryService.getWorkspaceMemoryModel(workspaceRef).catch(() => null),
-        memoryService.listProjectMemories({ workspaces: [workspaceRef] }),
-      ]);
+      const result = await memoryService.listProjectMemories({ workspaces: [workspaceRef] });
       if (requestIdRef.current !== requestId) return;
-      setEnabled(nextEnabled);
-      setMemoryModel(nextModel);
       setSummary(result[0]);
       setCatalogState("ready");
     } catch (error) {
@@ -119,8 +115,6 @@ export function WorkspaceMemoryDialog({
       setSummary(undefined);
       setCatalogError(getErrorMessage(error));
       setCatalogState("error");
-    } finally {
-      if (requestIdRef.current === requestId) setEnabledLoading(false);
     }
   }, [memoryService, remote, workspaceRef]);
 
@@ -129,8 +123,7 @@ export function WorkspaceMemoryDialog({
       requestIdRef.current += 1;
       setCatalogState("idle");
       setSummary(undefined);
-      setSwitchError(null);
-      setModelError(null);
+      setActionError(null);
       setEditor(null);
       setEditorError(null);
       setDeleteTarget(null);
@@ -138,13 +131,11 @@ export function WorkspaceMemoryDialog({
       return;
     }
     if (remote) {
-      setEnabledLoading(false);
       setCatalogState("idle");
       return;
     }
-    setEnabledLoading(true);
-    void refresh();
-  }, [open, remote, refresh]);
+    void refreshCatalog();
+  }, [open, refreshCatalog, remote]);
 
   const modelOptions = useWorkspaceMemoryModelOptions({
     open,
@@ -156,36 +147,24 @@ export function WorkspaceMemoryDialog({
 
   const handleMemoryEnabledChange = useCallback(
     async (next: boolean) => {
-      if (remote) return;
-      const previous = enabled;
-      setEnabled(next);
-      setSwitchError(null);
-      try {
-        await memoryService.setWorkspaceMemoryEnabled({ ...workspaceRef, enabled: next });
-        await refresh();
-      } catch (error) {
-        setEnabled(previous);
-        setSwitchError(getErrorMessage(error));
-      }
+      await config.setEnabled(next);
+      await refreshCatalog();
     },
-    [enabled, memoryService, refresh, remote, workspaceRef],
+    [config, refreshCatalog],
   );
 
   const handleModelChange = useCallback(
-    async (value: string) => {
-      if (remote) return;
-      const next = fromWorkspaceMemoryModelValue(value);
-      const previous = memoryModel;
-      setMemoryModel(next);
-      setModelError(null);
-      try {
-        await memoryService.setWorkspaceMemoryModel({ ...workspaceRef, model: next });
-      } catch (error) {
-        setMemoryModel(previous);
-        setModelError(getErrorMessage(error));
-      }
+    (value: string) => {
+      void config.setModel(fromWorkspaceMemoryModelValue(value));
     },
-    [memoryModel, memoryService, remote, workspaceRef],
+    [config],
+  );
+
+  const handleExpiryDaysChange = useCallback(
+    (days: number) => {
+      void config.setExpiryDays(days);
+    },
+    [config],
   );
 
   const openExistingFile = useCallback(
@@ -215,7 +194,7 @@ export function WorkspaceMemoryDialog({
           isNew: false,
         });
       } catch (error) {
-        setSwitchError(getErrorMessage(error));
+        setActionError(getErrorMessage(error));
       }
     },
     [memoryService, workspaceRef],
@@ -291,13 +270,13 @@ export function WorkspaceMemoryDialog({
         content: editor.content,
       });
       setEditor(null);
-      await refresh();
+      await refreshCatalog();
     } catch (error) {
       setEditorError(getErrorMessage(error));
     } finally {
       setEditorSaving(false);
     }
-  }, [editor, intl, memoryService, refresh, summary, workspaceRef]);
+  }, [editor, intl, memoryService, refreshCatalog, summary, workspaceRef]);
 
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
@@ -307,13 +286,13 @@ export function WorkspaceMemoryDialog({
         fileName: deleteTarget.name,
       });
       setDeleteTarget(null);
-      setSwitchError(null);
-      await refresh();
+      setActionError(null);
+      await refreshCatalog();
     } catch (error) {
       setDeleteTarget(null);
-      setSwitchError(getErrorMessage(error));
+      setActionError(getErrorMessage(error));
     }
-  }, [deleteTarget, memoryService, refresh, workspaceRef]);
+  }, [deleteTarget, memoryService, refreshCatalog, workspaceRef]);
 
   return (
     <>
@@ -346,28 +325,29 @@ export function WorkspaceMemoryDialog({
           ) : (
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
               <WorkspaceMemorySettingsRows
-                disabled={remote || enabledLoading}
-                enabled={enabled}
-                memoryModel={memoryModel}
+                disabled={remote || config.enabledLoading}
+                enabled={config.enabled}
+                expiryDays={config.expiryDays}
+                memoryModel={config.memoryModel}
                 modelOptions={modelOptions}
                 onEnabledChange={(checked) => {
                   void handleMemoryEnabledChange(checked);
+                }}
+                onExpiryDaysChange={(days) => {
+                  void handleExpiryDaysChange(days);
                 }}
                 onModelChange={(value) => {
                   void handleModelChange(value);
                 }}
               />
 
-              {switchError ? (
-                <Alert>
-                  <AlertDescription>{switchError}</AlertDescription>
-                </Alert>
-              ) : null}
-              {modelError ? (
-                <Alert>
-                  <AlertDescription>{modelError}</AlertDescription>
-                </Alert>
-              ) : null}
+              {[config.switchError, config.modelError, config.expiryError, actionError]
+                .filter((message): message is string => Boolean(message))
+                .map((message) => (
+                  <Alert key={message}>
+                    <AlertDescription>{message}</AlertDescription>
+                  </Alert>
+                ))}
 
               {remote ? (
                 <div className="rounded-xl border border-dashed border-border bg-transparent px-4 py-8 text-center text-ui-base text-foreground-subtle">
@@ -384,7 +364,7 @@ export function WorkspaceMemoryDialog({
                   onEditFile={(file) => {
                     void openExistingFile(file);
                   }}
-                  onRefresh={refresh}
+                  onRefresh={refreshCatalog}
                   onScopeKeyChange={() => {}}
                   showScopeSelector={false}
                 />

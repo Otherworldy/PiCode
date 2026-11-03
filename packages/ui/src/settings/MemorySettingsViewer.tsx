@@ -204,11 +204,20 @@ export function MemorySettingsViewer({
                       />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span
-                        data-testid={testId(TID_SETTINGS_MEMORY_FILE_NAME, file.name)}
-                        className="block truncate text-ui-base font-medium text-foreground"
-                      >
-                        {file.name}
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span
+                          data-testid={testId(TID_SETTINGS_MEMORY_FILE_NAME, file.name)}
+                          className="truncate text-ui-base font-medium text-foreground"
+                        >
+                          {file.name}
+                        </span>
+                        {file.category ? (
+                          <span className="shrink-0 rounded-md bg-background px-1.5 py-0.5 text-ui-xs text-foreground-subtle">
+                            {intl.formatMessage({
+                              id: `workspaceSidebar.memoryCategory.${file.category}`,
+                            })}
+                          </span>
+                        ) : null}
                       </span>
                       <span
                         data-testid={testId(TID_SETTINGS_MEMORY_FILE_UPDATED_AT, file.name)}

@@ -1234,6 +1234,11 @@ const enUS: Record<string, string> = {
   "workspaceSidebar.closeTaskSearch": "Close task search",
   "workspaceSidebar.remove": "Remove",
   "workspaceSidebar.memory": "Project memory",
+  "workspaceSidebar.memoryCategory.project": "Project",
+  "workspaceSidebar.memoryCategory.todo": "Todo",
+  "workspaceSidebar.memoryCategory.extension": "Extension",
+  "workspaceSidebar.memoryCategory.ui": "UI",
+  "workspaceSidebar.memoryCategory.protocol": "Protocol",
   "workspaceSidebar.rename": "Rename project",
   "workspaceSidebar.removeRunningWorkspace.title": "Remove a running project?",
   "workspaceSidebar.removeRunningWorkspace.description":
@@ -1867,6 +1872,11 @@ const enUS: Record<string, string> = {
   "settings.memory.viewer.deleteDescription": "This deletes {name} and cannot be undone.",
   "settings.memory.viewer.deleteConfirm": "Delete",
   "settings.memory.extractionModelFollow": "Follow session model",
+  "settings.memory.expiryDays": "Auto-clean",
+  "settings.memory.expiryDaysDescription":
+    "Memories not confirmed or changed within this window move to .pi/memory/.expired and drop out of the index.",
+  "settings.memory.expiryDaysValue": "{days} days",
+  "settings.memory.expiryDaysNever": "Never by idle time",
   "settings.memory.workspaceMemory": "Workspace Memory",
   "settings.memoryDescription":
     "Save and reuse long-term context in workspaces. Applies to new sessions and may increase model requests and token costs.",

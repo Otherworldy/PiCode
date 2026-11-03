@@ -2,6 +2,7 @@ import type { WorkspaceMemoryModelRef } from "@zcode/services";
 import { TID_WORKSPACE_MEMORY_SWITCH } from "@zcode/shared";
 import { Switch } from "@/components/ui/switch.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { WorkspaceMemoryExpirySelect } from "./WorkspaceMemoryExpirySelect.js";
 import {
   toWorkspaceMemoryModelValue,
   WORKSPACE_MEMORY_FOLLOW_SESSION_MODEL,
@@ -11,16 +12,20 @@ import {
 export function WorkspaceMemorySettingsRows({
   disabled,
   enabled,
+  expiryDays,
   memoryModel,
   modelOptions,
   onEnabledChange,
+  onExpiryDaysChange,
   onModelChange,
 }: {
   disabled: boolean;
   enabled: boolean;
+  expiryDays: number | null;
   memoryModel: WorkspaceMemoryModelRef | null;
   modelOptions: { value: string; label: string }[];
   onEnabledChange: (enabled: boolean) => void;
+  onExpiryDaysChange: (days: number) => void;
   onModelChange: (value: string) => void;
 }) {
   const { intl } = useZCodeIntl();
@@ -72,6 +77,22 @@ export function WorkspaceMemorySettingsRows({
           options={visibleModelOptions}
           value={selectedModelValue}
           onChange={onModelChange}
+        />
+      </div>
+
+      <div className="flex items-start justify-between gap-4 rounded-xl border border-border px-4 py-3">
+        <div className="min-w-0 space-y-1">
+          <p className="text-ui-base font-medium text-foreground">
+            {intl.formatMessage({ id: "settings.memory.expiryDays" })}
+          </p>
+          <p className="text-ui-sm text-foreground-subtle">
+            {intl.formatMessage({ id: "settings.memory.expiryDaysDescription" })}
+          </p>
+        </div>
+        <WorkspaceMemoryExpirySelect
+          disabled={disabled || expiryDays === null}
+          value={expiryDays}
+          onChange={onExpiryDaysChange}
         />
       </div>
     </>

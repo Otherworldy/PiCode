@@ -1145,6 +1145,11 @@ const zhCN: Record<string, string> = {
   "workspaceSidebar.closeTaskSearch": "关闭任务搜索",
   "workspaceSidebar.remove": "移除",
   "workspaceSidebar.memory": "项目记忆",
+  "workspaceSidebar.memoryCategory.project": "项目",
+  "workspaceSidebar.memoryCategory.todo": "待办",
+  "workspaceSidebar.memoryCategory.extension": "扩展",
+  "workspaceSidebar.memoryCategory.ui": "界面",
+  "workspaceSidebar.memoryCategory.protocol": "协议",
   "workspaceSidebar.rename": "重命名项目",
   "workspaceSidebar.removeRunningWorkspace.title": "移除运行中的项目？",
   "workspaceSidebar.removeRunningWorkspace.description":
@@ -1756,6 +1761,11 @@ const zhCN: Record<string, string> = {
   "settings.memory.viewer.deleteDescription": "将删除 {name}，无法撤销。",
   "settings.memory.viewer.deleteConfirm": "删除",
   "settings.memory.extractionModelFollow": "跟随会话模型",
+  "settings.memory.expiryDays": "自动清理",
+  "settings.memory.expiryDaysDescription":
+    "超过这个时间没被确认或改动的记忆会移到 .pi/memory/.expired，索引里一并移除。",
+  "settings.memory.expiryDaysValue": "{days} 天",
+  "settings.memory.expiryDaysNever": "不按闲置清理",
   "settings.memory.workspaceMemory": "工作区记忆",
   "settings.memoryDescription":
     "在工作区中保存并复用长期上下文，新会话生效。开启后可能增加模型调用和 Token 成本。",
