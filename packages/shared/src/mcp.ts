@@ -199,6 +199,8 @@ export interface McpAuthorizationCodeOAuthConfig {
   clientName?: string;
   redirectPath?: string;
   scope?: string;
+  /** Pi 1.5.0 的 MCP OAuth client registration 策略；透传给 Pi，ZCode 不解释。 */
+  clientRegistration?: "auto" | "dcr" | "cimd";
 }
 
 export type McpOAuthConfig = McpAuthorizationCodeOAuthConfig | McpClientCredentialsOAuthConfig;

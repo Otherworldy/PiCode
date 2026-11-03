@@ -380,7 +380,6 @@ export const zcodeStorageStartupStateSchema = z
   });
 export type ZCodeStorageStartupState = z.infer<typeof zcodeStorageStartupStateSchema>;
 
-
 export const zcodeProcessChildProcessesParamsSchema = z.object({}).strict();
 export const zcodeProcessChildProcessSchema = z
   .object({
@@ -443,6 +442,9 @@ const zcodeProtocolMcpOAuthSchema = z.union([
       clientName: nonEmptyString.optional(),
       redirectPath: nonEmptyString.optional(),
       scope: z.string().optional(),
+      // Pi 1.5.0 起 mcp.json 的 oauth 可带 clientRegistration（auto/dcr/cimd）。
+      // 这里只做透传白名单：不解析该字段，只避免 strict schema 把整条会话创建打成 Invalid params。
+      clientRegistration: z.enum(["auto", "dcr", "cimd"]).optional(),
     })
     .strict(),
 ]);
@@ -888,7 +890,15 @@ export const zcodeProviderAccountAccessSchema = z
   .object({
     type: z.literal("zhipu-account"),
     accountType: z.enum(["zai", "bigmodel"]),
-    mode: z.enum(["start-plan", "individual-coding-plan", "team-coding-plan", "off-peak"]),
+    // highspeed 是远端 revision 43 引入的派生代理 Provider，静态 Access 会带它；
+    // 枚举必须与 zhipuAccountModeDataSchema 对齐，否则 Model 执行层赋不进该类型。
+    mode: z.enum([
+      "start-plan",
+      "individual-coding-plan",
+      "team-coding-plan",
+      "off-peak",
+      "highspeed",
+    ]),
     entitled: z.boolean(),
   })
   .strict();
@@ -4121,4 +4131,3 @@ export const zcodeStoragePreparationFrameSchema = z.discriminatedUnion("method",
 export const zcodeStoragePathReadySchema = z
   .object({ method: z.literal("startup/storagePathReady"), reuse: z.boolean().optional() })
   .strict();
-

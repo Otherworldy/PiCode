@@ -97,8 +97,7 @@ export function createAccountProviderConnectionResolver(
         .flatMap(([providerId, config]) =>
           config.access?.type === "zhipu-account" &&
           config.access.accountType === family &&
-          config.access.mode &&
-          config.access.mode !== "off-peak"
+          isCodingPlanQueryMode(config.access.mode)
             ? [{ providerId, config, planKind: config.access.mode }]
             : [],
         );
@@ -341,4 +340,15 @@ export async function resolveCurrentAccountAccess(input: {
     family: accountType,
     planKind: selection.kind,
   };
+}
+
+/**
+ * 只有三种真实套餐参与可用性查询。
+ * `off-peak` / `highspeed` 是派生代理 Provider（hidden、固定 baseUrl），
+ * 它们的可用性由所依附的真实套餐推导，不能拿 mode 当 planKind 去查订阅接口。
+ */
+function isCodingPlanQueryMode(
+  mode: string | null | undefined,
+): mode is CodingPlanAvailabilityProvider["planKind"] {
+  return mode === "start-plan" || mode === "individual-coding-plan" || mode === "team-coding-plan";
 }

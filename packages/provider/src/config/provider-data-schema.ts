@@ -16,6 +16,10 @@ export const zhipuAccountModeDataSchema = z.enum([
   "individual-coding-plan",
   "team-coding-plan",
   "off-peak",
+  // 远端 revision 43 引入：Z.AI / BigModel Highspeed 卡，hidden 派生 Provider，
+  // 走 zcode.z.ai/api/v1/highspeed 代理。不认识它会让整份 Release 校验失败，
+  // 所有用户回落到 bundled 配置，所以必须进枚举。
+  "highspeed",
 ]);
 export const providerVisibilityDataSchema = z.enum(["visible", "hidden"]);
 export const providerLogoDataSchema = z
