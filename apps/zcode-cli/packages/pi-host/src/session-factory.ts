@@ -469,6 +469,7 @@ export function createSdkSessionFactory(
           ? [
               createWorkspaceMemoryExtension({
                 root: input.memoryRoot,
+                workspacePath: input.memoryWorkspacePath ?? input.cwd,
                 enabled: () => readWorkspaceMemoryEnabled(input.memoryWorkspacePath ?? input.cwd),
               }),
             ]

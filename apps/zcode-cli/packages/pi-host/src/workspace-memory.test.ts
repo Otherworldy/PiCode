@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
 import {
   applyWorkspaceMemoryPatch,
@@ -22,9 +22,10 @@ import {
 import {
   buildWorkspaceMemoryExtractionPrompt,
   buildWorkspaceMemoryTranscript,
-  lastWorkspaceMemoryTurnId,
   containsDirectWorkspaceMemoryWrite,
   containsEligibleWorkspaceMemoryUserProse,
+  currentWorkspaceMemoryTurnRows,
+  lastWorkspaceMemoryTurnId,
   readWorkspaceMemoryManifest,
 } from "./workspace-memory-extraction.js";
 
@@ -49,7 +50,8 @@ test("transcript keeps only user and assistant text", () => {
     { kind: "toolCall", text: "ignored" },
     { kind: "assistantText", text: "done" },
   ]);
-  assert.equal(transcript, "User: do the thing\n\nAssistant: done");
+  assert.equal(transcript.text, "User: do the thing\n\nAssistant: done");
+  assert.equal(transcript.truncated, false);
 });
 
 test("index over budget is truncated with a warning instead of being dropped", () => {
@@ -197,29 +199,43 @@ test("manifest previews are capped and marked truncated", async () => {
 });
 
 test("extraction is skipped when the main model already wrote memory this turn", () => {
-  const root = join(tmpdir(), "zcode-memory-root");
+  const workspacePath = join(tmpdir(), "zcode-memory-workspace");
+  const root = join(workspacePath, ".pi", "memory");
+  const check = (rows: Parameters<typeof containsDirectWorkspaceMemoryWrite>[0]) =>
+    containsDirectWorkspaceMemoryWrite(rows, { workspacePath, memoryRoot: root });
+  assert.equal(
+    check([{ kind: "toolCall", toolName: "Write", input: { path: join(root, "a.md") } }]),
+    true,
+  );
+  assert.equal(
+    check([{ kind: "toolCall", toolName: "Write", input: { path: "/other/a.md" } }]),
+    false,
+  );
+  assert.equal(
+    check([{ kind: "toolCall", toolName: "Read", input: { path: join(root, "a.md") } }]),
+    false,
+  );
+  // 相对路径的基准是 workspacePath：写业务代码不能被当成写记忆。
+  assert.equal(
+    check([{ kind: "toolCall", toolName: "Write", input: { path: "src/index.ts" } }]),
+    false,
+  );
+  assert.equal(
+    check([{ kind: "toolCall", toolName: "Write", input: { path: ".pi/memory/a.md" } }]),
+    true,
+  );
+  // 门禁只看刚结束的那一轮：历史里写过记忆不应把后续抽取卡死。
   const rows = [
-    {
-      kind: "toolCall",
-      toolName: "Write",
-      input: { path: join(root, "a.md") },
-    },
+    { kind: "turnHeader", turnId: "t1" },
+    { kind: "toolCall", turnId: "t1", toolName: "Write", input: { path: ".pi/memory/a.md" } },
+    { kind: "turnHeader", turnId: "t2" },
+    { kind: "toolCall", turnId: "t2", toolName: "Write", input: { path: "src/index.ts" } },
   ];
-  assert.equal(containsDirectWorkspaceMemoryWrite(rows, root), true);
-  assert.equal(
-    containsDirectWorkspaceMemoryWrite(
-      [{ kind: "toolCall", toolName: "Write", input: { path: "/other/a.md" } }],
-      root,
-    ),
-    false,
+  assert.deepEqual(
+    currentWorkspaceMemoryTurnRows(rows).map((row) => row.turnId),
+    ["t2", "t2"],
   );
-  assert.equal(
-    containsDirectWorkspaceMemoryWrite(
-      [{ kind: "toolCall", toolName: "Read", input: { path: join(root, "a.md") } }],
-      root,
-    ),
-    false,
-  );
+  assert.equal(check(currentWorkspaceMemoryTurnRows(rows)), false);
 });
 
 test("extraction is skipped when the turn has no real user prose", () => {
@@ -302,22 +318,34 @@ test("transcript covers every turn since the last extraction", () => {
   ];
   // 首次抽取（无游标）拿全部 turn，不能只剩最后一条。
   const all = buildWorkspaceMemoryTranscript(rows);
-  assert.match(all, /docker compose/);
-  assert.match(all, /Node 版本锁 24/);
-  assert.match(all, /测试用 pnpm/);
+  assert.match(all.text, /docker compose/);
+  assert.match(all.text, /Node 版本锁 24/);
+  assert.match(all.text, /测试用 pnpm/);
+  assert.equal(all.coveredUntilTurnId, "t3");
   // 已抽过 t2：只留下 t3，不重复抽。
   const after = buildWorkspaceMemoryTranscript(rows, { afterTurnId: "t2" });
-  assert.doesNotMatch(after, /docker compose/);
-  assert.doesNotMatch(after, /Node 版本锁 24/);
-  assert.match(after, /测试用 pnpm/);
+  assert.doesNotMatch(after.text, /docker compose/);
+  assert.doesNotMatch(after.text, /Node 版本锁 24/);
+  assert.match(after.text, /测试用 pnpm/);
   // 游标已经滚出窗口：退化为整窗重抽，宁可多抽不漏抽。
   const rolled = buildWorkspaceMemoryTranscript(rows, { afterTurnId: "t0" });
-  assert.match(rolled, /docker compose/);
+  assert.match(rolled.text, /docker compose/);
   assert.equal(lastWorkspaceMemoryTurnId(rows), "t3");
-  // 超长时丢最早内容，保留最近的。
-  const capped = buildWorkspaceMemoryTranscript(rows, { maxChars: 20 });
-  assert.match(capped, /earlier turns omitted/);
-  assert.match(capped, /pnpm/);
+  // 超长时从区间开头停，游标停在断点，不把没喂过的 turn 标成已抽。
+  const capped = buildWorkspaceMemoryTranscript(rows, { maxChars: 50 });
+  assert.equal(capped.truncated, true);
+  assert.equal(capped.coveredUntilTurnId, "t1");
+  assert.match(capped.text, /docker compose/);
+  assert.doesNotMatch(capped.text, /Node 版本锁 24/);
+  // 从断点继续：下一次只带剩下的 turn。
+  const rest = buildWorkspaceMemoryTranscript(rows, {
+    afterTurnId: capped.coveredUntilTurnId,
+    maxChars: 30,
+  });
+  assert.equal(rest.coveredUntilTurnId, "t2");
+  assert.match(rest.text, /Node 版本锁 24/);
+  assert.doesNotMatch(rest.text, /docker compose/);
+  assert.doesNotMatch(rest.text, /测试用 pnpm/);
 });
 
 test("index reconciliation drops dead links and adds missing pointers", async () => {
@@ -348,9 +376,17 @@ test("index reconciliation drops dead links and adds missing pointers", async ()
   });
 });
 
-test("index reconciliation leaves projects without an index alone", async () => {
+test("index reconciliation creates the index once items exist", async () => {
   await withRoot(async (root) => {
-    await writeFile(join(root, "a.md"), "---\nname: A\n---\n");
+    await writeFile(join(root, "a.md"), "---\nname: A\ndescription: 第一条\n---\n");
+    // 新项目第一次由 UI 新建记忆：索引不存在时要生成，否则永远不注入。
+    assert.match((await reconcileWorkspaceMemoryIndex(root)) ?? "", /- \[A\]\(a\.md\) — 第一条/);
+    assert.match((await readWorkspaceMemoryIndex(root)) ?? "", /- \[A\]\(a\.md\)/);
+  });
+});
+
+test("index reconciliation leaves an empty project without an index", async () => {
+  await withRoot(async (root) => {
     assert.equal(await reconcileWorkspaceMemoryIndex(root), null);
     await assert.rejects(readFile(join(root, "MEMORY.md"), "utf-8"));
   });
@@ -388,7 +424,7 @@ test("memory extension appends the index to the rendered prompt and clears when 
         if (name === "before_agent_start") handlers.push(handler);
       },
     };
-    createWorkspaceMemoryExtension({ root, enabled: true })(pi as never);
+    createWorkspaceMemoryExtension({ root, workspacePath: root, enabled: true })(pi as never);
     const options: Record<string, unknown> = {};
     await handlers[0]?.({ systemPrompt: "BASE PROMPT", systemPromptOptions: options });
     assert.match(String(options.forceSystemPrompt), /BASE PROMPT/);
@@ -413,7 +449,7 @@ test("memory extension appends the index to the rendered prompt and clears when 
         disabledHandlers.push(handler);
       },
     };
-    createWorkspaceMemoryExtension({ root, enabled: false })(disabledPi as never);
+    createWorkspaceMemoryExtension({ root, workspacePath: root, enabled: false })(disabledPi as never);
     const disabledOptions: Record<string, unknown> = { forceSystemPrompt: "stale" };
     await disabledHandlers[0]?.({ systemPrompt: "BASE", systemPromptOptions: disabledOptions });
     assert.equal(disabledOptions.forceSystemPrompt, undefined);
@@ -559,10 +595,12 @@ test("extraction prompt states the frontmatter contract and what not to write", 
     transcript: "User: use Node 24\n",
     index: null,
     manifest: [],
+    today: "2026-06-01",
   });
   for (const field of ["category", "type", "source", "confirmed", "lastConfirmed"]) {
     assert.match(prompt, new RegExp(`- ${field}:`));
   }
+  assert.match(prompt, /Today is 2026-06-01 \(UTC\)/);
   assert.match(prompt, /transient task state/);
   assert.match(prompt, /project \| todo \| extension \| ui \| protocol/);
   assert.match(prompt, /preference \| constraint \| decision \| fact/);

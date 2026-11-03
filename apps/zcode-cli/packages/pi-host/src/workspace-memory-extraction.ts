@@ -112,15 +112,19 @@ const WORKSPACE_MEMORY_MIN_USER_WORDS = 3;
 /** 主模型本轮已经写过记忆：抽取再写一遍就是同一事实的两份。 */
 export function containsDirectWorkspaceMemoryWrite(
   rows: readonly WorkspaceMemoryExtractionRow[],
-  root: string,
+  input: { workspacePath: string; memoryRoot: string },
 ): boolean {
-  const normalizedRoot = normalizeForCompare(root);
+  const normalizedRoot = normalizeForCompare(input.memoryRoot);
   for (const row of rows) {
     if (row.kind !== "toolCall") continue;
     if (row.toolName !== "Write" && row.toolName !== "Edit") continue;
     const target = toolCallPath(row);
     if (!target) continue;
-    const resolved = normalizeForCompare(isAbsolute(target) ? target : join(root, target));
+    // 相对路径的基准是会话 cwd（workspacePath），不是记忆根：
+    // 主模型写 `src/index.ts` 是在改业务代码，不是在写记忆。
+    const resolved = normalizeForCompare(
+      isAbsolute(target) ? target : resolve(input.workspacePath, target),
+    );
     if (resolved === normalizedRoot || resolved.startsWith(`${normalizedRoot}${sep}`)) return true;
   }
   return false;
@@ -182,7 +186,10 @@ export function buildWorkspaceMemoryExtractionPrompt(input: {
   transcript: string;
   index: string | null;
   manifest: readonly WorkspaceMemoryManifestEntry[];
+  /** 抽取请求里的“今天”；不注入日期时模型只能猜，`lastConfirmed` / `expires` 必然编。 */
+  today?: string;
 }): string {
+  const today = input.today ?? new Date().toISOString().slice(0, 10);
   const existing = input.manifest
     .map((entry) => {
       const meta = `${entry.bytes} bytes, ${entry.category}, updated ${new Date(entry.updatedAt).toISOString()}`;
@@ -195,6 +202,7 @@ export function buildWorkspaceMemoryExtractionPrompt(input: {
     .join("\n\n");
   return [
     "You maintain the persistent workspace memory for this project.",
+    `Today is ${today} (UTC).`,
     "Only use the conversation below. Do not investigate the repository, run tools, or verify code.",
     "Update existing memories instead of duplicating them. Delete memories that are now wrong.",
     "Return ONLY a JSON object with this shape:",
@@ -243,41 +251,109 @@ export function listWorkspaceMemoryTurnIds(
   return ids;
 }
 
-/** 窗口里最后一个 turn 的 id，抽取成功后用它推进游标。 */
+/** 窗口里最后一个 turn 的 id。 */
 export function lastWorkspaceMemoryTurnId(
   rows: ReadonlyArray<{ kind: string; turnId?: string }>,
 ): string | undefined {
   return listWorkspaceMemoryTurnIds(rows).at(-1);
 }
 
+/** 窗口里最后一个 turn 的 rows：「刚结束的这一轮」做了什么，用它判直接写入门禁。 */
+export function currentWorkspaceMemoryTurnRows<Row extends { kind: string; turnId?: string }>(
+  rows: readonly Row[],
+): Row[] {
+  const last = lastWorkspaceMemoryTurnId(rows);
+  if (last === undefined) return [...rows];
+  return rows.filter((row) => row.turnId === last);
+}
+
 /**
- * 取「上次抽取之后」的全部对话，供抽取 prompt 使用。
+ * 只保留游标之后的 rows；游标滚出窗口时退化为整窗。
  *
- * 抽取不是每轮都跑（3 轮 / 10 分钟闸门），所以要覆盖自上次抽取以来的所有 turn；
- * 只喂最后一轮会把中间轮次里用户交代的规则永久漏掉。窗口滚过游标时退化为整窗重抽。
+ * 抽取门禁与 transcript 必须看同一个区间：拿整个窗口做门禁，一次历史直接写入就能把
+ * 整个会话后续的抽取永久关掉。
+ */
+export function selectWorkspaceMemoryExtractionRows<Row extends { kind: string; turnId?: string }>(
+  rows: readonly Row[],
+  afterTurnId?: string,
+): Row[] {
+  const turnIds = listWorkspaceMemoryTurnIds(rows);
+  const cursorIndex = afterTurnId === undefined ? -1 : turnIds.indexOf(afterTurnId);
+  if (cursorIndex < 0) return [...rows];
+  return rows.filter((row) => {
+    if (row.turnId === undefined) return true;
+    const index = turnIds.indexOf(row.turnId);
+    return index < 0 || index > cursorIndex;
+  });
+}
+
+/** transcript 与它实际覆盖到的最后一个 turn；截断时两者不再等于窗口末尾。 */
+export interface WorkspaceMemoryTranscript {
+  text: string;
+  coveredUntilTurnId?: string;
+  /** 因为超出字符预算而停在断点，下一次从 `coveredUntilTurnId` 继续。 */
+  truncated: boolean;
+}
+
+/**
+ * 取「上次抽取之后」的对话，按 turn 从区间开头往后拼，超预算就停在断点。
+ *
+ * 抽取不是每轮都跑（3 轮 / 10 分钟闸门），所以要覆盖自上次抽取以来的所有 turn；只喂
+ * 最后一轮会把中间轮次里用户交代的规则永久漏掉。超预算时从**头部**停，不能从尾部裁：
+ * 尾裁会把没喂过的早期 turn 标记成“已抽取”，那些内容就再也抽不到了。
  */
 export function buildWorkspaceMemoryTranscript(
   rows: ReadonlyArray<{ kind: string; text?: string; turnId?: string }>,
   options: { afterTurnId?: string; maxChars?: number } = {},
-): string {
-  const turnIds = listWorkspaceMemoryTurnIds(rows);
-  const cursorIndex = options.afterTurnId === undefined ? -1 : turnIds.indexOf(options.afterTurnId);
-  const lines: string[] = [];
-  for (const row of rows) {
-    if (cursorIndex >= 0 && row.turnId !== undefined) {
-      const index = turnIds.indexOf(row.turnId);
-      // 游标之前的 turn 已经抽过；游标不在窗口里（index 为 -1）时整窗重抽。
-      if (index >= 0 && index <= cursorIndex) continue;
-    }
-    if (row.kind === "userInput" && row.text?.trim()) {
-      lines.push(`User: ${row.text.trim()}`);
-    } else if (row.kind === "assistantText" && row.text?.trim()) {
-      lines.push(`Assistant: ${row.text.trim()}`);
+): WorkspaceMemoryTranscript {
+  const maxChars = options.maxChars ?? WORKSPACE_MEMORY_TRANSCRIPT_MAX_CHARS;
+  const selected = selectWorkspaceMemoryExtractionRows(rows, options.afterTurnId);
+  const turnIds = listWorkspaceMemoryTurnIds(selected);
+  const blocks: Array<{ turnId?: string; lines: string[]; size: number }> = [];
+  for (const row of selected) {
+    const line =
+      row.kind === "userInput" && row.text?.trim()
+        ? `User: ${row.text.trim()}`
+        : row.kind === "assistantText" && row.text?.trim()
+          ? `Assistant: ${row.text.trim()}`
+          : null;
+    if (!line) continue;
+    const tail = blocks[blocks.length - 1];
+    // 一个 turn 一块：截断只发生在 turn 边界上，除非单个 turn 自己就超预算。
+    if (tail && tail.turnId === row.turnId) {
+      tail.lines.push(line);
+      tail.size += line.length + 2;
+    } else {
+      blocks.push({
+        ...(row.turnId !== undefined ? { turnId: row.turnId } : {}),
+        lines: [line],
+        size: line.length,
+      });
     }
   }
-  const maxChars = options.maxChars ?? WORKSPACE_MEMORY_TRANSCRIPT_MAX_CHARS;
-  const transcript = lines.join("\n\n");
-  if (transcript.length <= maxChars) return transcript;
-  // 从头部裁：越靠后的轮次越接近当前事实。
-  return `…(earlier turns omitted)\n\n${transcript.slice(transcript.length - maxChars)}`;
+
+  let used = 0;
+  const kept: string[] = [];
+  let coveredUntilTurnId: string | undefined;
+  let truncated = false;
+  for (const block of blocks) {
+    const text = block.lines.join("\n\n");
+    if (kept.length > 0 && used + text.length + 2 > maxChars) {
+      truncated = true;
+      break;
+    }
+    if (kept.length === 0 && text.length > maxChars) {
+      // 单个 turn 就比整个预算还大：只能取它开头这一段，并让游标越过它。
+      kept.push(text.slice(0, maxChars));
+      coveredUntilTurnId = block.turnId;
+      truncated = true;
+      break;
+    }
+    kept.push(text);
+    used += text.length + 2;
+    if (block.turnId !== undefined) coveredUntilTurnId = block.turnId;
+  }
+  // 没截断时，游标停在区间里最后一个 turn 上（含没有文本的 turn）。
+  if (!truncated) coveredUntilTurnId = turnIds.at(-1) ?? coveredUntilTurnId;
+  return { text: kept.join("\n\n"), coveredUntilTurnId, truncated };
 }

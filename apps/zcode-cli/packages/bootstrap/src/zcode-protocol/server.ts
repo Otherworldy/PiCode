@@ -342,10 +342,11 @@ export class ZCodeProtocolAgentServer {
             if (result.decision === "allow") return "allow";
             if (result.decision === "deny") return "deny";
             // 记忆是宿主预创建的项目目录，写普通 Markdown 不应每次弹确认。
+            // 开关随时可改，这里按当下配置判，不读创建时的快照。
             // 仍然保留 plan mode、显式 deny/ask 与工具自报的 alwaysAsk。
             if (
-              hosted.memoryEnabled &&
               (mapped === "Write" || mapped === "Edit") &&
+              (await hosted.readMemoryEnabled()) &&
               !result.alwaysAsk &&
               result.ruleId !== "mode.plan.nonReadOnly" &&
               result.ruleId !== "rule.project.ask" &&

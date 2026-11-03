@@ -35,14 +35,16 @@ const MEMORY_POINTER_TARGET = /\]\(([^)\s]+)\)/;
  * 按 frontmatter 补一行指针。
  *
  * 索引与文件是两条独立写入路径（抽取、主模型、UI 编辑各写一份），不对账就会产生
- * 永不注入的孤儿文件，以及模型下一轮还能看到的死链接。索引不存在时不创建：
- * 没有记忆的项目不该凭空多出一个 MEMORY.md。
+ * 永不注入的孤儿文件，以及模型下一轮还能看到的死链接。索引缺失但已有条目时
+ * 按条目生成索引：UI 新建的第一条记忆也得能进注入；空白项目仍不会被凭空建出
+ * 一个 MEMORY.md。
  */
 export async function reconcileWorkspaceMemoryIndex(memoryRoot: string): Promise<string | null> {
   const indexPath = join(memoryRoot, WORKSPACE_MEMORY_INDEX_FILE_NAME);
   const existing = await lstat(indexPath).catch(() => null);
-  if (!existing || !existing.isFile() || existing.isSymbolicLink()) return null;
-  let text = await readFile(indexPath, "utf-8").catch(() => null);
+  if (existing && (!existing.isFile() || existing.isSymbolicLink())) return null;
+  const hadIndex = existing !== null;
+  const text = hadIndex ? await readFile(indexPath, "utf-8").catch(() => null) : "";
   if (text === null) return null;
 
   const entries = await readdir(memoryRoot, { withFileTypes: true }).catch(() => []);
@@ -54,7 +56,7 @@ export async function reconcileWorkspaceMemoryIndex(memoryRoot: string): Promise
 
   const referenced = new Set<string>();
   const keptLines: string[] = [];
-  for (const line of text.split("\n")) {
+  for (const line of hadIndex ? text.split("\n") : []) {
     const target = MEMORY_POINTER_TARGET.exec(line)?.[1];
     if (target === undefined) {
       keptLines.push(line);
@@ -89,10 +91,10 @@ export async function reconcileWorkspaceMemoryIndex(memoryRoot: string): Promise
 
   let next = [...keptLines, ...appended].join("\n");
   if (appended.length > 0 && !next.endsWith("\n")) next += "\n";
-  if (next === text) return text;
+  if (!hadIndex && appended.length === 0) return null;
+  if (hadIndex && next === text) return text;
   await atomicWritePrivateTextFile(indexPath, next);
-  text = next;
-  return text;
+  return next;
 }
 
 /** 判断 Write/Edit 的目标是否是可自动放行的记忆 Markdown。 */

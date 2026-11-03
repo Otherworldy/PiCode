@@ -142,7 +142,12 @@ pnpm -r build`;
       catalog[0]?.files.map((file) => file.name),
       ["MEMORY.md", "build-command.md"],
     );
-    assert.equal(catalog[0]?.files[0]?.missing, true);
+    // 新项目的第一条记忆要自己把索引建起来，否则永远进不了注入。
+    assert.equal(catalog[0]?.files[0]?.missing, undefined);
+    assert.match(
+      await readFile(join(workspacePath, ".pi", "memory", "MEMORY.md"), "utf-8"),
+      /build-command\.md/,
+    );
     await service.writeProjectMemoryFile({
       workspacePath,
       fileName: "MEMORY.md",
@@ -155,6 +160,14 @@ pnpm -r build`;
     assert.deepEqual(
       emptied[0]?.files.map((file) => file.name),
       ["MEMORY.md"],
+    assert.doesNotMatch(
+      await readFile(join(workspacePath, ".pi", "memory", "MEMORY.md"), "utf-8"),
+      /build-command\.md/,
+    );
+    );
+    assert.doesNotMatch(
+      await readFile(join(workspacePath, ".pi", "memory", "MEMORY.md"), "utf-8"),
+      /build-command\.md/,
     );
     assert.equal(emptied[0]?.files[0]?.missing, undefined);
     await assert.rejects(() =>
@@ -324,7 +337,7 @@ test("expiry days round-trips and only touches features.memoryExpiryDays", async
     assert.equal(saved.features.memory, true);
     assert.deepEqual(saved.features.memoryModel, { provider: "p", model: "m" });
 
-    // 0 表示只保留 expires 显式到期，不是"未配置"。
+    // 0 表示只保留 expires 显式到期，写入后与默认值等价。
     await service.setWorkspaceMemoryExpiryDays({ workspacePath, days: 0 });
     assert.equal(await service.getWorkspaceMemoryExpiryDays({ workspacePath }), 0);
 
@@ -348,7 +361,10 @@ test("expiry days config ignores invalid values", async () => {
       assert.equal(await service.getWorkspaceMemoryExpiryDays({ workspacePath }), 90);
     }
     // 小数向下取整，避免 UI 显示 30 实际存 30.7。
-    await writeWorkspaceConfig(workspacePath, JSON.stringify({ features: { memoryExpiryDays: 30.7 } }));
+    await writeWorkspaceConfig(
+      workspacePath,
+      JSON.stringify({ features: { memoryExpiryDays: 30.7 } }),
+    );
     assert.equal(await service.getWorkspaceMemoryExpiryDays({ workspacePath }), 30);
   });
 });
@@ -359,7 +375,7 @@ test("remote workspaces report the default expiry and reject writes", async () =
     const workspaceIdentity = "remote:ssh:host:22:user:/srv/app";
     assert.equal(
       await service.getWorkspaceMemoryExpiryDays({ workspacePath, workspaceIdentity }),
-      90,
+      0,
     );
     await assert.rejects(
       service.setWorkspaceMemoryExpiryDays({ workspacePath, workspaceIdentity, days: 30 }),

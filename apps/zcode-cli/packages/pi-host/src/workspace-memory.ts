@@ -66,16 +66,16 @@ export function buildWorkspaceMemorySection(root: string, indexContent: string |
 
 export function createWorkspaceMemoryExtension(input: {
   root: string;
+  /** 记忆根所在的 workspace；相对路径按它解析。 */
+  workspacePath: string;
   /** 每轮重新读项目开关；关闭时立刻停止注入，不必重开会话。 */
   enabled: boolean | (() => Promise<boolean>);
 }): InlineExtension {
+  const isEnabled = async () =>
+    typeof input.enabled === "function" ? await input.enabled().catch(() => false) : input.enabled;
   return (pi) => {
     pi.on("before_agent_start", async (event) => {
-      const enabled =
-        typeof input.enabled === "function"
-          ? await input.enabled().catch(() => false)
-          : input.enabled;
-      if (!enabled) {
+      if (!(await isEnabled())) {
         delete event.systemPromptOptions.forceSystemPrompt;
         return;
       }
@@ -249,28 +249,43 @@ export function parseWorkspaceMemoryPatch(text: string): WorkspaceMemoryPatch | 
   return { writes, appends, deletes, ...(index !== undefined ? { index } : {}) };
 }
 
+/**
+ * 返回被跳过的条目：截断文件禁整份写、append 超 64 KiB 的内容不落盘。
+ * 静默跳过会让调用方以为整份已应用；调用方据此记 `warn`，并在“什么都没落盘”时不推游标。
+ */
 export async function applyWorkspaceMemoryPatch(
   root: string,
   patch: WorkspaceMemoryPatch,
   options: { expectedIndex?: string | null; truncatedFiles?: readonly string[] } = {},
-): Promise<void> {
+): Promise<{ applied: number; skipped: string[] }> {
   await mkdir(root, { recursive: true });
   await assertWorkspaceMemoryRootTrusted(root);
+  const skipped: string[] = [];
+  let applied = 0;
   // 预览被截断的文件模型没看全，整份重写会把尾部内容抹掉；这类只能 appends。
   const truncated = new Set(options.truncatedFiles ?? []);
   for (const file of patch.writes) {
-    if (truncated.has(file.file)) continue;
+    if (truncated.has(file.file)) {
+      skipped.push(`write:${file.file}`);
+      continue;
+    }
     await atomicWritePrivateTextFile(join(root, file.file), file.content);
+    applied += 1;
   }
   for (const file of patch.appends) {
     const existing = await readFile(join(root, file.file), "utf-8").catch(() => null);
     const separator = existing && !existing.endsWith("\n") ? "\n" : "";
     const next = `${existing ?? ""}${separator}${file.content}`;
-    if (Buffer.byteLength(next, "utf-8") > WORKSPACE_MEMORY_MAX_ITEM_BYTES) continue;
+    if (Buffer.byteLength(next, "utf-8") > WORKSPACE_MEMORY_MAX_ITEM_BYTES) {
+      skipped.push(`append:${file.file}`);
+      continue;
+    }
     await atomicWritePrivateTextFile(join(root, file.file), next);
+    applied += 1;
   }
   for (const file of patch.deletes) {
     await rm(join(root, file), { force: true });
+    applied += 1;
   }
   // 索引写入：模型给的索引超出注入预算时不落盘，改用条目重建的紧凑索引。
   // 否则一次抽取就能把索引写成模型自己再也看不全的样子。
@@ -285,25 +300,29 @@ export async function applyWorkspaceMemoryPatch(
       const current = await readWorkspaceMemoryIndex(root);
       if (current !== options.expectedIndex) {
         await reconcileWorkspaceMemoryIndex(root);
-        return;
+        return { applied, skipped };
       }
     }
     await atomicWritePrivateTextFile(join(root, WORKSPACE_MEMORY_INDEX_FILE_NAME), proposedIndex);
+    applied += 1;
     // 模型漏写指针、或删文件没删指针时补上：否则新文件永远不注入，死链一直留着。
     await reconcileWorkspaceMemoryIndex(root);
-    return;
+    return { applied, skipped };
   }
   const current = await readWorkspaceMemoryIndex(root);
-  if (patch.index !== undefined || current === null || current.trim() === "") {
+  if (patch.index !== undefined) {
+    // 模型给的索引超预算：不落盘，改用条目重建的紧凑索引。
     const rebuilt =
       (await rebuildWorkspaceMemoryIndex(root)) ?? (current && current.trim() ? current : null);
     if (rebuilt) {
       await atomicWritePrivateTextFile(join(root, WORKSPACE_MEMORY_INDEX_FILE_NAME), rebuilt);
+      applied += 1;
     }
   }
   // 只返回 writes / deletes 没给索引时，索引里既不会多出新文件的指针，
-  // 也不会少掉已删文件的指针。落盘后统一对账一次。
+  // 也不会少掉已删文件的指针。落盘后统一对账一次（缺索引时按条目生成）。
   await reconcileWorkspaceMemoryIndex(root);
+  return { applied, skipped };
 }
 
 /** 索引是否超出注入预算（行数或字符数）。 */

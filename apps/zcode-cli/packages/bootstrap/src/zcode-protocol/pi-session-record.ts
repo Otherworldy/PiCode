@@ -119,7 +119,7 @@ export async function bindHostedSession(
   }
   const record: ZCodeProtocolSessionRecord = {
     app,
-    memoryEnabled: hosted.memoryEnabled,
+    memoryEnabled: hosted.memoryEnabledAtCreation,
     nativeSearchEnhancementsEnabled: false,
     modelContextBudgetStrategy: "legacy",
     createdAt: summary?.createdAt ?? Date.now(),
@@ -252,7 +252,7 @@ export async function createPiSessionRecord(
   context.logger?.info("workspace memory hosted", {
     sessionId: hosted.sessionId,
     memoryCapable,
-    memoryEnabled: hosted.memoryEnabled,
+    memoryEnabledAtCreation: hosted.memoryEnabledAtCreation,
     workspacePath: params.workspace.workspacePath,
   });
   return bindHostedSession(context, hosted, params.workspace);
