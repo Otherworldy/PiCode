@@ -212,6 +212,8 @@ export function buildWorkspaceMemoryExtractionPrompt(input: {
     "- `file` must be a lowercase .md filename, never MEMORY.md, no directories.",
     "- `writes` replaces a whole file. Only use it for new files, or for existing files shown without `truncated`.",
     "- `appends` adds text to the end of an existing file. Use it for files marked `truncated`, which you cannot see in full.",
+    "- `deletes` is for memories that are wrong, obsolete, or merged into another file.",
+    "- Never delete a file only because it is missing from `<current_index>`: the index is rebuilt from the files, and the assistant may have just written that file.",
     "- `index` is the complete new MEMORY.md body; one pointer line per memory, no content.",
     "- Keep each file under 64 KiB and the index under 200 lines.",
     "- Every `writes` frontmatter must carry: name, description, category, type, source, confirmed, lastConfirmed.",

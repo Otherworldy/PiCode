@@ -120,6 +120,7 @@ export {
   isWorkspaceMemoryMarkdownTarget,
   reconcileWorkspaceMemoryIndex,
 } from "./node/workspaceMemoryIndex.js";
+export { normalizeWorkspaceMemoryItem } from "./node/workspaceMemoryNormalize.js";
 export {
   pruneExpiredWorkspaceMemories,
   readWorkspaceMemoryExpiryDays,

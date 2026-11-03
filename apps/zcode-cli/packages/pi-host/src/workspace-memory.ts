@@ -15,6 +15,7 @@ import {
   parseWorkspaceMemoryFrontmatter,
   reconcileWorkspaceMemoryIndex,
 } from "@zcode/shared/node";
+import { normalizeWorkspaceMemoryWrite } from "./workspace-memory-write.js";
 
 /** 记忆段在完整 prompt 里的起始标记；每轮先剪掉旧段，避免 force prompt 越积越长。 */
 const WORKSPACE_MEMORY_PROMPT_MARKER = "<!-- zcode:workspace-memory -->";
@@ -89,7 +90,38 @@ export function createWorkspaceMemoryExtension(input: {
         index,
       )}`;
     });
+    // 主模型用 Write/Edit 直接写记忆时不守 frontmatter 契约，也不一定补索引指针行；
+    // 写入后立刻归一，别把补字段的事留给抽取（抽取可能被频率闸门推迟很久）。
+    pi.on("tool_result", (event) => {
+      if (event.isError) return;
+      // Pi 内置工具名是小写的 `write` / `edit`。
+      const tool = event.toolName.toLowerCase();
+      if (tool !== "write" && tool !== "edit") return;
+      const target = toolCallTarget(event.input);
+      if (!target) return;
+      void isEnabled()
+        .then((enabled) =>
+          enabled
+            ? normalizeWorkspaceMemoryWrite({
+                workspacePath: input.workspacePath,
+                memoryRoot: input.root,
+                target,
+              })
+            : null,
+        )
+        .catch((error: unknown) => {
+          console.warn("pi-host workspace memory write normalize failed", error);
+        });
+    });
   };
+}
+
+/** Write / Edit 的目标路径；其它工具与写歪的入参一律忽略。 */
+function toolCallTarget(input: unknown): string | null {
+  if (typeof input !== "object" || input === null) return null;
+  const record = input as Record<string, unknown>;
+  const value = record.path ?? record.file_path;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 /** 上一轮的 force prompt 已经带过记忆段；先截断再追加，防止重复累积。 */

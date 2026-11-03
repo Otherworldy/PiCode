@@ -70,6 +70,7 @@ import {
   readWorkspaceMemoryIndex,
   shouldRunWorkspaceMemoryExtraction,
 } from "./workspace-memory.js";
+import { reconcileWorkspaceMemoryIndex } from "@zcode/shared/node";
 import {
   buildWorkspaceMemoryExtractionPrompt,
   buildWorkspaceMemoryTranscript,
@@ -1612,6 +1613,9 @@ export class HostSessionRegistry {
         const timeout = setTimeout(() => controller.abort(), 60_000);
         void (async () => {
           try {
+            // 主模型可能刚直接写过记忆却没补索引行：先对账，让抽取看到的索引与磁盘一致，
+            // 否则抽取会把「索引里没有」误判成可以删。
+            await reconcileWorkspaceMemoryIndex(workspaceMemoryRoot).catch(() => null);
             const [index, manifest] = await Promise.all([
               readWorkspaceMemoryIndex(workspaceMemoryRoot),
               readWorkspaceMemoryManifest(workspaceMemoryRoot),
