@@ -47,7 +47,6 @@ import { getSessionShellEnvironment } from "./session-shell-environment.js";
 import { deriveChildClientPorts } from "../helpers/child-client-ports.js";
 import { createCoordinatorResponsePort } from "../../subagent/coordinator-response.js";
 import { isStaleBranchRuntimeTaskEvent } from "./runtime-command-generation.js";
-import { loadPersistentAgentMemory } from "../../subagent/persistent-memory.js";
 import {
   createOfficialCuaPolicy,
   SUBAGENT_COMPUTER_USE_UNAVAILABLE_CODE,
@@ -129,19 +128,6 @@ export function createDefaultSubagentPort(
         builtInExplore && request.systemPrompt?.trim() === ""
           ? buildExploreAgentPrompt({ embeddedSearchEnabled })
           : request.systemPrompt?.trim();
-      const persistentMemory = await loadPersistentAgentMemory({
-        fileSystemPort: deps.fileSystemPort,
-        logger: this.logger,
-        memory: this.config.memory,
-        profile: request.profile,
-        traceContext: request.traceContext,
-        workspaceRoot: request.workspaceRoot,
-      });
-      // 空 agent prompt 不是一个语义段；先硬拼 `\n\n` 会把缺失段的边界
-      // 泄漏到 persistent Memory 开头。这里只组合非空正文，block 左边界由 builder 统一添加。
-      const agentPrompt = [baseAgentPrompt, persistentMemory?.prompt]
-        .filter((part): part is string => typeof part === "string" && part.length > 0)
-        .join("\n\n");
       const childRuntimeEnvInfo = {
         ...childEnvInfo,
 
@@ -263,7 +249,7 @@ export function createDefaultSubagentPort(
           // child 只复用父 runtime 已解析的 instructions snapshot；Project Context 仍不继承。
           currentDate: this.contextSourceSnapshot?.currentDate ?? this.config.currentDate,
           subagentContext: {
-            agentPrompt: agentPrompt ?? "",
+            agentPrompt: baseAgentPrompt ?? "",
             ...(agentsMdInstructions ? { userInstructions: agentsMdInstructions } : {}),
           },
           agentName: `zcode-${request.agentType}`,
@@ -320,7 +306,6 @@ export function createDefaultSubagentPort(
           httpClientPort: deps.httpClientPort,
           imageProcessorPort: deps.imageProcessorPort,
           pdfDocumentPort: deps.pdfDocumentPort,
-          memoryRoot: persistentMemory?.rootDir,
           mcpPort: childMcpAccess.port,
           skillPort: childSkillPort,
           artifactStore: deps.artifactStore,

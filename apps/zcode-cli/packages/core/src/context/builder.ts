@@ -19,7 +19,6 @@ import { buildEnvInfoSection, buildGitSystemContextSection } from "./sections/en
 import { buildSkillsSection } from "./sections/skills.js";
 import { buildRequestUserContextSection } from "./sections/request-user-context.js";
 import { buildCurrentDateSection } from "./sections/current-date.js";
-import { buildMemorySection } from "./sections/memory.js";
 import { buildDesktopContextSection } from "./sections/desktop.js";
 import {
   buildContextManagementSection,
@@ -126,7 +125,7 @@ export class ContextBuilder {
     // stable body，而是跳过默认 system prompt 体系和 systemContext；否则用户提供
     // custom prompt 后仍会混入 Session Guidance / output style 等动态 system 段。
     // 工作流子代理跳过其中面向「与用户对话」的三段（desktop、Dynamic Behavior、session
-    // guidance——契约里已把 Report outcomes faithfully 搬过去），保留 memory 与其后各段。
+    // guidance——契约里已把 Report outcomes faithfully 搬过去）。
     if (!hasCustomSystemPrompt) {
       if (!isWorkflowActor && this.config.presentationSurface === "zcode_desktop") {
         sections.push(buildDesktopContextSection(this.config.genUiOutputDirectory));
@@ -148,13 +147,6 @@ export class ContextBuilder {
         sections.push(sessionGuidanceSection);
       }
 
-      // Memory
-      if (this.config.memoryRoot) {
-        const memorySection = buildMemorySection(this.config.memoryRoot);
-        if (memorySection) {
-          sections.push(memorySection);
-        }
-      }
       sections.push(buildEnvInfoSection(this.config.envInfo, this.config.model));
 
       // Output Style
@@ -186,11 +178,9 @@ export class ContextBuilder {
       }
     }
 
-    // 5. Meta user context: workspace instructions/project memory first, date second.
+    // 5. Meta user context: workspace instructions first, date second.
     const requestUserContextSection = buildRequestUserContextSection({
       userInstructions: this.config.userInstructions,
-      memoryIndexContent: this.config.memoryIndexContent,
-      memoryRoot: this.config.memoryRoot,
     });
     if (requestUserContextSection) {
       sections.push(requestUserContextSection);

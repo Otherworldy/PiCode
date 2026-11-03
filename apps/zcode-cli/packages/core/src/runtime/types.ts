@@ -302,12 +302,7 @@ export interface EnqueueSubagentMessageInput {
 }
 
 export interface MemoryRuntimeConfig {
-  cliStorageRoot?: string;
-  enabled?: boolean;
-  /** 是否调度成功 Main turn 后的自动 Extraction；缺省按 true 处理。 */
-  extractionEnabled?: boolean;
-  storageRoot?: string;
-  use?: boolean;
+  /** 远端 session 的身份隔离键。项目记忆的开关与目录不再由 runtime 持有。 */
   workspaceIdentity?: string;
 }
 
@@ -376,7 +371,6 @@ export interface AgentRuntimeDeps {
   contextBuilder?: ContextBuilder; // Optional, will be created from config
   now?: () => Date;
   isRemoteWorkspace?: () => boolean;
-  memoryRoot?: string;
 }
 
 export interface RuntimeModelFactoryInput {
@@ -425,8 +419,6 @@ export interface TurnResult {
  * 也不会成为 Session Selection 的第二份来源。
  */
 export interface ModelExecutionContext {
-  /** 仅当前 Turn 跳过自动 Project Memory Extraction；不修改 Session Memory 配置。 */
-  memoryExtraction?: "skip";
   selectionScope: "execution";
   requestDependencies?: ModelRequestDependencies;
   subagents?: {

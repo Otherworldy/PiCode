@@ -427,7 +427,6 @@ async function executeToolCallImpl(
         remoteSessionId: deps.remoteSessionId,
         clientMode: deps.clientMode,
         deliveryKind: deps.deliveryKind,
-        memoryRoot: deps.getMemoryRoot?.(),
         runtimeScope: deps.runtimeScope,
         providerVisibleToolNames: deps.registry
           .list()
@@ -589,13 +588,7 @@ async function executeToolCallImpl(
 
       // Skill 已解析成功后，serialize/post_hook 仍可能失败；错误事件也要保留
       // resolved metadata，否则失败的 Skill agent_step 无法归因到具体 skill。
-      await emitToolCallError(
-        deps,
-        canonicalToolCall.id,
-        traceContext,
-        turnId,
-        result.error,
-      );
+      await emitToolCallError(deps, canonicalToolCall.id, traceContext, turnId, result.error);
 
       deps.logger?.error(
         "Tool call failed",
@@ -650,7 +643,6 @@ function resolveModelOutputEntry(entry: ToolEntry, output: unknown): ToolEntry {
 function isEmptyToolName(toolName: string): boolean {
   return toolName.trim().length === 0;
 }
-
 
 function appendPreToolAdditionalContextsToErrorResult(
   result: ToolExecutionResult,

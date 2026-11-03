@@ -614,8 +614,8 @@ async function runModelBackedTurnStepImpl(
   const executableToolCalls = toolCalls.filter((toolCall) => !toolCall.providerExecuted);
   const streamedToolResults = await streamingToolCoordinator.drain(executableToolCalls);
   if (outputTokenContinuation !== "none") {
-    // 首次命中 output-limit 时，当前 request 可能带有一次性的 project-memory attachment；
-    // query-local 状态必须从实际请求数组推进，不能退回请求前的数组。
+    // 首次命中 output-limit 时，query-local 状态必须从实际请求数组推进，
+    // 不能退回请求前的数组。
     state.turnRequestState.entries = options.requestEntries;
     const assistantCommitted = await persistCompletedAssistantStep(this, state, {
       assistantPersistenceAnchor,

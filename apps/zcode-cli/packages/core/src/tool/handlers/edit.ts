@@ -28,7 +28,6 @@ import {
   type TraceContext,
 } from "@zcode/contracts";
 import { createStructuredPatch } from "../diff.js";
-import { stampMemoryOriginSessionId } from "../../memory/origin-session.js";
 import {
   findEditMatch,
   normalizeLineEndings,
@@ -498,17 +497,11 @@ async function writeEditResult(input: {
     );
   }
 
-  const contentToWrite = stampMemoryOriginSessionId({
-    content: input.newContent,
-    filePath: input.filePath,
-    memoryRoot: input.context.memoryRoot,
-    sessionId: input.context.sessionId,
-  });
   const writeStartedAt = Date.now();
   const writeResult = await fileSystemPort.writeTextFile(
     {
       path: input.filePath,
-      content: contentToWrite,
+      content: input.newContent,
       encoding: input.read?.encoding,
       lineEndings: input.read?.lineEndings ?? detectLineEndings(input.originalFile),
       createParents: true,
@@ -523,7 +516,7 @@ async function writeEditResult(input: {
   const readFileStateEntry = updateReadFileStateAfterEdit(
     input.context.readFileState,
     input.filePath,
-    contentToWrite,
+    input.newContent,
     writeResult.revision,
   );
   recordReadFileStateMetadata(input.context, readFileStateEntry);
@@ -531,10 +524,10 @@ async function writeEditResult(input: {
   const structuredPatch = createStructuredPatch({
     filePath: input.inputFilePath,
     oldContent: input.originalFile,
-    newContent: contentToWrite,
+    newContent: input.newContent,
   });
   // perf 里 totalBytes/maxFileBytes 语义相同，缓存结果避免大文件编辑时重复扫描新内容。
-  const newContentBytes = fileByteCount(contentToWrite);
+  const newContentBytes = fileByteCount(input.newContent);
 
   return attachToolExecutionTelemetry(
     {

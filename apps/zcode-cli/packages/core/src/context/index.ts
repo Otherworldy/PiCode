@@ -13,5 +13,4 @@ export { buildWorkflowActorIdentitySection } from "./sections/workflow-actor.js"
 export { buildEnvInfoSection, buildGitSystemContextSection } from "./sections/env-info.js";
 export { buildSkillsSection } from "./sections/skills.js";
 export { buildCurrentDateSection } from "./sections/current-date.js";
-export { buildMemorySection } from "./sections/memory.js";
 export { buildDesktopContextSection } from "./sections/desktop.js";

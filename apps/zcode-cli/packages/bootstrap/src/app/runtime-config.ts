@@ -17,7 +17,6 @@ import {
 } from "@zcode/contracts";
 import { omitMcpServers, resolveTrustedOfficialCuaServerNames } from "../mcp-config.js";
 import { resolveDefaultEmbeddedSearchBackend } from "./embedded-search-backend.js";
-import { getProjectMemoryRoot } from "./paths.js";
 import type { ZCodeAppOptions } from "./types.js";
 import {
   resolveRegistryOwnedModelSelection,
@@ -36,7 +35,6 @@ interface ResolvedInitialRegistrySelection extends ResolvedRegistrySelection {
 }
 
 export function resolveAppRuntimeConfig(input: {
-  cliStorageRoot: string;
   configResult: ConfigResult;
   options: ZCodeAppOptions;
   persistedMode?: CollaborationMode;
@@ -48,12 +46,10 @@ export function resolveAppRuntimeConfig(input: {
   pluginRuntimeFeatures?: AgentRuntimeConfig["runtimeFeatures"];
   subagentOutputRootDir: string;
   subagentProfiles?: readonly AgentProfile[];
-  storageRoot?: string;
   workingDirectory: string;
   workspaceIdentity?: string;
 }): ResolvedAppRuntimeConfig {
   const {
-    cliStorageRoot,
     configResult,
     options,
     persistedMode,
@@ -185,13 +181,6 @@ export function resolveAppRuntimeConfig(input: {
       profiles: [...(options.runtimeConfig?.subagents?.profiles ?? []), ...subagentProfiles],
     },
     memory: {
-      cliStorageRoot,
-      enabled: options.runtimeConfig?.memory?.enabled ?? configResult.config.features.memory,
-      ...(options.runtimeConfig?.memory?.extractionEnabled === undefined
-        ? {}
-        : { extractionEnabled: options.runtimeConfig.memory.extractionEnabled }),
-      ...(input.storageRoot ? { storageRoot: input.storageRoot } : {}),
-      use: options.runtimeConfig?.memory?.use ?? configResult.config.memory.use,
       workspaceIdentity: workspaceIdentity?.trim() || undefined,
     },
   };
@@ -283,19 +272,8 @@ export function runtimeConfigLogContext(
   runtimeConfig: AgentRuntimeConfig,
   workingDirectory: string,
 ) {
-  const memoryRoot = runtimeConfig.memory?.cliStorageRoot
-    ? getProjectMemoryRoot(
-        runtimeConfig.memory.cliStorageRoot,
-        workingDirectory,
-        runtimeConfig.memory.workspaceIdentity,
-      )
-    : undefined;
   return {
     mcpEnabled: runtimeConfig.mcp?.enabled !== false,
-    memoryEnabled: runtimeConfig.memory?.enabled !== false,
-    memoryExtractionEnabled: runtimeConfig.memory?.extractionEnabled !== false,
-    memoryRoot,
-    memoryUse: runtimeConfig.memory?.use !== false,
     mcsMode: runtimeConfig.midConversationSystem?.mode,
     mode: runtimeConfig.mode,
     model: runtimeConfig.modelSelection

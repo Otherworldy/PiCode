@@ -238,7 +238,6 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
       : readProjectPermissionMode(localSettingStore, projectID);
     let { configuredMcpServers, runtimeConfig, untrustedProjectMcpServers } =
       resolveAppRuntimeConfig({
-        cliStorageRoot,
         configResult,
         options,
         persistedMode,
@@ -251,7 +250,6 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
         builtInSubagentToolOverrides: zcodeSubagentProfileOutcome.builtInToolOverrides,
         subagentOutputRootDir: join(cliStorageRoot, "agents"),
         subagentProfiles,
-        storageRoot,
         workingDirectory,
         workspaceIdentity: options.runtimeConfig?.memory?.workspaceIdentity,
       });
@@ -615,7 +613,7 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
                   ).configOverrides,
                 },
                 deps: {
-                              appOptions: options,
+                  appOptions: options,
                   appVersion,
                   artifactStore,
                   configResult,

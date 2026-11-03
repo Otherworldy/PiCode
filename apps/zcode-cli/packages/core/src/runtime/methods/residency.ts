@@ -22,7 +22,6 @@ export function hasResidencyBlockingWork(this: AgentRuntimeInternal): boolean {
   return (
     this.hasActiveOrQueuedTurnWork() ||
     this.hasRunningBackgroundTasks() ||
-    this.residencyBlockingWorkCount > 0 ||
-    (this.memoryExtractionScheduler?.hasPendingWork() ?? false)
+    this.residencyBlockingWorkCount > 0
   );
 }

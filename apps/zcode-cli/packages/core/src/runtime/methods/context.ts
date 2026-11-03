@@ -1,5 +1,3 @@
-import { join } from "node:path";
-
 import {
   traceContextToLogContext,
   createContextBuilder,
@@ -15,13 +13,6 @@ import type {
   ContextBuilderConfig,
 } from "../deps.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-import { ensureMemoryDirectoryExists } from "../../memory/directory.js";
-import { formatProjectMemoryIndexContent } from "../../memory/index-content.js";
-import {
-  createReadFileStateKey,
-  normalizeReadFileStateMtimeMs,
-} from "../../tool/read-file-state.js";
-import { resolveEnabledProjectMemoryRoot } from "../helpers/project-memory.js";
 import { buildContextHistoryEntries } from "./context-history-entries.js";
 import { resolveRuntimeEmbeddedSearchEnabled } from "./embedded-search-branch.js";
 import { getContextSourceShellDisplayName } from "./session-shell-environment.js";
@@ -67,13 +58,8 @@ export async function ensureContextInitialized(
   this.contextSourceSnapshot = snapshot;
   this.startMcpStartup(traceContext);
   this.skillLoadOutcome = await this.discoverSkillsForContext(traceContext);
-  this.memoryRoot = await this.loadProjectMemoryRoot(traceContext);
-  this.memoryIndexContent = await loadProjectMemoryIndexContent(this, this.memoryRoot);
   await ensureGenUiOutputDirectory(this);
-  this.contextBuilder = this.createContextBuilderFromSnapshot(snapshot, this.memoryRoot, {
-    memoryIndexContent: this.memoryIndexContent,
-    model,
-  });
+  this.contextBuilder = this.createContextBuilderFromSnapshot(snapshot, { model });
   this.initializeMessageHistoryFromContext(this.contextBuilder, traceContext);
   this.contextInitialized = true;
 }
@@ -101,8 +87,7 @@ export async function getSkillCatalog(
 export function createContextBuilderFromSnapshot(
   this: AgentRuntimeInternal,
   snapshot: ContextSourceSnapshot,
-  memoryRoot?: string,
-  options: { memoryIndexContent?: string; model?: Model; persistEnvInfo?: boolean } = {},
+  options: { model?: Model; persistEnvInfo?: boolean } = {},
 ): ContextBuilder {
   const envInfo = snapshot.envInfo;
   // 同步 preview / config-only fallback 会构造 unknown envInfo。
@@ -133,8 +118,6 @@ export function createContextBuilderFromSnapshot(
     currentDate: snapshot.currentDate,
     userInstructions: snapshot.userInstructions,
     projectContext: snapshot.projectContext,
-    memoryIndexContent: options.memoryIndexContent,
-    memoryRoot,
     skills: this.skillLoadOutcome,
     agentProfiles: this.config.subagents?.profiles,
     embeddedSearchEnabled: resolveRuntimeEmbeddedSearchEnabled(this),
@@ -148,72 +131,6 @@ export function createContextBuilderFromSnapshot(
   };
 
   return createContextBuilder(contextConfig).setToolRegistry(this.registry);
-}
-
-export async function loadProjectMemoryRoot(
-  this: AgentRuntimeInternal,
-  traceContext: TraceContext,
-): Promise<string | undefined> {
-  const memoryRoot = resolveEnabledProjectMemoryRoot(this.config, this.workspaceRoot);
-  if (!memoryRoot) {
-    this.logMemorySkipped(traceContext, "disabled_or_excluded", {
-      taskType: this.config.taskType,
-    });
-    return undefined;
-  }
-  if (!this.fileSystemPort) {
-    this.logMemorySkipped(traceContext, "missing_file_system_port", {
-      memoryRoot,
-    });
-    return undefined;
-  }
-  await ensureMemoryDirectoryExists(this.fileSystemPort, memoryRoot, traceContext, this.logger);
-  return memoryRoot;
-}
-
-async function loadProjectMemoryIndexContent(
-  runtime: AgentRuntimeInternal,
-  memoryRoot: string | undefined,
-): Promise<string | undefined> {
-  const fileSystemPort = runtime.fileSystemPort;
-  if (!fileSystemPort || !memoryRoot) return undefined;
-  const indexPath = join(memoryRoot, "MEMORY.md");
-  try {
-    const read = await fileSystemPort.readTextFile({ path: indexPath });
-    const formattedContent = formatProjectMemoryIndexContent(read.content);
-    if (!formattedContent) return undefined;
-    runtime.readFileState.set(createReadFileStateKey(indexPath, undefined, undefined), {
-      content: read.content,
-      isPartialView: formattedContent !== read.content,
-      limit: undefined,
-      mtimeMs: normalizeReadFileStateMtimeMs(read.revision?.mtimeMs),
-      offset: undefined,
-      path: indexPath,
-      readAt: runtime.now(),
-      revisionId: read.revision?.id,
-      sizeBytes: read.sizeBytes,
-    });
-    return read.content;
-  } catch {
-    // 默认 Memory 分支将缺失或不可读的 index 视为没有该 context source。
-    return undefined;
-  }
-}
-
-export function logMemorySkipped(
-  this: AgentRuntimeInternal,
-  traceContext: TraceContext,
-  reason: string,
-  context: Record<string, unknown> = {},
-): void {
-  this.logger?.debug("Memory read skipped", {
-    ...traceContextToLogContext(traceContext),
-    event: "memory.read.skipped",
-    module: "core.runtime",
-    reason,
-    status: "completed",
-    ...context,
-  });
 }
 
 export async function discoverSkillsForContext(

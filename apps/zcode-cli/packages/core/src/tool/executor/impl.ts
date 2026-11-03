@@ -83,7 +83,6 @@ export class ToolExecutorImpl implements ToolExecutor {
       remoteSessionId: options.remoteSessionId,
       clientMode: options.clientMode,
       deliveryKind: options.deliveryKind,
-      getMemoryRoot: options.getMemoryRoot,
       runtimeScope: options.runtimeScope ?? "main",
       traceContext: options.traceContext,
       getMode: options.getMode ?? (() => options.mode ?? "build"),

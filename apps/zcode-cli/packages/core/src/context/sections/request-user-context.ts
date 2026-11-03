@@ -2,9 +2,6 @@
 // Request User Context Section Builder
 // ============================================================
 
-import { join } from "node:path";
-
-import { formatProjectMemoryIndexContent } from "../../memory/index-content.js";
 import type {
   ContextSection,
   ResolvedUserInstructionSource,
@@ -14,8 +11,6 @@ import { estimateTokens } from "../utils.js";
 
 export function buildRequestUserContextSection(input: {
   userInstructions?: ResolvedUserInstructions;
-  memoryIndexContent?: string;
-  memoryRoot?: string;
 }): ContextSection | null {
   const content = buildRequestUserContextContent(input);
   if (!content) {
@@ -36,8 +31,6 @@ export function buildRequestUserContextSection(input: {
 
 function buildRequestUserContextContent(input: {
   userInstructions?: ResolvedUserInstructions;
-  memoryIndexContent?: string;
-  memoryRoot?: string;
 }): string | null {
   const sections: string[] = [];
 
@@ -48,40 +41,15 @@ function buildRequestUserContextContent(input: {
     sections.push(instructionContent);
   }
 
-  const memoryIndexContent = buildProjectMemoryIndexContent(
-    input.memoryRoot,
-    input.memoryIndexContent,
-  );
-  if (memoryIndexContent) {
-    sections.push(memoryIndexContent);
-  }
-
   if (sections.length === 0) {
     return null;
   }
 
   return [
-    // 聚合字段标题不能绑定到 AGENTS.md，否则仅有 Project Memory 时缺少标题。
-
     "# agentsMd",
     "Codebase and user instructions are shown below. Be sure to adhere to these instructions. IMPORTANT: These instructions OVERRIDE any default behavior and you MUST follow them exactly as written.",
     "",
     sections.join("\n\n"),
-  ].join("\n");
-}
-
-function buildProjectMemoryIndexContent(
-  memoryRoot: string | undefined,
-  indexContent: string | undefined,
-): string | null {
-  if (!memoryRoot || indexContent === undefined) return null;
-  const formatted = formatProjectMemoryIndexContent(indexContent);
-  if (!formatted) return null;
-
-  return [
-    `Contents of ${join(memoryRoot, "MEMORY.md")} (user's auto-memory, persists across conversations):`,
-    "",
-    formatted,
   ].join("\n");
 }
 

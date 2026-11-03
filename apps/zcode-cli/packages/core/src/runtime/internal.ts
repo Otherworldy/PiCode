@@ -53,7 +53,6 @@ import type { RuntimeTaskRegistry } from "../runtime-task/registry.js";
 import type { AgentRuntimeCoreMethods } from "./internal-methods.js";
 import type { AgentRuntimeTurnMethods } from "./internal-turn-methods.js";
 import type { AgentRuntimeHookMethods } from "./internal-hook-methods.js";
-import type { ProjectMemoryExtractionScheduler } from "./helpers/project-memory-extraction.js";
 import type { WorkspaceHookRuntimeAdmissionPort } from "../hooks/workspace-hook-runtime-admission.js";
 
 export interface AgentRuntimeInternal
@@ -89,9 +88,6 @@ export interface AgentRuntimeInternal
   contextInitialized: boolean;
   contextSourceSnapshot?: ContextSourceSnapshot;
   latestContextBuildResult?: ContextBuildResult;
-  memoryRoot?: string;
-  memoryIndexContent?: string;
-  memoryExtractionScheduler?: ProjectMemoryExtractionScheduler;
   contextSourcePort?: ContextSourcePort;
   skillPort?: SkillPort;
   mcpPort?: McpPort;

@@ -255,15 +255,8 @@ export interface AgentRuntimeCoreMethods {
   getSkillCatalog(traceContext: TraceContext): Promise<SkillLoadOutcome>;
   createContextBuilderFromSnapshot(
     snapshot: ContextSourceSnapshot,
-    memoryRoot?: string,
-    options?: { memoryIndexContent?: string; model?: Model; persistEnvInfo?: boolean },
+    options?: { model?: Model; persistEnvInfo?: boolean },
   ): ContextBuilder;
-  loadProjectMemoryRoot(traceContext: TraceContext): Promise<string | undefined>;
-  logMemorySkipped(
-    traceContext: TraceContext,
-    reason: string,
-    context?: Record<string, unknown>,
-  ): void;
   injectPluginReferenceReminderFromTurn(
     userInput: string,
     traceContext: TraceContext,
@@ -325,8 +318,6 @@ export interface AgentRuntimeCoreMethods {
     traceContext: TraceContext,
     events: SessionEvent[],
   ): Promise<void>;
-  isProjectMemoryEnabled(): boolean;
-  drainMemoryExtractions(timeoutMs?: number | null): Promise<void>;
   toScheduleState(schedule: ToolSchedule): TurnState["scheduledTools"];
   resumeFromStore(options?: ResumeSessionOptions): Promise<ResumeSessionResult>;
   readSessionTodosForContext(traceContext: TraceContext): Promise<TodoItem[]>;

@@ -1726,7 +1726,9 @@ function pagePiSubagentChildren(
         childSessionId: child.childSessionId,
         subagentType: child.subagentType,
         title: child.title,
-        status: (child.status === "failed" || child.status === "cancelled" || child.status === "lost"
+        status: (child.status === "failed" ||
+        child.status === "cancelled" ||
+        child.status === "lost"
           ? child.status
           : "success") as "success" | "failed" | "cancelled" | "lost",
         ...(child.summary ? { summary: child.summary } : {}),
@@ -1752,12 +1754,7 @@ export async function listSessionSubagents(
           parentSessionId: params.sessionId,
         })
       : [];
-    return pagePiSubagentChildren(
-      children,
-      params.endedCursor,
-      params.endedLimit,
-      hasLiveSubagent,
-    );
+    return pagePiSubagentChildren(children, params.endedCursor, params.endedLimit, hasLiveSubagent);
   }
   const store = context.deps.sessionStore;
   const liveParent = context.sessions.get(params.sessionId);
@@ -3463,9 +3460,6 @@ async function createRecord(
       toolDisallowlist: "toolDenylist" in params ? params.toolDenylist : undefined,
       nativeSearchEnhancementsEnabled: startupPreferences.nativeSearchEnhancementsEnabled,
       modelContextBudgetStrategy: startupPreferences.modelContextBudgetStrategy,
-      // Memory Settings 是现有 CLI features.memory/use 之外的总开关。只在关闭时
-      // 写入 override，避免开启值反向覆盖用户已有的 CLI 禁用配置。
-      ...(startupPreferences.memoryEnabled ? {} : { memory: { enabled: false } }),
       // desktop-continuous session/create 由 UI 先解析 ~/.PiCode/.agents 的 enabled MCP，
       // 但 protocol app-server 自己不会读取 UI/main 侧的 MCP store；之前 createRecord 没把
       // params.mcpServers 注入 runtimeConfig，导致日志里 runtimeHasMcpConfig=false，工具永远不启动。

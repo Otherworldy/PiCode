@@ -31,7 +31,6 @@ import { recheckPermissionHookModifiedInput } from "./permission-input-recheck.j
 import type { ToolExecutorDeps } from "./types.js";
 import { summarizeInput } from "./utils.js";
 import { validateInput } from "./validation.js";
-import { applyMemoryFilePermission } from "./memory-file-permission.js";
 
 type ToolPermissionFlowResult =
   | { allowed: true; executionInput: unknown; permissionWaitMs?: number }
@@ -88,14 +87,6 @@ export async function resolveToolPermission(
     rulePolicy,
   );
   permissionDecision = applyPreToolPermissionDecision(permissionDecision, preToolHookResult, mode);
-  permissionDecision = applyMemoryFilePermission({
-    decision: permissionDecision,
-    executionInput,
-    memoryRoot: deps.getMemoryRoot?.(),
-    toolName: toolCall.name,
-    workingDirectory: deps.getWorkingDirectory(),
-    workspaceRoot: deps.getWorkspaceRoot(),
-  });
 
   deps.logger?.debug("Tool permission evaluated", {
     ...traceContextToLogContext(traceContext),

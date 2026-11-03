@@ -6,7 +6,7 @@
 //
 // 它替换的是交互式的 Agent Identity（「You are an interactive PiCode agent that helps
 // users」）：子代理的读者是脚本，不是人。它**不**替换基座的其他段——安全 IMPORTANT 行与
-// `# Harness` 块从 identity 逐字复用，memory / skills / 项目指令由 builder 照常追加。
+// `# Harness` 块从 identity 逐字复用，skills / 项目指令由 builder 照常追加。
 // 作者写的 persona 叠加在开场句之后、契约之前：角色比通用规则更靠前、更醒目，但开场句先把
 // 「你是谁的谁、输出给谁」说死，persona 不能推翻它。
 //

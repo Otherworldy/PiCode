@@ -17,7 +17,6 @@ import {
   type TraceContext,
 } from "@zcode/contracts";
 import { createStructuredPatch } from "../diff.js";
-import { stampMemoryOriginSessionId } from "../../memory/origin-session.js";
 import { resolveWorkspacePath } from "../path-policy.js";
 import {
   createReadFileStateKey,
@@ -115,17 +114,11 @@ const writeHandler: ToolHandler = async (input, context) => {
     }
   }
 
-  const contentToWrite = stampMemoryOriginSessionId({
-    content,
-    filePath,
-    memoryRoot: context.memoryRoot,
-    sessionId: context.sessionId,
-  });
   const writeStartedAt = Date.now();
   const writeResult = await fileSystemPort.writeTextFile(
     {
       path: filePath,
-      content: contentToWrite,
+      content,
       encoding: originalEncoding,
       lineEndings: originalLineEndings,
       createParents: true,
@@ -140,7 +133,7 @@ const writeHandler: ToolHandler = async (input, context) => {
   const readFileStateEntry = updateReadFileStateAfterWrite(
     context.readFileState,
     filePath,
-    contentToWrite,
+    content,
     writeResult.revision,
   );
   recordReadFileStateMetadata(context, readFileStateEntry);
@@ -150,17 +143,17 @@ const writeHandler: ToolHandler = async (input, context) => {
       {
         type: "update",
         filePath: file_path,
-        content: contentToWrite,
+        content,
         structuredPatch: createStructuredPatch({
           filePath: file_path,
           oldContent: originalFile,
-          newContent: contentToWrite,
+          newContent: content,
         }),
         originalFile,
         userModified: false,
       },
       createWritePerformanceTelemetry({
-        content: contentToWrite,
+        content,
         fsReadMs,
         fsWriteMs,
         context,
@@ -172,13 +165,13 @@ const writeHandler: ToolHandler = async (input, context) => {
     {
       type: "create",
       filePath: file_path,
-      content: contentToWrite,
+      content,
       structuredPatch: [],
       originalFile: null,
       userModified: false,
     },
     createWritePerformanceTelemetry({
-      content: contentToWrite,
+      content,
       fsReadMs,
       fsWriteMs,
       context,

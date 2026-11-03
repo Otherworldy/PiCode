@@ -121,8 +121,6 @@ import type {
 import type { AgentRuntimeInternal } from "./internal.js";
 import { InMemoryRuntimeTaskRegistry, type RuntimeTaskRegistry } from "../runtime-task/registry.js";
 import type { ChildClientPortsContext, ClientFacingPorts } from "./helpers/child-client-ports.js";
-import type { ProjectMemoryExtractionScheduler } from "./helpers/project-memory-extraction.js";
-import { projectPersistentAgentMemoryTools } from "../subagent/persistent-memory.js";
 import type { WorkspaceHookRuntimeAdmissionPort } from "../hooks/workspace-hook-runtime-admission.js";
 import { disposeNodeReplSession } from "../tool/handlers/node-repl.js";
 import { cloneModelSelection } from "./model-selection.js";
@@ -161,9 +159,6 @@ export class AgentRuntime {
   private contextInitialized = false;
   private contextSourceSnapshot?: ContextSourceSnapshot;
   private latestContextBuildResult?: ContextBuildResult;
-  private memoryRoot?: string;
-  private memoryIndexContent?: string;
-  private memoryExtractionScheduler?: ProjectMemoryExtractionScheduler;
   private contextSourcePort?: ContextSourcePort;
   private skillPort?: SkillPort;
   private mcpPort?: McpPort;
@@ -231,10 +226,10 @@ export class AgentRuntime {
     this.sessionId = sessionId;
     this.turnNumber = 0;
     // 3.12.2：兼容旧 Host/内部调用传入 legacy，但本版本 Runtime、日志和子 Agent 只使用 preflight。
-    this.config = projectPersistentAgentMemoryTools({
+    this.config = {
       ...config,
       modelContextBudgetStrategy: DEFAULT_ZCODE_MODEL_CONTEXT_BUDGET_STRATEGY,
-    });
+    };
     Object.assign(this.config, resolveExecutionState(config));
     this.permissionService =
       deps.permissionService ?? new PermissionService(defaultPermissionConfig);
@@ -320,9 +315,6 @@ export class AgentRuntime {
     // ExecutionPort.close() 会把后台 Bash 收口为 cancelled；若允许
     // teardown terminal event 再唤醒模型，并与随后关闭的 session store 竞态。
     this.shuttingDown = true;
-    // 关闭单个 session 后进程仍存活，
-    // 因此必须先终止该 runtime 的 Extraction，不能只在超时后放弃等待。
-    this.memoryExtractionScheduler?.shutdown();
   }
 }
 
@@ -657,9 +649,6 @@ export interface AgentRuntime {
     input: ModelConnectivityTestInput,
     options?: { abortSignal?: AbortSignal; traceContext?: TraceContext },
   ): Promise<void>;
-  isProjectMemoryEnabled(): boolean;
-  /** 缺省等待最多 60 秒；null 等待全部已调度提取结束，不设置 drain deadline。 */
-  drainMemoryExtractions(timeoutMs?: number | null): Promise<void>;
 }
 
 installAgentRuntimeMethods(AgentRuntime);
