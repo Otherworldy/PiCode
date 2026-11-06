@@ -3456,6 +3456,19 @@ export function SessionPane({
         options?.initialBaseRevision ??
         (current?.sessionId === targetSessionId ? current.revision : 0);
       let lastAck: CommandAck | null = null;
+      // 配置命令的终态过去只落在 renderer 日志（生产关闭），现场只能看到“界面已切但
+      // 实际没切”。统一写进有界 ack 环形缓冲，便于复现时直接读答案。
+      const recordAck = (ack: CommandAck): void => {
+        recordV4CommandAck({
+          type: `ui:${type}`,
+          status: ack.status,
+          ...(ack.reasonCode ? { reasonCode: ack.reasonCode } : {}),
+          ...(ack.revisionAtDecision !== undefined
+            ? { revisionAtDecision: ack.revisionAtDecision }
+            : {}),
+          at: Date.now(),
+        });
+      };
       try {
         for (let attempt = 0; attempt < 3; attempt++) {
           const ack = await dispatchCommand(type, payload, targetSessionId, baseRevision);
@@ -3464,12 +3477,14 @@ export function SessionPane({
             baseRevision = ack.revisionAtDecision;
             continue;
           }
+          recordAck(ack);
           if (ack.status !== "accepted" && ack.status !== "noop") {
             logger.warn(`[v4-pane] ${type} 被拒绝: ${ack.status} ${ack.reasonCode ?? ""}`);
           }
           return ack;
         }
         logger.warn(`[v4-pane] ${type} 连续 stale，放弃重试`);
+        if (lastAck) recordAck(lastAck);
         return lastAck;
       } catch (error) {
         if (isProviderNotReadyError(error)) {
@@ -3586,25 +3601,32 @@ export function SessionPane({
 
   // 空闲时选择仍只属于下一次提交。正在跑的轮次里，Pi 会在下一次模型请求前读
   // session.model；只改草稿会让输入框已切换、请求仍用旧模型。
-  const applyRunningModelSelection = useCallback(() => {
+  // 失败必须可见：ACK 非 accepted/noop 时过去只写 renderer 日志（生产关闭），
+  // 用户看到的就是“界面已切、上游仍用旧模型”。
+  const applyRunningModelSelection = useCallback(async () => {
     const targetSessionId = sessionId ?? prewarmBindingRef.current?.sessionId ?? null;
     const snapshot = snapshotRef.current;
     if (!targetSessionId || !snapshot || snapshot.sessionId !== targetSessionId) return;
     if (snapshot.control.phase !== "running") return;
     const config = draftConfigRef.current;
     if (!config.provider || !config.model) return;
+    const provider = config.provider;
+    const modelId = config.model;
     const thought = config.thought ?? "";
     const sameModel =
-      snapshot.config.provider === config.provider && snapshot.config.model === config.model;
+      snapshot.config.provider === provider && snapshot.config.model === modelId;
     if (sameModel && (!thought || thought === (snapshot.config.thought ?? ""))) return;
-    void configCommandBarrier.enqueue(() =>
-      dispatchConfigCas(
+    await configCommandBarrier.enqueue(async () => {
+      const ack = await dispatchConfigCas(
         "switchModelConfig",
-        { provider: config.provider, model: config.model, thought },
+        { provider, model: modelId, thought },
         { targetSessionId },
-      ),
-    );
-  }, [configCommandBarrier, dispatchConfigCas, draftConfigRef, sessionId]);
+      );
+      if (ack && ack.status !== "accepted" && ack.status !== "noop") {
+        toast(intl.formatMessage({ id: "chat.model.switchFailed" }, { model: modelId }));
+      }
+    });
+  }, [configCommandBarrier, dispatchConfigCas, draftConfigRef, intl, sessionId]);
 
   const handleSelectModel = useCallback(
     (modelProvider: string, model: string, sourceModel: ModelSelectionSource | null) => {
@@ -3616,7 +3638,7 @@ export function SessionPane({
         branch: "composer-submission-intent",
       });
       handleDraftSelectModel(resolvedProvider, model);
-      applyRunningModelSelection();
+      void applyRunningModelSelection();
     },
     [applyRunningModelSelection, draftConfigRef, handleDraftSelectModel],
   );
@@ -3624,7 +3646,7 @@ export function SessionPane({
   const handleSelectThought = useCallback(
     (thought: string, _modelContext: { provider: string; model: string }) => {
       handleDraftSelectThought(thought);
-      applyRunningModelSelection();
+      void applyRunningModelSelection();
     },
     [applyRunningModelSelection, handleDraftSelectThought],
   );

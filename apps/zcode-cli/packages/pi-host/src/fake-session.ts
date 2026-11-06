@@ -31,6 +31,17 @@ export class FakePiSession implements PiSessionPort {
   isCompacting = false;
   tree: PiSessionTreeNode[] = [];
   sessionName?: string;
+  /** Pi session 的事实模型；setModel 成功后就地更新，模拟 agent.state.model。 */
+  currentModel?: { providerId: string; modelId: string };
+  modelSwitchCalls: Array<{ provider: string; modelId: string; thought?: string }> = [];
+  /** false 模拟目标模型不在 ModelRuntime。 */
+  acceptSetModel = true;
+  setModel(provider: string, modelId: string, thought?: string): Promise<boolean> {
+    this.modelSwitchCalls.push({ provider, modelId, ...(thought ? { thought } : {}) });
+    if (!this.acceptSetModel) return Promise.resolve(false);
+    this.currentModel = { providerId: provider, modelId };
+    return Promise.resolve(true);
+  }
   branchFrom?: (entryId: string) => { sessionId: string; sessionFile: string };
   /** 测试拿 bindUi 交进来的 ui context，直接发 ask/select/confirm。 */
   boundUi?: unknown;

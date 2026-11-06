@@ -347,6 +347,9 @@ export const BACKGROUND_WORK_CANCEL_REJECTED_FAULT_PREFIX =
   "fault.command.backgroundWorkCancelRejected." as const;
 
 // CAS ✓ 的命令：信封必带 baseRevision。
+// switchModelConfig 刻意不在列：模型切换是 last-write-wins，handler 的 noop 判定读 Pi 事实
+// 而不是投影，而 turn 进行中 control/row.* 会让 conversation revision 持续前进——CAS 只会
+// 把用户的切换意图按 stale 丢弃（见 docs/specs/model-switch-runtime-ownership.md）。
 export const COMMANDS_REQUIRING_BASE_REVISION: ReadonlySet<CommandType> = new Set([
   "applyFileRewind",
   "forkAssistant",
@@ -358,7 +361,6 @@ export const COMMANDS_REQUIRING_BASE_REVISION: ReadonlySet<CommandType> = new Se
   "reorderQueueItem",
   "deleteQueueItem",
   "setAutoDrain",
-  "switchModelConfig",
   "switchCollaborationMode",
   "setUiDesignMode",
   "setFollowupMode",

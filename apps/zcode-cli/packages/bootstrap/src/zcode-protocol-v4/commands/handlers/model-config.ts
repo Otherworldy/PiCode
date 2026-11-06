@@ -29,6 +29,17 @@ class V4ProviderNotInRegistryError extends Error {
 }
 
 /**
+ * setModel 结束了但 runtime 仍是旧模型（目标模型不在 ModelRuntime / 开关被静默吞掉）。
+ * 必须以 failed ACK 上行：否则 UI 停在“已切换”，用户看到的却是旧模型在答题。
+ */
+class V4ModelNotAppliedError extends Error {
+  readonly reasonCode = "model.notApplied";
+  constructor(providerId: string, modelId: string) {
+    super(`model switch not applied: ${providerId}/${modelId}`);
+  }
+}
+
+/**
  * 切模型前确认目标 Provider 已存在于当前 Environment Registry。`applied:false` 转换为
  * 结构化领域错误（gateway → failed ACK）。Host 未注入能力时保持旧 Entry 行为。
  */
@@ -110,6 +121,15 @@ async function switchModelConfig(
     if (modelIdentityChanged) {
       const result = await record.app.setModel(`${payload.provider}/${payload.model}`);
       actualThought = result.thoughtLevel ?? readActualThought(record);
+      // 以结果为准：runtime 未真正切到目标时不得以 accepted 结束（见
+      // docs/specs/model-switch-runtime-ownership.md）。noop/投影闩锁都在这一层暴露。
+      const appliedSelection = record.app.runtime.getSessionModelSelection();
+      if (
+        appliedSelection?.providerId !== payload.provider ||
+        appliedSelection.modelId !== payload.model
+      ) {
+        throw new V4ModelNotAppliedError(payload.provider, payload.model);
+      }
       if (requestedThought && record.app.listThoughtLevels().includes(requestedThought)) {
         // 用户即使显式选择了与默认值相同的档位，也是一项 pin。必须调用 setter 让
         // Session Selection 保存这个显式叶子，不能因为 effective 值相同而吞掉意图。

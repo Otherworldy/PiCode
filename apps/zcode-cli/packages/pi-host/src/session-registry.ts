@@ -165,6 +165,13 @@ export interface HostedSession {
   reloadHistory(content: string): void;
   hydrateHistory(content: string): HistoryHydrationTiming;
   setModel(provider: string, modelId: string, thought?: string): Promise<void>;
+  /**
+   * 当前模型选型（Pi session 事实 + 投影 thought）。
+   * 投影 config 只是派生展示，不能当作“当前模型”的判据。
+   */
+  getCurrentModelSelection(): { providerId: string; modelId: string } & {
+    options?: { reasoningLevel: string };
+  } | undefined;
   setThinkingLevel(level: string): void;
   setSessionName(name: string): void;
   /** 把手改标题写进投影并通知侧栏。只改 session 文件的话，当前列表仍显示旧标题。 */
@@ -1117,21 +1124,37 @@ export class HostSessionRegistry {
       : () => undefined;
     // 入队、删除、改写都走 replaceQueue。不推出去，界面看不到，也取消不了。
     projector.bindQueuePublish(emit);
-    const applyModel = async (selection: SubmissionModel) => {
+    const applyModel = async (selection: SubmissionModel): Promise<boolean> => {
       const provider = selection.providerId.trim();
       const modelId = selection.modelId.trim();
-      if (!provider || !modelId) return;
-      const config = projector.getSnapshot().config;
+      if (!provider || !modelId) return false;
       const thought = selection.thought?.trim();
-      if (config.provider === provider && config.model === modelId) {
-        if (thought && thought !== config.thought) {
+      // 同值判定读 Pi session 的事实模型。投影 config 只是派生展示，与 Pi 脱节时
+      // （例如上一次切换只 emit 了投影、session 实际没变）会让真实切换被当成
+      // 同值 noop 永久吞掉（见 docs/specs/model-switch-runtime-ownership.md）。
+      const current = pi.currentModel;
+      const sameModel = current
+        ? current.providerId === provider && current.modelId === modelId
+        : projector.getSnapshot().config.provider === provider &&
+          projector.getSnapshot().config.model === modelId;
+      if (sameModel) {
+        if (thought && thought !== projector.getSnapshot().config.thought) {
           pi.setThinkingLevel?.(mapThought(thought));
           emit(projector.setConfig({ thought }));
         }
-        return;
+        return true;
       }
-      const applied = await pi.setModel?.(provider, modelId, thought);
-      if (applied === false) return;
+      if (!pi.setModel) return false;
+      const applied = await pi.setModel(provider, modelId, thought);
+      if (applied === false) {
+        // 目标模型不在 Pi ModelRuntime：过去这里静默沿用旧模型，界面却显示已切换。
+        // 失败交给调用方上行（switchModelConfig）或 warn 降级（admission）。
+        console.warn("pi-host model switch rejected: model not in runtime", {
+          provider,
+          modelId,
+        });
+        return false;
+      }
       emit(
         projector.setConfig({
           provider,
@@ -1139,6 +1162,7 @@ export class HostSessionRegistry {
           ...(thought ? { thought } : {}),
         }),
       );
+      return true;
     };
     const extensionRuntime = {
       depth: 0,
@@ -1841,8 +1865,26 @@ export class HostSessionRegistry {
         pi.readManagedProcessOutput?.(workId) ?? Promise.resolve({ kind: "unavailable", workId }),
       compact: () => pi.compact(),
       setModel: async (provider, modelId, thought) => {
-        await applyModel({ providerId: provider, modelId, thought });
+        // 切换失败必须上行：静默成功会让 UI 停在“已切换”而 runtime 仍是旧模型。
+        const applied = await applyModel({ providerId: provider, modelId, thought });
         publishContext();
+        if (!applied) {
+          throw Object.assign(
+            new Error(`model not available in runtime: ${provider}/${modelId}`),
+            { reasonCode: "model.notInRuntime" },
+          );
+        }
+      },
+      // switchModelConfig 的 noop 判定与结果校验都必须看 Pi 事实，不能看投影。
+      getCurrentModelSelection: () => {
+        const current = pi.currentModel;
+        if (!current) return undefined;
+        const thought = projector.getSnapshot().config.thought;
+        return {
+          providerId: current.providerId,
+          modelId: current.modelId,
+          ...(thought ? { options: { reasoningLevel: thought } } : {}),
+        };
       },
       setThinkingLevel: (level) => {
         projector.setConfig({ thought: level });

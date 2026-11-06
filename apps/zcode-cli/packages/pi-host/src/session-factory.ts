@@ -599,11 +599,14 @@ export function createSdkSessionFactory(
     }
     let lastTurn: Promise<void> = Promise.resolve();
     let shuttingDown: Promise<void> | undefined;
-    const currentModel = session.model
-      ? { providerId: session.model.provider, modelId: session.model.id }
-      : isolated && delegate
-        ? { providerId: delegate.model.provider, modelId: delegate.model.id }
-        : undefined;
+    // 模型事实属于 Pi session，必须是活值：设成创建时快照会让 switchModelConfig 之后
+    // 的“当前模型”永远停在旧值，进而把后续切换当成同值 noop 吞掉。
+    const readCurrentModel = () =>
+      session.model
+        ? { providerId: session.model.provider, modelId: session.model.id }
+        : isolated && delegate
+          ? { providerId: delegate.model.provider, modelId: delegate.model.id }
+          : undefined;
     const preparePromptText = (text: string) =>
       expandUnloadedPromptTemplate(text, {
         cwd: input.cwd,
@@ -613,7 +616,9 @@ export function createSdkSessionFactory(
     return {
       sessionId: input.sessionId,
       sessionFile: session.sessionFile ?? input.sessionFile,
-      currentModel,
+      get currentModel() {
+        return readCurrentModel();
+      },
       listModels: () =>
         modelRuntime.getAvailableSnapshot().map((model) => ({
           providerId: model.provider,

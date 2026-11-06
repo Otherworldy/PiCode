@@ -111,7 +111,7 @@ export class CommandBridge {
   constructor(
     private readonly session: PiSessionPort,
     private readonly queue: HostQueue,
-    private readonly applyModel?: (selection: SubmissionModel) => Promise<void>,
+    private readonly applyModel?: (selection: SubmissionModel) => Promise<boolean | void>,
     private readonly noteAttachments?: (attachments: AttachmentRef[]) => void,
     private readonly extensionCommands?: ExtensionCommandRunner,
   ) {}
@@ -218,7 +218,14 @@ export class CommandBridge {
 
   private async useModel(selection: SubmissionModel | undefined): Promise<void> {
     if (!selection?.providerId || !selection.modelId || !this.applyModel) return;
-    await this.applyModel(selection);
+    // admission 不因目录抖动阻断发送：失败只告警，下一次提交会重新携带选择。
+    const applied = await this.applyModel(selection);
+    if (applied === false) {
+      console.warn("pi-host submission model not applied", {
+        providerId: selection.providerId,
+        modelId: selection.modelId,
+      });
+    }
   }
 
   async stop(): Promise<void> {

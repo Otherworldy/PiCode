@@ -198,12 +198,14 @@ export function createPiHostedApp(
         ? { turnId: hosted.sessionId }
         : null,
     getSessionModelSelection: (): ModelSelection | undefined => {
-      const config = hosted.projector.getSnapshot().config;
-      if (!config.provider || !config.model) return undefined;
+      // 模型事实属于 Pi session：投影 config 只是派生展示，拿它做“当前模型”会让
+      // 一次没生效的切换永久变成 config.unchanged noop。
+      const current = hosted.getCurrentModelSelection();
+      if (!current) return undefined;
       return {
-        providerId: config.provider,
-        modelId: config.model,
-        ...(config.thought ? { options: { reasoningLevel: config.thought } } : {}),
+        providerId: current.providerId,
+        modelId: current.modelId,
+        ...(current.options ? { options: { reasoningLevel: current.options.reasoningLevel } } : {}),
       };
     },
     emitModelSelected: async () => undefined,
