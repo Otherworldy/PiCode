@@ -30,16 +30,6 @@ const pnpmRunEnv = {
 const cliWorkspaceBuilds = [
   { packageName: "@zcode/shared-types", packageDir: "shared-types" },
   { packageName: "@zcode/contracts", packageDir: "contracts" },
-  // dynamic-workflow 的 tsc 构建依赖 gitignored 的 libs.generated.ts，
-  // 而 bare-tsc 路径（runBootstrapWithRemoteBuild）不会执行 package build script，
-  // 所以需要先跑生成脚本；必须排在 @zcode/core 之前，core 依赖 dynamic-workflow。
-  {
-    packageName: "@zcode/dynamic-workflow",
-    packageDir: "dynamic-workflow",
-    prepareScript: "scripts/generate-libs.mjs",
-  },
-  // dynamic-workflow-runtime 的类型入口是 dist/index.d.ts，必须先于 bootstrap 构建。
-  { packageName: "@zcode/dynamic-workflow-runtime", packageDir: "dynamic-workflow-runtime" },
   { packageName: "@zcode/core", packageDir: "core" },
   { packageName: "@zcode/pi-host", packageDir: "pi-host" },
   { packageName: "@zcode/adapters", packageDir: "adapters" },
@@ -113,8 +103,8 @@ async function runBootstrapWithRemoteBuild() {
     // bootstrap:with-remote 会在 remote assets 阶段构建 agent bundle。
     // 通过 pnpm 逐包执行 tsc 时会再走 shim/env node 层，低内存本地环境里容易长时间卡住。
     // 这里只有 bootstrap 专用环境变量生效，直接复用当前 Node 启动 TypeScript CLI。
-    // bare tsc 绕过 package build script，所以带 prepareScript 的包（dynamic-workflow）
-    // 必须先手动跑生成脚本补齐 gitignored 的 libs.generated.ts，否则 tsc 因缺文件报错。
+    // bare tsc 绕过 package build script，带 prepareScript 的包需先跑生成脚本补齐
+    // gitignored 的产物，否则 tsc 因缺文件报错。
     if (prepareScript) {
       runCommand(process.execPath, [prepareScript], {
         cwd: `apps/zcode-cli/packages/${packageDir}`,

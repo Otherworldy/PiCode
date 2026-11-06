@@ -35,11 +35,9 @@ if (
   // 新工作树没有预先生成的声明文件，先构建 Agent 的基础包。
   for (const name of [
     "shared-types",
-    "dynamic-workflow",
     "contracts",
     "i18n",
     "telemetry",
-    "dynamic-workflow-runtime",
     "core",
     "adapters",
     "bootstrap",

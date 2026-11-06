@@ -325,7 +325,6 @@ export class ZCodeProtocolAgentServer {
               input: args,
               riskLevel: service.getRiskLevel(mapped),
               mode,
-              workingDirectory: hosted.workspacePath,
             });
             if (result.decision === "allow") return "allow";
             if (result.decision === "deny") return "deny";

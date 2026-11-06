@@ -83,6 +83,10 @@ function syntheticUserNoticeKind(source: SyntheticUserMessageSource): MessageSem
       return "subagent_notification";
     case "todo_reminder":
       return "todo_reminder";
+    // workflow_launch 的生产方已移除，但旧 transcript 里仍有该来源；
+    // 它落盘时就是 user_prompt（见 message-persistence 的专用落盘），这里为穷举完备保持同一 kind。
+    case "workflow_launch":
+      return "user_prompt";
     case "shared_context":
       return "shared_context";
   }
