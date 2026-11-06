@@ -38,10 +38,7 @@ import {
 import {
   conversationInputIntentSchema,
   errorAttributionSchema,
-  workflowLaunchMetaSchema,
-  workflowNotificationMetaSchema,
   type ErrorAttribution,
-  type WorkflowLaunchMeta,
 } from "@zcode/shared/zcode-protocol-v4";
 import { shouldHideInvalidToolCallFromProduct } from "../tool-call-product-visibility.js";
 import { HYDRATION_TRACE_ID } from "./projection-state.js";
@@ -104,25 +101,6 @@ interface SynthesizeOptions {
 
 function isRealUserTurnStarter(message: MessageWithParts): boolean {
   return isConversationRealUserTurnStarter(message);
-}
-
-/**
- * 中枢直接启动工作流的启动轮消息。核心持久化时写
- * `source: "workflow_launch"` + `metadata.workflowLaunch`（冷恢复的权威来源）。它是 synthetic
- * 但语义上属于用户真实动作的可见消息，共享投影 policy 会把 synthetic user 归成 hiddenSynthetic，
- * 因此 `isConversationRealUserTurnStarter` 认不出它；冷路径据本判据在 real-user 分支之前显式重建
- * 与活投影同形的 controlOnly 启动轮（TurnStarted{inputSource, workflowLaunch, executionKind} +
- * TurnComplete），而不是被当作隐藏 synthetic 跳过。畸形 / 缺席元数据回 null（退回既有跳过语义）。
- */
-function workflowLaunchOfMessage(message: MessageWithParts): WorkflowLaunchMeta | null {
-  if (message.info.role !== "user") return null;
-  if (message.info.source !== "workflow_launch") return null;
-  const metadata = message.info.metadata;
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
-  const parsed = workflowLaunchMetaSchema.safeParse(
-    (metadata as Record<string, unknown>).workflowLaunch,
-  );
-  return parsed.success ? parsed.data : null;
 }
 
 function isProviderContextOnlyAssistant(message: MessageWithParts): boolean {
@@ -440,15 +418,6 @@ function inputIntentOfMessage(message: MessageWithParts): TurnInputIntentMetadat
 function executionKindOfMessage(message: MessageWithParts): "agent" | "controlOnly" | undefined {
   const value = message.info.metadata?.executionKind;
   return value === "agent" || value === "controlOnly" ? value : undefined;
-}
-
-/**
- * 引擎附加文本的起点：热路径它在 TurnStarted 上，
- * 冷路径从用户消息 metadata 读回同一个字段。只认非负整数——别的形状按缺席处理（宁可多显示）。
- */
-function epilogueStartOfMessage(message: MessageWithParts): number | undefined {
-  const value = message.info.metadata?.epilogueStart;
-  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
 }
 
 function contentBlocksToText(value: unknown): string | undefined {
@@ -1272,9 +1241,6 @@ function isTurnBoundaryStarter(message: MessageWithParts): boolean {
   if (isRealUserTurnStarter(message)) {
     return steerDeliveryOfMessage(message) !== "guide";
   }
-  // 启动轮是可见 controlOnly 用户轮，必须作为边界让前一轮输出收集在此停下（一会话一 run 下
-  // 它本就是首条消息，但语义上仍是独立轮边界，不能被并进上一轮）。
-  if (workflowLaunchOfMessage(message)) return true;
   return getConversationModelOnlyTurnTriggerSource(message) !== null;
 }
 
@@ -1289,37 +1255,12 @@ function backgroundResultOriginMetaOfMessage(
   const backgroundSource = record.backgroundSource;
   const workId = typeof record.workId === "string" ? record.workId.trim() : "";
   const title = typeof record.title === "string" ? record.title.trim() : "";
-  // 三个取值与 BackgroundResultOriginMeta 保持同步（contracts/src/events/session.events.ts）。
-  // "workflow" 是 workflow run（workId ≡ runId）：漏掉它，workflow 的后台结果轮在冷恢复后会
-  // 静默退化成一条无标题 model-only 消息，工具卡→详情页的关联键随之丢失。
-  if (
-    (backgroundSource !== "bash" &&
-      backgroundSource !== "subagent" &&
-      backgroundSource !== "workflow") ||
-    !workId ||
-    !title
-  ) {
+  // 只认 bash/subagent：历史 transcript 里可能有已下线的 "workflow" 来源，
+  // 这里**只丢来源**保基字段，那类轮次于是落在普通后台结果上，而不是整轮丢失。
+  if ((backgroundSource !== "bash" && backgroundSource !== "subagent") || !workId || !title) {
     return undefined;
   }
-  // manifest 载荷（workflowNotification）也要过冷恢复：这里若只回读三基字段，冷恢复后
-  // 载荷就丢了——manifest 条目退回裸标题行。用 shared 的 zod schema 校验，畸形就**只丢载荷**
-  // 保基字段，绝不抛：这是投影重建路径，一个坏载荷不该打挂整条冷恢复。
-  const workflowNotification = parseWorkflowNotificationMeta(record.workflowNotification);
-  return {
-    backgroundSource,
-    title,
-    workId,
-    ...(workflowNotification ? { workflowNotification } : {}),
-  };
-}
-
-/** 防御性解析 manifest 载荷：畸形 / 缺席都回 undefined（调用方据此让字段缺席），绝不抛。 */
-function parseWorkflowNotificationMeta(
-  value: unknown,
-): BackgroundResultOriginMeta["workflowNotification"] {
-  if (value === undefined || value === null) return undefined;
-  const parsed = workflowNotificationMetaSchema.safeParse(value);
-  return parsed.success ? parsed.data : undefined;
+  return { backgroundSource, title, workId };
 }
 
 function isLegacyCompactMaintenanceInput(
@@ -1732,58 +1673,6 @@ export function synthesizeEventsFromMessages(
       index += 1;
       continue;
     }
-    const workflowLaunch = workflowLaunchOfMessage(message);
-    if (workflowLaunch) {
-      // 中枢直接启动的启动轮：可见 controlOnly 用户轮，冷恢复须与活投影同形——同一 messageId、
-      // origin workflowLaunch（由 inputSource 映射）、同一份 workflowLaunch 元数据、无助手输出。
-      // 放在 real-user 分支之前，避免这条 synthetic user 被 hiddenSynthetic 跳过。
-      turnNumber += 1;
-      const turnId = `hydrate-turn-${turnNumber}`;
-      lastTurnId = turnId;
-      const launchText = textOfMessage(message.parts);
-      const turnStartedAtMs = messageCreatedAtMs(message) ?? baseMs + seq;
-      selectAcceptedTurnModel(turnModelSelectionOfUserMessage(message));
-      push(
-        SessionEventType.TurnStarted,
-        {
-          turnNumber,
-          // 文本仍进 userInput.text（旧客户端 / TUI 的降级呈现）；GUI 用元数据画启动卡。
-          input: launchText,
-          // 持久 messageId 是该轮权威 target，与活投影同用，否则 productTurn 身份冷热分叉。
-          messageId: String(message.info.id),
-          // 启动轮不执行 Agent（controlOnly，无工时）；source 驱动 origin=workflowLaunch。
-          executionKind: "controlOnly",
-          inputSource: "workflow_launch",
-          workflowLaunch,
-        },
-        turnId,
-        turnStartedAtMs,
-      );
-      index += 1;
-      const collected = collectTurnOutput({
-        messages,
-        startIndex: index,
-        turnId,
-        turnStartedAtMs,
-        emittedCompactOperations,
-        durableCompactPartsByOperation,
-        emittedGoalVerifications,
-        goalVerificationsByAnchor,
-        onModelChange: recordTimelineModel,
-        push,
-      });
-      index = collected.nextIndex;
-      finishTurn({
-        failure: collected.failure,
-        turnId,
-        resultType: collected.resultType,
-        toolCallCount: collected.toolCallCount,
-        historyRoundCount: collected.historyRoundCount,
-        turnStartedAtMs,
-        turnEndedAtMs: collected.turnEndedAtMs,
-      });
-      continue;
-    }
     if (!isRealUserTurnStarter(message)) {
       // model-only 唤醒轮：background wake /
       // goal continuation 触发的 synthetic user 开独立 model-only 轮（无可见气泡，
@@ -1894,7 +1783,6 @@ export function synthesizeEventsFromMessages(
     const attachments = attachmentMetasOfMessage(message.parts);
     const intent = inputIntentOfMessage(message);
     const executionKind = executionKindOfMessage(message);
-    const epilogueStart = epilogueStartOfMessage(message);
     const turnStartedAtMs = messageCreatedAtMs(message) ?? baseMs + seq;
     // timeline part 与下一个 accepted turn 之间可以夹着 legacy synthetic
     // context，不能靠「紧邻前一条」猜测；持有显式边界直到真正开轮。
@@ -1904,7 +1792,6 @@ export function synthesizeEventsFromMessages(
       {
         turnNumber,
         input: userText,
-        ...(epilogueStart === undefined ? {} : { epilogueStart }),
         // 根因：cold hydration 过去只重建可见 user row，遗漏持久 messageId，导致
         // 同一条历史消息在 UI 中可见却无法被 edit/rewind 命令寻址。真实 user
         // transcript message 就是该 row 的权威 target，必须与 live TurnStarted

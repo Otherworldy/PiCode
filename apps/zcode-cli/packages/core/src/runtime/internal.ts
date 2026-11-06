@@ -23,8 +23,6 @@ import type {
   SkillLoadOutcome,
   SkillPort,
   McpPort,
-  DynamicWorkflowRunPort,
-  ModelCatalogPort,
   SubagentPort,
   ToolArtifactStorePort,
   TraceContext,
@@ -100,8 +98,6 @@ export interface AgentRuntimeInternal
   mcpToolsSignature?: string;
   mcpToolListRevision?: number;
   subagentPort?: SubagentPort;
-  dynamicWorkflowRunPort?: DynamicWorkflowRunPort;
-  modelCatalogPort?: ModelCatalogPort;
   runtimeTaskRegistry: RuntimeTaskRegistry;
   branchGeneration: number;
   artifactStore?: ToolArtifactStorePort;

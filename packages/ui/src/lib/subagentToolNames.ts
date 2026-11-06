@@ -11,7 +11,7 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function normalizeToolToken(value: unknown): string {
-  // 照 workflowToolNames.ts 的同款归一：抹掉大小写与分隔符，
+  // 认领工具名与读取参数用同一条归一：抹掉大小写与分隔符，
   // `picode_subagent` / `picodeSubagent` 两种 wire 写法都命中。
   return typeof value === "string" ? value.toLowerCase().replace(/[^a-z0-9]/gu, "") : "";
 }

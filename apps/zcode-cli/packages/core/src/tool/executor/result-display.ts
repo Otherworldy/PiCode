@@ -22,11 +22,6 @@ import {
 import { createBashResultDisplay } from "./bash-result-display.js";
 import { countPatchLines } from "../diff.js";
 import { boundDisplayText } from "./display-text.js";
-import { createCreateWorkflowDisplay } from "./create-workflow-display.js";
-import { createWorkflowObservationDisplay } from "./workflow-observation-display.js";
-
-// 拆到 create-workflow-display.ts 后保持既有导出面（handlers/create-workflow.ts 仍从这里 import）。
-export { createCreateWorkflowDisplay } from "./create-workflow-display.js";
 import { isRecord } from "./utils.js";
 import { parseOfficialMcpToolError, type OfficialMcpToolErrorCode } from "@zcode/shared";
 import {
@@ -189,12 +184,6 @@ export function createToolResultDisplay(
 
   const nodeReplDisplay = createNodeReplDisplay(toolName, output);
   if (nodeReplDisplay) return nodeReplDisplay;
-
-  const createWorkflow = createCreateWorkflowDisplay(toolName, output);
-  if (createWorkflow) return createWorkflow;
-
-  const workflowObservation = createWorkflowObservationDisplay(toolName, output);
-  if (workflowObservation) return workflowObservation;
 
   if (options?.mcp) {
     // 结果级构造：官方 MCP 的不可用标识只能从本次结果里读，因此把 output 一起传进去。

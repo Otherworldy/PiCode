@@ -18,7 +18,6 @@ import type {
   SessionGoal,
   McpConnectionSnapshot,
   TargetChangedPayload,
-  DynamicWorkflowRunProgressPayload,
   UserInputAutoResolutionUpdatedPayload,
   TraceContext,
   TurnSteerInput,
@@ -95,9 +94,6 @@ export interface AgentRuntimeCoreMethods {
   recordUserInputAutoResolutionUpdate(
     input: UserInputAutoResolutionUpdatedPayload & { traceContext?: TraceContext },
   ): Promise<void>;
-  recordDynamicWorkflowRunProgress(
-    input: DynamicWorkflowRunProgressPayload & { traceContext?: TraceContext },
-  ): Promise<void>;
   maybeStartGoalSummaryTitleGeneration(
     input: string,
     targetID: string,
@@ -173,7 +169,6 @@ export interface AgentRuntimeCoreMethods {
   enqueueSubagentMessage(input: EnqueueSubagentMessageInput): undefined;
   drainPendingRuntimeCommandsForActiveLoop(): Promise<{
     backgroundSubagentResultConsumed: boolean;
-    workflowResultConsumed: boolean;
     consumedCommandIds: RuntimeCommandId[];
     drained: number;
     messageIds: MessageId[];

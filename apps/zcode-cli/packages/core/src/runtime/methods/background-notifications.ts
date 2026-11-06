@@ -130,7 +130,7 @@ function resolveBackgroundTaskNotificationSource(
 function resolveBackgroundTaskNotificationOriginMeta(
   commands: readonly [TaskNotificationRuntimeCommand, ...TaskNotificationRuntimeCommand[]],
 ): BackgroundResultOriginMeta | undefined {
-  // 单条：originMeta 整体透传，workflowNotification 载荷免费搭车（manifest 渲染的唯一数据源）。
+  // 单条：originMeta 整体透传。
   if (commands.length === 1) return commands[0].originMeta;
 
   const originMetas: BackgroundResultOriginMeta[] = [];
@@ -151,11 +151,8 @@ function resolveBackgroundTaskNotificationOriginMeta(
   );
 
   // 多 notification 共用一个 turn 后若直接丢弃 originMeta，后台结果会退化为
-  // 普通 assistant 渲染。这里复用首个任务的展示锚点并只合成 title，不引入 batch schema。
-  //
-  // workflowNotification 载荷**刻意不合成**：manifest 是「一轮 ↔ 一张」的对应，批量下这条关系不成立——谎报第一条的
-  // 载荷比整轮退化成裸标题行更坏。只保留 {backgroundSource, title, workId} 三个基字段，
-  // 整轮据此退回现状标题行。
+  // 普通 assistant 渲染。这里复用首个任务的展示锚点并只合成 title，不引入 batch schema，
+  // 只保留 {backgroundSource, title, workId} 三个基字段。
   return {
     backgroundSource: representative.backgroundSource,
     title,

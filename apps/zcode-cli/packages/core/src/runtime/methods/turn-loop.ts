@@ -49,7 +49,6 @@ export async function runRegularTurnLoop(
       const drainedRuntimeCommands = await this.drainPendingRuntimeCommandsForActiveLoop();
       state.backgroundSubagentResultConsumed ||=
         drainedRuntimeCommands.backgroundSubagentResultConsumed;
-      state.workflowResultConsumed ||= drainedRuntimeCommands.workflowResultConsumed;
       appendTurnRequestEntries(state.turnRequestState, drainedRuntimeCommands.runtimeEntries);
       if (drainedRuntimeCommands.drained > 0) {
         state.repeatedToolCallSignature = undefined;

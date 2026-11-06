@@ -166,11 +166,6 @@ const MEMORY_ONLY_EVENT_TYPES = new Set<string>([
   SessionEventType.BackgroundTaskStarted,
   SessionEventType.BackgroundTaskUpdated,
   SessionEventType.BackgroundTaskCompleted,
-  // workflow run 进度：权威事实在 dwf_event journal 与内存事件里，durable transcript（message/part）
-  // 从不合成它，所以它与 BackgroundTask* 同类——memory-only 权威。不分类的后果不是丢事件
-  // （兜底分支同样保留），而是每次冷恢复刷一条 unclassified 诊断，把"真的漏了词汇表"这个
-  // 信号淹掉。
-  SessionEventType.DynamicWorkflowRunProgress,
   SessionEventType.TargetChanged,
   SessionEventType.RewindTriggered,
 ]);

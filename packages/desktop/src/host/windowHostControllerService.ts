@@ -119,7 +119,6 @@ function sessionOverlay(
       ...(summary.pendingInteractionSummary
         ? { pendingInteractions: summary.pendingInteractionSummary }
         : {}),
-      ...(summary.workflowActivity ? { workflowActivity: summary.workflowActivity } : {}),
     },
   };
 }

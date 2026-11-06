@@ -9,7 +9,6 @@ import {
 } from "../deps.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import type { RuntimeModelFactoryInput } from "../types.js";
-import { resolveModelRetryBudgetFromTaskType } from "./model-request-session-type.js";
 
 export function createRuntimeModel(
   runtime: AgentRuntimeInternal,
@@ -41,7 +40,6 @@ export function createRuntimeModel(
  */
 function withRuntimeInvocationLayer(runtime: AgentRuntimeInternal, model: Model): Model {
   const layer: ModelInvocationContext = {
-    modelRetryBudget: resolveModelRetryBudgetFromTaskType(runtime.config.taskType),
     ...(runtime.modelRequestAdmission === undefined
       ? {}
       : { modelRequestAdmission: runtime.modelRequestAdmission }),

@@ -4,8 +4,6 @@ export type {
   EditOperationKind,
   RawToolCallFileSummary,
   ToolCallBlockRenderContext,
-  WorkflowDraftPosition,
-  WorkflowRunCardSummary,
 } from "@/ToolCallBlocks/fileSummaryTypes.js";
 export { readRawToolCallFileSummaries } from "@/ToolCallBlocks/fileSummaries.js";
 export {

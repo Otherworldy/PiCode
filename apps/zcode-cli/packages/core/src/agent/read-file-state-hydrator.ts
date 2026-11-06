@@ -68,13 +68,6 @@ export async function hydrateReadFileStateFromSession(input: {
         if (restored) result.restoredCount++;
         continue;
       }
-
-      // 内联草稿：模型亲手写的字节，与 Write 同一条恢复路径。不带 metadata 的 part（saved 拷贝、
-      // `path` 提交、沿用的脚本）在 restoreMetadataToolState 里自然落空。
-      if (part.tool === "CreateWorkflow" || part.tool === "AmendWorkflow") {
-        const restored = restoreMetadataToolState(input.readFileState, part, part.tool);
-        if (restored) result.restoredCount++;
-      }
     }
   }
 

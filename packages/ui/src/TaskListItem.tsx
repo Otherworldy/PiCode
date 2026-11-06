@@ -69,7 +69,6 @@ import { resolveWorkspaceDisplayLabel } from "@/lib/workspaceDisplayName.js";
 import { TaskTitleOverflowText } from "@/components/TaskTitleOverflowText.js";
 import { createTaskWorkbenchDragPreview } from "@/lib/taskWorkbenchDragPreview.js";
 import { TaskRowActionButton } from "@/workspace-grouped-tasks/task-row-action-button.js";
-import { TaskWorkflowRunLines } from "@/components/workflow-run-line/TaskWorkflowRunLines.js";
 
 type TaskListItemIntl = {
   formatMessage: (desc: { id: string }, values?: Record<string, string>) => string;
@@ -414,21 +413,6 @@ export const MemoTaskItem = memo(function TaskListItem({
     return resolveWorkspaceDisplayLabel(folderLabel, tab?.remoteTarget, tab?.displayName);
   });
   const taskItemKey = `${buildTaskWorkspaceKey(task.workspacePath, task.workspaceIdentity)}:${task.taskId}`;
-  // 工作流运行行：标题下的第二条通道，
-  // 与前置 16px 槽（error > unread > spinner）互不占位。只在会话带 run 摘要时挂组件。
-  const hasWorkflowRunLines = taskActivity?.workflowActivity !== undefined;
-  const workflowRunLinesNode = hasWorkflowRunLines ? (
-    <TaskWorkflowRunLines
-      activity={taskActivity.workflowActivity}
-      isActive={isActive}
-      intl={intl}
-      session={{
-        workspacePath: task.workspacePath,
-        ...(task.workspaceIdentity ? { workspaceIdentity: task.workspaceIdentity } : {}),
-        sessionId: task.taskId,
-      }}
-    />
-  ) : null;
   const changeSummaryNode =
     !hasPendingInteraction && taskChangeSummary ? (
       <span className="shrink-0 text-ui-base">
@@ -571,12 +555,8 @@ export const MemoTaskItem = memo(function TaskListItem({
       }}
       className={cn(
         "group/task-item flex cursor-pointer gap-2 rounded-lg pl-2.5 pr-1 py-1 transition-[background-color,border-color,box-shadow]",
-        // 默认行 32px 时前置槽整行居中；长出工作流运行行后行体是两行的纵向列，槽改为对齐首行。
-        variant === "timeline"
-          ? "items-start py-1.5"
-          : hasWorkflowRunLines
-            ? "items-start"
-            : "items-center",
+        // 默认行 32px 时前置槽整行居中；timeline 变体的行体更高，槽改为对齐首行。
+        variant === "timeline" ? "items-start py-1.5" : "items-center",
         isActive ? "bg-selected" : "hover:bg-surface-hover",
       )}
     >
@@ -587,8 +567,8 @@ export const MemoTaskItem = memo(function TaskListItem({
       <div
         className={cn(
           "relative flex size-4 shrink-0 items-center justify-center",
-          // 行体是纵向列（标题行 + 运行行）时前置槽对齐首行而不是整行：默认 24px 首行居中 = 上留 4px。
-          variant === "timeline" ? "mt-0.5" : hasWorkflowRunLines ? "mt-1" : undefined,
+          // timeline 变体的行体更高时前置槽对齐首行而不是整行：默认 24px 首行居中 = 上留 4px。
+          variant === "timeline" ? "mt-0.5" : undefined,
         )}
       >
         <span
@@ -722,7 +702,6 @@ export const MemoTaskItem = memo(function TaskListItem({
               {taskActionGroupNode}
             </div>
           </div>
-          {workflowRunLinesNode}
         </div>
       ) : (
         <div className="flex min-w-0 flex-1 flex-col">
@@ -822,7 +801,6 @@ export const MemoTaskItem = memo(function TaskListItem({
 
             {taskActionGroupNode}
           </div>
-          {workflowRunLinesNode}
         </div>
       )}
     </li>

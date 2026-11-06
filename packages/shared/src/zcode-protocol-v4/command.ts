@@ -12,10 +12,6 @@ import { modelSelectionSchema } from "../model-selection.js";
 import { modelExecutionSchema } from "../model-execution.js";
 import { submissionModeSchema } from "./submission.js";
 import {
-  amendWorkflowRunSettingsPayloadSchema,
-  amendWorkflowRunSettingsResultSchema,
-} from "./workflow-run-settings-command.js";
-import {
   workspaceHookReviewCommandTargetSchema,
   workspaceHookReviewDecisionSchema,
   workspaceHookTrustRevokeTargetSchema,
@@ -63,8 +59,6 @@ export const commandPayloadSchemas = {
     // 新会话的实际创建路径，不透传则 OffPeakCreate/OffPeakList 永不注册。additive，
     // 旧 CLI 的 z.object 会静默丢弃该键（fail-closed）。
     offPeakToolEnabled: z.boolean().optional(),
-    // 动态工作流灰度 flag，与 offPeakToolEnabled 同一模式。
-    dynamicWorkflowEnabled: z.boolean().optional(),
     // 会话仍归当前 workspace。仅当该路径是本仓库已注册的 worktree 时，Agent cwd 才用它。
     workingDirectory: z.string().trim().min(1).optional(),
   }),
@@ -273,28 +267,6 @@ export const commandPayloadSchemas = {
     model: z.string().min(1),
     thought: z.string(),
   }),
-  // cancel & resume：恢复一个已取消 / 被进程死亡
-  // 打断的 dwf run。workId ≡ runId（与 cancelBackgroundWork 同一个身份等式）；`name` 可选，
-  // 喂恢复后完成通知的主题（重启后原 CreateWorkflow 工具 input 不可得）。刻意不携
-  // baseRevision：与 cancelBackgroundWork 同类（workflowRuns 面免 revision，假 CAS 失败
-  // 只会误伤）。门在 CLI 侧（可恢复集 = cancelled ∪ failed+Interrupted），拒绝以
-  // fault.command.workflowRunResumeRejected.<reason> 回 ACK。
-  resumeWorkflowRun: z.object({ workId: z.string(), name: z.string().optional() }),
-  // startSavedWorkflow：中枢「运行」不再合成
-  // 对话文案，直接请 agent 在新会话里启动已保存工作流。与 cancelBackgroundWork / resumeWorkflowRun
-  // 同类：不携 baseRevision（workflowRuns 面免 revision，假 CAS 失败只会误伤）。name 由 agent 从
-  // 解析结果填（不变式 6），命令不收 name 覆盖。
-  // 拒绝以 fault.command.savedWorkflowStartRejected.<reason> 回 ACK（词表见下方
-  // savedWorkflowStartRejectionReasonSchema）；能力缺席（无 dwf 端口）→ V4CapabilityUnsupportedError
-  // （与 resumeWorkflowRun 同一条错误）。
-  startSavedWorkflow: z.object({
-    name: z.string().min(1),
-    scope: z.enum(["project", "global"]).optional(),
-    args: z.record(z.string(), z.unknown()).optional(),
-  }),
-  // amendWorkflowRunSettings：run 卡 / 详情页的「配置」直接请 agent 以新设置修订 run，不经模型轮。载荷、结果与拒绝
-  // 词表见 workflow-run-settings-command.ts；能力缺席 → V4CapabilityUnsupportedError。
-  amendWorkflowRunSettings: amendWorkflowRunSettingsPayloadSchema,
   renameSession: z.object({ title: z.string() }),
   deleteSession: z.object({}),
   discardSharedContext: z.object({ contextId: z.string().trim().min(1) }).strict(),
@@ -311,33 +283,6 @@ export type CommandPayloadMap = {
 export const commandTypeSchema = z.enum(
   Object.keys(commandPayloadSchemas) as [CommandType, ...CommandType[]],
 );
-
-// startSavedWorkflow 拒绝词表：
-// bootstrap handler 铸造 fault code，ui launcher 反查 i18n 文案，两侧共享此枚举避免漂移。
-// invalid_name / not_found：解析阶段；invalid_args：实参校验；compile_failed：analyzeScript 诊断；
-// session_busy：会话有活动 turn；start_failed：port.submit 之前的其它启动失败。
-export const savedWorkflowStartRejectionReasonSchema = z.enum([
-  "invalid_name",
-  "not_found",
-  "invalid_args",
-  "compile_failed",
-  "session_busy",
-  "start_failed",
-]);
-export type SavedWorkflowStartRejectionReason = z.infer<
-  typeof savedWorkflowStartRejectionReasonSchema
->;
-
-// 完整 fault code = 前缀 + reason（如 fault.command.savedWorkflowStartRejected.not_found）。
-// 与 workflowRunResumeRejected 命名空间同族；导出常量供 bootstrap 拼接、ui 前缀匹配。
-export const SAVED_WORKFLOW_START_REJECTED_FAULT_PREFIX =
-  "fault.command.savedWorkflowStartRejected." as const;
-
-// resumeWorkflowRun 的拒绝：前缀 + 端口 reason（not_found / not_resumable / superseded /
-// already_running / script_missing / script_mismatch / compile_failed）；`ack.message` 携带
-// compile_failed 的有界诊断。
-export const WORKFLOW_RUN_RESUME_REJECTED_FAULT_PREFIX =
-  "fault.command.workflowRunResumeRejected." as const;
 
 // cancelBackgroundWork 的拒绝：core 明确回「没有取消任何东西」时（任务不存在 / 已终结 / 类型不支持）
 // 以前缀 + reason 上行，而不是一个假装成功的 accepted——详情页据此告诉用户这个 run 并不在跑。
@@ -480,14 +425,6 @@ export const commandResultSchema = z.discriminatedUnion("type", [
     reasonCode: z.string().min(1).optional(),
     preview: v4ConversationFileRewindPreviewResultSchema.optional(),
   }),
-  z.object({
-    // startSavedWorkflow accepted ACK：
-    // runId 联接启动轮 run 卡状态 / 通知 / 侧板；toolCallId = launch-<uuid>，联接合成 CreateWorkflow 轮。
-    type: z.literal("startSavedWorkflow"),
-    runId: z.string().min(1),
-    toolCallId: z.string().min(1),
-  }),
-  amendWorkflowRunSettingsResultSchema,
   z.object({
     // messageId 只在 TurnStarted 后作为旁路归因补齐；Core admission ACK 不等待
     // projection commit，不能把 messageId 作为输入 accepted 的必要条件。

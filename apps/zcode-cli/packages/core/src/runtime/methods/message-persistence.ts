@@ -51,8 +51,6 @@ export async function persistUserPrompt(
     intent?: TurnInputIntentMetadata;
     /** 冷恢复所需的执行语义；不能只存在于 live TurnStarted。 */
     executionKind?: TurnExecutionKind;
-    /** 引擎附加文本的起点；同样为冷恢复而存。 */
-    epilogueStart?: number;
   },
 ): Promise<void> {
   this.latestConversationMessageId = messageID;
@@ -93,8 +91,7 @@ export async function persistUserPrompt(
     options?.steerDelivery ||
     options?.clientId ||
     options?.intent ||
-    options?.executionKind ||
-    options?.epilogueStart !== undefined
+    options?.executionKind
       ? {
           metadata: {
             ...(options?.steerDelivery ? { turnSteerDelivery: options.steerDelivery } : {}),
@@ -105,9 +102,6 @@ export async function persistUserPrompt(
               ? { inputClientId: options?.intent?.clientId ?? options?.clientId }
               : {}),
             ...(options?.executionKind ? { executionKind: options.executionKind } : {}),
-            ...(options?.epilogueStart === undefined
-              ? {}
-              : { epilogueStart: options.epilogueStart }),
           },
         }
       : {}),

@@ -45,8 +45,6 @@ export function backgroundTaskOutputMetadata(
   const stderrBytes = numberProperty(stderr, "bytes") ?? numberProperty(snapshot, "stderrBytes");
   const stdoutTail = stringProperty(stdout, "text") || stringProperty(snapshot, "stdoutTail");
   const stderrTail = stringProperty(stderr, "text") || stringProperty(snapshot, "stderrTail");
-  const workflowOutput = recordProperty(snapshot, "output");
-  const workflowTail = stringProperty(workflowOutput, "response");
   const outputBytes =
     stdoutBytes === undefined && stderrBytes === undefined
       ? undefined
@@ -63,7 +61,7 @@ export function backgroundTaskOutputMetadata(
     childSessionId,
     outputBytes,
     outputFile,
-    outputTail: stdoutTail ?? stderrTail ?? workflowTail,
+    outputTail: stdoutTail ?? stderrTail,
     outputTruncated,
     stderrBytes,
     stderrFile,

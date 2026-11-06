@@ -19,12 +19,6 @@ export * from "./interfaces/input-history.port.js";
 export * from "./interfaces/tool-artifact-store.port.js";
 export * from "./interfaces/subagent.port.js";
 export * from "./interfaces/coordinator-response.port.js";
-export * from "./interfaces/workflow.port.js";
-export * from "./interfaces/workflow-submit.port.js";
-export * from "./interfaces/workflow-escalate.port.js";
-export * from "./interfaces/dynamic-workflow-run.port.js";
-export * from "./interfaces/dynamic-workflow-snippet.port.js";
-export * from "./interfaces/model-catalog.port.js";
 export * from "./interfaces/automation.port.js";
 export * from "./interfaces/off-peak.port.js";
 export * from "./interfaces/mcp.port.js";
@@ -68,9 +62,6 @@ export * from "./commands/index.js";
 
 // Plugins
 export * from "./plugins/index.js";
-
-// Workflow
-export * from "./workflow/index.js";
 
 // Logging
 export * from "./logging/logger.js";

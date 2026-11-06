@@ -20,20 +20,6 @@ import type {
   V4ConversationPlansResult,
   V4ConversationRowsRangeParams,
   V4ConversationRowsRangeResult,
-  V4ConversationWorkflowRunArtifactDataParams,
-  V4ConversationWorkflowRunArtifactDataResult,
-  V4ConversationWorkflowRunArtifactReadParams,
-  V4ConversationWorkflowRunArtifactReadResult,
-  V4ConversationWorkflowRunArtifactsParams,
-  V4ConversationWorkflowRunArtifactsResult,
-  V4ConversationWorkflowRunNodeResultParams,
-  V4ConversationWorkflowRunNodeResultResult,
-  V4ConversationWorkflowRunWorkspaceParams,
-  V4ConversationWorkflowRunWorkspaceResult,
-  V4ConversationWorkflowRunEventsParams,
-  V4ConversationWorkflowRunsParams,
-  V4ConversationWorkflowRunEventsResult,
-  V4ConversationWorkflowRunsResult,
   ConversationResyncParams,
   V4ConversationResyncResult,
   V4ConversationSubscribeResult,
@@ -62,40 +48,6 @@ export interface ConversationTransport {
   rowsRange(params: V4ConversationRowsRangeParams): Promise<V4ConversationRowsRangeResult>;
   /** v4/conversation/plans：当前有效分支里的全部终态计划。 */
   plans(params: V4ConversationPlansParams): Promise<V4ConversationPlansResult>;
-  /** v4/conversation/workflowRunEvents：workflow run 的事件日志分页（cursor = journal sequence）。 */
-  workflowRunEvents(
-    params: V4ConversationWorkflowRunEventsParams,
-  ): Promise<V4ConversationWorkflowRunEventsResult>;
-  /** v4/conversation/workflowRuns：workflow run 枚举（journal-backed 的重启后发现面）。 */
-  workflowRuns(params: V4ConversationWorkflowRunsParams): Promise<V4ConversationWorkflowRunsResult>;
-  /**
-   * v4/conversation/workflowRunArtifacts：workflow run 的**用户面产物**清单（冷恢复的 durable 读法）。
-   *
-   * ⚠ 术语：artifact = 脚本经 `artifact.*` 发布给用户看的产出（文件 / markdown / 预置看板），
-   * 不是 run 的顶层返回值。
-   */
-  workflowRunArtifacts(
-    params: V4ConversationWorkflowRunArtifactsParams,
-  ): Promise<V4ConversationWorkflowRunArtifactsResult>;
-  /** v4/conversation/workflowRunArtifactData：预置看板的条目分页（cursor = journal sequence）。 */
-  workflowRunArtifactData(
-    params: V4ConversationWorkflowRunArtifactDataParams,
-  ): Promise<V4ConversationWorkflowRunArtifactDataResult>;
-  /** v4/conversation/workflowRunArtifactRead：内容产物的字节，一次一块（≤ 512 KiB）。 */
-  workflowRunArtifactRead(
-    params: V4ConversationWorkflowRunArtifactReadParams,
-  ): Promise<V4ConversationWorkflowRunArtifactReadResult>;
-  /**
-   * v4/conversation/workflowRunWorkspace：workflow run 的脚本 transcript 清单
-   * （files.* / git.* / world.run 的 journal 行，不带正文）。
-   */
-  workflowRunWorkspace(
-    params: V4ConversationWorkflowRunWorkspaceParams,
-  ): Promise<V4ConversationWorkflowRunWorkspaceResult>;
-  /** v4/conversation/workflowRunNodeResult：一个工作区节点的有界正文（展开时才取）。 */
-  workflowRunNodeResult(
-    params: V4ConversationWorkflowRunNodeResultParams,
-  ): Promise<V4ConversationWorkflowRunNodeResultResult>;
   /** v4/conversation/fileChanges：按 turn row 展开文件摘要详情与只读 diff。 */
   fileChanges(params: V4ConversationFileChangesParams): Promise<V4ConversationFileChangesResult>;
   /** v4/conversation/fileRewindPreview：按 turn row 预览 workspace-only 文件撤销。 */

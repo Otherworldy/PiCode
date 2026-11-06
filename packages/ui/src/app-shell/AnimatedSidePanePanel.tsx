@@ -44,11 +44,6 @@ import { SelectionSideChatPane } from "@/app-shell/SelectionSideChatPane.js";
 import { BackgroundBashOutputSidePane } from "@/app-shell/BackgroundBashOutputSidePane.js";
 import { PlanDetailSidePane } from "@/app-shell/PlanDetailSidePane.js";
 import { PluginUiLauncherItems, PluginUiSidePane, useOpenPluginUi } from "@/plugin-ui/index.js";
-import { WorkflowRunSidePane } from "@/app-shell/WorkflowRunSidePane.js";
-import { WorkflowRunDirectorySidePane } from "@/app-shell/WorkflowRunDirectorySidePane.js";
-import { WorkflowActorSessionSidePane } from "@/app-shell/WorkflowActorSessionSidePane.js";
-import { WorkflowWorkspaceSidePane } from "@/app-shell/WorkflowWorkspaceSidePane.js";
-import { WorkflowArtifactSidePane } from "@/app-shell/WorkflowArtifactSidePane.js";
 import {
   getSidePaneTabTitle,
   SidePaneTabDragOverlay,
@@ -77,10 +72,6 @@ import {
   type BrowserUseSidePaneTab,
   type BrowserSidePaneMetadata,
   type OpenScopedSubagentSideTabRequest,
-  type OpenScopedWorkflowActorSessionSideTabRequest,
-  type OpenScopedWorkflowWorkspaceSideTabRequest,
-  type OpenScopedWorkflowArtifactSideTabRequest,
-  type OpenScopedWorkflowRunSideTabRequest,
   type OpenBackgroundBashSideTabRequest,
   type WorkspaceSidePaneState,
 } from "@/lib/workspaceSidePane.js";
@@ -323,10 +314,6 @@ export function AnimatedSidePanePanel({
   onOpenCodeViewer,
   onOpenFileLink,
   onOpenSubagentSession,
-  onOpenWorkflowActorSession,
-  onOpenWorkflowWorkspace,
-  onOpenWorkflowArtifact,
-  onOpenWorkflowRun,
   onOpenBackgroundBash,
   onRefreshGit,
   onBrowserNavigationRequestHandled,
@@ -390,14 +377,6 @@ export function AnimatedSidePanePanel({
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenBackgroundBash?: (request: OpenBackgroundBashSideTabRequest) => void;
   onOpenSubagentSession: (request: OpenScopedSubagentSideTabRequest) => void;
-  /** run 详情页里点 ask 节点 → 打开那个 actor 实例的 transcript tab。 */
-  onOpenWorkflowActorSession?: (request: OpenScopedWorkflowActorSessionSideTabRequest) => void;
-  /** run 详情页里点脚本行 → 打开该 run 的脚本 transcript tab，落到那一站。 */
-  onOpenWorkflowWorkspace?: (request: OpenScopedWorkflowWorkspaceSideTabRequest) => void;
-  /** run 详情页里点一张产物卡 → 打开那个产物的全尺寸查看 tab。 */
-  onOpenWorkflowArtifact?: (request: OpenScopedWorkflowArtifactSideTabRequest) => void;
-  /** run 目录页里点一行 → 打开那个 run 的详情页 tab（目录 → 详情是这一页存在的理由）。 */
-  onOpenWorkflowRun?: (request: OpenScopedWorkflowRunSideTabRequest) => void;
   onRefreshGit: () => void;
   onBrowserNavigationRequestHandled: (requestId: string) => void;
   onBrowserUrlChange: (tabId: string, url: string) => void;
@@ -900,11 +879,6 @@ export function AnimatedSidePanePanel({
           id: "sidePane.selectionChat",
         }),
         planTitle: intl.formatMessage({ id: "planTool.panel.planTab" }),
-        workflowRunTitle: intl.formatMessage({ id: "sidePane.workflowRun" }),
-        workflowDirectoryTitle: intl.formatMessage({ id: "sidePane.workflowDirectory" }),
-        workflowActorTitle: intl.formatMessage({ id: "sidePane.workflowActor" }),
-        workflowScriptTitle: intl.formatMessage({ id: "sidePane.workflowScript" }),
-        workflowArtifactTitle: intl.formatMessage({ id: "sidePane.workflowArtifact" }),
       }}
       onActivateTab={onActivateTab}
       onCloseTab={onCloseTab}
@@ -1147,54 +1121,6 @@ export function AnimatedSidePanePanel({
                             onOpenBrowserUrl={onOpenBrowserUrl}
                             onOpenCodeViewer={onOpenCodeViewer}
                             onOpenFileLink={onOpenFileLink}
-                          />
-                        ) : tab.type === "workflow-run" ? (
-                          <WorkflowRunSidePane
-                            tab={tab}
-                            {...(onOpenWorkflowActorSession === undefined
-                              ? {}
-                              : { onOpenWorkflowActorSession })}
-                            {...(onOpenWorkflowArtifact === undefined
-                              ? {}
-                              : { onOpenWorkflowArtifact })}
-                            {...(onOpenWorkflowRun === undefined ? {} : { onOpenWorkflowRun })}
-                            {...(onOpenWorkflowWorkspace === undefined
-                              ? {}
-                              : { onOpenWorkflowWorkspace })}
-                          />
-                        ) : tab.type === "workflow-directory" ? (
-                          // 类型分支必须先收窄，回调缺席在**分支内部**处理：把
-                          // `&& onOpenWorkflowRun` 写进条件会让这个 tab 类型继续留在后面
-                          // 那些分支的联合里（browser 分支于是拿它去读 residency）。
-                          onOpenWorkflowRun ? (
-                            <WorkflowRunDirectorySidePane
-                              tab={tab}
-                              onOpenWorkflowRun={onOpenWorkflowRun}
-                            />
-                          ) : null
-                        ) : tab.type === "workflow-actor-session" ? (
-                          <WorkflowActorSessionSidePane
-                            tab={tab}
-                            focused={isVisible && tab.id === visibleActiveTabId}
-                            onOpenBrowserUrl={onOpenBrowserUrl}
-                            onOpenCodeViewer={onOpenCodeViewer}
-                            onOpenFileLink={onOpenFileLink}
-                          />
-                        ) : tab.type === "workflow-workspace" ? (
-                          <WorkflowWorkspaceSidePane
-                            tab={tab}
-                            focused={isVisible && tab.id === visibleActiveTabId}
-                            onOpenCodeViewer={onOpenCodeViewer}
-                          />
-                        ) : tab.type === "workflow-artifact" ? (
-                          // 「在工作区显示」复用 Git 面板那条文件树 reveal（同一个宿主回调），
-                          // 不新造第二条定位路径。
-                          <WorkflowArtifactSidePane
-                            tab={tab}
-                            onOpenBrowserUrl={onOpenBrowserUrl}
-                            {...(onRevealGitFileInTree === undefined
-                              ? {}
-                              : { onRevealFileInTree: onRevealGitFileInTree })}
                           />
                         ) : tab.type === "code-viewer" ? (
                           <PreviewPane

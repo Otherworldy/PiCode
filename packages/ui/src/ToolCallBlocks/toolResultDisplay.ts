@@ -1,18 +1,3 @@
-import {
-  toolCallEvalWorkflowSnippetDisplaySchema,
-  toolCallGetWorkflowRunDisplaySchema,
-  toolCallListModelsDisplaySchema,
-  toolCallListWorkflowRunsDisplaySchema,
-  toolCallResumeWorkflowRunDisplaySchema,
-  toolCallSavedWorkflowListDisplaySchema,
-  type ToolCallEvalWorkflowSnippetDisplay,
-  type ToolCallGetWorkflowRunDisplay,
-  type ToolCallListModelsDisplay,
-  type ToolCallListWorkflowRunsDisplay,
-  type ToolCallResumeWorkflowRunDisplay,
-  type ToolCallSavedWorkflowListDisplay,
-} from "@zcode/shared/zcode-protocol-v4";
-
 interface LocalAgentMessageToolResultDisplay {
   kind: "local_agent_message";
   status: "success" | "failed";
@@ -69,44 +54,10 @@ export type ToolResultDisplay =
   | TaskStopToolResultDisplay
   | TaskOutputToolResultDisplay
   | RespondToCoordinatorToolResultDisplay
-  | CuaToolResultDisplay
-  | ToolCallGetWorkflowRunDisplay
-  | ToolCallListWorkflowRunsDisplay
-  | ToolCallEvalWorkflowSnippetDisplay
-  | ToolCallSavedWorkflowListDisplay
-  | ToolCallListModelsDisplay
-  | ToolCallResumeWorkflowRunDisplay;
+  | CuaToolResultDisplay;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
- * 工作流 display kind → 解析函数的查表（新增 kind 只改这一处）。每个条目用 shared 侧的
- * strict schema safeParse，输出类型即各自 schema 的推断类型——成员输出不是 ToolResultDisplay
- * 的 union 成员时这里直接编译失败，而不是靠运行时兜住。
- */
-const WORKFLOW_DISPLAY_PARSERS_BY_KIND: Record<
-  string,
-  (value: Record<string, unknown>) => ToolResultDisplay | undefined
-> = {
-  get_workflow_run: (value) => parseWorkflowDisplay(toolCallGetWorkflowRunDisplaySchema, value),
-  list_workflow_runs: (value) => parseWorkflowDisplay(toolCallListWorkflowRunsDisplaySchema, value),
-  eval_workflow_snippet: (value) =>
-    parseWorkflowDisplay(toolCallEvalWorkflowSnippetDisplaySchema, value),
-  saved_workflow_list: (value) =>
-    parseWorkflowDisplay(toolCallSavedWorkflowListDisplaySchema, value),
-  list_models: (value) => parseWorkflowDisplay(toolCallListModelsDisplaySchema, value),
-  resume_workflow_run: (value) =>
-    parseWorkflowDisplay(toolCallResumeWorkflowRunDisplaySchema, value),
-};
-
-function parseWorkflowDisplay<T extends ToolResultDisplay>(
-  schema: { safeParse: (data: unknown) => { success: true; data: T } | { success: false } },
-  value: Record<string, unknown>,
-): ToolResultDisplay | undefined {
-  const parsed = schema.safeParse(value);
-  return parsed.success ? parsed.data : undefined;
 }
 
 function readOptionalString(
@@ -251,16 +202,6 @@ function parseDisplay(value: unknown): ToolResultDisplay | undefined {
       ...(value.truncated !== undefined ? { truncated: value.truncated } : {}),
       ...(targetApp !== undefined ? { targetApp } : {}),
     };
-  }
-
-  // 工作流工具的 display kind（观察五件套 + ResumeWorkflowRun 恢复卡）：按 kind 查表后用
-  // shared 的 strict schema 解析，保证 UI 消费侧与协议侧字段表永远同步——手写第二套结构
-  // 校验是漂移温床。
-  if (typeof value.kind === "string") {
-    const parseWorkflowDisplayByKind = WORKFLOW_DISPLAY_PARSERS_BY_KIND[value.kind];
-    if (parseWorkflowDisplayByKind !== undefined) {
-      return parseWorkflowDisplayByKind(value);
-    }
   }
 
   return undefined;

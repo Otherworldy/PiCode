@@ -20,42 +20,6 @@ export type { ToolSchedule, ToolScheduleItem, ToolDependency } from "./tool/sche
 export { createToolRegistry, ToolRegistry, ToolRegistryImpl } from "./tool/registry.js";
 export { createToolExecutor, ToolExecutor, ToolExecutorImpl } from "./tool/executor.js";
 export { builtInTools, registerBuiltInTools } from "./tool/handlers/index.js";
-// dwf driver 的 submit profile 运行时守卫要把 typed 声明换回通用声明。
-export {
-  createSubmitResultToolEntry,
-  submitResultToolEntry,
-} from "./tool/handlers/submit-result.js";
-// 已保存工作流的 store / codec：GUI 中枢的协议处理器住在
-// bootstrap，但解析器与序列化器只能有一份——写侧与读侧各自演化的症状是「刚保存的 workflow
-// 列不出来」，所以从这里导出而不是让 bootstrap 再抄一份。
-export {
-  SAVED_WORKFLOW_SENTINEL,
-  findSavedWorkflowShadowing,
-  listSavedWorkflows,
-  moveSavedWorkflow,
-  parseSavedWorkflow,
-  resolveSavedWorkflow,
-  saveSavedWorkflow,
-  savedWorkflowExists,
-  savedWorkflowFileName,
-  savedWorkflowPath,
-  savedWorkflowRoot,
-  savedWorkflowRoots,
-  serializeSavedWorkflow,
-  validateWorkflowArgs,
-} from "./tool/handlers/saved-workflows/index.js";
-export type {
-  ResolvedSavedWorkflow,
-  SavedWorkflowListResult,
-  SavedWorkflowMoveResult,
-  SavedWorkflowParseErrorReason,
-  SavedWorkflowParseResult,
-  SavedWorkflowResolveFailure,
-  SavedWorkflowResolveResult,
-  SavedWorkflowRoot,
-  SavedWorkflowRootsOptions,
-  WorkflowArgsValidation,
-} from "./tool/handlers/saved-workflows/index.js";
 export {
   DEFAULT_BASH_MAX_TIMEOUT_MS,
   DEFAULT_BASH_TIMEOUT_MS,
@@ -104,12 +68,6 @@ export * from "./subagent/index.js";
 // Runtime task components
 export * from "./runtime-task/index.js";
 
-// Workflow components
-export * from "./workflow/definition.js";
-export * from "./workflow/expert.js";
-export * from "./workflow/lifecycle.js";
-export * from "./workflow/scheduler.js";
-
 // Permission components
 export {
   DenyPermissionBroker,
@@ -132,10 +90,9 @@ export type { PermissionConfig } from "./permission/index.js";
 export { AgentRuntime } from "./runtime.js";
 export { createExternalTurnFaultError } from "./runtime/helpers/turn-errors.js";
 export { repairPersistedRemoteSessionPaths } from "./runtime/helpers/persisted-remote-session-path-repair.js";
-// 「按值把一段转录复制进另一个会话」的克隆器。fork 之外的第二个消费者是 dwf 的 amend-resume
-// 转录截断（bootstrap 的 workflow-actor-transcript.ts）：同一个动作——新会话用本地 id 续写，
-// parentID / part 内嵌锚点随之重映射。导出而不是让它再写一份，是因为漏掉任何一处重映射的症状
-// （悬空 parentID、指向父会话的锚点）离成因都很远。
+// 「按值把一段转录复制进另一个会话」的克隆器：新会话用本地 id 续写，
+// parentID / part 内嵌锚点随之重映射。导出而不是让调用方再写一份，是因为漏掉任何一处重映射的
+// 症状（悬空 parentID、指向父会话的锚点）离成因都很远。
 export { cloneMessageForFork, clonePartForFork } from "./runtime/helpers/steering.js";
 export type {
   ChildClientPortsContext,
@@ -153,9 +110,6 @@ export type {
   ProviderRuntimeHeadersPort,
   ResumeSessionOptions,
   ResumeSessionResult,
-  StartSavedWorkflowRunResult,
-  AmendWorkflowRunSettingsInput,
-  AmendWorkflowRunSettingsResult,
   TurnResult,
   WorkspaceGenerateTextInput,
   WorkspaceGenerateTextResult,

@@ -110,45 +110,18 @@ import {
 } from "@/settings/automationTemplateCatalog.js";
 import { useAutomationTemplates } from "@/settings/useAutomationTemplates.js";
 import type { AutomationsNavigationTab } from "@/lib/taskNavigationHistory.js";
-import {
-  AutomationsPageTitle,
-  type AutomationsPageTab,
-} from "@/settings/saved-workflows/AutomationsPageTitleSwitch.js";
-import { useDynamicWorkflowAvailability } from "@/hooks/useDynamicWorkflowAvailability.js";
-import {
-  readAutomationsPageTab,
-  writeAutomationsPageTab,
-} from "@/settings/saved-workflows/automationsPageTabMemory.js";
-import {
-  SavedWorkflowsSection,
-  type SavedWorkflowLaunchTarget,
-  type SavedWorkflowProjectTarget,
-  type SavedWorkflowsOpenArtifactParams,
-  type SavedWorkflowsOpenRunParams,
-  type SavedWorkflowsOpenTarget,
-} from "@/settings/saved-workflows/SavedWorkflowsSection.js";
 import { AutomationTemplateSkeletonGrid } from "@/settings/AutomationTemplateSkeletonGrid.js";
 
 interface AutomationsSectionProps {
   workspacePath?: string | null;
   workspaceIdentity?: string;
-  /** 「Create via chat」:切到会话让 agent 用 CronCreate 创建;缺省则回退到手动创建整页。
-   * target = 工作流所属项目；定时任务的「通过对话创建」不带 target，落到活动项目。 */
-  onCreateViaChat?: (prompt: string, target?: SavedWorkflowProjectTarget) => void;
+  /** 「Create via chat」:切到会话让 agent 用 CronCreate 创建;缺省则回退到手动创建整页。 */
+  onCreateViaChat?: (prompt: string) => void;
   /** 会话内创建卡片的详情导航目标；定位成功后由调用方清空。 */
   openAutomationId?: string | null;
-  /** 推荐提示词携带的一次性 tab 导航目标；仅在目标 tab 可见时应用。"workflow" 落到顶级「工作流」标签。 */
+  /** 推荐提示词携带的一次性 tab 导航目标；仅在目标 tab 可见时应用。 */
   openAutomationTab?: AutomationsNavigationTab | null;
   onOpenAutomationConsumed?: () => void;
-  /** 工作流「运行」= GUI 直接启动：accepted 后切到新会话。 */
-  onNavigateToLaunchedRun?: (target: SavedWorkflowLaunchTarget, sessionId: string) => void;
-  /** 工作流运行历史「查看实例」：切到发起它的会话并打开实例详情页。 */
-  onOpenWorkflowRun?: (params: SavedWorkflowsOpenRunParams) => void;
-  /** 产物 chip → `workflow-artifact` tab。 */
-  onOpenWorkflowArtifact?: (params: SavedWorkflowsOpenArtifactParams) => void;
-  /** 深链直接落到详情页；透传给 SavedWorkflowsSection，定位后由调用方清空。global 只需 name。 */
-  openWorkflow?: SavedWorkflowsOpenTarget | null;
-  onOpenWorkflowConsumed?: () => void;
   /** 打开某次运行关联的会话；管理页列出所有项目，必须携带 automation 所属 workspace。 */
   onOpenSession?: (params: {
     sessionId: string;
@@ -503,11 +476,6 @@ export function AutomationsSection({
   openAutomationId,
   openAutomationTab,
   onOpenAutomationConsumed,
-  onNavigateToLaunchedRun,
-  onOpenWorkflowRun,
-  onOpenWorkflowArtifact,
-  openWorkflow,
-  onOpenWorkflowConsumed,
   onOpenSession,
 }: AutomationsSectionProps) {
   const { intl, locale } = useZCodeIntl();
@@ -585,22 +553,6 @@ export function AutomationsSection({
     (filter: AutomationStatusFilter) => setTabState((previous) => ({ ...previous, filter })),
     [],
   );
-  // 动态工作流灰度：未命中就没有「工作流」标签，
-  // 页面退回单一的「自动化」。快照未就绪时 enabled 为 false，宁可标题晚半拍长出切换，也不先闪
-  // 一个标签再收起——中枢很少是用户进 app 后第一眼看的东西。
-  const { enabled: dynamicWorkflowEnabled } = useDynamicWorkflowAvailability();
-  // 顶级标签「自动化 / 工作流」：页标题即切换。中枢已是跨项目视图，记忆不再按项目分桶，用 app 级单 key。
-  const [storedPageTab, setPageTabState] = useState<AutomationsPageTab>(() =>
-    readAutomationsPageTab(),
-  );
-  // 灰度关时忽略 sessionStorage 里记住的「工作流」：只收窄读出来的值，记忆本身不清，
-  // 灰度再开时用户仍然回到上次那一页。中枢只在 `pageTab === "workflow"` 分支挂载，
-  // 收窄 pageTab 等于 SavedWorkflowsSection 永不挂载，不会有一帧的误挂载去发查询。
-  const pageTab: AutomationsPageTab = dynamicWorkflowEnabled ? storedPageTab : "automation";
-  const setPageTab = useCallback((next: AutomationsPageTab) => {
-    setPageTabState(next);
-    writeAutomationsPageTab(next);
-  }, []);
   const activeWorkspaceTab = useTabStore((state) => {
     const activeTab = state.tabs.find((candidate) => candidate.id === state.activeTabId);
     return activeTab && isWorkspaceTab(activeTab) ? activeTab : undefined;
@@ -706,18 +658,6 @@ export function AutomationsSection({
 
   useEffect(() => {
     if (!openAutomationTab) return;
-    // 灰度关：请求的「工作流」标签不存在，
-    // 落到「自动化」并把深链消费掉——不消费会让请求一直挂着，反复把页面拉回来。
-    if (openAutomationTab === "workflow" && !dynamicWorkflowEnabled) {
-      setPageTab("automation");
-      onOpenAutomationConsumed?.();
-      return;
-    }
-    if (openAutomationTab === "workflow") {
-      setPageTab("workflow");
-      onOpenAutomationConsumed?.();
-      return;
-    }
     // 闲时详情导航由下方 offpeak 分支统一 setTab("idle") + 消费；这里若先按
     // 当前（可能尚未加载的）可见 tab 回退到 scheduled 并消费，会把 pending 的详情导航一并清掉。
     if (isOffPeakDetailNavigationId(openAutomationId)) return;
@@ -733,17 +673,14 @@ export function AutomationsSection({
       visibleTabs,
     });
     if (result.status === "pending") return;
-    setPageTab("automation");
     if (result.tab !== tab) setTab(result.tab);
     onOpenAutomationConsumed?.();
   }, [
-    dynamicWorkflowEnabled,
     loadedWorkspaceKey,
     offPeakStoreLoading,
     onOpenAutomationConsumed,
     openAutomationId,
     openAutomationTab,
-    setPageTab,
     tab,
     visibleTabs,
     workspaceIdentity,
@@ -1370,43 +1307,19 @@ export function AutomationsSection({
     );
   }
 
-  // 页标题即顶级切换：「自动化 / 工作流」两个标题词
-  // 并排，30/34 沿用 h1 的页面标题层级；副标题随标签换。
+  // 页标题沿用原 h1 的页面标题层级；副标题随任务存量换文案。
   const pageHeader = (
     <div className="flex flex-col gap-3">
-      <AutomationsPageTitle
-        workflowTabEnabled={dynamicWorkflowEnabled}
-        value={pageTab}
-        onValueChange={setPageTab}
-      />
+      <h1 className="text-[30px] font-medium leading-[34px] tracking-[0.114px] text-foreground">
+        {intl.formatMessage({ id: "settings.automations.title" })}
+      </h1>
       <p className="text-ui-base leading-5 text-foreground-subtlest">
         {intl.formatMessage({
-          id:
-            pageTab === "workflow"
-              ? "workflows.hub.description"
-              : hasAnyTasks
-                ? "automations.description.populated"
-                : "automations.description",
+          id: hasAnyTasks ? "automations.description.populated" : "automations.description",
         })}
       </p>
     </div>
   );
-
-  if (pageTab === "workflow") {
-    return (
-      <SavedWorkflowsSection
-        header={pageHeader}
-        workspacePath={workspacePath}
-        workspaceIdentity={workspaceIdentity}
-        onNavigateToLaunchedRun={onNavigateToLaunchedRun}
-        onCreateViaChat={onCreateViaChat}
-        onOpenWorkflowRun={onOpenWorkflowRun}
-        onOpenWorkflowArtifact={onOpenWorkflowArtifact}
-        openWorkflow={openWorkflow}
-        onOpenWorkflowConsumed={onOpenWorkflowConsumed}
-      />
-    );
-  }
 
   return (
     <div data-automations-content className={cn(SETTINGS_FRAME_CONTENT_CLASSNAME, "flex flex-col")}>

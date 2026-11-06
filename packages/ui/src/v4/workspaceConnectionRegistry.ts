@@ -26,13 +26,6 @@ export type WorkspaceConnectionAgentService = Pick<
   | "queryConversationCommandsV4"
   | "conversationRowsRangeV4"
   | "conversationPlansV4"
-  | "conversationWorkflowRunEventsV4"
-  | "conversationWorkflowRunsV4"
-  | "conversationWorkflowRunArtifactsV4"
-  | "conversationWorkflowRunArtifactDataV4"
-  | "conversationWorkflowRunArtifactReadV4"
-  | "conversationWorkflowRunWorkspaceV4"
-  | "conversationWorkflowRunNodeResultV4"
   | "conversationFileChangesV4"
   | "conversationFileRewindPreviewV4"
   | "attachmentBeginV4"
@@ -54,10 +47,6 @@ interface WorkspaceConnectionScope {
 }
 
 /** pane 持有的连接租约；release 幂等。 */
-/**
- * useSavedWorkflowLauncher 的推断返回类型包含 lease，声明生成要求保留可命名的导出。
- * @lintignore
- */
 export interface WorkspaceConnectionLease {
   readonly layer: SessionDataLayer;
   readonly transport: ConversationTransport;

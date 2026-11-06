@@ -38,7 +38,6 @@ export type ContextSource =
   | "request_user_context" // request-level user context provider-visible 组合块
   | "current_date" // 当前日期
   | "custom_system_prompt" // 自定义 stable system body
-  | "workflow_actor_identity" // 动态工作流子代理身份：契约 + persona 叠加
   | "subagent_agent_prompt" // 子 agent 专属身份/任务 prompt
   | "subagent_notes" // 子 agent 通用操作提醒
   | "subagent_environment" // 子 agent 环境和模型上下文
@@ -113,25 +112,10 @@ export interface ContextBuilderConfig {
   embeddedSearchEnabled?: boolean;
   skillMetadataBudget?: number;
   customSystemPrompt?: string;
-  /**
-   * 动态工作流子代理（workflow child）的身份输入。在场即走 builder 的第三条路径：
-   * 基座段（CLI prefix、安全行、Harness）+ 工作流子代理契约 + persona 叠加，
-   * 而不是像 `customSystemPrompt` 那样整段替换。与 `customSystemPrompt` 互斥。
-   */
-  workflowActor?: WorkflowActorContext;
   language?: string;
   outputStyle?: OutputStylePromptConfig;
   compact?: AutoCompactPolicyConfig;
   guidanceToolNames?: readonly string[];
-}
-
-/**
- * 工作流子代理的身份输入：有效名（匿名缺席）、作者写的 persona system prompt（可缺席）。
- * 没有工具档位：每个子代理都有完整工作工具集，契约只有一份文本。
- */
-export interface WorkflowActorContext {
-  name?: string;
-  persona?: string;
 }
 
 export type ContextUserInstructionsRequest = UserInstructionsOptions;

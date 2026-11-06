@@ -383,7 +383,6 @@ export interface AgentRuntimeTurnMethods {
       clientId?: string;
       intent?: TurnInputIntentMetadata;
       executionKind?: TurnExecutionKind;
-      epilogueStart?: number;
     },
   ): Promise<void>;
   recordPendingModelChange(input: {

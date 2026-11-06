@@ -4,7 +4,6 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
   BotIcon,
-  BotMessageSquareIcon,
   BugIcon,
   FileCode2Icon,
   FileDiffIcon,
@@ -13,11 +12,8 @@ import {
   ListTreeIcon,
   PlugIcon,
   NotepadTextIcon,
-  PackageIcon,
   PaletteIcon,
   SquareTerminalIcon,
-  TerminalIcon,
-  Workflow as WorkflowIcon,
   XIcon,
 } from "lucide-react";
 import { cn } from "@/components/lib/utils.js";
@@ -273,29 +269,6 @@ export function SidePaneTabIcon({ tab }: { tab: WorkspaceSidePaneTab }) {
   if (tab.type === "plugin-ui") {
     return <PlugIcon className="size-3.5" />;
   }
-  // 同一条约定：来源卡片（CreateWorkflow）用 lucide Workflow，tab 必须与它一致。
-  if (tab.type === "workflow-run") {
-    return <WorkflowIcon className="size-3.5" />;
-  }
-  // run 目录与单个 run 的详情必须能一眼分开（一页名单 vs 一次运行），所以借 subagent 目录
-  // 的同一枚「目录」图标——两个目录页在 tab 条上因此同形，正是它们的共同点。
-  if (tab.type === "workflow-directory") {
-    return <ListTreeIcon className="size-3.5" />;
-  }
-  // actor transcript 是「一个 actor 的对话记录」：既不是整次运行（Workflow），也不是子智能体
-  // 会话（Bot）。三者在 tab 条上必须能一眼分开——它们的可见性与回收语义都不同。
-  if (tab.type === "workflow-actor-session") {
-    return <BotMessageSquareIcon className="size-3.5" />;
-  }
-  // 脚本 transcript 与脚本药丸同一枚字形（终端）：来源与 tab 一致，点开不跳变。
-  if (tab.type === "workflow-workspace") {
-    return <TerminalIcon className="size-3.5" />;
-  }
-  // 产物 tab 的图标**按 kind 变**是错的：tab 条上的图标要在打开前就稳定（tab 从内存恢复时
-  // 元数据还没读回来）。所以用一枚固定的「交付物」图标，kind 的区分留给 tab 内部的头部与卡片。
-  if (tab.type === "workflow-artifact") {
-    return <PackageIcon className="size-3.5" />;
-  }
   if (tab.type === "selection-side-chat") {
     return <MessageSquareTextIcon className="size-3.5" />;
   }
@@ -475,29 +448,6 @@ export function getSidePaneTabTitle(
 ): string {
   if (tab.type === "plan-detail") {
     return formatMessage({ id: "planTool.panel.planTab" });
-  }
-  // 展示名是卡片打开时冻结的兜底；run 身份始终是 runId（tab id 里那一段）。
-  if (tab.type === "workflow-run") {
-    return tab.workflowName?.trim() || formatMessage({ id: "sidePane.workflowRun" });
-  }
-  if (tab.type === "workflow-directory") {
-    return formatMessage({ id: "sidePane.workflowDirectory" });
-  }
-  // 实例序号必须留在标题里：同一车道族的实例共用脚本里那一个名字，少了序号 tab 条上就是
-  // 两个无法区分的「reviewer」。拼接而不是本地化模板——照 selection-side-chat 的先例。
-  if (tab.type === "workflow-actor-session") {
-    const name = tab.actorName?.trim() || formatMessage({ id: "sidePane.workflowActor" });
-    return `${name} #${tab.ordinal}`;
-  }
-  // 标题是 run 名（一个 run 一份脚本 transcript）；类型标签「Script steps / 脚本步骤」在 tooltip 里。
-  if (tab.type === "workflow-workspace") {
-    return tab.workflowName?.trim() || formatMessage({ id: "sidePane.workflowScript" });
-  }
-  // 展示名是打开时冻结的兜底；产物身份始终是 (runId, artifactId)（tab id 里那两段）。
-  if (tab.type === "workflow-artifact") {
-    return (
-      tab.title?.trim() || tab.artifactId || formatMessage({ id: "sidePane.workflowArtifact" })
-    );
   }
   if (tab.type === "selection-side-chat") {
     return `${formatMessage({ id: "sidePane.selectionChat" })} ${tab.ordinal}`;

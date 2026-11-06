@@ -1,5 +1,5 @@
 import type { TraceContext, TurnState } from "./deps.js";
-import type { BackgroundResultOriginMeta, WorkflowLaunchMeta } from "@zcode/contracts";
+import type { BackgroundResultOriginMeta } from "@zcode/contracts";
 import type {
   ActiveTurnStartReservation,
   ContinueActiveTargetLoopOptions,
@@ -13,8 +13,7 @@ export type RuntimeCommandMode =
   | "target-continuation"
   | "target-continuation-loop"
   | "task-notification"
-  | "subagent-message"
-  | "control-only-turn";
+  | "subagent-message";
 export type RuntimeCommandId = string & {
   readonly __runtimeCommandId: unique symbol;
 };
@@ -87,32 +86,12 @@ export interface SubagentMessageRuntimeCommand extends RuntimeCommandBase {
   readonly text: string;
 }
 
-/**
- * 一条排队的 controlOnly 用户轮：GUI「配置」
- * 已经把 run 修订掉了，这条命令只负责把这件事记进会话。它不进模型轮，却要落一条 user 消息，而
- * user 消息插不进一个正在跑的 turn（provider 语法：assistant 的 tool_use 与 tool_result 之间
- * 不能夹 user），所以它排在队列里、等当前 turn 结束。与通知同一个优先级，因而落在新 run 的任何
- * 通知之前；带 branchGeneration，rewind 后丢弃。
- */
-export interface ControlOnlyTurnRuntimeCommand extends RuntimeCommandBase {
-  readonly branchGeneration: number;
-  readonly mode: "control-only-turn";
-  /** 进 runtime history 与持久消息的规范句（模型下一回合读它）。 */
-  readonly text: string;
-  /** `ensureSessionPersisted` 的首输入标题种子。 */
-  readonly titleInput: string;
-  readonly inputId?: string;
-  /** 轮与消息上的同一份元数据（冷热同形）。 */
-  readonly workflowLaunch: WorkflowLaunchMeta;
-}
-
 export type RuntimeCommand =
   | PromptRuntimeCommand
   | TargetContinuationRuntimeCommand
   | TargetContinuationLoopRuntimeCommand
   | TaskNotificationRuntimeCommand
-  | SubagentMessageRuntimeCommand
-  | ControlOnlyTurnRuntimeCommand;
+  | SubagentMessageRuntimeCommand;
 
 export interface RuntimeCommandQueue {
   clearCancelPending(id: RuntimeCommandId): void;

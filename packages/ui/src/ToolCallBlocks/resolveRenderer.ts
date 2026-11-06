@@ -8,31 +8,10 @@
 import { EditToolCallBlock } from "@/ToolCallBlocks/renderers/edit.js";
 import { AgentToolCallBlock } from "@/ToolCallBlocks/renderers/agent.js";
 import { ChangesGroupToolCallBlock } from "@/ToolCallBlocks/renderers/changes-group.js";
-import { CreateWorkflowToolCallBlock } from "@/ToolCallBlocks/renderers/create-workflow.js";
-import { EscalateToolCallBlock } from "@/ToolCallBlocks/renderers/escalate.js";
-import { EvalWorkflowSnippetToolCallBlock } from "@/ToolCallBlocks/renderers/eval-workflow-snippet.js";
 import { ExploreToolCallBlock } from "@/ToolCallBlocks/renderers/explore.js";
 import { ExecuteToolCallBlock } from "@/ToolCallBlocks/renderers/execute.js";
 import { ExecuteGroupToolCallBlock } from "@/ToolCallBlocks/renderers/execute-group.js";
 import { FallbackToolCallBlock } from "@/ToolCallBlocks/renderers/fallback.js";
-import { GetWorkflowRunToolCallBlock } from "@/ToolCallBlocks/renderers/get-workflow-run.js";
-import { ListModelsToolCallBlock } from "@/ToolCallBlocks/renderers/list-models.js";
-import { ListSavedWorkflowsToolCallBlock } from "@/ToolCallBlocks/renderers/list-saved-workflows.js";
-import { ListWorkflowRunsToolCallBlock } from "@/ToolCallBlocks/renderers/list-workflow-runs.js";
-import { ResumeWorkflowRunToolCallBlock } from "@/ToolCallBlocks/renderers/resume-workflow-run.js";
-import { ResolveWorkflowQuestionToolCallBlock } from "@/ToolCallBlocks/renderers/resolve-workflow-question.js";
-import { SaveWorkflowToolCallBlock } from "@/ToolCallBlocks/renderers/save-workflow.js";
-import {
-  isEscalateToolCall,
-  isEvalWorkflowSnippetToolCall,
-  isGetWorkflowRunToolCall,
-  isListModelsToolCall,
-  isListSavedWorkflowsToolCall,
-  isListWorkflowRunsToolCall,
-  isResolveWorkflowQuestionToolCall,
-  isResumeWorkflowRunToolCall,
-  isSaveWorkflowToolCall,
-} from "@/lib/workflowToolNames.js";
 import { CuaToolCallBlock, isCuaToolCall } from "@/ToolCallBlocks/renderers/cua.js";
 import { CuaGroupToolCallBlock } from "@/ToolCallBlocks/renderers/cua-group.js";
 import { GoalToolCallBlock } from "@/ToolCallBlocks/renderers/goal.js";
@@ -47,7 +26,6 @@ import { SearchToolCallBlock } from "@/ToolCallBlocks/renderers/search.js";
 import { SendMessageToolCallBlock } from "@/ToolCallBlocks/renderers/send-message.js";
 import { SkillToolCallBlock } from "@/ToolCallBlocks/renderers/skill.js";
 import { SubagentToolCallBlock } from "@/ToolCallBlocks/renderers/subagent.js";
-import { SubmitResultToolCallBlock } from "@/ToolCallBlocks/renderers/submit-result.js";
 import { SwitchModeToolCallBlock } from "@/ToolCallBlocks/renderers/switch-mode.js";
 import { TaskOutputToolCallBlock } from "@/ToolCallBlocks/renderers/task-output.js";
 import { TaskStopToolCallBlock } from "@/ToolCallBlocks/renderers/task-stop.js";
@@ -73,55 +51,10 @@ export function resolveToolCallRenderer(context: ToolCallBlockRenderContext) {
 
   const identity = resolveToolCallIdentity(context.toolCallNode.toolCall);
 
-  // 可复用工作流的两个工具按**工具名**先分流，刻意排在 family 之前。两个理由：
-  // 它们今天不在 shared 的已知工具表里（identity 回 unknown，会掉进 raw JSON 兜底卡）；
-  // 而一旦将来被登记进 `workflow` family，下面那条分支的兜底会把它们渲染成 CreateWorkflow 卡。
-  // 按名字先判定让两种世界都成立。
-  if (isSaveWorkflowToolCall(context.toolCallNode.toolCall)) {
-    return SaveWorkflowToolCallBlock;
-  }
-  if (isListSavedWorkflowsToolCall(context.toolCallNode.toolCall)) {
-    return ListSavedWorkflowsToolCallBlock;
-  }
-
-  // 观察类工作流三工具同款按名分流、同样排在 family 之前：它们不在已知工具表里（identity
-  // 回 unknown → raw JSON 兜底卡），而 workflow family 的兜底是 CreateWorkflow 卡——
-  // 按名先判定让「登记前/登记后」两种世界都成立（workflowToolNames 的同款理由）。
-  if (isGetWorkflowRunToolCall(context.toolCallNode.toolCall)) {
-    return GetWorkflowRunToolCallBlock;
-  }
-  if (isListWorkflowRunsToolCall(context.toolCallNode.toolCall)) {
-    return ListWorkflowRunsToolCallBlock;
-  }
-  if (isEvalWorkflowSnippetToolCall(context.toolCallNode.toolCall)) {
-    return EvalWorkflowSnippetToolCallBlock;
-  }
-  // ResumeWorkflowRun 恢复入口同款按名分流（理由同上：不在已知工具表里，且 workflow family
-  // 兜底是 CreateWorkflow 卡——恢复卡必须抢在 family 之前认领自己的名字）。
-  if (isResumeWorkflowRunToolCall(context.toolCallNode.toolCall)) {
-    return ResumeWorkflowRunToolCallBlock;
-  }
-  // 模型目录同款按名分流：不按名认领，
-  // 兜底卡会把模型面那段以 providerId 开头的 `<models>` 文本原样摊进聊天区。
-  if (isListModelsToolCall(context.toolCallNode.toolCall)) {
-    return ListModelsToolCallBlock;
-  }
-
   // 子智能体派发工具同样不在已知工具表里（identity 回 unknown → raw fallback 卡），
   // 但 wire 名和扳手图标不能直接给用户看；按名认领后仍是兜底卡面，只换摘要行文案与图标。
   if (isSubagentDispatchToolCall(context.toolCallNode.toolCall)) {
     return SubagentToolCallBlock;
-  }
-
-  // 升级问答两工具同款按名分流、同样排在 family 之前：它们不在已知工具表里（identity 回
-  // unknown → raw JSON 兜底卡），而 workflow family 的兜底是 CreateWorkflow 卡——按名先判定让
-  // 「登记前/登记后」两种世界都成立。`escalate`（子代理提问）与 `ResolveWorkflowQuestion`
-  // （主代理作答）卡面完全不同，各认自己的名字。
-  if (isEscalateToolCall(context.toolCallNode.toolCall)) {
-    return EscalateToolCallBlock;
-  }
-  if (isResolveWorkflowQuestionToolCall(context.toolCallNode.toolCall)) {
-    return ResolveWorkflowQuestionToolCallBlock;
   }
 
   // 宿主 Node REPL 也通过 MCP 注册，因此同样带有 mcp_tool presentation。
@@ -155,12 +88,6 @@ export function resolveToolCallRenderer(context: ToolCallBlockRenderContext) {
       return identity.toolName === "TaskOutput" ? TaskOutputToolCallBlock : TaskStopToolCallBlock;
     case "skill":
       return SkillToolCallBlock;
-    case "workflow":
-      // family 内按工具名分派（`message` family 对 RespondToCoordinator 的同款先例）：
-      // 工作流的两个工具卡面完全不同——一个是脚本/图，一个是 actor 提交的结果。
-      return identity.toolName === "submit_result"
-        ? SubmitResultToolCallBlock
-        : CreateWorkflowToolCallBlock;
     case "session-context":
       return ReadSessionContextToolCallBlock;
     case "file-read":

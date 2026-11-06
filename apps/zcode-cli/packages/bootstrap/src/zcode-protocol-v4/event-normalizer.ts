@@ -6,7 +6,6 @@ import type {
   TurnAttachmentMeta,
   TurnInputIntentMetadata,
   TurnStartedPayload,
-  WorkflowLaunchMeta,
 } from "@zcode/contracts";
 import { SessionEventType } from "@zcode/contracts";
 
@@ -17,7 +16,6 @@ type CanonicalConversationOrigin =
   | "goalContinuation"
   | "mailbox"
   | "synthetic"
-  | "workflowLaunch"
   | "assistant"
   | "system";
 
@@ -53,27 +51,15 @@ export interface CanonicalUserIntentFact extends CanonicalConversationFactBase {
     | "backgroundResult"
     | "goalContinuation"
     | "mailbox"
-    | "synthetic"
-    | "workflowLaunch";
+    | "synthetic";
   input: string;
   intentText: string;
   intentKind: "sendText" | "sendGoalCommand";
   turnNumber: number;
   executionKind: "agent" | "controlOnly";
-  turnHeaderOrigin:
-    | "userInput"
-    | "backgroundResult"
-    | "goalContinuation"
-    | "editRerun"
-    | "workflowLaunch";
+  turnHeaderOrigin: "userInput" | "backgroundResult" | "goalContinuation" | "editRerun";
   originMeta?: BackgroundResultOriginMeta;
-  /**
-   * 中枢直接启动已保存工作流的启动轮元数据（`inputSource === "workflow_launch"` 时在场）。
-   * 活投影据它在 turnHeader / userInput 两行上画启动卡；与消息 metadata 里的同一份对齐（冷热同形）。
-   */
-  workflowLaunch?: WorkflowLaunchMeta;
   /** `input` 从此下标起是引擎附加文本。 */
-  epilogueStart?: number;
   sourceCommandId?: string;
   foregroundExecutionId?: string;
   clientId?: string;
@@ -255,8 +241,6 @@ function normalizeTurnStarted(
     executionKind: payload.executionKind ?? "agent",
     turnHeaderOrigin: turnHeaderOrigin(payload.inputSource),
     ...(payload.originMeta ? { originMeta: payload.originMeta } : {}),
-    ...(payload.workflowLaunch ? { workflowLaunch: payload.workflowLaunch } : {}),
-    ...(payload.epilogueStart === undefined ? {} : { epilogueStart: payload.epilogueStart }),
     ...((payload.intent?.sourceCommandId ?? payload.inputId)
       ? { sourceCommandId: payload.intent?.sourceCommandId ?? payload.inputId }
       : {}),
@@ -408,9 +392,6 @@ function turnHeaderOrigin(
       return "goalContinuation";
     case "rewind":
       return "editRerun";
-    // 中枢直接启动：turnHeader 与 userInput 同用 workflowLaunch origin，UI 据此画启动卡而非用户气泡。
-    case "workflow_launch":
-      return "workflowLaunch";
     default:
       return "userInput";
   }
@@ -434,9 +415,6 @@ function userInputOrigin(
     case "rewind":
     case "todo_reminder":
       return "synthetic";
-    // 中枢直接启动：用户在中枢里的真实动作，可见 user row 但以启动卡呈现（origin 区分它与普通气泡）。
-    case "workflow_launch":
-      return "workflowLaunch";
     default:
       return "realUser";
   }

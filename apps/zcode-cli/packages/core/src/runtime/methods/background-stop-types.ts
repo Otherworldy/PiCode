@@ -1,8 +1,8 @@
 // ============================================================
 // 后台停止分派的共享类型
 // ============================================================
-// 从 background.ts 抽出，供它与按 RuntimeTaskType 分派出去的各个停止分支模块共用
-// （见 background-stop-dynamic-workflow.ts）。单独成文件是为了让分支模块不必 import
+// 从 background.ts 抽出，供它与按 RuntimeTaskType 分派出去的各个停止分支模块共用。
+// 单独成文件是为了让分支模块不必 import
 // background.ts，避免两者互相 import 类型，也限制 background.ts 的规模。
 //
 // background.ts 继续对外 re-export 这些名字，所以 agent-runtime.ts /

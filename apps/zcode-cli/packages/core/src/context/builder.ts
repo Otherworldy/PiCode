@@ -14,7 +14,6 @@ import type { ToolRegistry } from "../tool/registry.js";
 import { estimateTokens } from "./utils.js";
 import { buildCliPrefixSection } from "./sections/cli-prefix.js";
 import { buildIdentitySection } from "./sections/identity.js";
-import { buildWorkflowActorIdentitySection } from "./sections/workflow-actor.js";
 import { buildEnvInfoSection, buildGitSystemContextSection } from "./sections/env-info.js";
 import { buildSkillsSection } from "./sections/skills.js";
 import { buildRequestUserContextSection } from "./sections/request-user-context.js";
@@ -85,23 +84,9 @@ export class ContextBuilder {
       : undefined;
     const customSystemPrompt = this.config.customSystemPrompt?.trim();
     const hasCustomSystemPrompt = Boolean(customSystemPrompt);
-    // 工作流子代理身份：第三条路径。与
-    // customSystemPrompt 互斥——两者同在只可能是接线错误（persona 该经 workflowActor 进来，
-    // 不该再塞 systemPrompt），大声失败而不是默默二选一。
-    const workflowActor = this.config.workflowActor;
-    if (workflowActor !== undefined && hasCustomSystemPrompt) {
-      throw new Error(
-        "ContextBuilder: workflowActor and customSystemPrompt are mutually exclusive",
-      );
-    }
-    const isWorkflowActor = workflowActor !== undefined;
 
     // 1. CLI / product prefix. Keep this as the short leading identity block.
-    // 「You are PiCode, an interactive coding agent」对一个
-    // 只对脚本说话、可能连读文件工具都没有的子代理是错的身份，且走在正确身份段前面。
-    if (!isWorkflowActor) {
-      sections.push(buildCliPrefixSection());
-    }
+    sections.push(buildCliPrefixSection());
 
     // 2. Stable agent behavior or custom prompt body
     if (hasCustomSystemPrompt) {
@@ -114,8 +99,6 @@ export class ContextBuilder {
           content: customSystemPrompt ? `\n${customSystemPrompt}` : "",
         }),
       );
-    } else if (workflowActor !== undefined) {
-      sections.push(buildWorkflowActorIdentitySection(workflowActor));
     } else {
       sections.push(buildIdentitySection(activeOutputStyle));
     }
@@ -124,22 +107,16 @@ export class ContextBuilder {
     // custom prompt 不是只替换
     // stable body，而是跳过默认 system prompt 体系和 systemContext；否则用户提供
     // custom prompt 后仍会混入 Session Guidance / output style 等动态 system 段。
-    // 工作流子代理跳过其中面向「与用户对话」的三段（desktop、Dynamic Behavior、session
-    // guidance——契约里已把 Report outcomes faithfully 搬过去）。
     if (!hasCustomSystemPrompt) {
-      if (!isWorkflowActor && this.config.presentationSurface === "zcode_desktop") {
+      if (this.config.presentationSurface === "zcode_desktop") {
         sections.push(buildDesktopContextSection(this.config.genUiOutputDirectory));
       }
 
       // behaviour part right after stable sp...
-      if (!isWorkflowActor) {
-        sections.push(buildDynamicBehaviorSection());
-      }
+      sections.push(buildDynamicBehaviorSection());
 
       // Session-specific guidance
-      const sessionGuidanceSection = isWorkflowActor
-        ? null
-        : buildSessionGuidanceSection(
+      const sessionGuidanceSection = buildSessionGuidanceSection(
             this.config.guidanceToolNames ?? [],
             (this.config.skills?.skills.length ?? 0) > 0,
           );
@@ -166,8 +143,7 @@ export class ContextBuilder {
 
     // 4. Skills appear as a meta user system-reminder, matching provider block layout.
     // guidanceToolNames 是 runtime 当下的
-    // 工具表；一个 Skill 工具未注册的工作流子代理被告知「以下技能可经 Skill 工具使用」，
-    // 只会让它相信自己有一个没有的工具。表缺席（测试 / 旧调用方）时保持既有行为。
+    // 工具表。表缺席（测试 / 旧调用方）时保持既有行为。
     if (this.config.skills && this.skillToolAvailable()) {
       const skillsSection = buildSkillsSection({
         outcome: this.config.skills,

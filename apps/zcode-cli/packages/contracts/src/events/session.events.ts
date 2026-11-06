@@ -48,7 +48,6 @@ import { createModelUsageSummary } from "../model/index.js";
 import type { CheckpointCreatedPayload, RewindTriggeredPayload } from "../rewind/index.js";
 import type { ModelApiErrorPhase, ModelFailureExceptionKind } from "../model/apiCall.js";
 import type { ToolSideEffectScope } from "../tools/contract.js";
-import type { SavedWorkflowScope } from "../tools/saved-workflow.js";
 import type { GoalCompletionVerificationOutput, SessionGoal } from "../tools/target.js";
 import type { ToolResultDisplayPayload } from "../tools/tool-result-metadata.js";
 import type {
@@ -137,11 +136,6 @@ export const SessionEventType = {
   BackgroundTaskStarted: "background_task_started",
   BackgroundTaskUpdated: "background_task_updated",
   BackgroundTaskCompleted: "background_task_completed",
-  // workflow run 的实时进度：一条引擎 RunEvent 一条事件，追加到**父会话**（run 自己没有会话）。
-  // v4 侧归约成 workflowRuns 状态键；v3 侧在 shouldExposeSessionEventToProtocol 剥离。
-  // 命名刻意带 dynamic_：legacy `Workflow` 工具的 script run 事件（workflow_started /
-  // workflow_completed，script-workflow-runtime.ts）是另一套日志，同名会真的混淆。
-  DynamicWorkflowRunProgress: "dynamic_workflow_run_progress",
   PermissionRequested: "permission_requested",
   PermissionResolved: "permission_resolved",
   PermissionDenied: "permission_denied",
@@ -238,69 +232,11 @@ export interface TurnAttachmentMeta {
   ref?: string;
 }
 
-/**
- * workflow 通知的结构化载荷。
- * 发射侧铸造、有界（summary≤500 / result≤4000 / error≤2000 / reports.preview 逐条≤500、≤8 条 /
- * artifacts ≤8 条、title≤120 / question·context≤4000）；与 shared 的
- * workflowNotificationMetaSchema 保持手工同步。
- * 批量通知轮刻意不携带——一轮一张 manifest 的对应关系在批量下不成立。
- */
-export type WorkflowNotificationMeta =
-  | {
-      kind: "terminal";
-      status: "completed" | "errored" | "stopped";
-      /** `status === "stopped"` 才在场。 */
-      stopReason?: "user" | "model" | "provider" | "interrupted" | "superseded";
-      summary: string;
-      result?: string;
-      resultForm?: "prose" | "json";
-      resultTruncated?: true;
-      error?: string;
-      reports?: { count: number; shown: number; preview: string[] };
-      /**
-       * 用户面产物的 chips 载荷：≤ 8 条，
-       * 超出（含被种类过滤掉的）置 `artifactsTruncated`。
-       *
-       * ⚠ 术语：这里的 artifact 是脚本经 `artifact.*` 发布给用户看的产出，与同一载荷上的
-       * `result`（脚本顶层返回值，引擎内部也叫 artifact）是两件不同的东西。
-       */
-      artifacts?: {
-        id: string;
-        kind: "file" | "markdown" | "chart" | "table" | "metrics" | "board";
-        title?: string;
-        version: number;
-        contentType?: string;
-        /** run 的交付物；清单以它带头。只有它带 `description`（完成卡的交付物行要念）。 */
-        primary?: true;
-        description?: string;
-      }[];
-      artifactsTruncated?: true;
-      durationMs?: number;
-    }
-  | {
-      kind: "escalation";
-      qid: string;
-      actor: string;
-      question: string;
-      context?: string;
-      askedAt?: number;
-    }
-  /** run 级停滞：每个 stall 段一条，不是终态。 */
-  | {
-      kind: "stall";
-      sinceMs: number;
-      reason?: string;
-      cap?: number;
-    };
-
 /** 独立后台结果轮的展示元信息；批量轮可复用代表任务身份并合成 title，不从通知文本反向解析。 */
 export interface BackgroundResultOriginMeta {
-  /** `workflow` 是 dynamic-workflow run（workId ≡ runId），复用整条后台通知管线。 */
-  backgroundSource: "bash" | "subagent" | "workflow";
+  backgroundSource: "bash" | "subagent";
   workId: string;
   title: string;
-  /** 只在 backgroundSource === "workflow" 的单条通知轮上在场；manifest 渲染的唯一数据源。 */
-  workflowNotification?: WorkflowNotificationMeta;
 }
 
 /**
@@ -324,122 +260,6 @@ export type TurnBackgroundAttribution =
       offPeakRunType?: never;
     };
 
-/**
- * 中枢直接启动已保存工作流的启动轮元数据。同一份同时写进 user message 的 `metadata`（冷恢复来源）与 `TurnStarted`
- * payload（活投影来源）——冷热同形，投影据它画启动卡而不是显示文本。
- */
-/** 启动元数据上的 display 只允许 create_workflow 这一种投影（与 shared 行 schema 同形）。 */
-export type WorkflowLaunchDisplay = Extract<ToolResultDisplayPayload, { kind: "create_workflow" }>;
-
-/**
- * 设置轮的「改了什么」：只有改动过的设置在场，
- * 每项 from / to 缺一端即那一端是默认（模型 = 会话模型，上限 = 本机上限）。`ceiling` 是本机上限，
- * 供「13 → 4」这种读法。与 shared 的 `workflowSettingsAmendMetaSchema` 同形。
- */
-export interface WorkflowSettingsAmendMeta {
-  /**
-   * 被这次调整替代（或接着跑）的那个 run。**缺席即就地生效**：只改并发上界、run 又还在飞时，
-   * 那次「配置」既不停这次 run 也不另起一次，于是没有前驱可指——`runId` 指的就是被调整的那一个。
-   * 与 shared 的 `workflowSettingsAmendMetaSchema` 同形。
-   */
-  predecessorRunId?: string;
-  subagentModel?: { from?: string; to?: string };
-  maxConcurrency?: { from?: number; to?: number };
-  ceiling?: number;
-}
-
-export interface WorkflowLaunchMeta {
-  /** run 的身份（≡ backgroundTaskId ≡ cancelBackgroundWork 的 workId）。 */
-  runId: string;
-  /**
-   * 启动这次 run 的合成 toolCall id（中枢启动 `launch-<uuid>`，设置轮 `settings-<uuid>`；
-   * 工具卡 → 详情页关联键）。
-   */
-  toolCallId: string;
-  /**
-   * 工作流名（解析结果，非用户/模型可覆盖）；启动卡题名与会话标题都取它。中枢启动恒在场；设置轮取被
-   * 调整的 run 自己的名字，无名 run 即缺席（UI 换用兜底词，不拿 run id 当标题）。
-   */
-  name?: string;
-  /** 解析出的实际作用域（不是请求里可能缺席的 scope）。只属于中枢启动：设置轮没有保存文件可指。 */
-  scope?: SavedWorkflowScope;
-  /** 保存文件的落点，用于详情/诊断；不参与执行。只属于中枢启动。 */
-  path?: string;
-  /** 本次 run 的实参（已按声明校验并回填默认值）；有界见 {@link boundWorkflowLaunchMeta}。 */
-  args?: Record<string, unknown>;
-  /** 工作流说明（saved 元数据的 description），有界 ≤ 500 字符。 */
-  description?: string;
-  /**
-   * 启动前编译得到的 `create_workflow` 结果 display（有界因果图 + 诊断），与 CreateWorkflow 工具行
-   * `display` 同一投影、同一构造函数。run 详情侧板按 toolCallId 找「发起行」取图——直接启动没有
-   * 工具行，图就从这里取。
-   */
-  display?: WorkflowLaunchDisplay;
-  /**
-   * 本次 run 实际执行的脚本原文（与 `port.submit.scriptText` 同一份）。工具路径把它放在工具入参
-   * `input.script` 上供侧板 Script 区读取，这里是同一事实的启动轮落点；有界见
-   * {@link WORKFLOW_LAUNCH_SCRIPT_MAX_CHARS}（超界整体缺席，侧板 Script 区随之缺席）。
-   */
-  script?: string;
-  /** 设置轮才在场：这次 run 是用「配置」从哪个 run 修订来的、改了什么。 */
-  amend?: WorkflowSettingsAmendMeta;
-}
-
-/** {@link WorkflowLaunchMeta.args} 的 JSON 序列化上界（字节）。超界即丢，换成一个标记键。 */
-export const WORKFLOW_LAUNCH_ARGS_MAX_BYTES = 4_096;
-/** {@link WorkflowLaunchMeta.description} 的字符上界。 */
-export const WORKFLOW_LAUNCH_DESCRIPTION_MAX_CHARS = 500;
-/**
- * {@link WorkflowLaunchMeta.script} 的字符上界。工具路径的 `input.script` 本就不设界地进转写，
- * 这里取一个远大于任何合理 dwf 脚本、又能挡住误塞整份仓库的上限；超界整体缺席而非截断
- * （半截脚本对 Script 区没有意义，图仍在 display 里）。
- */
-export const WORKFLOW_LAUNCH_SCRIPT_MAX_CHARS = 256_000;
-/**
- * args 超界时的替身键。真实实参永远走模型面的规范句（那份不截断），这里的元数据只喂启动卡；
- * 一个大到 4KB 的实参袋在卡上本就无从展示，所以整体替换成单条可读标记而不是硬塞。用省略号
- * 作键：它落在 `SAVED_WORKFLOW_NAME_PATTERN` 之外，不可能与真实实参名相撞。
- */
-export const WORKFLOW_LAUNCH_ARGS_TRUNCATED_KEY = "…";
-
-/**
- * 把启动轮元数据收进边界内。args 序列化后超 {@link WORKFLOW_LAUNCH_ARGS_MAX_BYTES} 即整体
- * 换成 `{ "…": "arguments omitted (N bytes)" }` 标记（见 {@link WORKFLOW_LAUNCH_ARGS_TRUNCATED_KEY}）；
- * description 超 {@link WORKFLOW_LAUNCH_DESCRIPTION_MAX_CHARS} 即截断加省略号。铸造侧就地调用，
- * 让 message metadata 与 TurnStarted payload 拿到同一份有界值。
- */
-export function boundWorkflowLaunchMeta(input: WorkflowLaunchMeta): WorkflowLaunchMeta {
-  const bounded: WorkflowLaunchMeta = {
-    runId: input.runId,
-    toolCallId: input.toolCallId,
-    ...(input.name === undefined ? {} : { name: input.name }),
-    ...(input.scope === undefined ? {} : { scope: input.scope }),
-    ...(input.path === undefined ? {} : { path: input.path }),
-  };
-  if (input.args !== undefined) {
-    const serialized = JSON.stringify(input.args);
-    const bytes = serialized === undefined ? 0 : Buffer.byteLength(serialized, "utf8");
-    bounded.args =
-      bytes > WORKFLOW_LAUNCH_ARGS_MAX_BYTES
-        ? { [WORKFLOW_LAUNCH_ARGS_TRUNCATED_KEY]: `arguments omitted (${bytes} bytes)` }
-        : input.args;
-  }
-  if (input.description !== undefined) {
-    bounded.description =
-      input.description.length > WORKFLOW_LAUNCH_DESCRIPTION_MAX_CHARS
-        ? `${input.description.slice(0, WORKFLOW_LAUNCH_DESCRIPTION_MAX_CHARS - 1)}…`
-        : input.description;
-  }
-  // display 已在构造处（createCreateWorkflowDisplay + boundCausalityGraph）限长，原样透传。
-  if (input.display !== undefined) bounded.display = input.display;
-  if (input.script !== undefined && input.script.length <= WORKFLOW_LAUNCH_SCRIPT_MAX_CHARS) {
-    bounded.script = input.script;
-  }
-  // amend 块本身有界（两个模型串由调用方取自已解析的规范形，与 run 状态同一条上界）。
-  if (input.amend !== undefined) bounded.amend = input.amend;
-  return bounded;
-}
-
 export interface TurnStartedPayloadBase {
   /** 执行入口的单调 epoch 毫秒；hooks/持久化发生在 TurnStarted 发布前，不能据发布时间反推执行开始。 */
   executionStartedAt?: number;
@@ -458,18 +278,8 @@ export interface TurnStartedPayloadBase {
   queryId?: QueryId;
   inputSource?: SyntheticUserMessageSource;
   inputVisibility?: MessageVisibility;
-  /**
-   * 中枢直接启动已保存工作流的启动轮元数据（`inputSource === "workflow_launch"` 时在场）。
-   * 活投影据它画启动卡；与消息 metadata 里的同一份对齐（冷热同形）。
-   */
-  workflowLaunch?: WorkflowLaunchMeta;
   /** 缺省为 agent，兼容旧事件与历史 transcript。 */
   executionKind?: TurnExecutionKind;
-  /**
-   * `input` 从此下标起是引擎附加文本（dwf ask 尾注 / nudge），GUI 把它折进披露；0 = 整条都是；
-   * 缺席 = 无。与消息 metadata 里的同一份对齐（冷热同形）。
-   */
-  epilogueStart?: number;
   /** idle background wake 的结构化来源；active-loop 合流不会创建独立 TurnStarted。 */
   originMeta?: BackgroundResultOriginMeta;
   /** 仅当一个 background notification batch 的所有成员来源一致时透传；混合来源留空。 */
@@ -592,8 +402,6 @@ export interface TurnCompletePayload {
   resultType: TurnResultType;
   /** 当前 turn 是否消费过来源为 subagent 的后台结果通知。 */
   backgroundSubagentResultConsumed?: boolean;
-  /** 当前 turn 是否消费过来源为 workflow（dynamic-workflow run）的后台通知。 */
-  workflowResultConsumed?: boolean;
   /** 内部抢占（如 sendQueuedNow）只终止当前 turn，不等价于用户手动 Stop 队列。 */
   preserveQueueAutoDrainOnCancel?: boolean;
 }
@@ -604,8 +412,6 @@ export interface TurnErrorPayload {
   inputId?: string;
   /** 当前 turn 是否消费过来源为 subagent 的后台结果通知。 */
   backgroundSubagentResultConsumed?: boolean;
-  /** 当前 turn 是否消费过来源为 workflow（dynamic-workflow run）的后台通知。 */
-  workflowResultConsumed?: boolean;
 }
 
 export type TurnResultType =
@@ -845,8 +651,8 @@ export interface ToolCallStartedPayload {
   display?: ToolResultDisplayPayload;
   /**
    * 这次调用**解析后**的副作用能力（工具元数据 + 按入参解析的运行时能力，例如 Bash 的只读命令判定）。
-   * 事件在 handler 动手之前发出，所以订阅者能在第一个字节落盘前知道「要写了」——dynamic-workflow 的
-   * driver 据此关闭 amend-resume 的导入缓存（`isWorkspaceMutatingToolCall`）。可选：早于本字段的事件没有。
+   * 事件在 handler 动手之前发出，所以订阅者能在第一个字节落盘前知道「要写了」。
+   * 可选：早于本字段的事件没有。
    */
   readOnly?: boolean;
   sideEffectScope?: ToolSideEffectScope;
@@ -899,9 +705,7 @@ export interface BackgroundTaskPayloadBase {
   taskId: string;
   toolCallId?: ToolCallId | string;
   toolName?: string;
-  // "workflow" = workflow run（CreateWorkflow）。追踪器的行为已按 per-tool lifecycleProvider
-  // 分派，taskKind 只决定面板分组与图标，所以加宽是纯展示修正，不改任何生命周期语义。
-  taskKind?: "bash" | "subagent" | "workflow";
+  taskKind?: "bash" | "subagent";
   childSessionId?: SessionId | string;
   blocked?: boolean;
   blockedReason?: "interactive_prompt_detected" | "no_output_progress" | string;
@@ -936,29 +740,6 @@ export type BackgroundTaskCompletedPayload = BackgroundTaskPayloadBase & {
   status: Exclude<BackgroundTaskStatus, "running">;
 };
 
-/**
- * 一条 workflow run 进度事件（父会话）。字段与 {@link DynamicWorkflowRunEvent} 同形——
- * **一次序列化、两个消费者**：`listEvents` 的事件页与这里的会话事件用同一个有界载荷，
- * 读端因此不需要两套解释规则。`type` 已被会话事件信封占用，故引擎事件种类叫 `eventType`。
- */
-export interface DynamicWorkflowRunProgressPayload {
-  runId: string;
-  /** 发起这次 run 的 CreateWorkflow 工具调用（工具卡 → 详情页的关联键）。 */
-  toolCallId?: ToolCallId | string;
-  /** journal sequence（`appendEvent` 单调分配）；事件日志的 cursor 与它同一把尺。 */
-  sequence: number;
-  /** 引擎事件种类：run-started / actor-created / node-* / usage-updated / log / report / phase-entered / run-settled。 */
-  eventType: string;
-  payload: Record<string, unknown>;
-  truncated?: boolean;
-  /** 派生字段（toProgressPayload）：`actor-created` 上该子代理会话的 id（driver 铸的 `sess_dwf-…`）。 */
-  actorSessionId?: string;
-  /**
-   * 派生字段（与 `actorSessionId` 同类，见 toProgressPayload）：该 run 的 `run-launched.inputId`。
-   * 只挂在 `actor-created` / `run-settled` 两种事件上，供下游把子代理归到发起 run 的那一轮。升级前的 run 没有 `run-launched`，字段缺席。
-   */
-  launchInputId?: string;
-}
 
 export interface PermissionRequestedPayload {
   requestId?: string;
@@ -1257,7 +1038,6 @@ export type SessionEventPayload =
   | BackgroundTaskStartedPayload
   | BackgroundTaskUpdatedPayload
   | BackgroundTaskCompletedPayload
-  | DynamicWorkflowRunProgressPayload
   | PermissionRequestedPayload
   | PermissionResolvedPayload
   | PermissionDeniedPayload

@@ -66,14 +66,6 @@ import {
 } from "./workspace-model-runtime.js";
 import { getSkillReferenceCatalog } from "./skill-reference-catalog.js";
 import { getAgentToolCatalog } from "./agent-tool-catalog.js";
-import {
-  deleteSavedWorkflowOp,
-  getSavedWorkflowOp,
-  listSavedWorkflowRunsOp,
-  listSavedWorkflowsOp,
-  moveSavedWorkflowOp,
-  updateSavedWorkflowMetaOp,
-} from "./saved-workflows.js";
 import { listMcpServers } from "./mcp.js";
 import {
   callMcpUiTool,
@@ -99,7 +91,6 @@ import { updateInteractionPreferences } from "./interaction-preferences.js";
 import { updateAccountProviderConfig } from "./account-provider-config.js";
 import { updateModelIoPreferences } from "./model-io-preferences.js";
 import { updateOffPeakToolPolicy } from "./off-peak-tool-policy.js";
-import { updateDynamicWorkflowPolicy } from "./dynamic-workflow-policy.js";
 import { grantWorkspaceHookTrustForProtocol } from "./workspace-hook-trust.js";
 import {
   V4InteractionRegistry,
@@ -281,9 +272,6 @@ export class ZCodeProtocolAgentServer {
       appRuntimePreferences: {
         modelIoFullRetentionEnabled: false,
         offPeakToolEnabled: false,
-        // 动态工作流灰度门 fail-closed：Host 必须显式 workspace/updateDynamicWorkflowPolicy
-        // 才开启。
-        dynamicWorkflowEnabled: false,
       },
       notify: (notification) => this.messageSink?.(notification),
       requestClient: (method, params, resultSchema, options) =>
@@ -617,25 +605,6 @@ export class ZCodeProtocolAgentServer {
         return await this.requireV4Gateway().fileChanges(request.params);
       case V4_METHODS.conversationFileRewindPreview:
         return await this.requireV4Gateway().fileRewindPreview(request.params);
-      // workflow run 事件日志分页（只读、无状态、超时重发安全；新方法天然偏斜安全）。
-      case V4_METHODS.conversationWorkflowRunEvents:
-        return await this.requireV4Gateway().workflowRunEvents(request.params);
-      // dwf run 枚举（重启后的发现查询）。
-      case V4_METHODS.conversationWorkflowRuns:
-        return await this.requireV4Gateway().workflowRuns(request.params);
-      // dwf 用户面产物的三个读面。同族：只读、无状态、
-      // 超时重发安全；ArtifactRead 的授权在宿主端口侧，网关只校参数与分块。
-      case V4_METHODS.conversationWorkflowRunArtifacts:
-        return await this.requireV4Gateway().workflowRunArtifacts(request.params);
-      case V4_METHODS.conversationWorkflowRunArtifactData:
-        return await this.requireV4Gateway().workflowRunArtifactData(request.params);
-      case V4_METHODS.conversationWorkflowRunArtifactRead:
-        return await this.requireV4Gateway().workflowRunArtifactRead(request.params);
-      // dwf 工作区 transcript 的两个读面。同族。
-      case V4_METHODS.conversationWorkflowRunWorkspace:
-        return await this.requireV4Gateway().workflowRunWorkspace(request.params);
-      case V4_METHODS.conversationWorkflowRunNodeResult:
-        return await this.requireV4Gateway().workflowRunNodeResult(request.params);
       // 附件只能走小 RPC transaction，禁止 full-data attachment/put 单行。
       case V4_METHODS.attachmentBegin:
         return await this.requireV4Gateway().attachmentBegin(request.params);
@@ -738,8 +707,6 @@ export class ZCodeProtocolAgentServer {
         return await updateModelIoPreferences(this.context, request.params);
       case zcodeProtocolMethods.workspaceUpdateOffPeakToolPolicy:
         return await updateOffPeakToolPolicy(this.context, request.params);
-      case zcodeProtocolMethods.workspaceUpdateDynamicWorkflowPolicy:
-        return await updateDynamicWorkflowPolicy(this.context, request.params);
       case zcodeProtocolMethods.workspaceGenerateText:
         return await this.withWorkspaceGenerateTextSignal(request, (signal) =>
           generateWorkspaceText(this.context, request.params, signal),
@@ -796,18 +763,6 @@ export class ZCodeProtocolAgentServer {
         return await getSkillReferenceCatalog(this.context, request.params);
       case zcodeProtocolMethods.agentToolCatalog:
         return await getAgentToolCatalog(this.context, request.params);
-      case zcodeProtocolMethods.workflowsList:
-        return await listSavedWorkflowsOp(this.context, request.params);
-      case zcodeProtocolMethods.workflowsGet:
-        return await getSavedWorkflowOp(this.context, request.params);
-      case zcodeProtocolMethods.workflowsUpdateMeta:
-        return await updateSavedWorkflowMetaOp(this.context, request.params);
-      case zcodeProtocolMethods.workflowsDelete:
-        return await deleteSavedWorkflowOp(this.context, request.params);
-      case zcodeProtocolMethods.workflowsRuns:
-        return await listSavedWorkflowRunsOp(this.context, request.params);
-      case zcodeProtocolMethods.workflowsMove:
-        return await moveSavedWorkflowOp(this.context, request.params);
       case zcodeProtocolMethods.processChildProcesses:
         return listChildProcesses(this.context.deps.mcpProcessRegistry?.listProcesses() ?? []);
       case zcodeProtocolMethods.runtimeCapabilities: {

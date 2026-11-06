@@ -25,13 +25,13 @@ const AUTOMATION_QUERY_ID_PREFIX = "automation-";
 /**
  * 闲时派发轮隐藏的工具；OffPeakList 只读保留。
  * - OffPeakCreate：防止闲时任务递归自我派生、无限调度。
- * - SendMessage / Workflow：会在闲时 turn 的 modelExecution 之外重新启动子 Agent（SendMessage 续跑
- *   已完成子 Agent、Workflow 派生脚本子会话），按父会话常驻选择建模型。
+ * - SendMessage：会在闲时 turn 的 modelExecution 之外重新启动子 Agent（续跑已完成子 Agent），
+ *   按父会话常驻选择建模型。
  *
  * 独立常量，绝不并入 AUTOMATION_MUTATION_TOOL_NAMES——cron automation turn 明确放行
  * OffPeakCreate（定时派生闲时任务），混入会让 automation turn 误 deny。
  */
-export const OFF_PEAK_MUTATION_TOOL_NAMES = ["OffPeakCreate", "SendMessage", "Workflow"] as const;
+export const OFF_PEAK_MUTATION_TOOL_NAMES = ["OffPeakCreate", "SendMessage"] as const;
 // 闲时派发 init 段 traceId 无固定前缀，只有 resume 段是 `${offPeakTaskId}:resume:*`
 // （offpeak- 开头）；前缀只是 resume 兜底信号，主信号必须是显式 offPeakTaskId。
 const OFF_PEAK_QUERY_ID_PREFIX = "offpeak-";
@@ -84,8 +84,6 @@ export interface RegularTurnLoopState {
   anomalyWarningsInjected: number;
   /** 本轮是否已消费来源为 subagent 的后台结果通知。 */
   backgroundSubagentResultConsumed: boolean;
-  /** 本轮是否已消费来源为 workflow（dynamic-workflow run）的后台通知。 */
-  workflowResultConsumed: boolean;
   compactTracking?: CompactLoopTracking;
   currentUserMessageId: MessageId;
   drainedSteerForNextRequest?: DrainedPendingInputDiagnostics;

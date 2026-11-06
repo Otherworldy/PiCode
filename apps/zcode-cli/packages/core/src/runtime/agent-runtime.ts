@@ -30,9 +30,7 @@ import type {
   SessionProjection,
   SessionStorePort,
   SessionGoal,
-  SavedWorkflowScope,
   TargetChangedPayload,
-  DynamicWorkflowRunProgressPayload,
   UserInputAutoResolutionUpdatedPayload,
   ContextSourcePort,
   ExecutionPort,
@@ -43,8 +41,6 @@ import type {
   SkillLoadOutcome,
   SkillPort,
   McpPort,
-  DynamicWorkflowRunPort,
-  ModelCatalogPort,
   SubagentPort,
   ToolArtifactStorePort,
   ToolCallId,
@@ -67,11 +63,6 @@ import type {
   TurnId,
 } from "./deps.js";
 import { installAgentRuntimeMethods } from "./methods/index.js";
-import type { StartSavedWorkflowRunResult } from "./methods/dynamic-workflow-run-start.js";
-import type {
-  AmendWorkflowRunSettingsInput,
-  AmendWorkflowRunSettingsResult,
-} from "./methods/dynamic-workflow-run-settings.js";
 import { createRuntimeCommandQueue } from "./command-queue.js";
 import type { RuntimeCommandQueue } from "./command-queue.js";
 import type {
@@ -170,8 +161,6 @@ export class AgentRuntime {
   private mcpToolsSignature?: string;
   private mcpToolListRevision?: number;
   private subagentPort?: SubagentPort;
-  private dynamicWorkflowRunPort?: DynamicWorkflowRunPort;
-  private modelCatalogPort?: ModelCatalogPort;
   private runtimeTaskRegistry: RuntimeTaskRegistry;
   private branchGeneration = 0;
   private artifactStore?: ToolArtifactStorePort;
@@ -276,9 +265,7 @@ export class AgentRuntime {
     this.imageProcessorPort = deps.imageProcessorPort;
     this.pdfDocumentPort = deps.pdfDocumentPort;
     this.subagentPort = deps.subagentPort ?? runtime.createDefaultSubagentPort(deps);
-    this.dynamicWorkflowRunPort = deps.dynamicWorkflowRunPort;
     // GUI「配置」解析子代理模型用的目录（与工具上下文拿的是同一个端口）。
-    this.modelCatalogPort = deps.modelCatalogPort;
     this.registry = deps.toolRegistry ?? createToolRegistry();
     this.workspaceRoot = this.workingDirectory;
     const tooling = initializeRuntimeTooling(runtime, deps, sessionId);
@@ -376,7 +363,7 @@ export interface AgentRuntime {
   ): Promise<PromptAdmissionReceipt>;
   /** Session 常驻池使用的 runtime busy 权威事实，包含 queue/drain/reservation。 */
   hasActiveOrQueuedTurnWork(): boolean;
-  /** Session 常驻池使用的后台 Bash/Agent/Workflow running 权威事实。 */
+  /** Session 常驻池使用的后台 Bash/Agent running 权威事实。 */
   hasRunningBackgroundTasks(): boolean;
   /**
    * Session 常驻池唯一消费的 runtime owned-work 聚合事实。
@@ -508,35 +495,6 @@ export interface AgentRuntime {
   recordUserInputAutoResolutionUpdate(
     input: UserInputAutoResolutionUpdatedPayload & { traceContext?: TraceContext },
   ): Promise<void>;
-  /** workflow run 进度的出回合追加（事件源在 bootstrap 的 run service）。 */
-  recordDynamicWorkflowRunProgress(
-    input: DynamicWorkflowRunProgressPayload & { traceContext?: TraceContext },
-  ): Promise<void>;
-  /** 恢复的 workflow run 的追踪重臂（registry 登记 + started 事件 + waiter + 结算通知）。 */
-  trackResumedDynamicWorkflowRun(input: {
-    runId: string;
-    toolCallId?: string;
-    name?: string;
-    traceContext?: TraceContext;
-  }): Promise<void>;
-  /**
-   * 中枢直接启动一个已保存的工作流：解析 + 校验 + 编译，
-   * 干净则 submit 启动 run、落 controlOnly 启动轮、登记后台追踪。`app.startSavedWorkflow` 能力的
-   * 落地实现（端口在场时注册）。
-   */
-  startSavedWorkflowRun(input: {
-    name: string;
-    scope?: SavedWorkflowScope;
-    args?: Record<string, unknown>;
-    traceContext?: TraceContext;
-  }): Promise<StartSavedWorkflowRunResult>;
-  /**
-   * GUI「配置」改一个 run 的子代理模型与并发上界：以同一份脚本修订出新 run、登记后台追踪、把设置轮排进队列。
-   * `app.amendWorkflowRunSettings` 能力的落地实现。
-   */
-  amendWorkflowRunSettings(
-    input: AmendWorkflowRunSettingsInput,
-  ): Promise<AmendWorkflowRunSettingsResult>;
   recordGoalStateChangeReminder(input: {
     text: string;
     traceContext?: TraceContext;

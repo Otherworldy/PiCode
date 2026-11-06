@@ -32,7 +32,6 @@
   },
   "dependencies": {
     "@zcode/contracts": "workspace:*",
-    "@zcode/dynamic-workflow": "workspace:*",
     "@zcode/shared": "workspace:*",
     "@zcode/shared-types": "workspace:*",
     "@zcode/zcode-cua": "workspace:*",

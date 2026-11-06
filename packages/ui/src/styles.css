@@ -170,9 +170,6 @@ body {
   --color-trajectory-tool-result: #0284c7;
   /* 工作流因果图仪表化渲染：
    * rule 比 --color-border 更弱——刻度与空闲轨道每图重复约 40 次，10% 会积成灰雾。 */
-  --color-workflow-rule: color-mix(in oklab, var(--color-neutral-950) 5.5%, transparent);
-  --color-workflow-trace: color-mix(in oklab, var(--color-neutral-950) 30%, transparent);
-  --color-workflow-trace-strong: color-mix(in oklab, var(--color-neutral-950) 55%, transparent);
   --color-accent: var(--color-sky-50);
   --color-find-highlight: #fde68a;
   --color-find-highlight-active: #facc15;
@@ -321,9 +318,6 @@ body {
   --color-trajectory-reasoning: #a78bfa;
   --color-trajectory-tool-call: #f59e0b;
   --color-trajectory-tool-result: #38bdf8;
-  --color-workflow-rule: color-mix(in oklab, var(--color-white) 6.5%, transparent);
-  --color-workflow-trace: color-mix(in oklab, var(--color-white) 35%, transparent);
-  --color-workflow-trace-strong: color-mix(in oklab, var(--color-white) 60%, transparent);
   --color-accent: color-mix(in oklab, var(--color-sky-950) 50%, transparent);
   --color-find-highlight: #713f12;
   --color-find-highlight-active: #a16207;
@@ -474,9 +468,6 @@ body {
   --color-trajectory-reasoning: #7c3aed;
   --color-trajectory-tool-call: #d97706;
   --color-trajectory-tool-result: #0284c7;
-  --color-workflow-rule: rgba(13, 13, 13, 0.055);
-  --color-workflow-trace: rgba(13, 13, 13, 0.3);
-  --color-workflow-trace-strong: rgba(13, 13, 13, 0.55);
   --color-accent: #ebf4ff;
   --color-find-highlight: #fff4eb;
   --color-find-highlight-active: #ffb26b;
@@ -619,9 +610,6 @@ body {
   --color-trajectory-reasoning: #a78bfa;
   --color-trajectory-tool-call: #f59e0b;
   --color-trajectory-tool-result: #38bdf8;
-  --color-workflow-rule: rgba(255, 255, 255, 0.065);
-  --color-workflow-trace: rgba(255, 255, 255, 0.35);
-  --color-workflow-trace-strong: rgba(255, 255, 255, 0.6);
   --color-accent: #001d3d;
   --color-find-highlight: #542500;
   --color-find-highlight-active: #ff8a30;

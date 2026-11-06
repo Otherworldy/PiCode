@@ -129,23 +129,6 @@ Use semantic colors only for actual semantic states. Do not borrow success, warn
 
 Waiting badges use one green confirmation treatment so identical waiting copy does not appear as different states. Do not substitute `--color-success` for a waiting confirmation.
 
-### Workflow timeline colors
-
-The dynamic-workflow timeline draws with a feature-scoped token family:
-
-- **Rule**: `--color-workflow-rule`
-  Sub-hairline for repeated furniture. Weaker than `--color-border`; do not use it as a
-  general separator.
-- **Trace / Trace Strong**: `--color-workflow-trace`, `--color-workflow-trace-strong`
-  Rail and arc stroke ramp: not yet taken vs control has passed. The marching segment
-  overlays `--color-warning` dashes; there is no third stroke colour.
-- Station lamps and agent pills use the semantic status colours (`--color-success`,
-  `--color-warning` for running, `--color-destructive`); agent avatars use the fixed nine-color HEX palette,
-  assigned by instance index (name hash fallback), and never encode status.
-- A compile-feedback row (a script that did not compile, so nothing ran) uses a hollow lamp:
-  `--color-warning` while it is the latest draft, `--color-foreground-subtlest` once a newer
-  draft exists. Never `--color-destructive`, which on this feature belongs to a run that errored.
-
 ### Overlay and utility colors
 
 - **Toast**: `--color-toast`
@@ -200,9 +183,8 @@ All interface typography must use the dedicated `text-ui-*` scale. The Appearanc
 | `text-ui-2xs`     | `--ui-font-size - 5px` |     9px |
 
 `text-ui-2xs` is a restricted exception below the `text-ui-xs` floor: it is permitted
-only for graph **axis furniture** — timebase tick labels, channel codes, and unit
-suffixes in the workflow timeline — never for content, labels, or metadata.
-Treat any other use as a design-system defect.
+only for chart **axis furniture** — tick labels, channel codes, and unit suffixes —
+never for content, labels, or metadata. Treat any other use as a design-system defect.
 
 `text-mobile-input-safe` is a fixed 16px platform-compatibility token. It is
 reserved for editable controls on mobile Web surfaces where iOS focus zoom must

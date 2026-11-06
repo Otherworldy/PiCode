@@ -25,7 +25,6 @@ const SORTED_PROVIDER_TOOL_NAMES = new Set([
   "TaskUpdate",
   "WebFetch",
   "WebSearch",
-  "Workflow",
   "Write",
 ]);
 

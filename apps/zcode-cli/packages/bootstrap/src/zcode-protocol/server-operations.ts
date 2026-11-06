@@ -1482,10 +1482,9 @@ export async function activateSessionForResume(
       model: undefined,
       ...(session.parentID ? { parentSessionId: String(session.parentID) } : {}),
       // resume 曾丢掉持久化 taskType，createRecord 落回缺省
-      // "interactive"。于是被 resume 的 workflow_child / subagent_child 会话通过
-      // isTaskListSessionType 的筛，经 getSessionWorkspaceId 漏进 sessions-index，
-      // desktop 任务列表长出「workflow actor actor#N@k」假任务，任务索引同步器还会
-      // 反复对它们发 session/resume。fork 路径一直带着 taskType，这里必须同样带。
+      // "interactive"。于是被 resume 的 subagent_child 会话通过 isTaskListSessionType 的筛，
+      // 经 getSessionWorkspaceId 漏进 sessions-index，desktop 任务列表长出假任务，任务索引
+      // 同步器还会反复对它们发 session/resume。fork 路径一直带着 taskType，这里必须同样带。
       taskType: session.taskType,
       workspace,
     },
@@ -2531,9 +2530,9 @@ function buildPromptTurnToolDisallowlist(
   if (activeAutomationId) tools.add("CronCreate");
   // 闲时派发轮隐藏 OffPeakCreate（防递归自我派生）；OffPeakList 只读保留。
   // 注意 automation 轮不加 OffPeakCreate——cron 轮放行（定时派生闲时任务）。
-  // SendMessage / Workflow 同样隐藏，与 V4 prompt-turn 及 core turn-loop-state 同值。
+  // SendMessage 同样隐藏，与 V4 prompt-turn 及 core turn-loop-state 同值。
   if (activeOffPeakTaskId) {
-    for (const toolName of ["OffPeakCreate", "SendMessage", "Workflow"]) tools.add(toolName);
+    for (const toolName of ["OffPeakCreate", "SendMessage"]) tools.add(toolName);
   }
   return tools.size > 0 ? [...tools] : undefined;
 }
@@ -3446,14 +3445,6 @@ async function createRecord(
       modelSelection: "model" in params ? toRuntimeModelSelection(initialModel) : undefined,
       parentSessionId,
       taskType,
-      // 动态工作流灰度门：与 offPeakPort
-      // 同一套读法——本次 create/resume 参数优先，缺席时读 Host 同步到进程的 workspace 级
-      // 结论；两者都没有就是 false（fail-closed）。这里**必须写出显式布尔**，不能省成
-      // undefined：core 把「缺席」定义为「不参与灰度、保留全部工具」（TUI / headless /
-      // workflow_child 的语义），受信 Host 创建的会话不能落进那条豁免。
-      dynamicWorkflowEnabled:
-        ("dynamicWorkflowEnabled" in params && params.dynamicWorkflowEnabled === true) ||
-        context.appRuntimePreferences.dynamicWorkflowEnabled === true,
       // 协议侧的工具允许/拒绝列表是 session 级安全边界，必须进入 runtimeConfig，
       // 不能只依赖 prompt 文本约束，否则内置工具和动态 MCP 工具仍可能越过调用面。
       toolAllowlist: "toolAllowlist" in params ? params.toolAllowlist : undefined,
@@ -3686,9 +3677,6 @@ async function snapshotWithDiagnostics(
     persistedGoalVerificationEvents,
     session,
     slashCommandOptions: {
-      // session snapshot 的 `/` 目录与 workspace presentation 必须给出同一份灰度结论，
-      // 否则关闭态下侧栏面板还能看到 `workflow`。
-      dynamicWorkflowEnabled: context.appRuntimePreferences.dynamicWorkflowEnabled,
       env: context.deps.env,
       logger: context.logger,
     },

@@ -26,10 +26,6 @@ import {
   V4SplitPaneEntryProvider,
   type V4SplitPaneSessionTarget,
 } from "@/v4/splitPaneEntryContext.js";
-import {
-  WorkflowRunOpenProvider,
-  type WorkflowRunOpenTarget,
-} from "@/v4/workflowRunOpenContext.js";
 import type { ConversationDropTargetController } from "@/v4/composer/conversationDropTarget.js";
 import type { WorkbenchSessionBinding } from "@/v4/workbenchGroupStore.js";
 import {
@@ -54,11 +50,6 @@ import {
 import { ScopedErrorBoundary } from "@/ErrorBoundary.js";
 
 import { AUTOMATIONS_TOAST_ANCHOR_ID, AutomationsSection } from "@/settings/AutomationsSection.js";
-import type {
-  SavedWorkflowLaunchTarget,
-  SavedWorkflowsOpenArtifactParams,
-  SavedWorkflowsOpenRunParams,
-} from "@/settings/saved-workflows/SavedWorkflowsSection.js";
 import { AutomationsMainBreadcrumbFrame } from "@/settings/AutomationsMainBreadcrumbFrame.js";
 import { TaskFindDialog } from "@/quickpick/TaskFindDialog.js";
 import { WorkspaceHeader } from "@/WorkspaceHeader.js";
@@ -326,11 +317,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   handleSyncSubagentSessionTabs,
   handleOpenSelectionSideChat,
   handleOpenPlanDetail,
-  handleOpenWorkflowRun,
-  handleOpenWorkflowRunDirectory,
-  handleOpenWorkflowActorSession,
-  handleOpenWorkflowWorkspace,
-  handleOpenWorkflowArtifact,
   handleCloseCodeViewer,
   handleCloseGit,
   handleActivateSidePaneTab,
@@ -896,8 +882,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
     },
     [handleCreateTaskInChat, workspaceReadOnlyReason],
   );
-  // 工作流「运行」现由中枢直接启动：GUI 建空会话 +
-  // 发 startSavedWorkflow 命令，不再合成对话文案。本层只在 accepted 后把会话切到前台。
   const handleSelectTaskInChat = useCallback(
     (
       targetWorkspacePath: string,
@@ -973,125 +957,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
       shellWorkbenchBinding,
       showChatMainView,
       tabStoreApi,
-      workspaceTabs,
-    ],
-  );
-  // 中枢直接启动 accepted 后切到新会话（run 卡已在顶部）：复用运行历史那条导航，
-  // target 恒带工作流所属项目坐标（不变式 7），remoteSessionId 决定连接 endpoint。
-  const handleNavigateToLaunchedRun = useCallback(
-    (target: SavedWorkflowLaunchTarget, sessionId: string) => {
-      handleSelectTaskInChat(
-        target.workspacePath,
-        sessionId,
-        target.workspaceIdentity,
-        target.remoteSessionId,
-      );
-    },
-    [handleSelectTaskInChat],
-  );
-  // 工作流运行历史「查看实例」：先回到发起它的会话（侧栏页只在 chat 视图里可见），再开实例详情页。
-  const handleOpenSavedWorkflowRun = useCallback(
-    (params: SavedWorkflowsOpenRunParams) => {
-      // 中枢是跨项目视图：实例必须开在发起它的项目，而非活动项目。
-      // params 恒带 workspacePath/identity；仅在异常缺省时兜底回退到活动 workspace。
-      const targetWorkspacePath = params.workspacePath || workspaceAbsPath;
-      const targetWorkspaceIdentity =
-        params.workspaceIdentity ?? (workspaceIdentity?.trim() ? workspaceIdentity : undefined);
-      // remoteSessionId 不在契约里：按目标 workspace 从已打开 tab 反查；命中活动项目即取活动值。
-      const targetRemoteSessionId = workspaceTabs.find(
-        (tab) =>
-          tab.workspacePath === targetWorkspacePath &&
-          (!targetWorkspaceIdentity || tab.workspaceIdentity === targetWorkspaceIdentity),
-      )?.remoteSessionId;
-      handleSelectTaskInChat(
-        targetWorkspacePath,
-        params.sessionId,
-        targetWorkspaceIdentity,
-        targetRemoteSessionId,
-      );
-      handleOpenWorkflowRun({
-        workspacePath: targetWorkspacePath,
-        ...(targetWorkspaceIdentity ? { workspaceIdentity: targetWorkspaceIdentity } : {}),
-        ...(targetRemoteSessionId ? { remoteSessionId: targetRemoteSessionId } : {}),
-        parentSessionId: params.sessionId,
-        toolCallId: params.toolCallId,
-        runId: params.runId,
-        workflowName: params.workflowName,
-      });
-    },
-    [
-      handleOpenWorkflowRun,
-      handleSelectTaskInChat,
-      workspaceAbsPath,
-      workspaceIdentity,
-      workspaceTabs,
-    ],
-  );
-  // 侧栏运行行：与 composer 徽标
-  // 同一跳转——先选中会话，再开 run pane。没有 toolCallId 的 run（不该有）只选中会话。
-  const handleOpenSidebarWorkflowRun = useCallback(
-    (target: WorkflowRunOpenTarget) => {
-      if (target.run.toolCallId === undefined) {
-        const targetRemoteSessionId = workspaceTabs.find(
-          (tab) =>
-            tab.workspacePath === target.workspacePath &&
-            (!target.workspaceIdentity || tab.workspaceIdentity === target.workspaceIdentity),
-        )?.remoteSessionId;
-        handleSelectTaskInChat(
-          target.workspacePath,
-          target.sessionId,
-          target.workspaceIdentity,
-          targetRemoteSessionId,
-        );
-        return;
-      }
-      handleOpenSavedWorkflowRun({
-        sessionId: target.sessionId,
-        runId: target.run.runId,
-        toolCallId: target.run.toolCallId,
-        workflowName: target.run.name ?? "",
-        workspacePath: target.workspacePath,
-        ...(target.workspaceIdentity ? { workspaceIdentity: target.workspaceIdentity } : {}),
-      });
-    },
-    [handleOpenSavedWorkflowRun, handleSelectTaskInChat, workspaceTabs],
-  );
-  // 中枢的产物 chip：与「查看实例」逐字同构（同一条「先回到发起它的会话」的路径），
-  // 只是终点是 `workflow-artifact` tab 而不是 run 详情页。
-  const handleOpenSavedWorkflowArtifact = useCallback(
-    (params: SavedWorkflowsOpenArtifactParams) => {
-      const targetWorkspacePath = params.workspacePath || workspaceAbsPath;
-      const targetWorkspaceIdentity =
-        params.workspaceIdentity ?? (workspaceIdentity?.trim() ? workspaceIdentity : undefined);
-      const targetRemoteSessionId = workspaceTabs.find(
-        (tab) =>
-          tab.workspacePath === targetWorkspacePath &&
-          (!targetWorkspaceIdentity || tab.workspaceIdentity === targetWorkspaceIdentity),
-      )?.remoteSessionId;
-      handleSelectTaskInChat(
-        targetWorkspacePath,
-        params.sessionId,
-        targetWorkspaceIdentity,
-        targetRemoteSessionId,
-      );
-      handleOpenWorkflowArtifact({
-        workspacePath: targetWorkspacePath,
-        ...(targetWorkspaceIdentity ? { workspaceIdentity: targetWorkspaceIdentity } : {}),
-        ...(targetRemoteSessionId ? { remoteSessionId: targetRemoteSessionId } : {}),
-        parentSessionId: params.sessionId,
-        runId: params.runId,
-        artifactId: params.artifactId,
-        ...(params.title === undefined ? {} : { title: params.title }),
-        // 中枢的 chip 载荷带得到 contentType（html 产物据它直接开浏览器 tab）；`sourcePath`
-        // 那份载荷没有，由 `handleOpenWorkflowArtifact` 自己查 journal 补。
-        ...(params.contentType === undefined ? {} : { contentType: params.contentType }),
-      });
-    },
-    [
-      handleOpenWorkflowArtifact,
-      handleSelectTaskInChat,
-      workspaceAbsPath,
-      workspaceIdentity,
       workspaceTabs,
     ],
   );
@@ -1514,10 +1379,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
       onOpenFileLink={handleOpenMarkdownFileLink}
       onOpenBackgroundBash={handleOpenBackgroundBash}
       onOpenSubagentSession={handleOpenSubagentSession}
-      onOpenWorkflowActorSession={handleOpenWorkflowActorSession}
-      onOpenWorkflowWorkspace={handleOpenWorkflowWorkspace}
-      onOpenWorkflowArtifact={handleOpenWorkflowArtifact}
-      onOpenWorkflowRun={handleOpenWorkflowRun}
       onRefreshGit={handleRefreshGit}
       onBrowserNavigationRequestHandled={handleBrowserNavigationRequestHandled}
       onBrowserUrlChange={handleBrowserUrlChange}
@@ -1602,55 +1463,53 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                 canOpenSession={canOpenSessionInSplitPane}
                 onOpenSession={handleOpenSessionInSplitPane}
               >
-                <WorkflowRunOpenProvider onOpenRun={handleOpenSidebarWorkflowRun}>
-                  <WorkspaceSidebar
-                    workspacePath={workspaceAbsPath}
-                    workspaceRemoteSessionId={workspaceRemoteSessionId}
-                    activePreviewPath={activePreviewPath}
-                    onSelectTask={handleSelectTaskInChat}
-                    onStartDraftInWorkspace={handleCreateProjectDraft}
-                    onOpenCodeViewer={handleOpenCodeViewer}
-                    onOpenBrowserUrl={handleOpenBrowserUrl}
-                    fileTreeOpenRequest={fileTreeOpenRequest}
-                    onCreateTask={handleCreateTaskInChat}
-                    onCreateConversationTask={onCreateConversationTask ?? handleCreateTaskInChat}
-                    onOpenFolderFromWorkspaceMenu={onOpenFolderFromWorkspaceMenu}
-                    onOpenRemoteWorkspace={onOpenRemoteWorkspace}
-                    theme={theme}
-                    onConnectRemote={onConnectRemote}
-                    onSelectRemoteProject={onSelectRemoteProject}
-                    onCancelRemoteProject={onCancelRemoteProject}
-                    onReconnectRemoteWorkspace={onReconnectRemoteWorkspace}
-                    reconnectingRemoteWorkspaceKeys={reconnectingRemoteWorkspaceKeys}
-                    remoteWorkspaceErrorByWorkspaceKey={remoteWorkspaceErrorByWorkspaceKey}
-                    reconnectingRemoteWorkspaceLogsByWorkspaceKey={
-                      reconnectingRemoteWorkspaceLogsByWorkspaceKey
-                    }
-                    onLogout={onLogout}
-                    onLogin={onLogin}
-                    user={user}
-                    isDesktop={isDesktop}
-                    isMacDesktop={isMacDesktop}
-                    isWindowsDesktop={isWindowsDesktop}
-                    isSidebarVisible={isSidebarVisible}
-                    onToggleSidebar={handleToggleSidebar}
-                    toggleSidebarShortcutLabel={toggleSidebarShortcutLabel}
-                    canGoBack={canPrimaryNavigationBack}
-                    canGoForward={canTaskNavForward}
-                    onGoBack={primaryNavigationBack}
-                    onGoForward={handleTaskNavForward}
-                    goBackShortcutLabel={goBackShortcutLabel}
-                    goForwardShortcutLabel={goForwardShortcutLabel}
-                    onOpenCommandCenter={handleOpenCommandCenter}
-                    onOpenAutomations={handleOpenAutomations}
-                    onOpenTodos={() => onWorkspaceMainViewChange("todos")}
-                    todosActive={workspaceMainView === "todos"}
-                    automationsActive={workspaceMainView === "automations"}
-                    onOpenPluginStore={handleOpenPluginStore}
-                    pluginStoreActive={workspaceMainView === "plugin-store"}
-                    onFileTreeOpenChange={setIsSidebarFileTreeOpen}
-                  />
-                </WorkflowRunOpenProvider>
+                <WorkspaceSidebar
+                  workspacePath={workspaceAbsPath}
+                  workspaceRemoteSessionId={workspaceRemoteSessionId}
+                  activePreviewPath={activePreviewPath}
+                  onSelectTask={handleSelectTaskInChat}
+                  onStartDraftInWorkspace={handleCreateProjectDraft}
+                  onOpenCodeViewer={handleOpenCodeViewer}
+                  onOpenBrowserUrl={handleOpenBrowserUrl}
+                  fileTreeOpenRequest={fileTreeOpenRequest}
+                  onCreateTask={handleCreateTaskInChat}
+                  onCreateConversationTask={onCreateConversationTask ?? handleCreateTaskInChat}
+                  onOpenFolderFromWorkspaceMenu={onOpenFolderFromWorkspaceMenu}
+                  onOpenRemoteWorkspace={onOpenRemoteWorkspace}
+                  theme={theme}
+                  onConnectRemote={onConnectRemote}
+                  onSelectRemoteProject={onSelectRemoteProject}
+                  onCancelRemoteProject={onCancelRemoteProject}
+                  onReconnectRemoteWorkspace={onReconnectRemoteWorkspace}
+                  reconnectingRemoteWorkspaceKeys={reconnectingRemoteWorkspaceKeys}
+                  remoteWorkspaceErrorByWorkspaceKey={remoteWorkspaceErrorByWorkspaceKey}
+                  reconnectingRemoteWorkspaceLogsByWorkspaceKey={
+                    reconnectingRemoteWorkspaceLogsByWorkspaceKey
+                  }
+                  onLogout={onLogout}
+                  onLogin={onLogin}
+                  user={user}
+                  isDesktop={isDesktop}
+                  isMacDesktop={isMacDesktop}
+                  isWindowsDesktop={isWindowsDesktop}
+                  isSidebarVisible={isSidebarVisible}
+                  onToggleSidebar={handleToggleSidebar}
+                  toggleSidebarShortcutLabel={toggleSidebarShortcutLabel}
+                  canGoBack={canPrimaryNavigationBack}
+                  canGoForward={canTaskNavForward}
+                  onGoBack={primaryNavigationBack}
+                  onGoForward={handleTaskNavForward}
+                  goBackShortcutLabel={goBackShortcutLabel}
+                  goForwardShortcutLabel={goForwardShortcutLabel}
+                  onOpenCommandCenter={handleOpenCommandCenter}
+                  onOpenAutomations={handleOpenAutomations}
+                  onOpenTodos={() => onWorkspaceMainViewChange("todos")}
+                  todosActive={workspaceMainView === "todos"}
+                  automationsActive={workspaceMainView === "automations"}
+                  onOpenPluginStore={handleOpenPluginStore}
+                  pluginStoreActive={workspaceMainView === "plugin-store"}
+                  onFileTreeOpenChange={setIsSidebarFileTreeOpen}
+                />
               </V4SplitPaneEntryProvider>
             </ScopedErrorBoundary>
           </aside>
@@ -1839,9 +1698,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                                     workspacePath={workspaceAbsPath}
                                     workspaceIdentity={workspaceIdentity}
                                     onCreateViaChat={handleCreateAutomationInChat}
-                                    onNavigateToLaunchedRun={handleNavigateToLaunchedRun}
-                                    onOpenWorkflowRun={handleOpenSavedWorkflowRun}
-                                    onOpenWorkflowArtifact={handleOpenSavedWorkflowArtifact}
                                     openAutomationId={openAutomationId}
                                     openAutomationTab={openAutomationTab}
                                     onOpenAutomationConsumed={onOpenAutomationConsumed}
@@ -1927,11 +1783,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                             onSyncSubagentSessionTabs={handleSyncSubagentSessionTabs}
                             onOpenSelectionSideChat={handleOpenSelectionSideChat}
                             onOpenPlanDetail={handleOpenPlanDetail}
-                            onOpenWorkflowRun={handleOpenWorkflowRun}
-                            onOpenWorkflowArtifact={handleOpenWorkflowArtifact}
-                            onOpenWorkflowRunDirectory={handleOpenWorkflowRunDirectory}
-                            onOpenWorkflowActorSession={handleOpenWorkflowActorSession}
-                            onOpenWorkflowWorkspace={handleOpenWorkflowWorkspace}
                             onOpenFileLink={handleOpenMarkdownFileLink}
                             conversationFindQuery={conversationFindQuery}
                             conversationFindActiveIndex={conversationFindActiveIndex}

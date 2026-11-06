@@ -267,7 +267,7 @@ export interface TurnSteerInput {
 }
 
 export type TurnSteerCommandKind = "sendText" | "sendGoalCommand" | "compact";
-export type TurnSteerSource = "plan_approval_feedback" | "workflow_refine_feedback";
+export type TurnSteerSource = "plan_approval_feedback";
 
 /**
  * 输入投递语义：

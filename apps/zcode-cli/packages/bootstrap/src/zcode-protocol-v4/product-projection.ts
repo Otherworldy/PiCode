@@ -22,7 +22,6 @@ import {
 import type {
   AssistantFeedbackUpdatedPayload,
   CompactLifecyclePayload,
-  DynamicWorkflowRunProgressPayload,
   HookRunLifecyclePayload,
   ModelCompletePayload,
   ModelNetworkStatusPayload,
@@ -63,8 +62,6 @@ import type {
   WorkspaceHookReviewSupersededPayload,
 } from "@zcode/contracts";
 import {
-  AMEND_WORKFLOW_TOOL_NAME,
-  CREATE_WORKFLOW_TOOL_NAME,
   CoreErrorType,
   SessionEventType,
   getModelUsageContextTokens,
@@ -78,7 +75,6 @@ import {
 // （改直连 monotonicity subpath；discovery barrel 的该 re-export
 // 会在 packages/ui 的 Desktop 构建链解析失败，App 重启后打不开。）
 import {
-  WORKFLOW_REFINE_PERMISSION_OPTION_ID,
   ZCODE_FILE_STREAMING_TOOL_INPUT_PREVIEW_MIN_INTERVAL_MS,
   extractPlanStepsFromToolInput,
   extractPlanStepsFromToolOutput,
@@ -119,15 +115,12 @@ import type {
   TurnWorkSegment,
   UserInputQuestionPayload,
   UserInputRow,
-  WorkflowRunProgressEnvelope,
 } from "@zcode/shared/zcode-protocol-v4";
 import {
   PROTOCOL_V4_LIMITS,
   applyConversationDeltas,
   applyConversationDeltasMutable,
   createMutableConversationSnapshotAccumulator,
-  diffWorkflowRunsState,
-  reduceWorkflowRunsState,
   workspaceHookReviewRequestPayloadSchema,
 } from "@zcode/shared/zcode-protocol-v4";
 import {
@@ -1577,8 +1570,6 @@ export class ProductProjection {
       case SessionEventType.BackgroundTaskUpdated:
       case SessionEventType.BackgroundTaskCompleted:
         return this.onBackgroundTaskLifecycle(event);
-      case SessionEventType.DynamicWorkflowRunProgress:
-        return this.onDynamicWorkflowRunProgress(event);
       case SessionEventType.SubagentSpawned:
         return this.onSubagentSpawned(event);
       case SessionEventType.SubagentMessage:
@@ -2183,7 +2174,6 @@ export class ProductProjection {
       executionKind: fact.executionKind,
       ...(fact.sourceCommandId ? { sourceCommandId: fact.sourceCommandId } : {}),
       ...(fact.originMeta ? { originMeta: fact.originMeta } : {}),
-      ...(fact.workflowLaunch ? { workflowLaunch: fact.workflowLaunch } : {}),
       state: "running",
       startedAt: headerBase.createdAt,
     };
@@ -2206,8 +2196,6 @@ export class ProductProjection {
         ...(fact.sourceCommandId ? { sourceCommandId: fact.sourceCommandId } : {}),
         ...(rootSourceCommandId ? { rootSourceCommandId } : {}),
         ...(fact.clientId ? { clientId: fact.clientId } : {}),
-        ...(fact.workflowLaunch ? { workflowLaunch: fact.workflowLaunch } : {}),
-        ...(fact.epilogueStart === undefined ? {} : { epilogueStart: fact.epilogueStart }),
         ...(attachments && attachments.length > 0 ? { attachments } : {}),
         ...(fact.source ? { source: fact.source } : {}),
       };
@@ -3441,21 +3429,6 @@ export class ProductProjection {
                   : ("deny" as const),
             response: option.response,
           })),
-          // workflow Refine 只在 v4 投放（legacy 选项列表刻意不含，见 session-mapper 注释）。
-          // 静态 response 是普通 deny：任何不认识该
-          // optionId 的消费面（无 freeText 的应答）都退化为拒绝，反馈升级只发生在
-          // interaction-broker 对 freeText 的特判里。
-          ...(payload.toolName === CREATE_WORKFLOW_TOOL_NAME ||
-          payload.toolName === AMEND_WORKFLOW_TOOL_NAME
-            ? [
-                {
-                  optionId: WORKFLOW_REFINE_PERMISSION_OPTION_ID,
-                  label: "Refine",
-                  kind: "custom" as const,
-                  response: { decision: "deny" as const, reason: "Denied" },
-                },
-              ]
-            : []),
         ],
       },
     };
@@ -4193,9 +4166,6 @@ export class ProductProjection {
         case "pluginUi.instanceClosed":
         case "pluginUi.appToolCall":
         case "embeddedBrowser.open":
-        // 非行 op：只动 workflowRuns 状态键，与 subagent 行投影的输入没有交集。
-        case "workflowRun.updated":
-        case "workflowRun.removed":
           break;
         default: {
           const exhaustiveDelta: never = delta;
@@ -4349,9 +4319,6 @@ export class ProductProjection {
         case "pluginUi.instanceClosed":
         case "pluginUi.appToolCall":
         case "embeddedBrowser.open":
-        // 非行 op：改不了这一行的 prospective 形态。
-        case "workflowRun.updated":
-        case "workflowRun.removed":
           break;
         case "row.upserted":
           if (delta.row.rowId === prospective.rowId) prospective = delta.row;
@@ -4576,20 +4543,16 @@ export class ProductProjection {
     const legacyKind = resolveZCodeBackgroundTaskControlKind(payload);
     // 新事件使用 runtime 的显式 taskKind；旧事件统一走 shared resolver，
     // 不能再在 reducer 内散落 Agent/Task/subagent 字符串分支。
-    // "workflow" 是 workflow run（此前错标成 bash）；legacy resolver 里没有对应值，因为
-    // legacy `Workflow` 工具刻意仍归 bash——两者是不同的东西，共用类别会让面板混在一起。
     const kind: BackgroundWorkSummary["kind"] =
       payload.taskKind === "subagent"
         ? "subagent"
         : payload.taskKind === "bash"
           ? "bash"
-          : payload.taskKind === "workflow"
-            ? "workflow"
-            : legacyKind === "agent"
-              ? "subagent"
-              : legacyKind === "bash"
-                ? "bash"
-                : (existing?.kind ?? "bash");
+          : legacyKind === "agent"
+            ? "subagent"
+            : legacyKind === "bash"
+              ? "bash"
+              : (existing?.kind ?? "bash");
     // 事件 status（running/completed/failed/timed_out/cancelled/spawn_error/lost）
     // → summary status（running/resultPending/failed/cancelled）。
     const rawStatus = payload.status ?? "running";
@@ -4647,29 +4610,6 @@ export class ProductProjection {
       ? prev.map((work) => (work.workId === workId ? next : work))
       : [...prev, next];
     return [{ op: "state.updated", patch: { backgroundWorks } }];
-  }
-
-  // ── dwf 实时运行态：DynamicWorkflowRunProgress → workflowRuns 状态键 ──
-  // 一条引擎 RunEvent 一条会话事件，归约成键级整体替换的权威态。走 reducer 而不是侧通道，
-  // 所以持久、可回放、冷恢复免费（先例：subagents 键）。
-  //
-  // 归约本体在 @zcode/shared 的 workflow-runs-reducer（与状态 schema 同居）：TUI 镜像要用
-  // 同一份归约，两处各写一份就是两个时钟。
-  // 留在这里的只有投影的非纯部分——从事件信封取载荷、把新旧状态之差发成键级增量。
-  private onDynamicWorkflowRunProgress(event: SessionEvent): ConversationDelta[] {
-    // 先转 contracts 的有界 payload、再赋给 shared 的结构化入参：这行赋值就是"两边形状不漂移"
-    // 的编译期闸（shared 不得反向依赖 contracts，所以入参类型只能结构化定义）。
-    const envelope: WorkflowRunProgressEnvelope =
-      event.payload as DynamicWorkflowRunProgressPayload;
-    const prior = this.snapshot.workflowRuns;
-    const workflowRuns = reduceWorkflowRunsState(prior, envelope);
-    // null = 语义无变化（无效事件或同一条事件重放）：不产 delta，revision 不抬。
-    if (workflowRuns === null) return [];
-    // 发**差**而不是整键：一条引擎事件只动一个节点，整键重发是每事件 O(N) 字节、一条 run
-    // 全程 O(N²)（workflow-runs-delta.ts 的文件头讲了这笔账怎么变成节点上界和 UI 卡死的）。
-    // `applyAll(prior, diff(prior, next))` 与 next **逐字节**一致是增量协议的契约，
-    // 所以 applyEventInternal 把这串 delta 应用回去之后，this.snapshot.workflowRuns 仍是 next。
-    return diffWorkflowRunsState(prior, workflowRuns);
   }
 
   private removeQueueItems(ids: readonly string[]): ConversationDelta[] {
@@ -5778,16 +5718,6 @@ function toProtocolToolCallDisplay(
     case "task_output":
     case "respond_to_coordinator":
     case "mcp_tool":
-    case "create_workflow":
-    // 观察类工作流工具的五个 display kind——shared 侧 toolCallDisplaySchema 已同步加
-    // 成员，这里放行后 UI 才能在 row.display 上拿到结构化载荷。
-    case "get_workflow_run":
-    case "list_workflow_runs":
-    case "eval_workflow_snippet":
-    case "saved_workflow_list":
-    case "list_models":
-    // ResumeWorkflowRun 的恢复卡。
-    case "resume_workflow_run":
       return display;
     default:
       return undefined;

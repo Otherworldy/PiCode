@@ -6,7 +6,6 @@ import type { StreamablePath } from "./core.js";
 import type { ConversationDelta } from "./delta.js";
 import type { ConversationRow } from "./rows.js";
 import type { ConversationSnapshot } from "./snapshot.js";
-import { applyWorkflowRunRemoved, applyWorkflowRunUpdated } from "./workflow-runs-delta.js";
 
 /**
  * 仅供服务端在未发布的候选快照内批量归约使用。
@@ -126,18 +125,6 @@ export function applyConversationDelta(
     case "embeddedBrowser.open":
       // live-only 通知 / 信箱投递：不改变快照，由 renderer 另行派发。
       return snapshot;
-    // workflowRuns 是唯一开了增量口子的状态键（delta.ts 的注释讲了为什么）。规则整份住在
-    // workflow-runs-delta.ts：两个 twin 都只转调它，两边的语义因此没有走散的余地。
-    case "workflowRun.updated":
-      return {
-        ...snapshot,
-        workflowRuns: applyWorkflowRunUpdated(snapshot.workflowRuns, delta),
-      };
-    case "workflowRun.removed":
-      return {
-        ...snapshot,
-        workflowRuns: applyWorkflowRunRemoved(snapshot.workflowRuns, delta),
-      };
   }
 }
 
@@ -212,13 +199,6 @@ export function applyConversationDeltaMutable(
     case "pluginUi.appToolCall":
     case "embeddedBrowser.open":
       return;
-    // 与不可变实现调同一个纯函数：workflowRuns 是状态键不是 rows 窗口，没有「原地追加」可优化，
-    // 而 accumulator.snapshot 本来就是候选快照自己的对象，赋一个新容器不会碰到已发布的快照。
-    case "workflowRun.updated":
-      snapshot.workflowRuns = applyWorkflowRunUpdated(snapshot.workflowRuns, delta);
-      return;
-    case "workflowRun.removed":
-      snapshot.workflowRuns = applyWorkflowRunRemoved(snapshot.workflowRuns, delta);
   }
 }
 

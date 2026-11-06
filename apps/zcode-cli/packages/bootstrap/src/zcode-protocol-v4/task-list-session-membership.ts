@@ -5,7 +5,7 @@ import type { SessionTaskType } from "@zcode/contracts";
  *
  * 列表可见性不能用 `parent_id is null` 的层级查询代替：显式 fork
  * 这类有 parent 的主任务会在 CLI 重启后被冷启动种子过滤。可见性必须由 taskType 决定，
- * 而辅助对话、subagent 与 workflow child 继续由各自专用投影承载。
+ * 而辅助对话与 subagent 继续由各自专用投影承载（workflow_parent 是历史取值，读旧数据保留）。
  */
 export const TASK_LIST_SESSION_TYPES = [
   "interactive",

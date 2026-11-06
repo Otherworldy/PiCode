@@ -139,56 +139,6 @@ export class ReplaceableConversationTransport implements ConversationTransport {
     return this.current.plans(params);
   }
 
-  // workflowRunEvents 是后来（workflow run 事件日志的 RPC）加进 ConversationTransport
-  // 的成员，加的时候只落到了具体传输实现上，这个稳定身份漏掉了转发。而 pane 持的正是本对象，
-  // 于是走 service proxy 的 pane 上 `transport.workflowRunEvents` 是 undefined——run 详情页
-  // 的事件日志被静默解除，一打开就抛。接口新增成员时这里必须同步长出一条转发。
-  workflowRunEvents(
-    params: Parameters<ConversationTransport["workflowRunEvents"]>[0],
-  ): ReturnType<ConversationTransport["workflowRunEvents"]> {
-    return this.current.workflowRunEvents(params);
-  }
-
-  // 同一类漏接的预防：接口新增成员时，这个稳定身份必须同步长出一条转发。
-  workflowRuns(
-    params: Parameters<ConversationTransport["workflowRuns"]>[0],
-  ): ReturnType<ConversationTransport["workflowRuns"]> {
-    return this.current.workflowRuns(params);
-  }
-
-  // workflow 用户面产物的三条读接口必须在此转发；遗漏时 service proxy 上的方法为
-  // undefined，侧板调用就会抛错。
-  workflowRunArtifacts(
-    params: Parameters<ConversationTransport["workflowRunArtifacts"]>[0],
-  ): ReturnType<ConversationTransport["workflowRunArtifacts"]> {
-    return this.current.workflowRunArtifacts(params);
-  }
-
-  workflowRunArtifactData(
-    params: Parameters<ConversationTransport["workflowRunArtifactData"]>[0],
-  ): ReturnType<ConversationTransport["workflowRunArtifactData"]> {
-    return this.current.workflowRunArtifactData(params);
-  }
-
-  workflowRunArtifactRead(
-    params: Parameters<ConversationTransport["workflowRunArtifactRead"]>[0],
-  ): ReturnType<ConversationTransport["workflowRunArtifactRead"]> {
-    return this.current.workflowRunArtifactRead(params);
-  }
-
-  // dwf 脚本 transcript 的两条读面。
-  workflowRunWorkspace(
-    params: Parameters<ConversationTransport["workflowRunWorkspace"]>[0],
-  ): ReturnType<ConversationTransport["workflowRunWorkspace"]> {
-    return this.current.workflowRunWorkspace(params);
-  }
-
-  workflowRunNodeResult(
-    params: Parameters<ConversationTransport["workflowRunNodeResult"]>[0],
-  ): ReturnType<ConversationTransport["workflowRunNodeResult"]> {
-    return this.current.workflowRunNodeResult(params);
-  }
-
   fileChanges(
     params: Parameters<ConversationTransport["fileChanges"]>[0],
   ): ReturnType<ConversationTransport["fileChanges"]> {

@@ -191,7 +191,7 @@ export function createDefaultSubagentPort(
           : baseChildModelFactory(target);
       const parentToolCallId = traceStringAttribute(request.traceContext, "parentToolCallId");
       // 对外交互端口（permission broker + provider runtime headers）：与 dwf actor、legacy
-      // workflow child 共用同一条派生，路由身份统一落到本 runtime 的会话。
+      // 路由身份统一落到本 runtime 的会话。
       const childClientPorts = deriveChildClientPorts(
         {
           permissionBroker: this.permissionBroker,
@@ -256,11 +256,6 @@ export function createDefaultSubagentPort(
           maxTurns: request.maxTurns ?? this.config.subagents?.maxTurns ?? 4,
           parentSessionId: this.sessionId,
           taskType: "subagent_child",
-          // 动态工作流灰度门必须结构性继承：
-          // 父会话关着而子代理开着，等于 Agent 工具变成绕过灰度的后门。默认路径（child 继承
-          // 父 registry 可见的工具名）本来就够，但**自定义 agent profile 显式写
-          // `allowedTools: ["CreateWorkflow"]` 时会跳过那次交集**，只剩这一道能挡住。
-          dynamicWorkflowEnabled: this.config.dynamicWorkflowEnabled,
           // 默认 subagent 已从 Explore 调整为 general-purpose。
           // toolset 不能再依赖 DEFAULT_SUBAGENT_TYPE，否则默认通用 agent 会被误降级为只读搜索工具面。
           toolset: builtInExplore ? "explore" : "main",
@@ -285,7 +280,7 @@ export function createDefaultSubagentPort(
           // 子 runtime 自己仍使用 request.sessionId 做事件持久化和 trace 归档；对外阻塞交互
           // （permission / AskUserQuestion / provider runtime headers）一律路由回父 session——
           // 桌面 UI 只认识父 task 的 sessionId。派生收敛在 deriveChildClientPorts 一处，
-          // dwf actor 与 legacy workflow child 走同一条。
+          // 子 runtime 走同一条派生。
           ...childClientPorts,
           coordinatorResponsePort: createCoordinatorResponsePort({
             agentId: request.agentId,

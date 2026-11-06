@@ -16,9 +16,7 @@ export type ToolSideEffectScope =
 /**
  * 会改写工作区的副作用范围：文件系统、git、
  * 以及无法证明只读的 shell / 宿主执行。`network`、`session`、`userInteraction`、`none` 不碰工作区。
- * dynamic-workflow 的导入缓存据此判「第一笔写入」——一次工具调用在解析后的能力上 `readOnly !== true`
- * 且范围落在这个集合里，就是一笔写入。判定放在 contracts 是因为产生标记的执行器（core）与消费它的
- * driver（bootstrap）都要用同一条规则。
+ * 判定放在 contracts 是因为产生标记的执行器（core）与消费它的调用方都要用同一条规则。
  */
 export const WORKSPACE_MUTATING_SIDE_EFFECT_SCOPES: ReadonlySet<ToolSideEffectScope> = new Set<ToolSideEffectScope>([
   "workspace",
@@ -38,8 +36,8 @@ export function isWorkspaceMutatingToolCall(capability: {
 }
 
 /**
- * 只服务于协议本身、不看也不动外部世界的副作用范围：`session` 是把结果 / 问题交回调用方
- * （dynamic-workflow 的 `submit_result`、`escalate` 就在这一档），`userInteraction` 是问用户。
+ * 只服务于协议本身、不看也不动外部世界的副作用范围：`session` 是把结果 / 问题交回调用方，
+ * `userInteraction` 是问用户。
  */
 const PROTOCOL_ONLY_SIDE_EFFECT_SCOPES: ReadonlySet<ToolSideEffectScope> = new Set<ToolSideEffectScope>([
   "session",

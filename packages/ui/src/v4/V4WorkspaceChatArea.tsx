@@ -16,11 +16,6 @@ import type {
   OpenScopedSubagentDirectorySideTabRequest,
   OpenSelectionSideChatRequest,
   OpenScopedPlanDetailSideTabRequest,
-  OpenScopedWorkflowArtifactSideTabRequest,
-  OpenScopedWorkflowRunSideTabRequest,
-  OpenScopedWorkflowActorSessionSideTabRequest,
-  OpenScopedWorkflowRunDirectorySideTabRequest,
-  OpenScopedWorkflowWorkspaceSideTabRequest,
   SyncSubagentSessionTabsRequest,
 } from "@/lib/workspaceSidePane.js";
 import { logger } from "@/logger.js";
@@ -113,11 +108,6 @@ interface V4WorkspaceChatAreaProps {
   onSyncSubagentSessionTabs?: (request: SyncSubagentSessionTabsRequest) => void;
   onOpenSelectionSideChat?: (request: OpenSelectionSideChatRequest) => void;
   onOpenPlanDetail?: (request: OpenScopedPlanDetailSideTabRequest) => void;
-  onOpenWorkflowRun?: (request: OpenScopedWorkflowRunSideTabRequest) => void;
-  onOpenWorkflowArtifact?: (request: OpenScopedWorkflowArtifactSideTabRequest) => void;
-  onOpenWorkflowRunDirectory?: (request: OpenScopedWorkflowRunDirectorySideTabRequest) => void;
-  onOpenWorkflowActorSession?: (request: OpenScopedWorkflowActorSessionSideTabRequest) => void;
-  onOpenWorkflowWorkspace?: (request: OpenScopedWorkflowWorkspaceSideTabRequest) => void;
   conversationFindQuery?: string;
   conversationFindActiveIndex?: number;
   conversationFindNavigationRequestId?: number;
@@ -174,11 +164,6 @@ export function V4WorkspaceChatArea({
   onSyncSubagentSessionTabs,
   onOpenSelectionSideChat,
   onOpenPlanDetail,
-  onOpenWorkflowRun,
-  onOpenWorkflowArtifact,
-  onOpenWorkflowRunDirectory,
-  onOpenWorkflowActorSession,
-  onOpenWorkflowWorkspace,
   conversationFindQuery = "",
   conversationFindActiveIndex = -1,
   conversationFindNavigationRequestId = 0,
@@ -299,11 +284,6 @@ export function V4WorkspaceChatArea({
       onSyncSubagentSessionTabs,
       onOpenSelectionSideChat,
       onOpenPlanDetail,
-      onOpenWorkflowRun,
-      onOpenWorkflowArtifact,
-      onOpenWorkflowRunDirectory,
-      onOpenWorkflowActorSession,
-      onOpenWorkflowWorkspace,
       conversationFindQuery,
       conversationFindActiveIndex,
       conversationFindNavigationRequestId,
@@ -344,11 +324,6 @@ export function V4WorkspaceChatArea({
       onSyncSubagentSessionTabs,
       onOpenSelectionSideChat,
       onOpenPlanDetail,
-      onOpenWorkflowRun,
-      onOpenWorkflowArtifact,
-      onOpenWorkflowRunDirectory,
-      onOpenWorkflowActorSession,
-      onOpenWorkflowWorkspace,
       conversationFindQuery,
       conversationFindActiveIndex,
       conversationFindNavigationRequestId,

@@ -10,11 +10,6 @@ import { APP_PROTOCOL_APP_ONLY_BUILTIN_SLASH_COMMANDS } from "../slash-command-s
 
 export interface ListProtocolSlashCommandsOptions extends ListZCodeCustomCommandsOptions {
   /**
-   * 动态工作流灰度门。斜杠目录已改跟 Pi，不再据此增删命令。
-   * 保留字段，避免旧调用方传参变成类型错误。
-   */
-  dynamicWorkflowEnabled?: boolean;
-  /**
    * 活会话已经加载的 Pi 命令。扩展命令只能从这里来。
    * 提示词文件不冻结在会话创建时：即使传了这份快照，仍会再扫一次目录，把保存后新出现的文件补进菜单。
    */

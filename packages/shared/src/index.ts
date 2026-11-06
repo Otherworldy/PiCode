@@ -115,7 +115,6 @@ export * from "./media-preview.js";
 export * from "./plugin-display-name.js";
 export * from "./zcode-agent-runtime.js";
 export * from "./runtimeEnv.js";
-export * from "./dynamic-workflow-feature.js";
 export * from "./markdown-artifact-images.js";
 export * from "./serviceAuthority.js";
 export * from "./server-remote.js";
@@ -128,7 +127,6 @@ export interface ICredentialStore {
 }
 
 export * from "./test-ids.js";
-export * from "./test-ids-workflow.js";
 export * from "./channels.js";
 export * from "./storage.js";
 export * from "./oauth.js";

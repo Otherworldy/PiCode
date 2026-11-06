@@ -36,12 +36,6 @@ import type {
   ZCodeMcpUiUnregisterAppToolsResult,
   ZCodeMcpUiListResourceTemplatesResult,
   ZCodePluginsListUiSurfacesResult,
-  ZCodeWorkflowsDeleteResult,
-  ZCodeWorkflowsGetResult,
-  ZCodeWorkflowsListResult,
-  ZCodeWorkflowsMoveResult,
-  ZCodeWorkflowsRunsResult,
-  ZCodeWorkflowsUpdateMetaResult,
   ZCodePluginsUninstallResult,
   ZCodePluginsRestoreBuiltinResult,
   ZCodePluginsConfigureResult,
@@ -99,13 +93,6 @@ import type {
   V4ConversationFileChangesResult,
   V4ConversationFileRewindPreviewResult,
   V4ConversationPlansResult,
-  V4ConversationWorkflowRunEventsResult,
-  V4ConversationWorkflowRunArtifactDataResult,
-  V4ConversationWorkflowRunArtifactReadResult,
-  V4ConversationWorkflowRunArtifactsResult,
-  V4ConversationWorkflowRunNodeResultResult,
-  V4ConversationWorkflowRunWorkspaceResult,
-  V4ConversationWorkflowRunsResult,
   V4ConversationRowsRangeResult,
   V4ConversationResyncResult,
   V4ConversationSubscribeResult,
@@ -116,7 +103,6 @@ import type {
 import { createServiceDescriptor } from "../descriptors.js";
 
 export * from "./zcodeAgentPluginParams.js";
-export * from "./zcodeAgentWorkflowParams.js";
 import type {
   ZCodeAgentAddPluginMarketplaceParams,
   ZCodeAgentAutomationIdParams,
@@ -154,14 +140,6 @@ import type {
   ZCodeAgentValidatePluginParams,
   ZCodeAgentWorkspaceTarget,
 } from "./zcodeAgentPluginParams.js";
-import type {
-  ZCodeAgentDeleteSavedWorkflowParams,
-  ZCodeAgentGetSavedWorkflowParams,
-  ZCodeAgentListSavedWorkflowRunsParams,
-  ZCodeAgentListSavedWorkflowsParams,
-  ZCodeAgentMoveSavedWorkflowParams,
-  ZCodeAgentUpdateSavedWorkflowMetaParams,
-} from "./zcodeAgentWorkflowParams.js";
 
 export interface ZCodeAgentSessionTarget extends ZCodeAgentWorkspaceTarget {
   sessionId: string;
@@ -400,58 +378,6 @@ export interface ZCodeAgentConversationRowsRangeParams extends ZCodeAgentSession
 
 /** 当前有效分支里的终态 ExitPlanMode 目录。 */
 export type ZCodeAgentConversationPlansParams = ZCodeAgentSessionTarget;
-
-/** workflow run 的事件日志分页（详情页审计面）；cursor = journal sequence。 */
-export interface ZCodeAgentConversationWorkflowRunEventsParams extends ZCodeAgentSessionTarget {
-  runId: string;
-  afterSequence?: number;
-  limit?: number;
-}
-
-/** dwf run 的枚举（重启后的发现查询）。 */
-export interface ZCodeAgentConversationWorkflowRunsParams extends ZCodeAgentSessionTarget {
-  limit?: number;
-}
-
-// ── dwf 用户面产物──
-// ⚠ 术语：artifact = 脚本经 `artifact.*` 发布给**用户**看的产出（文件 / markdown / 预置看板），
-// 不是 run 的顶层返回值（引擎内部对后者的同名叫法）。
-
-/** 产物清单；UI 冷恢复与中枢详情的 durable 读法。 */
-export interface ZCodeAgentConversationWorkflowRunArtifactsParams extends ZCodeAgentSessionTarget {
-  runId: string;
-}
-
-/** 预置看板的取数面；cursor = journal sequence（严格大于）。 */
-export interface ZCodeAgentConversationWorkflowRunArtifactDataParams extends ZCodeAgentSessionTarget {
-  runId: string;
-  artifactId: string;
-  afterSequence?: number;
-  limit?: number;
-}
-
-/** 内容产物的字节，一次一块（≤ 512 KiB，形状逐字照 attachmentRead）。 */
-export interface ZCodeAgentConversationWorkflowRunArtifactReadParams extends ZCodeAgentSessionTarget {
-  runId: string;
-  artifactId: string;
-  version: number;
-  offset: number;
-  limit: number;
-}
-
-// ── dwf 工作区 transcript──
-/** 轻行清单：一个 run 的 files.* / git.* / world.run 行，不带正文。 */
-export interface ZCodeAgentConversationWorkflowRunWorkspaceParams extends ZCodeAgentSessionTarget {
-  runId: string;
-}
-
-/** 一个工作区节点的正文，按 maxBytes 保形有界化（缺省与上限在 CLI 网关侧）。 */
-export interface ZCodeAgentConversationWorkflowRunNodeResultParams extends ZCodeAgentSessionTarget {
-  runId: string;
-  siteId: string;
-  ordinal: number;
-  maxBytes?: number;
-}
 
 export interface ZCodeAgentBackgroundBashOutputParams extends ZCodeAgentSessionTarget {
   workId: string;
@@ -701,22 +627,6 @@ export interface IZCodeAgentService {
   listPluginUiSurfaces(
     params: ZCodeAgentWorkspaceTarget,
   ): Promise<ZCodePluginsListUiSurfacesResult>;
-  // 已保存工作流的 GUI 中枢：workspace 级、无会话，每次调用现扫 `<cwd>/.PiCode/workflows/`。
-  // 全局档传 `scope: "global"`：带 workspace 就用它当载体，不带则由 services 层自选本机载体运行时。
-  listSavedWorkflows(params: ZCodeAgentListSavedWorkflowsParams): Promise<ZCodeWorkflowsListResult>;
-  getSavedWorkflow(params: ZCodeAgentGetSavedWorkflowParams): Promise<ZCodeWorkflowsGetResult>;
-  updateSavedWorkflowMeta(
-    params: ZCodeAgentUpdateSavedWorkflowMetaParams,
-  ): Promise<ZCodeWorkflowsUpdateMetaResult>;
-  deleteSavedWorkflow(
-    params: ZCodeAgentDeleteSavedWorkflowParams,
-  ): Promise<ZCodeWorkflowsDeleteResult>;
-  listSavedWorkflowRuns(
-    params: ZCodeAgentListSavedWorkflowRunsParams,
-  ): Promise<ZCodeWorkflowsRunsResult>;
-  // 在项目档 / 全局档之间移动同名文件：
-  // `workspace` 是载体（移到项目传目标项目、移到全局传源项目），`to` 是落点档；不覆盖已存在的目标。
-  moveSavedWorkflow(params: ZCodeAgentMoveSavedWorkflowParams): Promise<ZCodeWorkflowsMoveResult>;
   resolveSuggestedPluginReference(
     params: ZCodeAgentResolveSuggestedPluginReferenceParams,
   ): Promise<import("@zcode/shared").ZCodePluginsResolveSuggestedReferenceResult>;
@@ -824,34 +734,6 @@ export interface IZCodeAgentService {
   conversationPlansV4(
     params: ZCodeAgentConversationPlansParams,
   ): Promise<V4ConversationPlansResult>;
-  /** workflow run 事件日志分页；与 plans 同族（只读、无状态、超时重发安全）。 */
-  conversationWorkflowRunEventsV4(
-    params: ZCodeAgentConversationWorkflowRunEventsParams,
-  ): Promise<V4ConversationWorkflowRunEventsResult>;
-  /** workflow run 枚举；journal-backed 的重启后发现面。 */
-  conversationWorkflowRunsV4(
-    params: ZCodeAgentConversationWorkflowRunsParams,
-  ): Promise<V4ConversationWorkflowRunsResult>;
-  /** workflow run 的用户面产物清单；与 plans 同族（只读、无状态、超时重发安全）。 */
-  conversationWorkflowRunArtifactsV4(
-    params: ZCodeAgentConversationWorkflowRunArtifactsParams,
-  ): Promise<V4ConversationWorkflowRunArtifactsResult>;
-  /** 预置看板的条目分页；hook 以 itemCount 变化为信号增量拉取。 */
-  conversationWorkflowRunArtifactDataV4(
-    params: ZCodeAgentConversationWorkflowRunArtifactDataParams,
-  ): Promise<V4ConversationWorkflowRunArtifactDataResult>;
-  /** 内容产物的字节，一次一块；授权在 CLI 侧（journal 行才是取字节的依据）。 */
-  conversationWorkflowRunArtifactReadV4(
-    params: ZCodeAgentConversationWorkflowRunArtifactReadParams,
-  ): Promise<V4ConversationWorkflowRunArtifactReadResult>;
-  /** dwf 工作区 transcript 的清单。 */
-  conversationWorkflowRunWorkspaceV4(
-    params: ZCodeAgentConversationWorkflowRunWorkspaceParams,
-  ): Promise<V4ConversationWorkflowRunWorkspaceResult>;
-  /** 一个工作区节点的有界正文。 */
-  conversationWorkflowRunNodeResultV4(
-    params: ZCodeAgentConversationWorkflowRunNodeResultParams,
-  ): Promise<V4ConversationWorkflowRunNodeResultResult>;
   backgroundBashOutputV4(
     params: ZCodeAgentBackgroundBashOutputParams,
   ): Promise<BackgroundBashOutputResult>;

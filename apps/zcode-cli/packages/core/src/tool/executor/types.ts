@@ -4,8 +4,6 @@ import type {
   BrowserControlPort,
   CollaborationMode,
   CoordinatorResponsePort,
-  DynamicWorkflowRunPort,
-  DynamicWorkflowSnippetPort,
   EmbeddedSearchBackend,
   ExecutionPort,
   ExecutionShellSelection,
@@ -14,7 +12,6 @@ import type {
   ImageProcessorPort,
   Logger,
   Model,
-  ModelCatalogPort,
   OffPeakPort,
   PdfDocumentPort,
   PermissionBrokerPort,
@@ -28,9 +25,6 @@ import type {
   ToolArtifactStorePort,
   TraceContext,
   TurnId,
-  WorkflowEscalatePort,
-  WorkflowPort,
-  WorkflowSubmitPort,
 } from "@zcode/contracts";
 import type { HookRunner } from "../../hooks/index.js";
 import type { PermissionService } from "../../permission/service.js";
@@ -96,24 +90,14 @@ export interface ToolExecutorOptions {
   skillPort?: SkillPort;
   subagentPort?: SubagentPort;
   coordinatorResponsePort?: CoordinatorResponsePort;
-  workflowSubmitPort?: WorkflowSubmitPort;
-  /** actor 的升级端口；存在即为该会话注册 escalate。 */
-  workflowEscalatePort?: WorkflowEscalatePort;
   artifactStore?: ToolArtifactStorePort;
   automationPort?: AutomationPort;
   offPeakPort?: OffPeakPort;
   sessionStore?: SessionStorePort;
   sessionModePort?: SessionModePort;
-  workflowPort?: WorkflowPort;
-  /** workflow run 端口；按工具名查表时 CreateWorkflow 的后台生命周期提供者。 */
-  dynamicWorkflowRunPort?: DynamicWorkflowRunPort;
-  dynamicWorkflowSnippetPort?: DynamicWorkflowSnippetPort;
-  /** 模型目录端口；缺席则 ListModels 报能力缺席，CreateWorkflow 的 subagent_model 被拒。 */
-  modelCatalogPort?: ModelCatalogPort;
+  /** 模型目录端口；缺席则 ListModels 报能力缺席。 */
   runtimeTaskRegistry?: RuntimeTaskRegistry;
   readFileState?: ReadFileStateMap;
-  /** 技能门的探针（ToolInputResolutionContext.hasLoadedSkill）；runtime 按 provider 可见历史回答。 */
-  hasLoadedSkill?: (skillName: string) => boolean;
   subagentBackgroundBashMaxMs?: number;
   bashShellSelection?: ExecutionShellSelection;
   getBashShellSelection?: () => ExecutionShellSelection | undefined;
@@ -206,23 +190,14 @@ export interface ToolExecutorDeps {
   skillPort?: SkillPort;
   subagentPort?: SubagentPort;
   coordinatorResponsePort?: CoordinatorResponsePort;
-  workflowSubmitPort?: WorkflowSubmitPort;
-  /** actor 的升级端口；存在即为该会话注册 escalate。 */
-  workflowEscalatePort?: WorkflowEscalatePort;
   artifactStore?: ToolArtifactStorePort;
   automationPort?: AutomationPort;
   offPeakPort?: OffPeakPort;
   sessionStore?: SessionStorePort;
   sessionModePort?: SessionModePort;
-  workflowPort?: WorkflowPort;
-  /** workflow run 端口；按工具名查表时 CreateWorkflow 的后台生命周期提供者。 */
-  dynamicWorkflowRunPort?: DynamicWorkflowRunPort;
-  dynamicWorkflowSnippetPort?: DynamicWorkflowSnippetPort;
-  /** 模型目录端口；缺席则 ListModels 报能力缺席，CreateWorkflow 的 subagent_model 被拒。 */
-  modelCatalogPort?: ModelCatalogPort;
+  /** 模型目录端口；缺席则 ListModels 报能力缺席。 */
   runtimeTaskRegistry?: RuntimeTaskRegistry;
   readFileState: ReadFileStateMap;
-  hasLoadedSkill?: (skillName: string) => boolean;
   subagentBackgroundBashMaxMs?: number;
   bashShellSelection?: ExecutionShellSelection;
   getBashShellSelection?: () => ExecutionShellSelection | undefined;

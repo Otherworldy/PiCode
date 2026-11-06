@@ -5,8 +5,6 @@ import {
   type WorkspaceOptimisticTaskOverlay,
 } from "@/hooks/workspaceTaskListOptimisticOverlay.js";
 import { areTaskListItemsEquivalent } from "@/hooks/workspaceTaskListRefreshSignatures.js";
-import { countLiveWorkflowRuns } from "@/lib/workflowRunLine.js";
-import { getTaskListRowActivity } from "@/v4/taskListRowActivity.js";
 
 interface WorkspaceTaskListDisplayConfig {
   scope: {
@@ -25,8 +23,6 @@ export interface WorkspaceTaskListGroup {
   total: number;
   hasMore: boolean;
   hasUnread: boolean;
-  /** 组内在跑的工作流 run 数：项目收起时组头旁的脉冲灯。 */
-  liveWorkflowCount: number;
 }
 
 export function buildWorkspaceTaskListDisplayGroups(params: {
@@ -87,11 +83,6 @@ export function buildWorkspaceTaskListDisplayGroups(params: {
       (displayResult?.unreadTaskKeys ?? []).some(
         (taskKey) => params.taskUnreadOverlayByEntityKey[taskKey] !== null,
       );
-    const liveWorkflowCount = items.reduce(
-      (count, task) =>
-        count + countLiveWorkflowRuns(getTaskListRowActivity(task)?.workflowActivity),
-      0,
-    );
     const nextGroup = {
       workspacePath: config.scope.workspacePath,
       workspaceIdentity: config.scope.workspaceIdentity,
@@ -99,7 +90,6 @@ export function buildWorkspaceTaskListDisplayGroups(params: {
       total,
       hasMore: Math.max(total, items.length) > items.length,
       hasUnread,
-      liveWorkflowCount,
     };
     if (
       previousGroup &&
@@ -108,7 +98,6 @@ export function buildWorkspaceTaskListDisplayGroups(params: {
       previousGroup.total === nextGroup.total &&
       previousGroup.hasMore === nextGroup.hasMore &&
       previousGroup.hasUnread === nextGroup.hasUnread &&
-      previousGroup.liveWorkflowCount === nextGroup.liveWorkflowCount &&
       areTaskListItemsEquivalent(previousGroup.items, nextGroup.items)
     ) {
       cache.set(config.workspaceKey, previousGroup);

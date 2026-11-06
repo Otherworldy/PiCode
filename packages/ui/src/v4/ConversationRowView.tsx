@@ -87,17 +87,7 @@ import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
 import { Spinner } from "@/components/ui/spinner.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
-import { WorkflowToolSummary } from "@/v4/WorkflowToolSummary.js";
-import {
-  readWorkflowName,
-  readWorkflowRetuneCall,
-} from "@/ToolCallBlocks/renderers/createWorkflowInput.js";
-import { WorkflowRetuneRow } from "@/ToolCallBlocks/renderers/WorkflowRetuneRow.js";
-import { workflowRunSettingsCeiling } from "@/components/workflow-timeline/workflowRunSettings.js";
-import { isAmendWorkflowToolCall } from "@/lib/workflowToolNames.js";
 import { ToolCallBlock } from "@/ToolCallBlocks.js";
-import { ToolSummaryTrailingContext } from "@/ToolCallBlocks/ToolSummaryRow.js";
-import { resolveWorkflowRunOpenToolCallId } from "@/v4/workflowRunCardJoin.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
 import { PluginUiModelContextChip, formatPluginDisplayName } from "@/plugin-ui/index.js";
@@ -133,10 +123,6 @@ import { useOpenPptxElementReference } from "@/v4/composer/useOpenPptxElementRef
 import { ConversationFileRewindDialog } from "@/v4/ConversationFileRewindDialog.js";
 import { ConversationUserInputBody } from "@/v4/ConversationUserInputBody.js";
 import { ConversationUserInputContent } from "@/v4/ConversationUserInputContent.js";
-import {
-  ConversationUserInputEpilogue,
-  splitUserInputEpilogue,
-} from "@/v4/ConversationUserInputEpilogue.js";
 import { ConversationHookDetailsAction } from "@/v4/ConversationHookDetailsAction.js";
 import { ConversationTurnUsagePill } from "@/v4/ConversationTurnUsagePill.js";
 import { formatModelChangeLabel } from "@/v4/composer/modelTriggerDisplay.js";
@@ -898,16 +884,13 @@ const UserInputRowView = memo(function UserInputRowView({
   status?: string;
 }) {
   const { intl } = useZCodeIntl();
-  // 引擎尾注折叠：正文只到 epilogueStart，
-  // 之后的引擎文本折进气泡底部的披露。提示词上下文解析也只看正文——尾注里没有用户引用。
-  const { body: bodyText, epilogue } = splitUserInputEpilogue(row.text, row.epilogueStart);
   const parsedPrompt = useMemo(
     () =>
-      parseComposerPromptContexts(bodyText, {
+      parseComposerPromptContexts(row.text, {
         workspacePath: context.workspacePath,
         workspaceIdentity: context.workspaceIdentity,
       }),
-    [bodyText, context.workspaceIdentity, context.workspacePath],
+    [row.text, context.workspaceIdentity, context.workspacePath],
   );
   // 只用于把历史消息里的 share URL 尾块从可见正文里剥掉。
   // 该块已不再产出（见 ConversationComposer 的 promptText 注释）；这里保留解析，是为了让
@@ -982,8 +965,7 @@ const UserInputRowView = memo(function UserInputRowView({
     ) ?? false;
   const hasVisibleText = visibleText.trim().length > 0;
   const pluginUiContexts = parsedPrompt.pluginUiContexts;
-  // nudge 轮整条都是引擎文本：正文为空但气泡仍要画，里面只有那一枚披露。
-  const hasBubble = hasVisibleText || epilogue !== undefined;
+  const hasBubble = hasVisibleText;
   const hasContextReferences =
     codeCommentContexts.length > 0 ||
     webElementContexts.length > 0 ||
@@ -1592,7 +1574,6 @@ const UserInputRowView = memo(function UserInputRowView({
               />
             </ConversationUserInputBody>
           ) : null}
-          {epilogue === undefined ? null : <ConversationUserInputEpilogue text={epilogue} />}
         </div>
       ) : null}
       {row.source?.kind === "genUi" && (
@@ -2454,91 +2435,6 @@ const ToolCallRowView = memo(function ToolCallRowView({
             ...choice,
           })
       : undefined;
-  // workflow run 详情入口的门控：run 身份走 workflowRuns 投影（schema 里 toolCallId 就是
-  // 「工具卡 → 详情页的关联键」），不从工具输出里读——v4 行的 output 只剩一句散文。
-  // 命中的摘要同时决定卡片形态：有 run 就是紧凑可点卡，没有就是可展开卡。
-  const workflowRun =
-    context.workflowRunByToolCallId?.get(row.toolCallId) ??
-    // ResumeWorkflowRun 行按 runId 联接：display 载荷带 runId（≡ backgroundTaskId），而投影
-    // 的 run.toolCallId 跨 resume 沿用原始 CreateWorkflow 行——resume 行按 toolCallId 永远
-    // 查不到。命中后 onOpenWorkflowRun 的收窄走同一条路径，tab 身份 runId 键、幂等。
-    (row.display?.kind === "resume_workflow_run"
-      ? context.workflowRunByRunId?.get(row.display.runId)
-      : undefined);
-  // 原因：已启动的工具卡与轮尾摘要重复画同一条实时进度；上方改为普通摘要入口。
-  // 只替换成功关联的发起行，编译诊断及 Resume 等其他工具仍走原有渲染。
-  if (
-    workflowRun &&
-    context.workflowRunByToolCallId?.has(row.toolCallId) &&
-    row.status !== "error"
-  ) {
-    const workflowName = readWorkflowName(row.input);
-    const sessionId = context.sessionId;
-    return (
-      <RowShell rowId={row.rowId} className="py-0">
-        <ToolSummaryTrailingContext.Provider
-          value={onResume ? <ResumeHereButton onPick={onResume} rowId={row.rowId} /> : null}
-        >
-          <WorkflowToolSummary
-            toolCallId={row.toolCallId}
-            summary={workflowRun}
-            amend={isAmendWorkflowToolCall(row)}
-            onOpen={
-              context.onOpenWorkflowRun && sessionId
-                ? () =>
-                    context.onOpenWorkflowRun?.({
-                      parentSessionId: sessionId,
-                      toolCallId: resolveWorkflowRunOpenToolCallId(row.toolCallId, workflowRun),
-                      runId: workflowRun.runId,
-                      ...(workflowName === undefined ? {} : { workflowName }),
-                    })
-                : undefined
-            }
-          />
-        </ToolSummaryTrailingContext.Provider>
-      </RowShell>
-    );
-  }
-  // 就地生效的修订：只改并发上限、run 又在飞时这次调用
-  // 不编译、不铸新 run，结果只有一句话。判据全在已经上线的字段上——入参的形状、**没有** display、
-  // 成功且非错误；工具的结构化输出不过 v4，而三处 create_workflow display schema 都是冻结字段集
-  // 的 `.strict()`，多一个键会让旧端把整条工具结果丢掉，所以这条路不新增任何协议字段。
-  // 退回真修订的那一条（run 已结算）两条判据都不成立：它有 display，也铸出一条按 toolCallId
-  // 联接得上的 run，上面那个分支先接走它。
-  const retune = isAmendWorkflowToolCall(row) ? readWorkflowRetuneCall(row.input) : undefined;
-  if (
-    retune !== undefined &&
-    row.status === "success" &&
-    (row.output?.display ?? row.display) === undefined &&
-    !context.workflowRunByToolCallId?.has(row.toolCallId)
-  ) {
-    const sessionId = context.sessionId;
-    // 被调整那条 run 的投影：只为两件事——本机天花板（措辞据它不念出一个大于上限的数）与
-    // 打开请求里那条 run 的发起行 id。它不进上面的 `workflowRun`：那个变量回答的是「这一行是不是
-    // 某条 run 的发起行」，而这一行不是。
-    const retuned = context.workflowRunByRunId?.get(retune.runId);
-    const ceiling =
-      retuned?.run === undefined ? undefined : workflowRunSettingsCeiling(retuned.run);
-    return (
-      <RowShell rowId={row.rowId} className="py-0">
-        <WorkflowRetuneRow
-          requested={retune.requested}
-          runId={retune.runId}
-          {...(ceiling === undefined ? {} : { ceiling })}
-          {...(context.onOpenWorkflowRun && sessionId
-            ? {
-                onOpen: () =>
-                  context.onOpenWorkflowRun?.({
-                    parentSessionId: sessionId,
-                    toolCallId: resolveWorkflowRunOpenToolCallId(row.toolCallId, retuned),
-                    runId: retune.runId,
-                  }),
-              }
-            : {})}
-        />
-      </RowShell>
-    );
-  }
   // 工具行去掉纵向内边距（对齐 z-code-2 无 per-tool padding）；连续工具间距由
   // ConversationAssistantWorkItems 的 gap-4 组容器统一给。
   return (
@@ -2565,65 +2461,6 @@ const ToolCallRowView = memo(function ToolCallRowView({
                   })
               : undefined
           }
-          onOpenWorkflowRun={
-            context.onOpenWorkflowRun && context.sessionId && workflowRun
-              ? (request) =>
-                  context.onOpenWorkflowRun?.({
-                    ...request,
-                    parentSessionId: context.sessionId!,
-                    // 打开请求的关联键是发起行（CreateWorkflow）id，不是点中行的 id——
-                    // resume 行点开时两者不同，详情页拿它找 causalityGraph/脚本。
-                    toolCallId: resolveWorkflowRunOpenToolCallId(row.toolCallId, workflowRun),
-                    runId: workflowRun.runId,
-                  })
-              : undefined
-          }
-          onOpenWorkflowActor={
-            context.onOpenWorkflowActor && context.sessionId && workflowRun
-              ? (request) =>
-                  context.onOpenWorkflowActor?.({ ...request, parentSessionId: context.sessionId! })
-              : undefined
-          }
-          // 脚本药丸 → 脚本 transcript：关联键同 onOpenWorkflowRun（发起行 id + runId）。
-          onOpenWorkflowWorkspace={
-            context.onOpenWorkflowWorkspace && context.sessionId && workflowRun
-              ? (request) =>
-                  context.onOpenWorkflowWorkspace?.({
-                    ...request,
-                    parentSessionId: context.sessionId!,
-                    toolCallId: resolveWorkflowRunOpenToolCallId(row.toolCallId, workflowRun),
-                    runId: workflowRun.runId,
-                  })
-              : undefined
-          }
-          onResumeWorkflowRun={
-            context.onResumeWorkflowRun && workflowRun?.resumable
-              ? (request) => context.onResumeWorkflowRun?.(workflowRun.runId, request.workflowName)
-              : undefined
-          }
-          // 产物药丸 → 产物 tab：与通知行的 chips 同一条打开路径（不带版本号，打开即最新版）。
-          onOpenWorkflowArtifact={
-            context.onOpenWorkflowArtifact && context.sessionId && workflowRun
-              ? (artifactId) => {
-                  // 活投影的产物摘要带最新版的 `contentType`（宿主据它把 html 产物直接开成
-                  // 浏览器 tab）；`sourcePath` 那份摘要刻意不带，缺席时宿主自己查 journal。
-                  const artifact = workflowRun.run?.artifacts?.find(
-                    (candidate) => candidate.id === artifactId,
-                  );
-                  context.onOpenWorkflowArtifact?.({
-                    parentSessionId: context.sessionId!,
-                    runId: workflowRun.runId,
-                    artifactId,
-                    ...(artifact?.title === undefined ? {} : { title: artifact.title }),
-                    ...(artifact?.contentType === undefined
-                      ? {}
-                      : { contentType: artifact.contentType }),
-                  });
-                }
-              : undefined
-          }
-          workflowRun={workflowRun}
-          workflowDraft={context.workflowDraftByToolCallId?.get(row.toolCallId)}
         />
       </div>
     </RowShell>

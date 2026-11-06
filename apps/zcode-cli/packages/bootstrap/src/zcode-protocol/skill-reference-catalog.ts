@@ -59,8 +59,8 @@ function toResult(
 ): ZCodeSkillsReferenceCatalogResult {
   return {
     authority,
-    // 内置技能包（bundled-skills.ts）不进引用面板：它由内置命令（`/workflow`）加载，不是用户
-    // 管理或引用的对象；协议的 scope 是封闭枚举，旧客户端严格校验，这里不为它扩枚举。
+    // 内置技能包不进引用面板：它随 CLI 分发而非用户管理，不是可引用的对象；
+    // 协议的 scope 是封闭枚举，旧客户端严格校验，这里不为它扩枚举。
     skills: outcome.skills
       .filter((skill) => skill.source !== "bundled")
       .map(toReferenceCatalogEntry),

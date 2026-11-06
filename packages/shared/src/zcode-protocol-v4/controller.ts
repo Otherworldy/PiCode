@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { zcodeTaskMetaSchema } from "../validation.js";
 import { pendingInteractionSummarySchema } from "./sessions-index.js";
-import { sessionWorkflowActivitySchema } from "./sessions-index-workflow-activity.js";
 import { sessionPhaseSchema } from "./snapshot.js";
 import { subscribeAckSchema } from "./transport.js";
 
@@ -79,8 +78,6 @@ export const windowHostControllerTaskActivitySchema = z
     lastActivityAt: z.number().finite().nonnegative(),
     hasBackgroundWork: z.boolean(),
     pendingInteractions: pendingInteractionSummarySchema.optional(),
-    // 侧栏工作流运行行；无 run 时缺席。
-    workflowActivity: sessionWorkflowActivitySchema.optional(),
   })
   .strict();
 export type WindowHostControllerTaskActivity = z.infer<

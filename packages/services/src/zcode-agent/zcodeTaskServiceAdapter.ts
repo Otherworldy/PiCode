@@ -5788,9 +5788,7 @@ function stringArray(value: unknown): string[] {
 }
 
 function turnSteerSourceValue(value: unknown): ZCodeTurnSteerSource | undefined {
-  return value === "plan_approval_feedback" || value === "workflow_refine_feedback"
-    ? value
-    : undefined;
+  return value === "plan_approval_feedback" ? value : undefined;
 }
 
 function turnSteerCommandKindValue(value: unknown): ZCodeTurnSteerCommandKind | undefined {

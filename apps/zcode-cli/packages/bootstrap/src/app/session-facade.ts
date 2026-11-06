@@ -113,11 +113,6 @@ interface SessionResourceCloseInput {
 }
 
 interface CreateSessionFacadeDeps {
-  /**
-   * 停下本会话拥有的 dwf run：
-   * run service 的 `close()`。缺席即本装配没有 dwf 端口（journal 窄化失败、测试装配）。
-   */
-  closeDynamicWorkflowRuns?: () => Promise<void>;
   closeNodeReplBrowserBroker?: () => Promise<void> | undefined;
   configResult: ConfigResult;
   configuredMcpServers: Record<string, McpServerConfig>;
@@ -286,27 +281,6 @@ export function createSessionFacade(deps: CreateSessionFacadeDeps): SessionFacad
     close: async () => {
       closePromise ??= (async () => {
         deps.runtime.beginShutdown();
-        // 引擎归本 App 所有，所以关闭要主动停下它。
-        // 位置是两个约束夹出来的：在 beginShutdown **之后**，结算带出的终态通知才会被丢掉
-        // （background-notifications.ts 在 shuttingDown 时不入队），不会把正在关闭的会话的模型
-        // 叫醒；在 closeSessionResources **之前**，子代理还有 execution / MCP / session store
-        // 可以干净地中止，引擎也还有 journal 可以写自己那一笔 stopped(interrupted)。
-        if (deps.closeDynamicWorkflowRuns !== undefined) {
-          try {
-            await deps.closeDynamicWorkflowRuns();
-          } catch (error: unknown) {
-            // 卡住或抛错的 dwf 关闭绝不能吃掉资源关闭（同下面并行关闭那条注释的论证）：
-            // 记一条 warn 继续走，最坏情况是那个 run 留成孤儿行，下一次构造时被收敛。
-            deps.logger.warn?.(
-              "Closing dynamic workflow runs failed; continuing to close resources",
-              {
-                errorMessage: error instanceof Error ? error.message : String(error),
-                event: "dynamic_workflow.service.close_failed",
-                module: "bootstrap.app",
-              },
-            );
-          }
-        }
         const closableSessionStore =
           deps.ownsSessionStore && isClosableSessionStore(deps.sessionStore)
             ? deps.sessionStore

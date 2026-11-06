@@ -59,9 +59,9 @@ export const SYNTHETIC_USER_MESSAGE_SOURCES = [
   "subagent",
   "subagent_message",
   "todo_reminder",
-  // 中枢直接启动已保存工作流时落的那条 user 消息的来源。
-  // 它虽是 synthetic（GUI 用元数据画启动卡而非显示文本），语义上却是用户真实动作：
-  // origin=real_user、kind=user_prompt，与其余「运行时注入的提醒」类来源不同档。
+  // 中枢直接启动工作流时落的那条 user 消息的来源。生产侧已移除，
+  // 但历史 transcript 里仍有该值：与 @zcode/shared 的 legacy 词表保持同一份，
+  // 否则旧会话的 synthetic 来源在此类型边界上对不上。
   "workflow_launch",
   "shared_context",
 ] as const;

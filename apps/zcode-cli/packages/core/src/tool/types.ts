@@ -7,8 +7,6 @@ import type {
   AutomationPort,
   BrowserControlPort,
   CoordinatorResponsePort,
-  DynamicWorkflowRunPort,
-  DynamicWorkflowSnippetPort,
   EmbeddedSearchBackend,
   ExecutionPort,
   ExecutionShellSelection,
@@ -17,7 +15,6 @@ import type {
   ImageProcessorPort,
   JsonSchema,
   Model,
-  ModelCatalogPort,
   ModelContentProtection,
   ModelMessageContent,
   ModelToolSideEffectScope,
@@ -48,9 +45,6 @@ import type {
   TraceContext,
   TraceId,
   TurnId,
-  WorkflowEscalatePort,
-  WorkflowPort,
-  WorkflowSubmitPort,
 } from "@zcode/contracts";
 import type { RuntimeTaskRegistry } from "../runtime-task/registry.js";
 import type {
@@ -160,22 +154,12 @@ export interface ToolExecutionContext {
   skillPort?: SkillPort;
   subagentPort?: SubagentPort;
   coordinatorResponsePort?: CoordinatorResponsePort;
-  /** 工作流 actor 提交终态结果并等待引擎裁决的端口；仅在 workflow actor 会话注入。 */
-  workflowSubmitPort?: WorkflowSubmitPort;
-  /** 工作流 actor 升级阻塞问题并等待主代理作答的端口；仅在 workflow actor 会话注入。 */
-  workflowEscalatePort?: WorkflowEscalatePort;
   artifactStore?: ToolArtifactStorePort;
   automationPort?: AutomationPort;
   offPeakPort?: OffPeakPort;
   sessionStore?: SessionStorePort;
   sessionModePort?: SessionModePort;
-  workflowPort?: WorkflowPort;
-  /** workflow run 提交端口；缺席则 CreateWorkflow 回占位诊断而不启动。 */
-  dynamicWorkflowRunPort?: DynamicWorkflowRunPort;
-  /** dwf snippet 同步执行端口；缺席则 EvalWorkflowSnippet 报能力缺席的业务失败。 */
-  dynamicWorkflowSnippetPort?: DynamicWorkflowSnippetPort;
-  /** 模型目录端口；缺席则 ListModels 报能力缺席，CreateWorkflow 的 subagent_model 被拒。 */
-  modelCatalogPort?: ModelCatalogPort;
+  /** 模型目录端口；缺席则 ListModels 报能力缺席。 */
   runtimeTaskRegistry?: RuntimeTaskRegistry;
   readFileState?: ReadFileStateMap;
   recordReadFileStateMetadata?: (metadata: PersistedReadFileStateMetadata) => void;
@@ -239,26 +223,6 @@ export type ToolInputValidationResult = { result: true } | ToolHandlerFailure;
 export interface ToolInputResolutionContext {
   workingDirectory?: string;
   runtimeTaskRegistry?: RuntimeTaskRegistry;
-  /**
-   * workflow run 端口与本会话 id：AmendWorkflow 用它们把 `run_id` 解析成「前驱是不是本会话的、
-   * 还在不在跑」的事实块。仍然只读——
-   * 归一化钩子不因此变成第二个执行入口。
-   */
-  dynamicWorkflowRunPort?: DynamicWorkflowRunPort;
-  /**
-   * 模型目录端口：CreateWorkflow / AmendWorkflow 用它把 `subagent_model` 解析成规范形，解不出来
-   * 在确认窗**之前**就作为业务失败退回。
-   * 同步、只读，与 `dynamicWorkflowRunPort` 同一条理由待在这里。缺席时给了字段即被拒——
-   * 不静默放行一个宿主解不了的字符串。
-   */
-  modelCatalogPort?: ModelCatalogPort;
-  sessionId?: string;
-  /**
-   * 「这个会话此刻加载着某个技能吗」的探针（handlers/workflow-skill-gate.ts）。由 runtime 用
-   * provider 可见历史回答（agent/loaded-skills.ts），所以 compaction 之后答案随历史一起变回
-   * 否。缺席 = 本会话没有 Skill 工具或调用方不参与，门不生效。
-   */
-  hasLoadedSkill?: (skillName: string) => boolean;
 }
 
 export type ToolInputResolutionResult = { result: true; input: unknown } | ToolHandlerFailure;

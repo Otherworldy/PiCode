@@ -191,10 +191,6 @@ export function computeInputRouting(
 }
 
 // revision 递进规则（封闭定义）：行结构变化 + A 区（usage/pendingCommands 除外）变化各 +1。
-// `workflowRuns` **刻意不在列**，归入 usage/pendingCommands 的豁免类：它是高频派生数据
-// （每个节点约 5 次迁移）、自带单调 revision 字段、且没有任何 command 的
-// baseRevision CAS 读它——列入会让 run 在飞期间的每次节点迁移都抖动 conversation revision，
-// 徒增 CAS 假失败。
 const REVISION_BEARING_PATCH_KEYS: ReadonlyArray<keyof StatePatch> = [
   "control",
   "availability",
@@ -223,12 +219,8 @@ export function deltaBumpsRevision(delta: ConversationDelta): boolean {
     case "pluginUi.resourceListChanged":
     case "pluginUi.instanceClosed":
     case "pluginUi.appToolCall":
-    case "embeddedBrowser.open":
     // live-only 通知不改快照，不记账。
-    // 键级增量与整键 `workflowRuns` patch 同一条豁免（见上面的注释）：它们表达的就是那个键的变化，
-    // 换个编码不该换记账规则——列入会让一条在飞的 run 每次节点迁移都抖动 conversation revision。
-    case "workflowRun.updated":
-    case "workflowRun.removed":
+    case "embeddedBrowser.open":
       return false;
   }
 }

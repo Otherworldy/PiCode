@@ -13,7 +13,6 @@ import {
 import { conversationDeltaSchema } from "./delta.js";
 import { conversationRowSchema, toolCallRowSchema } from "./rows.js";
 import { sessionsIndexDeltaSchema, sessionsIndexSnapshotSchema } from "./sessions-index.js";
-import { WORKFLOW_RUN_STOP_REASONS } from "./workflow-observation-display.js";
 import { conversationSnapshotSchema } from "./snapshot.js";
 import { workspaceConfigDeltaSchema, workspaceConfigSnapshotSchema } from "./workspace-config.js";
 import { createTopicWireFrameSchema, topicWireFrameCandidateSchema } from "./wire.js";
@@ -28,12 +27,6 @@ export const hostCapabilitiesSchema = z.object({
   // Wire-compatible：旧 Host 缺失等价于 false；调用方必须用 === true 判断。
   workspaceHookReview: z.boolean().optional(),
   independentPlanState: z.boolean().optional(),
-  /**
-   * 本 Host 会发 `workflowRun.*` 键级增量（delta.ts 的两条 op），因而 `workflowRuns` 的
-   * actors / nodes 可以到 1024 而不是旧界的 256。没有这个位的消费者收到的仍是整键
-   * `state.updated`，并且先经 `clampWorkflowRunsForLegacy` 裁到旧界。
-   */
-  workflowRunDeltas: z.boolean().optional(),
 });
 export type HostCapabilities = z.infer<typeof hostCapabilitiesSchema>;
 
@@ -75,12 +68,6 @@ export const clientHelloSchema = z
     capabilities: z
       .object({
         workspaceHookReviewUi: z.boolean().optional(),
-        /**
-         * 本客户端认得 `workflowRun.*` 增量。⚠ 声明规则是**单向**的：客户端只有在 Host 的
-         * hello 里见到 `workflowRunDeltas === true` 时才能带上这个键——这个 capabilities 对象
-         * 是 `.strict()` 的，老 Host 见到不认识的键会整条 clientHello 解析失败、连接握不上手。
-         */
-        workflowRunDeltas: z.boolean().optional(),
       })
       .strict()
       .optional(),
@@ -94,14 +81,6 @@ export function hostSupportsWorkspaceHookReview(capabilities: HostCapabilities):
 
 export function clientSupportsWorkspaceHookReview(clientHello: ClientHello): boolean {
   return clientHello.capabilities?.workspaceHookReviewUi === true;
-}
-
-export function hostSupportsWorkflowRunDeltas(capabilities: HostCapabilities): boolean {
-  return capabilities.workflowRunDeltas === true;
-}
-
-export function clientSupportsWorkflowRunDeltas(clientHello: ClientHello): boolean {
-  return clientHello.capabilities?.workflowRunDeltas === true;
 }
 
 // ── §3.1 订阅 ──
@@ -190,12 +169,11 @@ type Timestamp = z.infer<typeof timestampSchema>;
 export const conversationTopicFrameSchema = createTopicFrameSchema(
   conversationSnapshotSchema,
   conversationDeltaSchema,
-)
-  .superRefine((frame, context) => {
-    if (!frame.topic.startsWith("conversation/") || frame.topic.length === "conversation/".length) {
-      context.addIssue({ code: "custom", message: "invalid conversation topic", path: ["topic"] });
-    }
-  });
+).superRefine((frame, context) => {
+  if (!frame.topic.startsWith("conversation/") || frame.topic.length === "conversation/".length) {
+    context.addIssue({ code: "custom", message: "invalid conversation topic", path: ["topic"] });
+  }
+});
 export type ConversationTopicFrame = z.infer<typeof conversationTopicFrameSchema>;
 export const conversationTopicWireFrameSchema = createTopicWireFrameSchema(
   conversationTopicFrameSchema,
@@ -339,22 +317,6 @@ export const V4_METHODS = {
   conversationFileChanges: "v4/conversation/fileChanges",
   backgroundBashOutput: "v4/conversation/backgroundBashOutput",
   conversationFileRewindPreview: "v4/conversation/fileRewindPreview",
-  // workflow run 的事件日志分页（详情页审计面）：只读、无状态、超时重发安全。
-  // 新方法天然偏斜安全——旧桌面根本不会调用它。
-  conversationWorkflowRunEvents: "v4/conversation/workflowRunEvents",
-  conversationWorkflowRuns: "v4/conversation/workflowRuns",
-  // workflow run 的用户面产物。三条同族：
-  // 只读、无状态、超时重发安全；schema 在 workflow-artifacts.ts（那边还有术语消歧）。
-  //   Artifacts    产物清单（冷恢复与中枢详情的 durable 读法）
-  //   ArtifactData 预置看板的条目分页（cursor = journal sequence）
-  //   ArtifactRead 内容产物的字节，≤ 512 KiB 一块，形状逐字照 attachmentRead
-  conversationWorkflowRunArtifacts: "v4/conversation/workflowRunArtifacts",
-  conversationWorkflowRunArtifactData: "v4/conversation/workflowRunArtifactData",
-  conversationWorkflowRunArtifactRead: "v4/conversation/workflowRunArtifactRead",
-  // workflow run 的工作区 transcript。两条同族，
-  // 照产物的 ①/③ 拆法：Workspace 是轻行清单（不带正文），NodeResult 是一个节点的有界正文。
-  conversationWorkflowRunWorkspace: "v4/conversation/workflowRunWorkspace",
-  conversationWorkflowRunNodeResult: "v4/conversation/workflowRunNodeResult",
   // usage query（模式同 rows/range：只读、无状态、超时重发安全）。
   // usage 事实源在 CLI 的 session 库（model_usage/turn_usage 聚合），host 侧无副本，
   // 故收敛为 v4 query 而非 host 直连；旧词 usage/stats、session/usage 就此消费清零。
@@ -422,12 +384,6 @@ export const v4ConversationSubscribeParamsSchema = subscribeParamsSchema.extend(
   legacyTaskIds: z.array(z.string().min(1)).max(MAX_LEGACY_TASK_IDS_PER_SUBSCRIBE).optional(),
   // 仅供 host→CLI cold resume 使用；live conversation 不消费该 hint。
   resumeThoughtLevel: z.string().trim().min(1).optional(),
-  /**
-   * 这条订阅收不收 `workflowRun.*` 键级增量。与 `clientMode` 同族：由**可信 host** 从该连接的
-   * clientHello 注入，面向 UI 的 subscribe 选不了它——一个客户端能不能认得增量是连接的事实，
-   * 不是某一次订阅可以自选的口味。缺席 = 按旧消费者处理（整键 patch + 旧界裁剪）。
-   */
-  workflowRunDeltas: z.boolean().optional(),
 });
 export type V4ConversationSubscribeParams = z.infer<typeof v4ConversationSubscribeParamsSchema>;
 
@@ -584,123 +540,6 @@ export const v4ConversationFileChangesResultSchema = z
   })
   .strict();
 export type V4ConversationFileChangesResult = z.infer<typeof v4ConversationFileChangesResultSchema>;
-
-// ── workflow run 事件日志──
-// 形态与 rows/range、plans 同族：只读、无状态、超时重发安全。cursor = journal sequence
-// （`appendEvent` 单调分配），在 workflowRuns[].lastEventSequence 抬升时重取。
-// 刻意**不是** v4 command：command 的 ACK 结果是 commandResultSchema 那个封闭的「变更结果」
-// 判别联合，把一页只读事件塞进去等于把读放进写的词汇表，还要白背 baseRevision/幂等那套机制。
-export const v4ConversationWorkflowRunEventsParamsSchema = z
-  .object({
-    sessionId: z.string().min(1),
-    runId: z.string().min(1),
-    /** 只取 sequence 严格大于该值的事件；缺省从头取。 */
-    afterSequence: z.number().int().nonnegative().optional(),
-    limit: z.number().int().positive().max(500).optional(),
-  })
-  .strict();
-export type V4ConversationWorkflowRunEventsParams = z.infer<
-  typeof v4ConversationWorkflowRunEventsParamsSchema
->;
-
-export const v4ConversationWorkflowRunEventsResultSchema = z
-  .object({
-    events: z.array(
-      z
-        .object({
-          sequence: z.number().int().nonnegative(),
-          type: z.string().min(1).max(64),
-          // 载荷已在 CLI 侧经 boundDynamicWorkflowRunEventPayload 有界化（同一次序列化
-          // 也喂给 workflowRuns 投影）。这里不再复述引擎的事件形状：读端按种类解释。
-          payload: z.record(z.string(), z.unknown()),
-          truncated: z.boolean().optional(),
-        })
-        .strict(),
-    ),
-    /** 本页取满 limit 且后面仍有事件。 */
-    hasMore: z.boolean(),
-  })
-  .strict();
-// **刻意不带 `atSeq` / `atLogEpoch`**，尽管同族的 rows/range 与 plans 都带。
-//
-// 那两个字段在同族里是**陈旧读防护**：它们读的是 conversation projection，而 projection 的
-// `rowId` 只在一个 log epoch 内有意义（重建 / fork / rewind 会重新编号），所以读端的契约是
-// "atLogEpoch ≠ store 当前 epoch → 整个结果丢弃"。
-//
-// 本 query 读的是 **journal**（`dwf_event`），它与 conversation log 无关，且 cursor 永不失效：
-// journal 的 JournalStorePort 契约要求 sequence 只追加、
-// 跨 resume 从既有最大值继续、既不重置也不复用，既有条目的编号不变。也就是说一个
-// `(runId, sequence)` cursor 永远有效——没有任何"陈旧"可供防护。
-//
-// 更要紧的是：带上 `atLogEpoch` 不是无害的对称。按同族的读端契约，一次与 run 完全无关的
-// 会话 rewind（epoch 变化）会让详情页把**合法的** journal 页整页丢掉。宁可少一个字段，
-// 也不要携带一个在这里定义不出正确语义的字段。
-export type V4ConversationWorkflowRunEventsResult = z.infer<
-  typeof v4ConversationWorkflowRunEventsResultSchema
->;
-
-// ── dwf run 枚举 ──
-// journal-backed 的重启后发现面：`workflowRuns` 投影是 memory-only（冷合并归类），
-// 重启后为空——工具卡 join 与 Resume 按钮的可用性只能从 dwf_run 行还原。与
-// workflowRunEvents 同族（只读、无状态、超时重发安全），同样刻意不是 v4 command，
-// 同样不带 atSeq/atLogEpoch（读 journal，与 conversation log 无关，见上一个 query 的论证）。
-// 新方法天然偏斜安全：旧桌面永远不会调用它。
-export const v4ConversationWorkflowRunsParamsSchema = z
-  .object({
-    sessionId: z.string().min(1),
-    /** 返回条数上限；缺省与钳制在 CLI 侧（枚举面有界，绝不无界扫库）。 */
-    limit: z.number().int().positive().max(64).optional(),
-  })
-  .strict();
-export type V4ConversationWorkflowRunsParams = z.infer<
-  typeof v4ConversationWorkflowRunsParamsSchema
->;
-
-export const v4ConversationWorkflowRunSummarySchema = z
-  .object({
-    runId: z.string().min(1),
-    /** 发起 run 的 CreateWorkflow 工具调用 id（工具卡 → 详情页/Resume 的关联键）；老 run 缺席。 */
-    toolCallId: z.string().min(1).optional(),
-    /**
-     * 展示标签，服务端读时派生（`name` → 脚本首行 → runId）。optional 是偏斜安全：
-     * 老 CLI 不发这个键，读侧回落 runId——少一个标签是退化，不是错误。
-     * 上限与派生侧的 80 字符对齐后留一倍余量（用户起的 `name` 不受派生上限约束）。
-     */
-    label: z.string().min(1).max(160).optional(),
-    /** 最后更新时间（epoch 毫秒，journal 的 `dwf_run.time_updated`）。缺席即不显示时间。 */
-    updatedAt: z.number().int().nonnegative().optional(),
-    // 与 workflowRuns 投影同一套五值词汇；
-    // 此查询使用独立的 schema，新增查询状态不改变投影侧的状态键。
-    status: z.enum(["completed", "errored", "pending", "running", "stopped"]),
-    /** `status === "stopped"` 才在场。词表与观察面共用一份——这里曾各抄一遍，于是引擎多出
-     * `superseded` 时这份 strict schema 把整页 run 目录拒掉（桌面端表现为
-     * 「读取 run 摘要失败」，任务列表计数与目录页一起空白）。 */
-    stopReason: z.enum(WORKFLOW_RUN_STOP_REASONS).optional(),
-    // lineage：修订出来的 run 带前驱，
-    // 被替代的 run 带后继（只随 `stopReason: "superseded"`）。两者 optional：老 CLI 不发。
-    resumedFrom: z.string().min(1).optional(),
-    supersededBy: z.string().min(1).optional(),
-    /** errored / stopped(provider|interrupted) 的结构化失败编码（`ProviderStop` / `Interrupted` …）。 */
-    failureCode: z.string().min(1).max(64).optional(),
-    failureMessage: z.string().max(2048).optional(),
-    /** 是否可恢复。CLI 按 resume 门的同一个谓词算好——UI 绝不自行推导（两处谓词会漂移）。 */
-    resumable: z.boolean(),
-  })
-  .strict();
-export type V4ConversationWorkflowRunSummary = z.infer<
-  typeof v4ConversationWorkflowRunSummarySchema
->;
-
-export const v4ConversationWorkflowRunsResultSchema = z
-  .object({
-    /** 最近更新在前（排序在存储层）。 */
-    runs: z.array(v4ConversationWorkflowRunSummarySchema),
-  })
-  .strict();
-export type V4ConversationWorkflowRunsResult = z.infer<
-  typeof v4ConversationWorkflowRunsResultSchema
->;
-
 export const v4ConversationFileRewindPreviewParamsSchema = z
   .object({
     sessionId: z.string().min(1),

@@ -135,12 +135,6 @@ export interface ZCodeProtocolAgentServerContext {
     modelIoFullRetentionEnabled: boolean;
     /** host 同步的 Off-Peak 工具面门禁；缺省 false（fail-closed），供 v4 冷恢复等无 host 参数的路径读取。 */
     offPeakToolEnabled: boolean;
-    /**
-     * host 同步的动态工作流灰度门。
-     * 缺省 false（fail-closed）：不认识该方法的旧 Host 或还没来得及同步的启动窗口里，
-     * 工作流工具面、`/workflow` 与 dynamic-workflows 技能一律不露出。
-     */
-    dynamicWorkflowEnabled: boolean;
   };
   // 竖切：v4 conversation 通道（订阅/帧/命令），与旧 session/* 方法并存。
   // 构造顺序问题（gateway 闭包持有 context）用可选字段收口，server 构造完立即赋值。

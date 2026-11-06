@@ -11,11 +11,6 @@ import type { OpenAutomationsMain } from "@/lib/taskNavigationHistory.js";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
 import type {
   OpenScopedPlanDetailSideTabRequest,
-  OpenScopedWorkflowActorSessionSideTabRequest,
-  OpenScopedWorkflowArtifactSideTabRequest,
-  OpenScopedWorkflowRunSideTabRequest,
-  OpenScopedWorkflowRunDirectorySideTabRequest,
-  OpenScopedWorkflowWorkspaceSideTabRequest,
   OpenScopedSubagentDirectorySideTabRequest,
   OpenScopedSubagentSideTabRequest,
   OpenBackgroundBashSideTabRequest,
@@ -60,11 +55,6 @@ interface V4ChatPaneProps {
   onOpenSubagentDirectory?: (request: OpenScopedSubagentDirectorySideTabRequest) => void;
   onSyncSubagentSessionTabs?: (request: SyncSubagentSessionTabsRequest) => void;
   onOpenPlanDetail?: (request: OpenScopedPlanDetailSideTabRequest) => void;
-  onOpenWorkflowRun?: (request: OpenScopedWorkflowRunSideTabRequest) => void;
-  onOpenWorkflowArtifact?: (request: OpenScopedWorkflowArtifactSideTabRequest) => void;
-  onOpenWorkflowRunDirectory?: (request: OpenScopedWorkflowRunDirectorySideTabRequest) => void;
-  onOpenWorkflowActorSession?: (request: OpenScopedWorkflowActorSessionSideTabRequest) => void;
-  onOpenWorkflowWorkspace?: (request: OpenScopedWorkflowWorkspaceSideTabRequest) => void;
   conversationFindQuery?: string;
   conversationFindActiveIndex?: number;
   conversationFindNavigationRequestId?: number;
@@ -105,11 +95,6 @@ export function V4ChatPane({
   onOpenSubagentDirectory,
   onSyncSubagentSessionTabs,
   onOpenPlanDetail,
-  onOpenWorkflowRun,
-  onOpenWorkflowArtifact,
-  onOpenWorkflowRunDirectory,
-  onOpenWorkflowActorSession,
-  onOpenWorkflowWorkspace,
   conversationFindQuery = "",
   conversationFindActiveIndex = -1,
   conversationFindNavigationRequestId = 0,
@@ -148,11 +133,6 @@ export function V4ChatPane({
         onOpenSubagentDirectory={onOpenSubagentDirectory}
         onSyncSubagentSessionTabs={onSyncSubagentSessionTabs}
         onOpenPlanDetail={onOpenPlanDetail}
-        onOpenWorkflowRun={onOpenWorkflowRun}
-        onOpenWorkflowArtifact={onOpenWorkflowArtifact}
-        onOpenWorkflowRunDirectory={onOpenWorkflowRunDirectory}
-        onOpenWorkflowActorSession={onOpenWorkflowActorSession}
-        onOpenWorkflowWorkspace={onOpenWorkflowWorkspace}
         conversationFindQuery={conversationFindQuery}
         conversationFindActiveIndex={conversationFindActiveIndex}
         conversationFindNavigationRequestId={conversationFindNavigationRequestId}

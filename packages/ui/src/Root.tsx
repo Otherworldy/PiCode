@@ -11,7 +11,6 @@ import { TooltipProvider } from "@/components/ui/tooltip.js";
 import { Button } from "@/components/ui/button.js";
 import { PlatformProvider } from "@/hooks/usePlatform.js";
 import { ServiceProvider } from "@/hooks/useServices.js";
-import { useDynamicWorkflowAvailabilityLoader } from "@/hooks/useDynamicWorkflowAvailability.js";
 import { DirectoryBrowser } from "@/DirectoryBrowser.js";
 import { useTabPersistence } from "@/hooks/useTabPersistence.js";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh.js";
@@ -156,11 +155,6 @@ function RootInner({
     };
   }, [platform]);
 
-  // 动态工作流灰度快照的唯一取数点：
-  // 放在 app 级 ServiceProvider 这一层取一次，自动化页与 run 面板只读。消费方可能位于
-  // 工作区级 ServiceProvider 内（远程 Host 的 accessor），由它们取数会拿到另一台 Host 的答案。
-  useDynamicWorkflowAvailabilityLoader(services.codingPlanSubscriptionService);
-
   const { intl, locale } = useZCodeIntl();
   const theme = useZCodeStore((state) => state.theme);
   const user = useZCodeStore((state) => state.user);
@@ -272,11 +266,7 @@ function RootInner({
     return () => {
       disposable.dispose();
     };
-  }, [
-    refreshAppSettings,
-    services.broadcastService,
-    services.zcodeAgentService,
-  ]);
+  }, [refreshAppSettings, services.broadcastService, services.zcodeAgentService]);
 
   useEffect(() => {
     if (!appSettings) {
@@ -854,9 +844,7 @@ function RootInner({
           handleResolveConversationWorkspace={handleResolveConversationWorkspace}
           handleOpenWorkspace={handleOpenWorkspace}
           handleOpenFolderFromWorkspaceMenu={handleOpenFolderFromWorkspaceMenu}
-          handleOpenRemoteWorkspace={
-            allowRemoteWorkspace ? handleOpenRemoteConnection : undefined
-          }
+          handleOpenRemoteWorkspace={allowRemoteWorkspace ? handleOpenRemoteConnection : undefined}
           handleCreateScratchWorkspace={handleCreateScratchWorkspace}
           remoteConnectionInProgress={remoteConnectionInProgress}
           remoteWorkspaceSessions={remoteWorkspaceSessions}

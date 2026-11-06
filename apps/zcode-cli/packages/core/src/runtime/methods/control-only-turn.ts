@@ -2,7 +2,6 @@ import {
   SessionEventType,
   createChildTraceContext,
   createMessageId,
-  createPartId,
   createTurnId,
 } from "../deps.js";
 import type {
@@ -10,26 +9,22 @@ import type {
   SyntheticUserMessageSource,
   TraceContext,
   TurnInputIntentMetadata,
-  WorkflowLaunchMeta,
 } from "../deps.js";
 import { buildUserContentFromTurn } from "../helpers/index.js";
 import { realUserRuntimeMetadata } from "../../agent/message-history.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-import type { ControlOnlyTurnRuntimeCommand } from "../command-queue.js";
-import { buildProjectionAnchor } from "./projection-anchor.js";
 import { maybeStartGoalSummaryTitleGeneration } from "./goal-summary-title.js";
 import { maybeStartSessionTitleGeneration } from "./session-title.js";
 
 /**
- * controlOnly 用户轮的公共边界（`/goal` 外部 query 与中枢直接启动工作流共用）。
+ * controlOnly 用户轮的公共边界（`/goal` 外部 query 使用）。
  *
  * 两条入口都不走普通 `executeTurn`，却都要落一条**用户可见、role=user** 的持久消息、把它喂进
  * runtime history（模型下一回合看得到）、再补一组无模型输出的完整 turn 边界
  * （`TurnStarted{executionKind:"controlOnly"}` + `TurnComplete{response:""}`）——否则 live
  * ProductProjection 收不到 TurnStarted，query 要等冷恢复才现身，且 0ms 控制轮会被 modelChange
- * marker 误显示成「已工作 1 秒」。唯一实质差异是这条消息**怎么落**（真实 user prompt vs 带
- * `workflowLaunch` 元数据的 synthetic user 消息）与标题/后续副作用，各由 `persistMessage` 回调
- * 与 `afterTurnBoundary` 回调注入。
+ * marker 误显示成「已工作 1 秒」。这条消息**怎么落**与标题/后续副作用各由 `persistMessage`
+ * 回调与 `afterTurnBoundary` 回调注入。
  */
 export async function emitControlOnlyUserTurn(
   this: AgentRuntimeInternal,
@@ -44,7 +39,6 @@ export async function emitControlOnlyUserTurn(
     traceContext: TraceContext;
     inputId?: string;
     inputSource?: SyntheticUserMessageSource;
-    workflowLaunch?: WorkflowLaunchMeta;
     intent?: TurnInputIntentMetadata;
     /** 落这条 user message（真实或 synthetic）——两条路径的唯一实质差异。 */
     persistMessage: () => Promise<void>;
@@ -86,7 +80,6 @@ export async function emitControlOnlyUserTurn(
         // session running/activeWorks。
         executionKind: "controlOnly",
         ...(options.inputSource ? { inputSource: options.inputSource } : {}),
-        ...(options.workflowLaunch ? { workflowLaunch: options.workflowLaunch } : {}),
         ...(options.intent ? { intent: options.intent } : {}),
       },
       turnTraceContext,
@@ -111,100 +104,6 @@ export async function emitControlOnlyUserTurn(
   options.afterTurnBoundary?.();
   this.turnNumber += 1;
   this.messageHistory.setCacheMiss();
-}
-
-/**
- * 落中枢直接启动工作流的启动轮 user 消息。
- *
- * 它是一条 **synthetic 但语义上属于用户真实动作** 的消息：`synthetic: true` + 新
- * `source: "workflow_launch"`，却带 `origin: "real_user"` / `kind: "user_prompt"` 与
- * ui/provider/transcript 三面全可见——用户在中枢里点了「运行」，这就是他的真实意图，只是 GUI
- * 用 `metadata.workflowLaunch` 画轮尾 run 卡而非显示这段文本。元数据同时进 message metadata（冷恢复
- * 来源）与 TurnStarted payload（活投影来源，由调用方写），两处同一份。
- */
-export async function persistWorkflowLaunchUserMessage(
-  this: AgentRuntimeInternal,
-  options: {
-    messageID: MessageId;
-    text: string;
-    meta: WorkflowLaunchMeta;
-    traceContext: TraceContext;
-  },
-): Promise<void> {
-  this.latestConversationMessageId = options.messageID;
-  if (!this.sessionStore) return;
-
-  const created = Date.now();
-  await this.persistMessage(
-    {
-      id: options.messageID,
-      sessionID: this.sessionId,
-      role: "user",
-      time: { created },
-      agent: this.config.agentName ?? "zcode-agent",
-      // 冷恢复来源：transcript-hydration 据 source === "workflow_launch" + metadata.workflowLaunch
-      // 重建启动卡行。
-      metadata: { workflowLaunch: options.meta },
-      modelSelection: this.getSessionModelSelection(),
-      semantics: {
-        // 用户真实动作：不是 agent_runtime 的 system 提醒，模型下一回合以真实 user prompt 读它。
-        origin: "real_user",
-        kind: "user_prompt",
-        source: "workflow_launch",
-        uiVisibility: "visible",
-        providerVisibility: "visible",
-        transcriptVisibility: "visible",
-      },
-      anchor: buildProjectionAnchor(options.traceContext, "realUser"),
-      source: "workflow_launch",
-      system: this.config.systemPrompt,
-      synthetic: true,
-      tools: Object.fromEntries(this.getTools().map((tool) => [tool.name, true])),
-      visibility: "user-visible",
-    },
-    options.traceContext,
-  );
-  await this.persistPart(
-    {
-      id: createPartId(),
-      sessionID: this.sessionId,
-      messageID: options.messageID,
-      type: "text",
-      text: options.text,
-      synthetic: true,
-      time: { start: created, end: created },
-      metadata: { source: "workflow_launch", visibility: "user-visible" },
-    },
-    options.traceContext,
-  );
-}
-
-/**
- * 跑一条排队的 controlOnly 轮（{@link ControlOnlyTurnRuntimeCommand}）：与中枢启动轮同一条落法——
- * synthetic `workflow_launch` user 消息 + 元数据 + 完整 turn 边界，只是时机由队列决定。
- */
-export async function runControlOnlyTurnCommand(
-  this: AgentRuntimeInternal,
-  command: ControlOnlyTurnRuntimeCommand,
-): Promise<void> {
-  const messageId = createMessageId();
-  await emitControlOnlyUserTurn.call(this, {
-    messageId,
-    titleInput: command.titleInput,
-    historyText: command.text,
-    turnInput: command.text,
-    traceContext: command.traceContext,
-    ...(command.inputId === undefined ? {} : { inputId: command.inputId }),
-    inputSource: "workflow_launch",
-    workflowLaunch: command.workflowLaunch,
-    persistMessage: () =>
-      persistWorkflowLaunchUserMessage.call(this, {
-        messageID: messageId,
-        text: command.text,
-        meta: command.workflowLaunch,
-        traceContext: command.traceContext,
-      }),
-  });
 }
 
 export async function recordExternalUserPrompt(

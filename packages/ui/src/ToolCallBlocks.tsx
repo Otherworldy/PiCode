@@ -85,13 +85,6 @@ function ToolCallBlockComponent({
   onOpenAutomationsMain,
   onOpenPlanDetail,
   pluginUi: providedPluginUi,
-  onOpenWorkflowRun,
-  onResumeWorkflowRun,
-  onOpenWorkflowActor,
-  onOpenWorkflowWorkspace,
-  onOpenWorkflowArtifact,
-  workflowRun,
-  workflowDraft,
   onLoadFullToolCallFields,
   suppressSourceLabel = false,
   disableSummaryContentAnimation = false,
@@ -121,23 +114,6 @@ function ToolCallBlockComponent({
   onOpenAutomationsMain?: (automationId?: string) => void;
   onOpenPlanDetail?: ToolCallBlockRenderContext["onOpenPlanDetail"];
   pluginUi?: ToolCallBlockRenderContext["pluginUi"];
-  onOpenWorkflowRun?: ToolCallBlockRenderContext["onOpenWorkflowRun"];
-  /** 工具卡页脚的 Resume；与 workflowRun 同样不向子工具卡透传。 */
-  onResumeWorkflowRun?: ToolCallBlockRenderContext["onResumeWorkflowRun"];
-  /** 药丸 → 子代理 transcript；同样不向子工具卡透传。 */
-  onOpenWorkflowActor?: ToolCallBlockRenderContext["onOpenWorkflowActor"];
-  /** 脚本药丸 → 脚本 transcript；同样不向子工具卡透传。 */
-  onOpenWorkflowWorkspace?: ToolCallBlockRenderContext["onOpenWorkflowWorkspace"];
-  /** 产物药丸 → 产物 tab；同样不向子工具卡透传。 */
-  onOpenWorkflowArtifact?: ToolCallBlockRenderContext["onOpenWorkflowArtifact"];
-  /**
-   * 该工具调用联接到的 workflow run 摘要（宿主按 toolCallId 从 workflowRuns 投影解析）。
-   * 刻意**不**向子工具卡透传：摘要是按 toolCallId 联接出来的，把父卡的 run 摘要传给
-   * 一个不同 toolCallId 的子卡，画出来的就是别人的运行态。
-   */
-  workflowRun?: ToolCallBlockRenderContext["workflowRun"];
-  /** 编译反馈的草稿位置（宿主按 toolCallId 从行窗口联接）；同 workflowRun，不向子工具卡透传。 */
-  workflowDraft?: ToolCallBlockRenderContext["workflowDraft"];
   onLoadFullToolCallFields?: (toolId: string) => Promise<boolean | void> | boolean | void;
   suppressSourceLabel?: boolean;
   disableSummaryContentAnimation?: boolean;
@@ -260,7 +236,6 @@ function ToolCallBlockComponent({
               onOpenBrowserUrl={onOpenBrowserUrl}
               onOpenAutomationsMain={onOpenAutomationsMain}
               onOpenPlanDetail={onOpenPlanDetail}
-              onOpenWorkflowRun={onOpenWorkflowRun}
               onLoadFullToolCallFields={onLoadFullToolCallFields}
               suppressSourceLabel={suppressSourceLabel}
               disableSummaryContentAnimation={disableSummaryContentAnimation}
@@ -317,16 +292,6 @@ function ToolCallBlockComponent({
       onOpenAutomationsMain,
       onOpenPlanDetail,
       pluginUi,
-      // onOpenWorkflowRun 之前只被透传给子工具卡，从未进过 renderContext，
-      // 于是 CreateWorkflow renderer 永远收不到它——「打开详情页」的入口不是被埋深了，
-      // 是根本没渲染过。run 态紧凑卡就挂在这个回调上，所以它必须在这里。
-      onOpenWorkflowRun,
-      onResumeWorkflowRun,
-      onOpenWorkflowActor,
-      onOpenWorkflowWorkspace,
-      onOpenWorkflowArtifact,
-      workflowRun,
-      workflowDraft,
       onLoadFullToolCallFields,
       resumeMenuForToolId,
     }),
@@ -346,11 +311,6 @@ function ToolCallBlockComponent({
       onOpenBrowserUrl,
       onOpenPlanDetail,
       pluginUi,
-      onOpenWorkflowRun,
-      onResumeWorkflowRun,
-      onOpenWorkflowActor,
-      onOpenWorkflowWorkspace,
-      onOpenWorkflowArtifact,
       onOpenFileLink,
       rawFileSummaries,
       resumeMenuForToolId,
@@ -361,8 +321,6 @@ function ToolCallBlockComponent({
       theme,
       toolCallNode,
       toolPreviewCodeViewer,
-      workflowRun,
-      workflowDraft,
       workspacePath,
     ],
   );

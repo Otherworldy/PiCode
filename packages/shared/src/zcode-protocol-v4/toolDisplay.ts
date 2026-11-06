@@ -7,15 +7,6 @@ import { timestampSchema } from "./core.js";
 import { OFFICIAL_MCP_TOOL_ERROR_CODES } from "../official-mcp-tool-error.js";
 import { cuaRequestAccessStatusSchema } from "./cuaPermission.js";
 import { mcpToolDisplayUiSchema } from "../mcp-apps/schemas.js";
-import { toolCallCreateWorkflowDisplaySchema } from "./create-workflow-display.js";
-import {
-  toolCallEvalWorkflowSnippetDisplaySchema,
-  toolCallGetWorkflowRunDisplaySchema,
-  toolCallListModelsDisplaySchema,
-  toolCallListWorkflowRunsDisplaySchema,
-  toolCallSavedWorkflowListDisplaySchema,
-  toolCallResumeWorkflowRunDisplaySchema,
-} from "./workflow-observation-display.js";
 
 // toolCall 终态 output 的结构化展示模型（port 自 feat；CUA 工具靠 kind:"cua" 分支把
 // errorCode/suggestedAction/media(screenshot) 等结构化内容带到 renderer）。consume-main 之前
@@ -137,19 +128,6 @@ const toolResultDisplaySchema = z.discriminatedUnion("kind", [
     // 插件 UI 元数据；与 CLI contracts 的 mcpToolResultDisplayPayloadSchema 同源复用，见 mcp-apps/schemas.ts。
     ui: mcpToolDisplayUiSchema.optional(),
   }),
-  // buildToolOutput 把 CLI 侧 ToolResultDisplayPayload 原样塞进 toolOutput.display，
-  // 而这条 union 是 strict 的——create_workflow 不在成员里，CreateWorkflow 的 display 会被整段
-  // 拒掉/剥掉，工具卡退化成纯文本。两侧成员表必须同步（同 contracts 的
-  // toolResultDisplayPayloadSchema），所以直接复用 toolCall 侧同形的那份 schema。
-  toolCallCreateWorkflowDisplaySchema,
-  // 观察类工作流工具的五个 display kind + ResumeWorkflowRun 的恢复卡（同上：与 contracts
-  // 侧同步，缺成员 = 整块被剥）。
-  toolCallGetWorkflowRunDisplaySchema,
-  toolCallListWorkflowRunsDisplaySchema,
-  toolCallEvalWorkflowSnippetDisplaySchema,
-  toolCallSavedWorkflowListDisplaySchema,
-  toolCallListModelsDisplaySchema,
-  toolCallResumeWorkflowRunDisplaySchema,
 ]);
 export type ToolResultDisplay = z.infer<typeof toolResultDisplaySchema>;
 
@@ -262,12 +240,5 @@ export const toolCallDisplaySchema = z.discriminatedUnion("kind", [
   toolCallTaskOutputDisplaySchema,
   toolCallRespondToCoordinatorDisplaySchema,
   toolCallMcpDisplaySchema,
-  toolCallCreateWorkflowDisplaySchema,
-  toolCallGetWorkflowRunDisplaySchema,
-  toolCallListWorkflowRunsDisplaySchema,
-  toolCallEvalWorkflowSnippetDisplaySchema,
-  toolCallSavedWorkflowListDisplaySchema,
-  toolCallListModelsDisplaySchema,
-  toolCallResumeWorkflowRunDisplaySchema,
 ]);
 export type ToolCallDisplay = z.infer<typeof toolCallDisplaySchema>;

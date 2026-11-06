@@ -84,15 +84,6 @@ export const BUILTIN_ZCODE_SLASH_COMMAND_HELP_ENTRIES: readonly BuiltinZCodeSlas
       usage: "/init [notes]",
     },
     {
-      details: [
-        "Starts a durable expert workflow in yolo mode when called with a task.",
-        "Use status, resume, or stop to manage the latest or a named workflow run.",
-      ],
-      name: "expert",
-      summary: "Run or manage the expert workflow.",
-      usage: "/expert [status|resume|stop|<task>]",
-    },
-    {
       aliases: ["variant"],
       details: [
         "In the TUI, type /effort or /variant to open composer suggestions.",
@@ -102,16 +93,6 @@ export const BUILTIN_ZCODE_SLASH_COMMAND_HELP_ENTRIES: readonly BuiltinZCodeSlas
       name: "effort",
       summary: "Show or switch the current session reasoning effort.",
       usage: "/effort [list|<level>]",
-    },
-    {
-      details: [
-        "Lists this session's dynamic workflow runs with server-decided status and resumability.",
-        "cancel without a run id cancels the only in-flight run, or lists candidates when there are several.",
-        "resume asks the server; a run the server refuses reports the structured reason.",
-      ],
-      name: "dwf",
-      summary: "List, cancel, or resume dynamic workflow runs.",
-      usage: "/dwf [list|cancel [runId]|resume <runId>]",
     },
     {
       details: [
@@ -219,15 +200,5 @@ export const BUILTIN_ZCODE_SLASH_COMMAND_HELP_ENTRIES: readonly BuiltinZCodeSlas
       name: "goal",
       summary: "Show or set the current session goal.",
       usage: "/goal [pause|resume|clear|replace <objective>|<objective>]",
-    },
-    {
-      details: [
-        "Loads the dynamic-workflows skill, then writes a workflow script and submits it with CreateWorkflow.",
-        "Runs as a normal agent turn; the workflow starts only after you confirm the script.",
-        "In the desktop app the command is offered only while dynamic workflows are enabled for this client.",
-      ],
-      name: "workflow",
-      summary: "Design and launch a dynamic workflow for a task.",
-      usage: "/workflow [what the workflow should accomplish]",
     },
   ] as const;

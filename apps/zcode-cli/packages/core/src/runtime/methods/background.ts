@@ -7,7 +7,6 @@ import type {
   TraceContext,
 } from "../deps.js";
 import type { AgentRuntimeInternal } from "../internal.js";
-import { stopDynamicWorkflowBackgroundTask } from "./background-stop-dynamic-workflow.js";
 import type {
   RuntimeBackgroundStopOptions,
   RuntimeBackgroundStopResult,
@@ -34,7 +33,7 @@ export type {
 /**
  * Session 常驻池的同步权威查询。
  *
- * 协议层的 activeAbortController 只覆盖前台 turn，后台 Bash/Agent/Workflow
+ * 协议层的 activeAbortController 只覆盖前台 turn，后台 Bash/Agent
  * 已经从前台 turn 脱离但仍需要当前 runtime 接收终态与唤醒通知。回收判定必须直接读取
  * runtime task registry，不能从协议投影或 UI 状态猜测。
  */
@@ -115,15 +114,6 @@ export async function stopBackgroundTask(
 
   if (target.taskType === "local_bash") {
     return stopLocalBashBackgroundTask.call(this, target, traceContext);
-  }
-
-  if (target.taskType === "local_dynamic_workflow") {
-    return stopDynamicWorkflowBackgroundTask.call(
-      this,
-      target,
-      unsupportedBackgroundStopResult,
-      options.initiator,
-    );
   }
 
   return unsupportedBackgroundStopResult(target);
@@ -432,11 +422,6 @@ function runtimeTaskTypeFromBackgroundInfo(
       return "local_bash";
     case "Agent":
       return "local_agent";
-    case "Workflow":
-      return "local_workflow";
-    case "CreateWorkflow":
-    case "AmendWorkflow":
-      return "local_dynamic_workflow";
     default:
       return undefined;
   }
@@ -448,10 +433,6 @@ function toolNameFromRuntimeTaskType(type: RuntimeTaskType): string {
       return "Agent";
     case "local_bash":
       return "Bash";
-    case "local_workflow":
-      return "Workflow";
-    case "local_dynamic_workflow":
-      return "CreateWorkflow";
     case "monitor_mcp":
       return "Monitor";
   }

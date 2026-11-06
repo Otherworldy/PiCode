@@ -2,7 +2,6 @@ import type { RuntimeInputPresentation } from "@zcode/contracts";
 /* eslint-disable max-lines -- Runtime 类型集中承载 core/runtime 对外结构，拆分需要单独迁移。 */
 import { PermissionService, ToolScheduler } from "./deps.js";
 import type {
-  JsonSchema,
   BackgroundResultOriginMeta,
   ContextUsageBreakdownItem,
   CoordinatorResponsePort,
@@ -66,9 +65,6 @@ import type {
   SessionProjection,
   SessionStorePort,
   ContextSourcePort,
-  DynamicWorkflowRunPort,
-  DynamicWorkflowSnippetPort,
-  ModelCatalogPort,
   ExecutionPort,
   BrowserControlPort,
   ExecutionShellSelection,
@@ -85,9 +81,6 @@ import type {
   SubagentPort,
   ToolArtifactStorePort,
   ToolCallId,
-  WorkflowPort,
-  WorkflowEscalatePort,
-  WorkflowSubmitPort,
   TraceContext,
   TraceId,
   TurnId,
@@ -209,22 +202,9 @@ export interface AgentRuntimeConfig {
   };
   parentSessionId?: SessionId;
   taskType?: SessionTaskType;
-  /**
-   * 动态工作流灰度门：Host 判定后经
-   * PiCode Protocol 下发，runtime 只消费。**缺席即开启**——TUI、headless `-p` 与
-   * workflow_child 都不会设置它，它们必须保留完整工具面；只有受信 Host
-   * 创建的 protocol session 才会显式写 false 把十个工作流工具关掉。
-   */
-  dynamicWorkflowEnabled?: boolean;
 
   // Context Builder config
   systemPrompt?: string;
-  /**
-   * 动态工作流子代理的身份输入：在场即让
-   * context builder 走「基座 + 工作流子代理契约 + persona 叠加」路径，而不是把 persona 当
-   * `systemPrompt` 整段替换。与 `systemPrompt` 互斥（builder 抛错）。
-   */
-  workflowActor?: { name?: string; persona?: string };
   /**
    * Selects the subagent-specific context builder for child runtimes. The
    * builder still receives env/date/model data through the normal runtime
@@ -335,31 +315,12 @@ export interface AgentRuntimeDeps {
   mcpPort?: McpPort;
   subagentPort?: SubagentPort;
   coordinatorResponsePort?: CoordinatorResponsePort;
-  /** 工作流 actor 提交终态结果的端口；存在即作为 submit_result 工具的注册门。 */
-  workflowSubmitPort?: WorkflowSubmitPort;
-  /**
-   * mono 子代理的 typed `submit_result`：在场时注册的工具声明是 `{ result: <这份 schema> }` 而非
-   * 任意 JSON。只改
-   * provider 可见的声明与 strict 资格；handler、权限、终止语义与 workflowSubmitPort 单独在场时相同。
-   * 没有端口时忽略（端口才是注册门）。
-   */
-  workflowSubmitSchema?: JsonSchema;
-  /**
-   * 工作流 actor 升级阻塞问题的端口；存在即作为 escalate 工具的注册门。与 workflowSubmitPort 同一注入方式与同一条门。
-   */
-  workflowEscalatePort?: WorkflowEscalatePort;
   /**
    * 模型请求的进程级准入端口：在场时
-   * 每次模型请求尝试先经它拿票据；沿调用上下文到 adapter。dwf actor runtime 拿 driver 的 per-actor
-   * 包装（受闸门约束），主 runtime 拿治理器的 observer（只喂信号）；缺席即不设闸门。
+   * 每次模型请求尝试先经它拿票据；沿调用上下文到 adapter；缺席即不设闸门。
    */
   modelRequestAdmission?: ModelRequestAdmission;
-  workflowPort?: WorkflowPort;
-  /** workflow run 的提交/观察/取消端口；存在即 CreateWorkflow 真启动，缺席则回占位诊断。 */
-  dynamicWorkflowRunPort?: DynamicWorkflowRunPort;
-  dynamicWorkflowSnippetPort?: DynamicWorkflowSnippetPort;
-  /** 模型目录端口；缺席则 ListModels 报能力缺席，CreateWorkflow 的 subagent_model 被拒。 */
-  modelCatalogPort?: ModelCatalogPort;
+  /** 模型目录端口；缺席则 ListModels 报能力缺席。 */
   runtimeTaskRegistry?: RuntimeTaskRegistry;
   artifactStore?: ToolArtifactStorePort;
   automationPort?: AutomationPort;
@@ -435,11 +396,6 @@ export interface ExecuteTurnOptionsBase {
   };
   continueActiveTargetAfterTurn?: boolean;
   displayInput?: string;
-  /**
-   * `input` 从此下标起是调用方追加的引擎文本（dwf ask 尾注 / nudge）。只进 TurnStarted 与用户
-   * 消息 metadata 供 GUI 折叠；模型历史、持久 text part 仍是全文（amend-resume 的转录复制要全文）。
-   */
-  epilogueStart?: number;
   inputId?: string;
   intent?: TurnInputIntentMetadata;
   sharedContextRefs?: TurnInputIntentMetadata["sharedContextRefs"];
@@ -452,8 +408,6 @@ export interface ExecuteTurnOptionsBase {
   backgroundSource?: BackgroundResultOriginMeta["backgroundSource"];
   /** 由 runtime command drain 计算，表示本轮消费过 subagent 后台结果。 */
   backgroundSubagentResultConsumed?: boolean;
-  /** 由 runtime command drain 计算，表示本轮消费过 dynamic-workflow run 的通知（完成 / 提问）。 */
-  workflowResultConsumed?: boolean;
   recordedInputMessageId?: MessageId;
   skipInputRecord?: boolean;
   skipUserPromptSubmitHooks?: boolean;
@@ -533,7 +487,7 @@ export type AcquireForegroundPromotionLeaseResult =
 
 export interface ActiveTurnInfo {
   kind: ActiveTurnKind;
-  /** 本轮的 inputId（TurnStarted.inputId 的同一个值）；workflow run 的发起锚点从这里取。 */
+  /** 本轮的 inputId（TurnStarted.inputId 的同一个值）。 */
   inputId?: string;
   queueLength: number;
   steerable: boolean;

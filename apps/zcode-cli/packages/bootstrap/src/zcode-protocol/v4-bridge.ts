@@ -27,7 +27,6 @@ import {
 } from "@zcode/shared/zcode-protocol-v4";
 import { V4CommandExecutor } from "../zcode-protocol-v4/commands/executor.js";
 import { V4QueuePromotionLeaseUnavailableError } from "../zcode-protocol-v4/commands/handlers/queue.js";
-import { V4CapabilityUnsupportedError } from "../zcode-protocol-v4/commands/handlers/interaction-background.js";
 import {
   buildColdFileChangeSummaries,
   readConversationFileChangesFromEvents,
@@ -71,8 +70,6 @@ import {
 } from "@zcode/contracts";
 import type {
   CollaborationMode,
-  DynamicWorkflowRunProgressPayload,
-  EventId,
   ForkCommitBundle,
   GoalStatus,
   MessageId,
@@ -80,11 +77,9 @@ import type {
   SessionEvent,
   SessionId,
   StableForkGoalBoundaryMetadata,
-  TraceId,
   TurnId,
   WorkspaceId,
 } from "@zcode/contracts";
-import { HYDRATION_TRACE_ID } from "../zcode-protocol-v4/projection-state.js";
 import { resolveWorkspaceRefFromId } from "./mapper.js";
 import { buildLiveWorkspaceConfigStateV4 } from "./v4-workspace-config.js";
 import {
@@ -185,55 +180,6 @@ async function readConversationFileChanges(
       (await record.app.readToolResultArtifact(snapshotRef)).content,
     ...(targetTurnId ? { targetTurnId } : {}),
   });
-}
-
-/**
- * 冷物化时把本会话的 workflow run 从 journal 回放成 `DynamicWorkflowRunProgress` 会话事件。
- *
- *   - 只对**直接命中** record 的父会话补种：经 parentID 回落到父 record 的子会话（actor
- *     transcript）不补——journal 按父会话建键，子会话的投影不该长出父会话的 run；
- *   - 内存事件里已出现过的 runId 交给 CLI 排除（本进程跑过的 run 事件全在内存 store 里，
- *     进度事件不带 turnId、不受 turn-window 淘汰），暖物化因此零重复；
- *   - 回放失败只记日志、回空：观察面绝不让冷开失败。
- *
- * 事件 id / traceId 照 transcript hydration 的合成事件；sequenceNumber 由 cold merge 统一重排。
- */
-async function replayDynamicWorkflowRunEvents(
-  context: ZCodeProtocolAgentServerContext,
-  sessionId: string,
-  record: ZCodeProtocolSessionRecord,
-  memoryEvents: readonly SessionEvent[],
-): Promise<SessionEvent[]> {
-  if (context.sessions.get(sessionId) !== record) return [];
-  const replay = record.app.replayDynamicWorkflowRuns;
-  if (!replay) return [];
-  const excludeRunIds = new Set<string>();
-  for (const event of memoryEvents) {
-    if (event.type !== SessionEventType.DynamicWorkflowRunProgress) continue;
-    const runId = (event.payload as { runId?: unknown } | undefined)?.runId;
-    if (typeof runId === "string") excludeRunIds.add(runId);
-  }
-  let payloads: DynamicWorkflowRunProgressPayload[];
-  try {
-    payloads = await replay({ excludeRunIds });
-  } catch (error) {
-    context.logger?.warn("v4 hydrate dynamic workflow replay failed", {
-      error: error instanceof Error ? error.message : String(error),
-      event: "zcode_protocol.v4.hydrate_workflow_replay_failed",
-      module: "bootstrap.zcode_protocol",
-      sessionId,
-    });
-    return [];
-  }
-  return payloads.map((payload, index) => ({
-    id: `dwf-replay-${index + 1}` as EventId,
-    sessionId: sessionId as SessionId,
-    type: SessionEventType.DynamicWorkflowRunProgress,
-    timestamp: new Date(0),
-    traceId: HYDRATION_TRACE_ID as TraceId,
-    sequenceNumber: 0,
-    payload,
-  }));
 }
 
 async function resolveConversationBackingRecord(
@@ -1182,7 +1128,6 @@ export function createConversationV4Gateway(
       workspaceId,
       mcpServers,
       offPeakToolEnabled,
-      dynamicWorkflowEnabled,
       workingDirectory,
     }) => {
       // workspaceId 双形态（Workspace Identity 约束）：
@@ -1195,7 +1140,6 @@ export function createConversationV4Gateway(
       // shared parser 统一兼容 WSL legacy 与显式 user identity；非远程格式继续按
       // 本地 workspacePath 处理。
       void offPeakToolEnabled;
-      void dynamicWorkflowEnabled;
       const workspace = resolveWorkspaceRefFromId(workspaceId);
       const record = await createPiSessionRecord(context, {
         workspace,
@@ -1655,84 +1599,6 @@ export function createConversationV4Gateway(
       }
       return readConversationFileChanges(record, sessionId, messageIds, targetTurnId);
     },
-    // dwf 事件日志：能力在 app 上（run service 构造成功才有），缺席时不在这里兜底成空页——
-    // gateway 会回结构化的能力不支持错误，让 renderer 能区分"没有事件"与"没有这个能力"。
-    listDynamicWorkflowRunEvents: async (sessionId, input) => {
-      const record = context.sessions.get(sessionId);
-      if (!record) {
-        throw new Error(`fault.workflowRunEvents.sessionNotFound: ${sessionId}`);
-      }
-      if (!record.app.listDynamicWorkflowRunEvents) {
-        throw new V4CapabilityUnsupportedError("listDynamicWorkflowRunEvents", sessionId);
-      }
-      // 经 app 调用（不可解构：实现可能依赖 this 绑定）。
-      return record.app.listDynamicWorkflowRunEvents(input);
-    },
-    // workflow run 枚举：能力条件同上（run service 构造成功才有）。
-    listDynamicWorkflowRuns: async (sessionId, input) => {
-      const record = context.sessions.get(sessionId);
-      if (!record) {
-        throw new Error(`fault.workflowRuns.sessionNotFound: ${sessionId}`);
-      }
-      if (!record.app.listDynamicWorkflowRuns) {
-        throw new V4CapabilityUnsupportedError("listDynamicWorkflowRuns", sessionId);
-      }
-      // 经 app 调用（不可解构：实现可能依赖 this 绑定）。
-      return record.app.listDynamicWorkflowRuns(input);
-    },
-    // dwf 用户面产物的三个读面：能力条件同上。
-    // ⚠ 术语：artifact = 脚本经 `artifact.*` 发布给用户看的产出，不是 run 的顶层返回值。
-    listDynamicWorkflowRunArtifacts: async (sessionId, input) => {
-      const record = context.sessions.get(sessionId);
-      if (!record) {
-        throw new Error(`fault.workflowRunArtifacts.sessionNotFound: ${sessionId}`);
-      }
-      if (!record.app.listDynamicWorkflowRunArtifacts) {
-        throw new V4CapabilityUnsupportedError("listDynamicWorkflowRunArtifacts", sessionId);
-      }
-      return record.app.listDynamicWorkflowRunArtifacts(input);
-    },
-    listDynamicWorkflowRunArtifactItems: async (sessionId, input) => {
-      const record = context.sessions.get(sessionId);
-      if (!record) {
-        throw new Error(`fault.workflowRunArtifactData.sessionNotFound: ${sessionId}`);
-      }
-      if (!record.app.listDynamicWorkflowRunArtifactItems) {
-        throw new V4CapabilityUnsupportedError("listDynamicWorkflowRunArtifactItems", sessionId);
-      }
-      return record.app.listDynamicWorkflowRunArtifactItems(input);
-    },
-    readDynamicWorkflowRunArtifact: async (sessionId, input) => {
-      const record = context.sessions.get(sessionId);
-      if (!record) {
-        throw new Error(`fault.workflowRunArtifactRead.sessionNotFound: ${sessionId}`);
-      }
-      if (!record.app.readDynamicWorkflowRunArtifact) {
-        throw new V4CapabilityUnsupportedError("readDynamicWorkflowRunArtifact", sessionId);
-      }
-      return record.app.readDynamicWorkflowRunArtifact(input);
-    },
-    // dwf 工作区 transcript 的两个读面：能力条件同上。
-    listDynamicWorkflowRunWorkspaceNodes: async (sessionId, input) => {
-      const record = context.sessions.get(sessionId);
-      if (!record) {
-        throw new Error(`fault.workflowRunWorkspace.sessionNotFound: ${sessionId}`);
-      }
-      if (!record.app.listDynamicWorkflowRunWorkspaceNodes) {
-        throw new V4CapabilityUnsupportedError("listDynamicWorkflowRunWorkspaceNodes", sessionId);
-      }
-      return record.app.listDynamicWorkflowRunWorkspaceNodes(input);
-    },
-    readDynamicWorkflowRunNodeResult: async (sessionId, input) => {
-      const record = context.sessions.get(sessionId);
-      if (!record) {
-        throw new Error(`fault.workflowRunNodeResult.sessionNotFound: ${sessionId}`);
-      }
-      if (!record.app.readDynamicWorkflowRunNodeResult) {
-        throw new V4CapabilityUnsupportedError("readDynamicWorkflowRunNodeResult", sessionId);
-      }
-      return record.app.readDynamicWorkflowRunNodeResult(input);
-    },
     previewConversationFileRewind: async (sessionId, input) => {
       const record = context.sessions.get(sessionId);
       if (!record) {
@@ -1752,18 +1618,18 @@ export function createConversationV4Gateway(
       if (context.piHost?.get(sessionId)) {
         return { events: [], synthesized: false, sourceEventSeq: 0 };
       }
-      // dwf workflow actor / subagent 这类 detached live child 没有自己的
-      // bootstrap record（事件经 ingestDetachedLiveSession 走父 record 的 sink 路由）。
+      // subagent 这类 detached live child 没有自己的 bootstrap record
+      // （事件经 ingestDetachedLiveSession 走父 record 的 sink 路由）。
       // context.sessions.get 取不到 record 时不能直接返回 synthesized:false——
       // 否则首次订阅的 performHydration 会走"保留健康 live publisher"早退分支，
       // durable transcript 三源合并从不执行——只由 live 事件喂养的投影会丢掉所有
       // 不以 live 事件形式出现的持久正文。amend-resume 把前驱 transcript 前缀直接
-      // 复制进 session store 来播种 actor 会话，
-      // 这段前缀正属于此类，于是侧栏 actor transcript 只剩本次 live 增量；
-      // 普通崩溃恢复后 warm 窗口同样看不到 crash 前的 actor 消息。
+      // 复制进 session store 来播种 child 会话，
+      // 这段前缀正属于此类，于是侧栏 child transcript 只剩本次 live 增量；
+      // 普通崩溃恢复后 warm 窗口同样看不到 crash 前的 child 消息。
       // 改用 resolveConversationBackingRecord：child 自身没有 record 时按持久
       // parentID 落到父 record，只借它的共享 event/artifact store，事件读取仍显式用
-      // child 自己的 sessionId（script workflow child runtime 共享父 event store，
+      // child 自己的 sessionId（child runtime 共享父 event store，
       // 事件按 child sessionId 归档），因此 sourceEventSeq 仍是 child 的真实水位。
       // 代价：contextWindow 分母会按父 record 的当前模型解析而不是 actor 模型，纯展示层偏差。
       const record = await resolveConversationBackingRecord(context, sessionId);
@@ -1789,11 +1655,7 @@ export function createConversationV4Gateway(
         record.eventStore.getEvents(sessionId as SessionId),
         record.eventStore.getLatestSequenceNumber(sessionId as SessionId),
       ]);
-      // workflow run 的冷回放：journal 回放出的进度
-      // 事件前置到内存事件之前——cold merge 已把该类型归为 memory-only 权威（保序进 supplements），
-      // 投影经同一个 reducer 归约，`workflowRuns` 因此在重启前后一致。
-      const replayed = await replayDynamicWorkflowRunEvents(context, sessionId, record, liveEvents);
-      const events = replayed.length === 0 ? liveEvents : [...replayed, ...liveEvents];
+      const events = liveEvents;
       const store = context.deps.sessionStore;
       const source = await loadPersistedConversationMaterialization({
         memoryEvents: events,

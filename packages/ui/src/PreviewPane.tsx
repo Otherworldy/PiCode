@@ -659,7 +659,7 @@ export function PreviewPane({
     }),
     [intl],
   );
-  // PDF / PPTX 的标签与 dwf 的 workflow-artifact tab 共用一份（见该 hook 的注释）：
+  // PDF / PPTX 的标签只在这里装配（见该 hook 的注释）：
   // 两个 labels 接口都是必填全字段，各写一份漏的不会是类型错误，而是一句没翻译的文案。
   const pdfViewerLabels = usePdfViewerLabels();
   const pptxViewerLabels = usePptxViewerLabels();

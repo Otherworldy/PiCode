@@ -11,7 +11,7 @@ import {
 import {
   classifyModelFailure,
   findProviderBusinessError,
-  inspectProviderFailure,
+  isRetryableFailure,
   type ClassifiedModelFailure,
 } from "./failure-classifier.js";
 import { resolveAnthropicRequestMetadataUserId } from "./anthropic-request-metadata.js";
@@ -78,7 +78,6 @@ import type {
   ResolvedAiSdkModel,
 } from "./runner-runtime.js";
 import { resolveModelForAttempt, RuntimeHeadersRefreshError } from "./runner-runtime-headers.js";
-import { retryAllowedByFailurePolicy } from "./workflow-model-failure-policy.js";
 import {
   modelFailureStatusFields,
   providerRequestIdFromHeaders,
@@ -1463,9 +1462,6 @@ function canRetryStreamFailure(input: {
   retryBudget?: ModelRetryBudget;
   streamFailurePhase?: StreamFailurePhase;
 }): boolean {
-  // workflow 流量（无上限预算）不读分类器的 retryable，读策略表：只有确定性的模型侧错误
-  // 才不重试；3008/3009/3010 这类并发上限在这里是 retry。
-  const providerCode = inspectProviderFailure(input.error).providerErrorCode;
   // 可见输出已发出后绝不重放（交给 core 的 stream recovery）；预算门在 unbounded 下恒开。
   if (
     input.emittedRetryBoundaryEvent ||
@@ -1487,7 +1483,7 @@ function canRetryStreamFailure(input: {
     return true;
   }
 
-  if (!retryAllowedByFailurePolicy(input.failure, input.retryBudget, providerCode)) {
+  if (!isRetryableFailure(input.failure)) {
     return false;
   }
 

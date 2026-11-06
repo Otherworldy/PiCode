@@ -7,14 +7,7 @@ import type {
 } from "@zcode/contracts";
 import type { AgentOutput } from "@zcode/contracts";
 
-// local_dynamic_workflow 与 local_workflow 刻意分开：后者是 legacy `Workflow` 工具（不可取消），
-// 前者是 workflow run（经 DynamicWorkflowRunPort.cancel 可取消）。合成一个类型，取消分派就无法区分。
-export type RuntimeTaskType =
-  | "local_agent"
-  | "local_bash"
-  | "local_workflow"
-  | "local_dynamic_workflow"
-  | "monitor_mcp";
+export type RuntimeTaskType = "local_agent" | "local_bash" | "monitor_mcp";
 
 export interface RuntimeTaskUsageSnapshot {
   durationMs?: number;
@@ -52,13 +45,7 @@ export interface RuntimeTaskSnapshot extends SubagentTaskSnapshot {
   pendingMessages?: RuntimeTaskPendingMessage[];
   prompt?: string;
   /**
-   * workflow run 产物的序列化文本。TaskOutput 的投影只读得到 registry 条目（dwf 从不写
-   * outputFile），所以产物必须在终态更新时就存到条目上。
-   */
-  resultText?: string;
-  /**
-   * 是谁请求停止这个任务（"user" = GUI / 后台面板，"model" = TaskStop）。dwf 停止分支在调
-   * 端口 cancel 之前写下它；终态通知稍后由 waiter 结算时读它。重臂（resume 新生命）随结算面复位。
+   * 是谁请求停止这个任务（"user" = GUI / 后台面板，"model" = TaskStop）。
    */
   stopInitiator?: "user" | "model";
   taskType?: RuntimeTaskType;

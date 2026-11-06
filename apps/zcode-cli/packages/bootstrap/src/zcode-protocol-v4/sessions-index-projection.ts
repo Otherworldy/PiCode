@@ -3,12 +3,11 @@
 // 纯归约、无 IO；publisher（sessions-index-publisher）负责 seq 记账与帧构造，
 // 事件订阅与 flush 调度归 gateway（v4-gateway）。
 import { isBareSlashCommandTitle } from "@zcode/shared";
-import {
-  deriveSessionWorkflowActivity,
-  type ConversationSnapshot,
-  type SessionSummary,
-  type SessionsIndexDelta,
-  type SessionsIndexSnapshot,
+import type {
+  ConversationSnapshot,
+  SessionSummary,
+  SessionsIndexDelta,
+  SessionsIndexSnapshot,
 } from "@zcode/shared/zcode-protocol-v4";
 
 /** 派生一条 summary 需要的、快照之外的会话级元信息（来自 session-store record / 事件时刻）。 */
@@ -87,12 +86,6 @@ function deriveSessionSummary(
     if (lastAssistantPreview) break;
   }
   const hasBackgroundWork = snapshot.backgroundWorks.some((work) => work.status === "running");
-  // 侧栏工作流运行行的数据：
-  // 同一 snapshot 的 workflowRuns + backgroundWorks 派生，侧栏不必订阅 run 进度。
-  const workflowActivity = deriveSessionWorkflowActivity({
-    workflowRuns: snapshot.workflowRuns,
-    backgroundWorks: snapshot.backgroundWorks,
-  });
   // workspaceHookReview 由 Hooks Settings 呈现，不降级成 permission/userInput 侧栏徽标。
   // 工具行已经 success/error/cancelled 的交互不再是「等待确认」：问卷答完后
   // 投影若还留着旧 pending，侧栏不能继续挂徽标。
@@ -128,7 +121,6 @@ function deriveSessionSummary(
     // 忠实透传 control.sessionEnded（语义：成功轮收口后即 true，不代表已删除）。
     sessionEnded: snapshot.control.sessionEnded,
     hasBackgroundWork,
-    ...(workflowActivity === undefined ? {} : { workflowActivity }),
     ...(pendingInteraction ? { pendingInteraction } : {}),
     ...(permissionCount > 0 || userInputCount > 0
       ? {
@@ -159,7 +151,6 @@ function summariesEqual(a: SessionSummary, b: SessionSummary): boolean {
     a.hasBackgroundWork === b.hasBackgroundWork &&
     // phase 翻转 / 结算 / 在跑子代理数变化永不被 conflation 吃掉；反之只改 node 的事件在这里判等
     // （真实系统里它仍会因 lastActivityAt 推进而产帧——那是活动事实，语义不变）。
-    JSON.stringify(a.workflowActivity ?? null) === JSON.stringify(b.workflowActivity ?? null) &&
     JSON.stringify(a.pendingInteraction ?? null) === JSON.stringify(b.pendingInteraction ?? null) &&
     a.pendingInteractionSummary?.permissionCount === b.pendingInteractionSummary?.permissionCount &&
     a.pendingInteractionSummary?.userInputCount === b.pendingInteractionSummary?.userInputCount &&

@@ -30,7 +30,6 @@ import {
 } from "lucide-react";
 import type { useSortable } from "@dnd-kit/sortable";
 import { BorderBeam } from "border-beam";
-import { STATUS_DOT } from "@/components/workflow-graph/run-status-presentation.js";
 import { Button, buttonVariants } from "@/components/ui/button.js";
 import {
   Collapsible,
@@ -151,7 +150,6 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
   taskListLoading,
   taskListHasMore,
   taskListHasUnread = false,
-  taskListLiveWorkflowCount = 0,
   onShowMoreTasks,
   reconnectingRemoteWorkspaceKeys,
   remoteWorkspaceErrorByWorkspaceKey,
@@ -179,8 +177,6 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
   taskListLoading: boolean;
   taskListHasMore: boolean;
   taskListHasUnread?: boolean;
-  /** 组内在跑的工作流 run 数；项目收起时在未读点旁画脉冲灯（>1 带数量）。 */
-  taskListLiveWorkflowCount?: number;
   onShowMoreTasks: () => void;
   reconnectingRemoteWorkspaceKeys: string[];
   remoteWorkspaceErrorByWorkspaceKey: Record<string, string>;
@@ -813,22 +809,6 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
           data-workspace-unread-indicator="true"
           className="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500 dark:bg-sky-400"
         />
-      ) : null}
-      {!isExpanded && taskListLiveWorkflowCount > 0 ? (
-        // 工作流运行行的组头汇总：
-        // 只汇总在跑的 run；已结束未确认的行不上卷。
-        <span
-          data-workspace-workflow-indicator="true"
-          data-count={String(taskListLiveWorkflowCount)}
-          aria-label={intl.formatMessage(
-            { id: "taskList.workflowRun.liveCount" },
-            { count: String(taskListLiveWorkflowCount) },
-          )}
-          className="flex shrink-0 items-center gap-1 text-ui-xs leading-none text-foreground-subtle"
-        >
-          <span aria-hidden="true" className={cn("size-1.5 rounded-full", STATUS_DOT.running)} />
-          {taskListLiveWorkflowCount > 1 ? taskListLiveWorkflowCount : null}
-        </span>
       ) : null}
       {readOnlyReason ? (
         <ControlHintTooltip title={readOnlyReason} side="right" align="center">

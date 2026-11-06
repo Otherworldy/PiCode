@@ -19,7 +19,6 @@ import { runCommandsCommand } from "./commands-command.js";
 import { resolveCliCwd } from "./cwd.js";
 import { CLI_COMMAND_NAME, CLI_PROCESS_NAME } from "./process-name.js";
 import { isPluginHostInvocation, runPluginHostCommand } from "./plugin-host-command.js";
-import { isDwfChildInvocation, runDwfChildCommand } from "./dwf-child-command.js";
 import { runPluginsCommand, type PluginsCommandFlags } from "./plugins-command.js";
 import type {
   CliPermissionMode,
@@ -46,8 +45,6 @@ const BROWSER_USE_SCOPE_ERROR =
 const SURFACE_SCOPE_ERROR =
   "--surface can only be used with --prompt, --target, app-server, or agent-server.";
 const MEMORY_BENCH_SCOPE_ERROR = "--memory-bench can only be used with -p/--prompt.";
-const ENABLE_WORKFLOW_SCOPE_ERROR =
-  "--enable-workflow can only be used with -p/--prompt or --target.";
 
 const pluginsCommandFlags = (
   values: ReturnType<typeof parseGlobalArgs>["values"],
@@ -96,7 +93,6 @@ const globalOptions = (
     browserExecutable,
     browserUse,
     detectedLocale,
-    ...(values["enable-workflow"] === true ? { enableWorkflow: true } : {}),
     force: values.force === true,
     json: values.json === true,
     locale,
@@ -290,12 +286,6 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
     return await runPluginHostCommand(ctx, ctx.argv.slice(1));
   }
 
-  // 与 plugin host 同理，且必须同样在 parseArgs 之前：SEA 下 dwf 的沙箱子进程是本二进制的
-  // 自 re-exec，argv 末位是入口文件路径——交给严格 parseArgs 只会报未知参数。
-  if (isDwfChildInvocation(ctx.argv)) {
-    return await runDwfChildCommand(ctx, ctx.argv.slice(1));
-  }
-
   if (ctx.argv[0] === "hooks") {
     return await runHooksCommand(ctx, deps, version);
   }
@@ -412,15 +402,6 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
   if (parsed.values.version === true) {
     ctx.stdout.write(`${version}\n`);
     return 0;
-  }
-
-  if (
-    options.enableWorkflow &&
-    (parsed.positionals.length > 0 ||
-      (typeof parsed.values.prompt !== "string" && targetRequest === undefined))
-  ) {
-    ctx.stderr.write(`${ENABLE_WORKFLOW_SCOPE_ERROR}\n`);
-    return 1;
   }
 
   if (

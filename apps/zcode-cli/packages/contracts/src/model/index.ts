@@ -35,8 +35,6 @@ export const ModelRequestSessionType = {
  * 模型请求的重试预算档位（runtime-only）。
  * - `default`：adapter 构造时解析出的 maxAttempts（默认 10 次重试）。
  * - `unbounded`：**瞬态**失败无上限重试（退避曲线不变、封顶 60s 后无限探测），永久失败照旧立即抛。
- *   给 workflow actor（taskType workflow_child / nested_workflow_child）使用：模型错误绝不是
- *   workflow 错误，唯一出口是用户 cancel。
  */
 export const ModelRetryBudget = {
   Default: "default",

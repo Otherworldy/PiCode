@@ -46,8 +46,6 @@ export async function recordMainTurnModelUsage(
 
 export function querySourceForTask(taskType: AgentRuntimeInternal["config"]["taskType"]): string {
   if (taskType === "subagent_child") return "subagent";
-  if (taskType === "workflow_child" || taskType === "nested_workflow_child")
-    return "workflow_child";
   return "main_turn";
 }
 

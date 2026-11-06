@@ -24,7 +24,6 @@ export const SortableWorkspaceSidebarItem = memo(function SortableWorkspaceSideb
   taskListLoading,
   taskListHasMore,
   taskListHasUnread = false,
-  taskListLiveWorkflowCount = 0,
   workspaceKey,
   onShowMoreWorkspaceTasks,
   reconnectingRemoteWorkspaceKeys,
@@ -49,7 +48,6 @@ export const SortableWorkspaceSidebarItem = memo(function SortableWorkspaceSideb
   taskListLoading: boolean;
   taskListHasMore: boolean;
   taskListHasUnread?: boolean;
-  taskListLiveWorkflowCount?: number;
   workspaceKey: string;
   onShowMoreWorkspaceTasks: (workspaceKey: string) => void;
   reconnectingRemoteWorkspaceKeys: string[];
@@ -118,7 +116,6 @@ export const SortableWorkspaceSidebarItem = memo(function SortableWorkspaceSideb
       taskListLoading={taskListLoading}
       taskListHasMore={taskListHasMore}
       taskListHasUnread={taskListHasUnread}
-      taskListLiveWorkflowCount={taskListLiveWorkflowCount}
       onShowMoreTasks={handleShowMoreTasks}
       reconnectingRemoteWorkspaceKeys={reconnectingRemoteWorkspaceKeys}
       remoteWorkspaceErrorByWorkspaceKey={remoteWorkspaceErrorByWorkspaceKey}

@@ -36,10 +36,6 @@ export async function projectTask(
   if (task.type === "local_agent") {
     return projectAgentTask(task, context);
   }
-  if (task.type === "local_dynamic_workflow") {
-    return projectDynamicWorkflowTask(task, context);
-  }
-
   const output = await readTaskOutputFile(task.outputFile, context);
   return {
     task_id: task.taskId,
@@ -48,29 +44,6 @@ export async function projectTask(
     description: task.description,
     output,
     ...(task.outputFile ? { outputFile: task.outputFile } : {}),
-  };
-}
-
-/**
- * workflow run 的投影优先读取终态更新时写入的 resultText；只读 outputFile 可能遗漏结果。
- * 文件读取保留为回退，返回形状与 {@link projectAgentTask} 一致。
- */
-async function projectDynamicWorkflowTask(
-  task: RuntimeTaskSnapshot,
-  context: ToolExecutionContext,
-): Promise<TaskOutputTask> {
-  const outputFile = task.outputFile;
-  const output = task.resultText ?? (await readTaskOutputFile(outputFile, context));
-
-  return {
-    task_id: task.taskId,
-    task_type: task.type,
-    status: task.status,
-    description: task.description,
-    output,
-    ...(outputFile ? { outputFile } : {}),
-    ...(task.resultText === undefined ? {} : { result: task.resultText }),
-    ...(task.error ? { error: task.error } : {}),
   };
 }
 

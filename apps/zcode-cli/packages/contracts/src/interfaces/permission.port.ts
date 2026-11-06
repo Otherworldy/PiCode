@@ -36,16 +36,15 @@ export type PermissionUpdate = {
   rules: PermissionRuleValue[];
 };
 
-// 修改原因：workflow Refine 与 plan 反馈同构——
 // deny + reason 只有携带专用 source 才允许被升级为真实 user message。
-export type PermissionBrokerReasonSource = "plan_approval_feedback" | "workflow_refine_feedback";
+export type PermissionBrokerReasonSource = "plan_approval_feedback";
 
 /**
  * Narrows the option set a permission ask may offer. `no-always-allow` drops the
- * persistent project rule option: some tools carry different code on every call
- * (CreateWorkflow scripts), so "always allow" would permanently disable the gate
- * rather than remember a comparable decision. `session-always-allow` replaces the
- * persistent rule with a session-scoped one that lives only in the runtime's memory.
+ * persistent project rule option: some tools carry different code on every call,
+ * so "always allow" would permanently disable the gate rather than remember a
+ * comparable decision. `session-always-allow` replaces the persistent rule with a
+ * session-scoped one that lives only in the runtime's memory.
  */
 export type PermissionOptionsPolicy = "no-always-allow" | "session-always-allow";
 

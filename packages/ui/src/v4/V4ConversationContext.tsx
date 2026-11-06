@@ -15,20 +15,6 @@ import type {
   V4ConversationFileChangesResult,
   V4ConversationFileRewindPreviewParams,
   V4ConversationFileRewindPreviewResult,
-  V4ConversationWorkflowRunArtifactDataParams,
-  V4ConversationWorkflowRunArtifactDataResult,
-  V4ConversationWorkflowRunArtifactReadParams,
-  V4ConversationWorkflowRunArtifactReadResult,
-  V4ConversationWorkflowRunArtifactsParams,
-  V4ConversationWorkflowRunArtifactsResult,
-  V4ConversationWorkflowRunNodeResultParams,
-  V4ConversationWorkflowRunNodeResultResult,
-  V4ConversationWorkflowRunWorkspaceParams,
-  V4ConversationWorkflowRunWorkspaceResult,
-  V4ConversationWorkflowRunEventsParams,
-  V4ConversationWorkflowRunsParams,
-  V4ConversationWorkflowRunEventsResult,
-  V4ConversationWorkflowRunsResult,
 } from "@zcode/shared/zcode-protocol-v4";
 import type { IServiceAccessor } from "@zcode/services";
 import { ServiceProvider } from "@/hooks/useServices.js";
@@ -48,35 +34,6 @@ export interface V4ConversationContextValue {
   fileRewindPreview(
     params: V4ConversationFileRewindPreviewParams,
   ): Promise<V4ConversationFileRewindPreviewResult>;
-  /** workflow run 事件日志分页（详情页审计面）；只读、无状态、超时重发安全。 */
-  workflowRunEvents(
-    params: V4ConversationWorkflowRunEventsParams,
-  ): Promise<V4ConversationWorkflowRunEventsResult>;
-  /** workflow run 枚举（journal-backed 的重启后发现面）。 */
-  workflowRuns(params: V4ConversationWorkflowRunsParams): Promise<V4ConversationWorkflowRunsResult>;
-  /**
-   * workflow run 的**用户面产物**清单（冷恢复的 durable 读法）。⚠ 术语：artifact = 脚本经
-   * `artifact.*` 发布给用户看的产出，不是 run 的顶层返回值。
-   */
-  workflowRunArtifacts(
-    params: V4ConversationWorkflowRunArtifactsParams,
-  ): Promise<V4ConversationWorkflowRunArtifactsResult>;
-  /** 预置看板的条目分页（cursor = journal sequence）。 */
-  workflowRunArtifactData(
-    params: V4ConversationWorkflowRunArtifactDataParams,
-  ): Promise<V4ConversationWorkflowRunArtifactDataResult>;
-  /** 内容产物的字节，一次一块（≤ 512 KiB）；拼接归调用方的 hook。 */
-  workflowRunArtifactRead(
-    params: V4ConversationWorkflowRunArtifactReadParams,
-  ): Promise<V4ConversationWorkflowRunArtifactReadResult>;
-  /** dwf 脚本 transcript 的清单（files.* / git.* / world.run 行，不带正文）。 */
-  workflowRunWorkspace(
-    params: V4ConversationWorkflowRunWorkspaceParams,
-  ): Promise<V4ConversationWorkflowRunWorkspaceResult>;
-  /** 一个工作区节点的有界正文（展开时才取）。 */
-  workflowRunNodeResult(
-    params: V4ConversationWorkflowRunNodeResultParams,
-  ): Promise<V4ConversationWorkflowRunNodeResultResult>;
   /** UI 高层 put 语义；transport 内部只走 begin/chunk/commit/abort。 */
   attachmentPut(
     params: V4AttachmentPutParams,
@@ -135,19 +92,6 @@ function ReadyV4ConversationProvider({
       fileChanges: (params: V4ConversationFileChangesParams) => transport.fileChanges(params),
       fileRewindPreview: (params: V4ConversationFileRewindPreviewParams) =>
         transport.fileRewindPreview(params),
-      workflowRunEvents: (params: V4ConversationWorkflowRunEventsParams) =>
-        transport.workflowRunEvents(params),
-      workflowRunArtifacts: (params: V4ConversationWorkflowRunArtifactsParams) =>
-        transport.workflowRunArtifacts(params),
-      workflowRunArtifactData: (params: V4ConversationWorkflowRunArtifactDataParams) =>
-        transport.workflowRunArtifactData(params),
-      workflowRunArtifactRead: (params: V4ConversationWorkflowRunArtifactReadParams) =>
-        transport.workflowRunArtifactRead(params),
-      workflowRunWorkspace: (params: V4ConversationWorkflowRunWorkspaceParams) =>
-        transport.workflowRunWorkspace(params),
-      workflowRunNodeResult: (params: V4ConversationWorkflowRunNodeResultParams) =>
-        transport.workflowRunNodeResult(params),
-      workflowRuns: (params: V4ConversationWorkflowRunsParams) => transport.workflowRuns(params),
       attachmentPut: (params: V4AttachmentPutParams, options?: AttachmentUploadOptions) =>
         transport.attachmentPut(params, options),
       attachmentRead: (params) => transport.attachmentRead(params),
@@ -299,20 +243,6 @@ function ReadyV4PaneConversationProvider({
           lease.transport.fileChanges(params),
         fileRewindPreview: (params: V4ConversationFileRewindPreviewParams) =>
           lease.transport.fileRewindPreview(params),
-        workflowRunEvents: (params: V4ConversationWorkflowRunEventsParams) =>
-          lease.transport.workflowRunEvents(params),
-        workflowRunArtifacts: (params: V4ConversationWorkflowRunArtifactsParams) =>
-          lease.transport.workflowRunArtifacts(params),
-        workflowRunArtifactData: (params: V4ConversationWorkflowRunArtifactDataParams) =>
-          lease.transport.workflowRunArtifactData(params),
-        workflowRunArtifactRead: (params: V4ConversationWorkflowRunArtifactReadParams) =>
-          lease.transport.workflowRunArtifactRead(params),
-        workflowRunWorkspace: (params: V4ConversationWorkflowRunWorkspaceParams) =>
-          lease.transport.workflowRunWorkspace(params),
-        workflowRunNodeResult: (params: V4ConversationWorkflowRunNodeResultParams) =>
-          lease.transport.workflowRunNodeResult(params),
-        workflowRuns: (params: V4ConversationWorkflowRunsParams) =>
-          lease.transport.workflowRuns(params),
         attachmentPut: (params: V4AttachmentPutParams, options?: AttachmentUploadOptions) =>
           lease.transport.attachmentPut(params, options),
         attachmentRead: (params) => lease.transport.attachmentRead(params),

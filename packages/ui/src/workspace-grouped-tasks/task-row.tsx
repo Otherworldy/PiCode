@@ -38,7 +38,6 @@ import {
   TASK_GROUP_ROW_LINE_CLASS,
   type TaskGroupMenuItem,
 } from "@/workspace-grouped-tasks/types.js";
-import { TaskWorkflowRunLines } from "@/components/workflow-run-line/TaskWorkflowRunLines.js";
 import { useTaskInteractionAutoResolutionSnooze } from "@/hooks/useTaskInteractionAutoResolutionSnooze.js";
 import { useOptionalTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceReadOnly } from "@/store/tabStore.js";
@@ -152,21 +151,6 @@ function GroupedTaskRowComponent({
           "bg-sky-500 dark:bg-sky-400"
         : null;
   const canShowHoverActions = !dragOverlay;
-  // 工作流运行行：分组行同样长在标题下；
-  // drag overlay 只是纯展示，不挂确认副作用与点击入口。
-  const workflowRunLinesNode =
-    taskActivity?.workflowActivity && !dragOverlay ? (
-      <TaskWorkflowRunLines
-        activity={taskActivity.workflowActivity}
-        isActive={isActive}
-        intl={intl}
-        session={{
-          workspacePath: task.workspacePath,
-          ...(task.workspaceIdentity ? { workspaceIdentity: task.workspaceIdentity } : {}),
-          sessionId: task.taskId,
-        }}
-      />
-    ) : null;
 
   const taskRow = (
     <div
@@ -474,7 +458,6 @@ function GroupedTaskRowComponent({
           ) : null}
         </span>
       </span>
-      {workflowRunLinesNode}
     </div>
   );
 

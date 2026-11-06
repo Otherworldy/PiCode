@@ -6,15 +6,10 @@ import type {
   TimelineMarkerRow,
   TurnHeaderRow,
   UserInputRow,
-  WorkflowLaunchMeta,
 } from "@zcode/shared/zcode-protocol-v4";
 import type { AssistantWorkRow, ConversationTurnFlowItem } from "@/v4/conversationTurnFlowItems.js";
 import { isAssistantBodyTextRow } from "@/v4/processEventText.js";
 import type { PluginUiRowPinResolver } from "@/plugin-ui/index.js";
-import {
-  isWorkflowLaunchUserInputRow,
-  resolveWorkflowLaunchMeta,
-} from "@/v4/workflowLaunchTurn.js";
 import {
   assistantHistoryDefaultsOpen,
   buildConversationTurnWorkSegments,
@@ -73,8 +68,6 @@ export interface ConversationTurnRenderUnit {
    */
   workStatus?: ConversationTurnWorkStatus;
   startedAt?: number;
-  /** 中枢直接启动轮的启动元数据（规则见 `workflowLaunchTurn.ts`）；在场时轮由 run 卡呈现、无用户气泡。 */
-  workflowLaunch?: WorkflowLaunchMeta;
 }
 
 interface BuildConversationTurnRenderUnitsOptions {
@@ -231,12 +224,7 @@ function materializeDraftUnit(
   total: number,
   options: BuildConversationTurnRenderUnitsOptions,
 ): ConversationTurnRenderUnit {
-  const workflowLaunch = resolveWorkflowLaunchMeta(draft.header, draft.userInputs);
-  // 启动轮的用户行由 run 卡代言，不进可见输入也不进流。
-  const renderedRows =
-    workflowLaunch === undefined
-      ? draft.orderedRows
-      : draft.orderedRows.filter((row) => !isWorkflowLaunchUserInputRow(row));
+  const renderedRows = draft.orderedRows;
   const visibleUserInputs = renderedRows.filter(isUserInputRow);
   const visibleAssistantWorkRows = draft.assistantWorkRows.filter(isVisibleAssistantWorkRow);
   const visibleOrderedRows = renderedRows.filter(isVisibleConversationRow);
@@ -346,7 +334,6 @@ function materializeDraftUnit(
     timelineOnly,
     ...(workStatus ? { workStatus } : {}),
     ...(draft.header ? { startedAt: draft.header.startedAt } : {}),
-    ...(workflowLaunch ? { workflowLaunch } : {}),
   };
 }
 
@@ -372,8 +359,6 @@ function shouldKeepRenderUnit(unit: ConversationTurnRenderUnit): boolean {
     unit.assistantWorkRows.length > 0 ||
     unit.hookInvocations.some((row) => row.executions.some((execution) => execution.didExecute)) ||
     unit.leadingBoundaryRows.length > 0 ||
-    // 直接启动轮：用户行不可见、无助手内容，轮由 run 卡呈现——它当然要留下。
-    unit.workflowLaunch !== undefined ||
     unit.isRunning
   );
 }
@@ -456,7 +441,5 @@ export function buildConversationTurnRenderUnits(
     materializeDraftUnit(unit, index, units.length, options),
   );
   const keptUnits = materializedUnits.filter(shouldKeepRenderUnit);
-  return keptUnits.map((unit, index) =>
-    normalizeRenderUnitPosition(unit, index, keptUnits.length),
-  );
+  return keptUnits.map((unit, index) => normalizeRenderUnitPosition(unit, index, keptUnits.length));
 }

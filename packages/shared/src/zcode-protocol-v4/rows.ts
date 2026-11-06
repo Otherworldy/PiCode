@@ -5,7 +5,6 @@ import { z } from "zod";
 import { executionOutputPreviewSchema } from "../execution-output-preview.js";
 import { timestampSchema } from "./core.js";
 import { conversationInputSourceSchema } from "./input-intent.js";
-import { backgroundResultOriginMetaSchema, workflowLaunchMetaSchema } from "./workflow-row-meta.js";
 
 // RowBase。rowId：session 内单调、永不复用、事件日志的确定性纯函数。
 const rowBaseFields = {
@@ -33,17 +32,13 @@ const rowBaseFields = {
 export const rowActionsSchema = rowBaseFields.actions;
 export type RowActions = NonNullable<z.infer<typeof rowActionsSchema>>;
 
-// workflow 轮的行级元数据拆到了 workflow-row-meta.ts（max-lines）；名字在此原样再导出。
-export {
-  backgroundResultOriginMetaSchema,
-  workflowLaunchMetaSchema,
-  workflowNotificationMetaSchema,
-  workflowSettingsAmendMetaSchema,
-  type BackgroundResultOriginMeta,
-  type WorkflowLaunchMeta,
-  type WorkflowNotificationMeta,
-  type WorkflowSettingsAmendMeta,
-} from "./workflow-row-meta.js";
+// 后台结果来源元数据（bash / subagent）。
+export const backgroundResultOriginMetaSchema = z.object({
+  backgroundSource: z.enum(["bash", "subagent"]),
+  workId: z.string().min(1),
+  title: z.string().min(1),
+});
+export type BackgroundResultOriginMeta = z.infer<typeof backgroundResultOriginMetaSchema>;
 
 export const turnWorkSegmentSchema = z.object({
   segmentId: z.string().min(1),
@@ -84,16 +79,7 @@ export type TurnUsage = z.infer<typeof turnUsageSchema>;
 export const turnHeaderRowSchema = z.object({
   ...rowBaseFields,
   kind: z.literal("turnHeader"),
-  // workflowLaunch：中枢直接启动的 controlOnly 轮。
-  // 记录在案的偏斜：闭集枚举加值 → 旧桌面 + 新 CLI 时该行 parse 失败被丢（与下方
-  // backgroundSource: "workflow" 加值同一档），CLI 与桌面同批发布下接受。
-  origin: z.enum([
-    "userInput",
-    "backgroundResult",
-    "goalContinuation",
-    "editRerun",
-    "workflowLaunch",
-  ]),
+  origin: z.enum(["userInput", "backgroundResult", "goalContinuation", "editRerun"]),
   // 执行语义由 CLI 投影裁决；UI 不得根据输入文本或 duration 反推。
   // optional 仅用于兼容旧 snapshot，新的 turnHeader 一律显式写入。
   executionKind: z.enum(["agent", "controlOnly"]).optional(),
@@ -116,8 +102,6 @@ export const turnHeaderRowSchema = z.object({
   // 本轮用量。缺省表示这一轮没有发生过模型调用，客户端不画用量卡。
   usage: turnUsageSchema.optional(),
   originMeta: backgroundResultOriginMetaSchema.optional(),
-  // origin === "workflowLaunch" 的轮上在场（活投影来源）；与 originMeta 并列，不复用其形状。
-  workflowLaunch: workflowLaunchMetaSchema.optional(),
   fileChanges: z
     .object({
       additions: z.number(),
@@ -134,31 +118,15 @@ export const userInputRowSchema = z.object({
   ...rowBaseFields,
   kind: z.literal("userInput"),
   text: z.string(),
-  // text 从此下标起是引擎附加文本（dwf ask 尾注 /
-  // nudge），GUI 把它折进默认收起的披露；0 = 整条都是；缺席 = 无（老转录、非工作流会话）。
-  epilogueStart: z.number().int().nonnegative().optional(),
-  // workflowLaunch：中枢直接启动轮的用户可见行。
-  // 消息文本仍进 text（旧客户端 / TUI 的降级呈现就是那句规范英文）；新客户端用下方
-  // workflowLaunch 元数据画轮尾 run 卡而非气泡。闭集加值的偏斜同 turnHeader.origin 注释。
-  origin: z.enum([
-    "realUser",
-    "backgroundResult",
-    "goalContinuation",
-    "mailbox",
-    "synthetic",
-    "workflowLaunch",
-  ]),
+  origin: z.enum(["realUser", "backgroundResult", "goalContinuation", "mailbox", "synthetic"]),
   originMeta: z
     .object({
-      // 与 backgroundResultOriginMetaSchema 同一组取值（含 workflow run 的 "workflow"）。
-      backgroundSource: z.enum(["bash", "subagent", "workflow"]).optional(),
+      backgroundSource: z.enum(["bash", "subagent"]).optional(),
       workId: z.string().optional(),
       senderSessionId: z.string().optional(),
       senderLabel: z.string().optional(),
     })
     .optional(),
-  // origin === "workflowLaunch" 的行上在场；与 originMeta 并列，与 turnHeader 上同一份。
-  workflowLaunch: workflowLaunchMetaSchema.optional(),
   // 经 turn-steer 注入（guideModeTurnSteer）。
   guided: z.literal(true).optional(),
   // realUser/guided 必带；系统来源缺省。overlay 收口锚点。

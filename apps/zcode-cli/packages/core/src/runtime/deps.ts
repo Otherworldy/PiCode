@@ -130,8 +130,7 @@ export type {
   MessageProjectionAnchor,
   MessageSemantics,
   MessageVisibility,
-  SavedWorkflowScope,
-  WorkflowLaunchMeta,
+
   FilePartSource,
   ModelSelectionOrigin,
   ModelNetworkStatusEvent,
@@ -181,7 +180,7 @@ export type {
   StreamingToolExecutionTiming,
   StreamingToolLedgerPayload,
   StreamingToolLedgerStatus,
-  DynamicWorkflowRunProgressPayload,
+
   TargetChangedPayload,
   UserInputAutoResolutionUpdatedPayload,
   TargetCompletionVerificationPayload,
@@ -194,9 +193,7 @@ export type {
   SessionTaskType,
   SessionTitleSource,
   ContextSourcePort,
-  DynamicWorkflowRunPort,
-  DynamicWorkflowSnippetPort,
-  ModelCatalogPort,
+
   EmbeddedSearchBackend,
   ExecutionPort,
   BrowserControlPort,
@@ -219,9 +216,7 @@ export type {
   SubagentTaskSnapshot,
   ToolArtifactStorePort,
   ToolCallId,
-  WorkflowPort,
-  WorkflowEscalatePort,
-  WorkflowSubmitPort,
+
   TodoItem,
   SessionGoal,
   SessionModeChangedPayload,

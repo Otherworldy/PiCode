@@ -144,7 +144,6 @@ export type {
   ZCodeAgentReadSessionParams,
   ZCodeAgentResumeSessionParams,
   ZCodeAgentRunAutomationNowResult,
-  ZCodeAgentSavedWorkflowTarget,
   ZCodeAgentSendPromptParams,
   ZCodeAgentServiceEvent,
   ZCodeAgentSessionSubscribeParams,

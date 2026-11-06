@@ -9,8 +9,7 @@ export function isStaleBranchRuntimeCommand(
 ): boolean {
   if (
     command.mode !== "task-notification" &&
-    command.mode !== "subagent-message" &&
-    command.mode !== "control-only-turn"
+    command.mode !== "subagent-message"
   ) {
     return false;
   }

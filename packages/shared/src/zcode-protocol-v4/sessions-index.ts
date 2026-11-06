@@ -1,7 +1,6 @@
 // sessions-index topic：列表活性数据源；conflated 最新态，永不溢出。
 import { z } from "zod";
 import { timestampSchema } from "./core.js";
-import { sessionWorkflowActivitySchema } from "./sessions-index-workflow-activity.js";
 import {
   goalStateSchema,
   interactionAutoResolutionSchema,
@@ -39,9 +38,6 @@ export const sessionSummarySchema = z.object({
   sessionEnded: z.boolean(),
   // 列表小圆点用（此处保留布尔，避免为侧栏订阅整个 backgroundWorks）。
   hasBackgroundWork: z.boolean(),
-  // 侧栏工作流运行行：有界的 run 摘要，
-  // 只装画迷你轨道要的字段；会话没有任何 run 时缺席。optional 兼容旧 frame / 旧 CLI。
-  workflowActivity: sessionWorkflowActivitySchema.optional(),
   pendingInteraction: sessionPendingInteractionSummarySchema.optional(),
   // 侧栏只需要 kind/count，不下发问题、命令或答案等敏感 payload。
   // optional 兼容旧 sessions-index frame / stored summary。

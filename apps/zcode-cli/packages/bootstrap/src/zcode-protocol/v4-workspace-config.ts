@@ -49,7 +49,6 @@ export async function buildLiveWorkspaceConfigStateV4(
   if (!record) return null;
   const settings = await mapSessionSettings(record.app);
   const slashCommands = await listProtocolSlashCommands({
-    dynamicWorkflowEnabled: context.appRuntimePreferences.dynamicWorkflowEnabled,
     env: context.deps.env,
     logger: context.logger,
     workingDirectory: record.workspace.workspacePath,

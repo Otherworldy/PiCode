@@ -7,18 +7,11 @@ import type { AssistantPreviewCardsAutoOpenRequest } from "@/lib/assistantPrevie
 import type { OpenAutomationsMain } from "@/lib/taskNavigationHistory.js";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
 import type { AssistantFeedbackHandler } from "@/v4/ConversationRowView.js";
-import type { WorkflowCausalityGraphData } from "@/components/workflow-graph/types.js";
-import type { WorkflowRunSettingsChange } from "@/components/workflow-timeline/workflowRunSettings.js";
-import type { WorkflowDraftPosition, WorkflowRunCardSummary } from "@/ToolCallBlocks/shared.js";
 import type { Theme } from "@/useTheme.js";
 import type { ModelSelectionView } from "@zcode/services";
 import type { ConversationAttachmentReadParams, ConversationTransport } from "@/v4/transport.js";
 import type {
   OpenPlanDetailSideTabRequest,
-  OpenWorkflowActorSessionSideTabRequest,
-  OpenWorkflowArtifactSideTabRequest,
-  OpenWorkflowRunSideTabRequest,
-  OpenWorkflowWorkspaceSideTabRequest,
   OpenSubagentSideTabRequest,
 } from "@/lib/workspaceSidePane.js";
 import type {
@@ -129,89 +122,10 @@ export interface ConversationRowRenderContext {
   onOpenFileLink?: (target: MessageFileLinkTarget) => void;
   onOpenSubagentSession?: (request: OpenSubagentSideTabRequest) => void;
   onOpenPlanDetail?: (request: OpenPlanDetailSideTabRequest) => void;
-  /** 插件 UI：内联卡片请求在侧栏打开；RowView 补 parentSessionId 与 workspace 字段。 */
-  onOpenWorkflowRun?: (request: OpenWorkflowRunSideTabRequest) => void;
-  /**
-   * 产物的全尺寸查看 tab 入口。
-   *
-   * ⚠ 术语：这里的 artifact 是脚本经 `artifact.*` 发布给用户看的产出，不是引擎内部那个
-   * 「脚本顶层返回值」的同名词。
-   *
-   * 与 `onOpenWorkflowRun` 同构：行只发意图（哪个 run 的哪个产物），会话与 workspace 身份
-   * 由宿主补齐。**不带版本号**——chip 的语义是「让我看这个产物」，落点恒为最新版。
-   */
-  onOpenWorkflowArtifact?: (request: OpenWorkflowArtifactSideTabRequest) => void;
   /**
    * 取消一项后台工作（`cancelBackgroundWork{workId}`），由宿主绑定 dispatchCommand + sessionId。
-   *
-   * 轮尾 run 卡用它做「Stop run」：run 的
-   * `runId ≡ workId`，与详情侧板 / 任务列表同一条取消路径。通知行已是终态、不需要
-   * 取消入口，所以该能力在 context 上缺席；run 卡是第一个在 running 态就渲染停止按钮的
-   * 转写行，故新增此可选字段。宿主（SessionPane）在只读会话下不注入即整卡无取消。
    */
   onCancelBackgroundWork?: (workId: string) => void;
-  /**
-   * 工具卡页脚的 Resume：与详情页同一条
-   * v4 `resumeWorkflowRun {workId ≡ runId}`。只读会话下宿主不注入。
-   */
-  onResumeWorkflowRun?: (workId: string, name?: string) => void;
-  /**
-   * run 卡的「配置」：v4
-   * `amendWorkflowRunSettings {workId ≡ runId, ...改过的设置}`，回 ACK 给弹层显示拒绝理由。与 Resume
-   * 同两道门（只读、灰度）：缺席即卡上没有 Configure。
-   */
-  onAmendWorkflowRunSettings?: (
-    workId: string,
-    change: WorkflowRunSettingsChange,
-  ) => Promise<CommandAck>;
-  /** 会话当前模型（「配置」弹层首项「会话模型」的名字）；读不到即缺席，首项只写「会话模型」。 */
-  workflowSessionModel?: { providerId: string; modelId: string };
-  /**
-   * 工具卡上的子代理药丸 → 该子代理的 transcript tab：与详情页子代理行同一条打开路径，宿主补齐 workspace 身份。
-   */
-  onOpenWorkflowActor?: (request: OpenWorkflowActorSessionSideTabRequest) => void;
-  /**
-   * 工具卡上的脚本药丸 → 该 run 的脚本 transcript tab：
-   * 与详情页脊线上的脚本行同一条打开路径，宿主补齐 workspace 身份。
-   */
-  onOpenWorkflowWorkspace?: (request: OpenWorkflowWorkspaceSideTabRequest) => void;
-  /**
-   * CreateWorkflow 工具调用 → workflow run 摘要的解析表，由宿主从 `workflowRuns` 投影建立。
-   *
-   * run 身份必须走投影而不是工具输出：`workflowRunSchema.toolCallId` 就是为这个关联而存在的
-   * （「工具卡 → 详情页的关联键」），而 v4 工具行的 output 只剩一句散文，
-   * `status` / `backgroundTaskId` 这些结构化字段被 formatModelContent 丢掉了。
-   *
-   * 值带状态与步数而不只是 runId：命中即卡片进入 run 态（紧凑可点卡），那张卡要渲染
-   * 实时状态词与进度，联接一次就把它们算完（`workflowRunCardJoin.ts`）。
-   */
-  workflowRunByToolCallId?: ReadonlyMap<string, WorkflowRunCardSummary>;
-  /**
-   * runId 键的同源联接表（`workflowRunCardJoin.buildWorkflowRunByRunId`）。给
-   * ResumeWorkflowRun 的工具行用：投影里 run.toolCallId 跨 resume 沿用**原始
-   * CreateWorkflow 行**（join 不断链的刻意语义），resume 行按 toolCallId 永远查不到，
-   * 但它的 display 载荷带着 runId——按 runId 联接同一份投影。
-   */
-  workflowRunByRunId?: ReadonlyMap<string, WorkflowRunCardSummary>;
-  /**
-   * runId → 该 run 当前停驻的 qid 集合，由宿主从**活投影**（不掺 journal 兜底）建立
-   * （`workflowRunCardJoin.buildWorkflowRunPendingQuestionsByRunId`）。Workflow 通知 manifest
-   * 的升级条目据此做 Waiting→Answered 翻转：键在场 ⟺ run 在活投影里，值含 qid = Waiting、
-   * 不含 = Answered、整键缺席 = run 不在场（中性 Question）。
-   */
-  workflowRunPendingQuestionsByRunId?: ReadonlyMap<string, ReadonlySet<string>>;
-  /**
-   * 发起 toolCallId → 该 run 的静态图（`workflowRunCardJoin.buildWorkflowGraphByToolCallId`），由宿主
-   * 从行窗口建立。图是 run 的属性：轮尾 run 卡不论挂在 CreateWorkflow 行、ResumeWorkflowRun 行还是
-   * 直接启动轮上，都按 run 的发起 toolCallId 到这张表取图。
-   */
-  workflowGraphByToolCallId?: ReadonlyMap<string, WorkflowCausalityGraphData>;
-  /**
-   * CreateWorkflow / AmendWorkflow 行 → 草稿位置（稿号、是否已被替代），由宿主从行窗口一遍建立
-   * （`workflowDraftJoin.buildWorkflowDraftByToolCallId`）。编译反馈行据此写「第 n 稿」并决定空环灯的
-   * 颜色；缺席时卡片不编号。
-   */
-  workflowDraftByToolCallId?: ReadonlyMap<string, WorkflowDraftPosition>;
   fetchFileChanges?: (
     target: ConversationRowTarget,
     options: ConversationFileChangesRequestOptions,

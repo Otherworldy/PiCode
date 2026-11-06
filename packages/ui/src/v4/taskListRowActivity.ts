@@ -1,9 +1,5 @@
 import type { ZCodeTaskMeta } from "@zcode/shared";
-import type {
-  PendingInteractionSummary,
-  SessionSummary,
-  SessionWorkflowActivity,
-} from "@zcode/shared/zcode-protocol-v4";
+import type { PendingInteractionSummary, SessionSummary } from "@zcode/shared/zcode-protocol-v4";
 
 // UI-only sidecar：不进入 shared task meta/schema，也不写回 tasks-index。
 // 字段名使用明确的内部前缀，避免调用方把它误当成持久化 task 属性。
@@ -14,8 +10,6 @@ export interface TaskListRowActivity {
   lastActivityAt: number;
   hasBackgroundWork: boolean;
   pendingInteractions?: PendingInteractionSummary;
-  /** 侧栏工作流运行行的数据；无 run 时缺席。 */
-  workflowActivity?: SessionWorkflowActivity;
 }
 
 export type TaskListMetaWithActivity = ZCodeTaskMeta & {
@@ -46,9 +40,9 @@ function isTaskListRowRunning(task: ZCodeTaskMeta): boolean {
 /**
  * 列表运行层的成员判定：回合在跑（prewarming/running）**或**挂着后台工作（hasBackgroundWork）。
  *
- * 动态工作流 run 是后台工作——启动轮收口后父会话 phase 已回到 completedSuccess，
- * 但每条 run 进度事件仍会推进 lastActivityAt。运行层若只看 phase，两个各跑一个 run 的会话
- * 都落在按 updatedAt 排序的非运行层，随进度事件互相换位。后台 bash / 分离子代理同理。
+ * 后台工作（后台 bash、分离子代理）期间父会话 phase 可能已回到 completedSuccess，
+ * 但仍会有活动事件推进 lastActivityAt。运行层若只看 phase，两个各跑一个后台任务的会话
+ * 都落在按 updatedAt 排序的非运行层，随活动事件互相换位。
  * 转圈图标仍只认 phase（isTaskListRowRunning），这里只决定排序层。
  */
 export function isTaskListRowActive(task: ZCodeTaskMeta): boolean {

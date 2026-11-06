@@ -13,13 +13,6 @@ import {
 //   未实现的命令通过结构化错误返回。
 // - flush 定时器是唯一的时间源，publisher 本身保持纯推进（边界不变）。
 import type {
-  DynamicWorkflowRunArtifact,
-  DynamicWorkflowRunArtifactBytes,
-  DynamicWorkflowRunArtifactItem,
-  DynamicWorkflowRunWorkspaceNode,
-  DynamicWorkflowRunWorkspaceNodeResult,
-  DynamicWorkflowRunEvent,
-  DynamicWorkflowRunSessionSummary,
   MessageWithParts,
   SessionEvent,
   TargetChangedPayload,
@@ -56,13 +49,6 @@ import type {
   V4ConversationFileChangesResult,
   V4ConversationFileRewindPreviewResult,
   V4ConversationPlansResult,
-  V4ConversationWorkflowRunArtifactDataResult,
-  V4ConversationWorkflowRunArtifactReadResult,
-  V4ConversationWorkflowRunArtifactsResult,
-  V4ConversationWorkflowRunNodeResultResult,
-  V4ConversationWorkflowRunWorkspaceResult,
-  V4ConversationWorkflowRunEventsResult,
-  V4ConversationWorkflowRunsResult,
   V4ConversationRowsRangeResult,
   WorkspaceConfigState,
   WorkspaceConfigTopicFrame,
@@ -99,22 +85,6 @@ import {
   v4ConversationFileChangesParamsSchema,
   v4ConversationFileRewindPreviewParamsSchema,
   v4ConversationPlansParamsSchema,
-  WORKFLOW_ARTIFACT_LIMITS,
-  v4ConversationWorkflowRunArtifactDataParamsSchema,
-  v4ConversationWorkflowRunArtifactDataResultSchema,
-  v4ConversationWorkflowRunArtifactReadParamsSchema,
-  v4ConversationWorkflowRunArtifactReadResultSchema,
-  v4ConversationWorkflowRunArtifactsParamsSchema,
-  v4ConversationWorkflowRunArtifactsResultSchema,
-  v4ConversationWorkflowRunNodeResultParamsSchema,
-  v4ConversationWorkflowRunNodeResultResultSchema,
-  v4ConversationWorkflowRunWorkspaceParamsSchema,
-  v4ConversationWorkflowRunWorkspaceResultSchema,
-  WORKFLOW_WORKSPACE_LIMITS,
-  v4ConversationWorkflowRunEventsParamsSchema,
-  v4ConversationWorkflowRunEventsResultSchema,
-  v4ConversationWorkflowRunsParamsSchema,
-  v4ConversationWorkflowRunsResultSchema,
   v4ConversationRowsRangeParamsSchema,
   v4ConversationResyncParamsSchema,
   v4ConversationSubscribeParamsSchema,
@@ -136,14 +106,12 @@ import type {
   SessionUsageSeed,
 } from "./product-projection.js";
 import type { ConversationRowTargetAction } from "./product-projection.js";
-import { SessionsIndexFanoutThrottle } from "./sessions-index-fanout-throttle.js";
 import { SessionsIndexPublisher } from "./sessions-index-publisher.js";
 import { SessionsIndexPublisherRegistry } from "./sessions-index-publisher-registry.js";
 import { WorkspaceConfigPublisher } from "./workspace-config-publisher.js";
 import type { TopicFrameReservation } from "./topic-frame-reservation.js";
 import { TurnLifecycleFactNormalizer } from "./turn-lifecycle-facts.js";
 import { CuaPermissionObservationNormalizer } from "./cua-permission-observation.js";
-import { V4CapabilityUnsupportedError } from "./commands/handlers/interaction-background.js";
 
 function toRuntimeTurnId(turnId: string | null): TurnId | null {
   // conversation projection 为了 row 索引用 string 保存 product turnId；
@@ -182,16 +150,10 @@ interface PersistedEventsLoadResult {
 type V4GatewayErrorContext = Record<string, unknown>;
 
 /**
- * 一条已读回的**整份字节**，供分块读取复用。
+ * 一条已读回的**整份字节**，供分块读取复用（已发送附件的预览 `attachmentRead`）。
  *
- * 两个家族共用这张表：已发送附件的预览（`attachmentRead`）与 dwf 用户面产物的字节
- * （`workflowRunArtifactRead`）。共用是有意的——两者的失效规则逐字相同（TTL、字节预算、
- * 最旧先逐、会话销毁时按 `sessionId` 清），而分成两张表会得到两份**各自**的字节预算，
- * 于是"最多缓存多少字节"这条约束就再也说不清了。
- *
- * 键空间靠**首段标签**区分（`att` / `dwfart`），不靠字段个数或内容——两个家族的键都是
- * NUL 分隔的四五段，段数相同、内容也可能撞（一个叫 "1" 的产物 id 与一个 attachmentIndex
- * 1 会长得一样），只有一个不可能相等的首段才是可证明的隔离。
+ * 键空间靠**首段标签**（`att`）区分；NUL 分隔的段数与内容都可能与别的家族相撞，
+ * 只有一个不可能相等的首段才是可证明的隔离。
  *
  * `bytes` 为 null 表示读还在飞：此时它不计入预算，也不会被按预算逐出（逐出一个正在被
  * await 的条目只会让下一块重新读一遍整份文件，正是这张表要消灭的事）。
@@ -372,52 +334,6 @@ export interface V4GatewayHost {
       targetTurnId: TurnId | null;
     },
   ): Promise<V4ConversationFileRewindPreviewResult>;
-  /**
-   * workflow run 的事件日志分页（详情页审计面）。缺席 = 该会话 runtime 没有这个能力
-   * （dwf journal 不可用 → run service 整个没构造），gateway 据此回结构化能力不支持错误。
-   */
-  listDynamicWorkflowRunEvents?(
-    sessionId: string,
-    input: { runId: string; afterSequence?: number; limit?: number },
-  ): Promise<DynamicWorkflowRunEvent[]>;
-  /**
-   * dwf run 的枚举面（重启后的发现查询）。
-   * 缺席条件同 {@link listDynamicWorkflowRunEvents}。
-   */
-  listDynamicWorkflowRuns?(
-    sessionId: string,
-    input: { limit?: number },
-  ): Promise<DynamicWorkflowRunSessionSummary[]>;
-  /**
-   * workflow run 的**用户面产物**读面。三条一起在场、
-   * 一起缺席（app 侧同一个条件注册）。缺席条件同 {@link listDynamicWorkflowRunEvents}。
-   *
-   * ⚠ 术语：artifact = 脚本经 `artifact.*` 发布给用户看的产出，不是 run 的顶层返回值。
-   */
-  listDynamicWorkflowRunArtifacts?(
-    sessionId: string,
-    input: { runId: string },
-  ): Promise<readonly DynamicWorkflowRunArtifact[] | undefined>;
-  listDynamicWorkflowRunArtifactItems?(
-    sessionId: string,
-    input: { runId: string; artifactId: string; afterSequence?: number; limit: number },
-  ): Promise<readonly DynamicWorkflowRunArtifactItem[]>;
-  readDynamicWorkflowRunArtifact?(
-    sessionId: string,
-    input: { runId: string; artifactId: string; version: number },
-  ): Promise<DynamicWorkflowRunArtifactBytes | undefined>;
-  /**
-   * workflow run 的工作区 transcript：两条一起在场、
-   * 一起缺席。授权在宿主侧（run 属于本会话）；拒绝与未知都回 `undefined`。
-   */
-  listDynamicWorkflowRunWorkspaceNodes?(
-    sessionId: string,
-    input: { runId: string },
-  ): Promise<readonly DynamicWorkflowRunWorkspaceNode[] | undefined>;
-  readDynamicWorkflowRunNodeResult?(
-    sessionId: string,
-    input: { runId: string; siteId: string; ordinal: number; maxBytes: number },
-  ): Promise<DynamicWorkflowRunWorkspaceNodeResult | undefined>;
   /**
    * hydration：读取 session 的持久化事件用于冷订阅重建投影（fork child / resume /
    * app-restart）。`synthesized=true` 表示事件日志覆盖不了 transcript，events 是从
@@ -604,10 +520,6 @@ export class ConversationV4Gateway {
   private readonly attachmentUploads: AttachmentUploadRegistry;
   private readonly binaryReadCache = new Map<string, BinaryReadCacheEntry>();
   private binaryReadCacheBytes = 0;
-  /** 高频进度事件的 index fan-out 节流（14-sessions-index「事件 fan-out 节奏」）。 */
-  private readonly indexFanoutThrottle = new SessionsIndexFanoutThrottle({
-    publish: (sessionId) => this.publishCurrentSummaryToIndex(sessionId),
-  });
   private readonly attachmentPruneTimer: ReturnType<typeof setInterval>;
   private readonly now: () => number;
   private readonly createLogEpoch: (sessionId: string) => string;
@@ -1053,12 +965,6 @@ export class ConversationV4Gateway {
    */
   private fanOutToIndex(sessionId: string, event: SessionEvent): void {
     if (event.type === SessionEventType.ModelStreaming) return;
-    // 工作流进度同样是高频流（实测 8s 4000 条），但列表要继续动，所以不是丢弃而是
-    // leading + trailing 窗口节流：窗内合并为窗末一帧，终态仍在一个窗口内送达。
-    if (event.type === SessionEventType.DynamicWorkflowRunProgress) {
-      this.indexFanoutThrottle.request(sessionId);
-      return;
-    }
     this.publishCurrentSummaryToIndex(sessionId);
   }
 
@@ -1082,8 +988,6 @@ export class ConversationV4Gateway {
    * task-index syncer 无法观察到 draft→visible，也就不会创建侧栏 task row。
    */
   private publishCurrentSummaryToIndex(sessionId: string): void {
-    // 这一次发布带的就是窗内合并后的当前摘要：待发的 trailing 到此被满足，不重复发帧。
-    this.indexFanoutThrottle.notePublished(sessionId);
     const getWorkspaceId = this.host.getSessionWorkspaceId;
     if (!getWorkspaceId) return;
     try {
@@ -1402,9 +1306,6 @@ export class ConversationV4Gateway {
       connectionId: params.connectionId,
       base: params.base,
       deliveryProfile: profileName,
-      // 与 clientMode 同族的可信注入：能力位来自该连接的 clientHello，缺席一律按旧消费者办
-      // （整键 patch + 旧界裁剪）。resync / rehydrate 沿用订阅上已记下的这一位，不再重取。
-      workflowRunDeltas: params.workflowRunDeltas === true,
     });
     const routeKey = subscriptionRouteKey(
       params.topic,
@@ -1582,306 +1483,6 @@ export class ConversationV4Gateway {
         ? await this.ensureColdReadyPublisher(params.sessionId)
         : await this.hydratePublisher(params.sessionId);
     return publisher.getPlans();
-  }
-
-  /**
-   * workflow run 事件日志的分页读取（cursor = journal sequence）。
-   *
-   * 与 rows/range、plans 同族：只读、无状态、超时重发安全。刻意**不是** v4 command——
-   * command 的 ACK 结果是那个封闭的「变更结果」判别联合，一页只读事件不属于那个词汇表。
-   *
-   * `hasMore` 由「取满 limit」判定：多读一条来确认后面还有，比让 renderer 靠"这页正好满"
-   * 猜测更可靠（正好取尽时不会白翻一页空的）。
-   */
-  async workflowRunEvents(rawParams: unknown): Promise<V4ConversationWorkflowRunEventsResult> {
-    const params = v4ConversationWorkflowRunEventsParamsSchema.parse(rawParams);
-    if (!this.host.listDynamicWorkflowRunEvents) {
-      throw new V4CapabilityUnsupportedError("listDynamicWorkflowRunEvents", params.sessionId);
-    }
-    await this.ensureHostRecordForJournalRead(params.sessionId);
-    const limit = params.limit;
-    const events = await this.host.listDynamicWorkflowRunEvents(params.sessionId, {
-      runId: params.runId,
-      ...(params.afterSequence === undefined ? {} : { afterSequence: params.afterSequence }),
-      // 多取一条只为判定 hasMore；它不进结果页。
-      ...(limit === undefined ? {} : { limit: limit + 1 }),
-    });
-    const hasMore = limit !== undefined && events.length > limit;
-    return v4ConversationWorkflowRunEventsResultSchema.parse({
-      events: hasMore ? events.slice(0, limit) : events,
-      hasMore,
-    });
-  }
-
-  /**
-   * dwf run 的枚举 query。与
-   * workflowRunEvents 同族：只读、无状态、超时重发安全。limit 的缺省与钳制在 CLI 侧
-   * （run service），这里只透传；`resumable` 由 CLI 按 resume 门的同一个谓词算好。
-   */
-  async workflowRuns(rawParams: unknown): Promise<V4ConversationWorkflowRunsResult> {
-    const params = v4ConversationWorkflowRunsParamsSchema.parse(rawParams);
-    if (!this.host.listDynamicWorkflowRuns) {
-      throw new V4CapabilityUnsupportedError("listDynamicWorkflowRuns", params.sessionId);
-    }
-    await this.ensureHostRecordForJournalRead(params.sessionId);
-    const runs = await this.host.listDynamicWorkflowRuns(params.sessionId, {
-      ...(params.limit === undefined ? {} : { limit: params.limit }),
-    });
-    return v4ConversationWorkflowRunsResultSchema.parse({ runs });
-  }
-
-  /**
-   * workflow run 的**用户面产物**清单。
-   * 与 workflowRunEvents 同族：只读、无状态、超时重发安全。
-   *
-   * ⚠ 术语：这里的 artifact 是脚本经 `artifact.*` 发布给用户看的产出，不是 run 的顶层
-   * 返回值（引擎内部对后者的同名叫法）。
-   *
-   * 未知 runId 回空清单而不是错误：一个已被淘汰 / 从未存在的 run 没有产物，这是一个
-   * 事实而不是故障——同一姿态见事件日志对越界 cursor 的处理。
-   */
-  async workflowRunArtifacts(
-    rawParams: unknown,
-  ): Promise<V4ConversationWorkflowRunArtifactsResult> {
-    const params = v4ConversationWorkflowRunArtifactsParamsSchema.parse(rawParams);
-    if (!this.host.listDynamicWorkflowRunArtifacts) {
-      throw new V4CapabilityUnsupportedError("listDynamicWorkflowRunArtifacts", params.sessionId);
-    }
-    await this.ensureHostRecordForJournalRead(params.sessionId);
-    const artifacts = await this.host.listDynamicWorkflowRunArtifacts(params.sessionId, {
-      runId: params.runId,
-    });
-    return v4ConversationWorkflowRunArtifactsResultSchema.parse({ artifacts: artifacts ?? [] });
-  }
-
-  /**
-   * 预置看板的取数面：喂给某个产物的 `report` 条目分页。
-   *
-   * `limit` 的**缺省与钳制都在这里**（存储层精确兑现、绝不自造页大小也绝不再钳）；`hasMore` 照 workflowRunEvents 的惯例多取一条判定——判据绝不能是「这页正好满」，
-   * 那会在条目数恰好等于 limit 时误报，让看板去翻一页不存在的数据。
-   */
-  async workflowRunArtifactData(
-    rawParams: unknown,
-  ): Promise<V4ConversationWorkflowRunArtifactDataResult> {
-    const params = v4ConversationWorkflowRunArtifactDataParamsSchema.parse(rawParams);
-    if (!this.host.listDynamicWorkflowRunArtifactItems) {
-      throw new V4CapabilityUnsupportedError(
-        "listDynamicWorkflowRunArtifactItems",
-        params.sessionId,
-      );
-    }
-    await this.ensureHostRecordForJournalRead(params.sessionId);
-    const limit = Math.max(
-      1,
-      Math.min(
-        params.limit ?? WORKFLOW_ARTIFACT_LIMITS.defaultItemsPerPage,
-        WORKFLOW_ARTIFACT_LIMITS.maxItemsPerPage,
-      ),
-    );
-    const items = await this.host.listDynamicWorkflowRunArtifactItems(params.sessionId, {
-      runId: params.runId,
-      artifactId: params.artifactId,
-      ...(params.afterSequence === undefined ? {} : { afterSequence: params.afterSequence }),
-      // 多取一条只为判定 hasMore；它不进结果页。
-      limit: limit + 1,
-    });
-    const hasMore = items.length > limit;
-    return v4ConversationWorkflowRunArtifactDataResultSchema.parse({
-      items: hasMore ? items.slice(0, limit) : items,
-      hasMore,
-    });
-  }
-
-  /**
-   * 内容产物的字节，**逐字照 attachmentRead**：一次一块、≤ 512 KiB（schema 已钉住 limit 的
-   * 上界），`nextOffset` 为 null 即读到尾。
-   *
-   * **授权全在宿主侧**（端口实现）：该 run 必须属于 `sessionId` 这个会话 ∧ journal 里有
-   * `(artifactId, version)` 的 completed 行，然后才拿**行上的** uri 去 store 读。网关只做
-   * 参数校验与分块——它没有 journal，也不该有第二份授权判据（两处各判一次，同一个 id
-   * 迟早会在两层上得到不同的解释）。宿主回 `undefined` = 无此版本 / 不是你的 run /
-   * 这是块看板（没有字节），三者对调用方是同一个业务事实，这里归一成结构化的 not found。
-   *
-   * `offset` 越界不是错误：返回空块 + `nextOffset: null`，与读到尾同一形态。
-   */
-  async workflowRunArtifactRead(
-    rawParams: unknown,
-  ): Promise<V4ConversationWorkflowRunArtifactReadResult> {
-    const params = v4ConversationWorkflowRunArtifactReadParamsSchema.parse(rawParams);
-    if (!this.host.readDynamicWorkflowRunArtifact) {
-      throw new V4CapabilityUnsupportedError("readDynamicWorkflowRunArtifact", params.sessionId);
-    }
-    await this.ensureHostRecordForJournalRead(params.sessionId);
-    const artifact = await this.readWorkflowArtifactPayload(params);
-    const totalBytes = artifact.bytes.byteLength;
-    const start = Math.min(params.offset, totalBytes);
-    const end = Math.min(start + params.limit, totalBytes);
-    const chunk = artifact.bytes.subarray(start, end);
-    return v4ConversationWorkflowRunArtifactReadResultSchema.parse({
-      dataBase64: Buffer.from(chunk).toString("base64"),
-      mediaType: artifact.mediaType,
-      totalBytes,
-      nextOffset: end < totalBytes ? end : null,
-    });
-  }
-
-  /**
-   * 工作区 transcript 的清单：一个 run 的
-   * `files.*` / `git.*` / `world.run` 行，不带正文。
-   *
-   * 宿主回 `undefined`（未知 run / 不是你的 run）得到空清单而不是错误：与产物清单同一姿态，
-   * 也是授权链「不告诉越权者猜对了哪一半」的要求。清单超过 maxNodes 截尾并置 `truncated`——
-   * 一个循环里跑了三千次 `world.run` 的 run 不该把侧板撑爆。
-   */
-  async workflowRunWorkspace(
-    rawParams: unknown,
-  ): Promise<V4ConversationWorkflowRunWorkspaceResult> {
-    const params = v4ConversationWorkflowRunWorkspaceParamsSchema.parse(rawParams);
-    if (!this.host.listDynamicWorkflowRunWorkspaceNodes) {
-      throw new V4CapabilityUnsupportedError(
-        "listDynamicWorkflowRunWorkspaceNodes",
-        params.sessionId,
-      );
-    }
-    await this.ensureHostRecordForJournalRead(params.sessionId);
-    const nodes =
-      (await this.host.listDynamicWorkflowRunWorkspaceNodes(params.sessionId, {
-        runId: params.runId,
-      })) ?? [];
-    const truncated = nodes.length > WORKFLOW_WORKSPACE_LIMITS.maxNodes;
-    return v4ConversationWorkflowRunWorkspaceResultSchema.parse({
-      nodes: truncated ? nodes.slice(0, WORKFLOW_WORKSPACE_LIMITS.maxNodes) : nodes,
-      ...(truncated ? { truncated: true } : {}),
-    });
-  }
-
-  /**
-   * 一个工作区节点的正文，按 `maxBytes` 保形有界化（缺省与上限都是 resultMaxBytes，钳在这里）。
-   * 授权全在宿主侧；宿主回 `undefined` = 无此节点 / 不是你的 run / 不是 world 行，归一成
-   * 结构化的 not found。
-   */
-  async workflowRunNodeResult(
-    rawParams: unknown,
-  ): Promise<V4ConversationWorkflowRunNodeResultResult> {
-    const params = v4ConversationWorkflowRunNodeResultParamsSchema.parse(rawParams);
-    if (!this.host.readDynamicWorkflowRunNodeResult) {
-      throw new V4CapabilityUnsupportedError("readDynamicWorkflowRunNodeResult", params.sessionId);
-    }
-    await this.ensureHostRecordForJournalRead(params.sessionId);
-    const maxBytes = Math.max(
-      1,
-      Math.min(
-        params.maxBytes ?? WORKFLOW_WORKSPACE_LIMITS.resultMaxBytes,
-        WORKFLOW_WORKSPACE_LIMITS.resultMaxBytes,
-      ),
-    );
-    const result = await this.host.readDynamicWorkflowRunNodeResult(params.sessionId, {
-      runId: params.runId,
-      siteId: params.siteId,
-      ordinal: params.ordinal,
-      maxBytes,
-    });
-    if (result === undefined) {
-      throw new Error(
-        `fault.workflowRunNodeResult.notFound: ${params.runId}/${params.siteId}@${params.ordinal}`,
-      );
-    }
-    return v4ConversationWorkflowRunNodeResultResultSchema.parse(result);
-  }
-
-  /**
-   * 一个产物版本的**整份**字节，带缓存。
-   *
-   * 端口的 `readArtifact` 返回的是整份字节，而
-   * `workflowRunArtifactRead` 是**分块**查询——不缓存的话，一个 20 MiB 的 PDF 按 512 KiB
-   * 分 40 块取，就会把整份文件从 store 读 40 遍（800 MiB 的 I/O），而且每一块都要重走一遍
-   * journal 授权链。`attachmentRead` 早就有这张表，这里复用它（见 {@link BinaryReadCacheEntry}
-   * 关于两个家族共用一张表的论证）。
-   *
-   * 缓存的是 **promise 而不是结果**，且在发起前就写进表里：并发抓取的多个分块因此共享
-   * 同一次读，而不是各自发起一次再各自写一遍缓存。
-   *
-   * 授权不因缓存被绕过：键里带着 `sessionId`，而 `sessionId` 正是端口那条授权链
-   * （run 的 parentSessionId 必须等于它）的比对对象——换一个会话就是另一个键，必然重新
-   * 走一次端口。会话销毁时按 `sessionId` 整片清掉，与附件同一条规则。
-   *
-   * 宿主回 `undefined`（不是你的 run / 无此版本 / 是块看板）在这里**抛错**而不是被缓存：
-   * 走既有的 catch 分支把条目删掉，于是一个"发布刚落库、读稍微早了一步"的竞态不会被
-   * 负缓存钉死 30 秒。
-   */
-  private readWorkflowArtifactPayload(params: {
-    sessionId: string;
-    runId: string;
-    artifactId: string;
-    version: number;
-  }): Promise<{ bytes: Uint8Array; mediaType: string }> {
-    const now = this.now();
-    this.pruneBinaryReadCache(now);
-    // 首段标签 `dwfart`：与附件预览共用同一张表，靠首段隔离（见 BinaryReadCacheEntry）。
-    const key = `dwfart\u0000${params.sessionId}\u0000${params.runId}\u0000${params.artifactId}\u0000${params.version}`;
-    const cached = this.binaryReadCache.get(key);
-    if (cached) {
-      cached.accessedAt = now;
-      return cached.payload;
-    }
-
-    const payload = this.host.readDynamicWorkflowRunArtifact!(params.sessionId, {
-      runId: params.runId,
-      artifactId: params.artifactId,
-      version: params.version,
-    })
-      .then((artifact) => {
-        if (artifact === undefined) {
-          throw new Error(
-            `fault.workflowRunArtifactRead.notFound: ${params.runId}/${params.artifactId}@${params.version}`,
-          );
-        }
-        const current = this.binaryReadCache.get(key);
-        if (current) {
-          current.bytes = artifact.bytes.byteLength;
-          this.binaryReadCacheBytes += artifact.bytes.byteLength;
-          this.pruneBinaryReadCache(this.now());
-        }
-        // contentType 归一成表里的 mediaType 词汇；值仍是 journal 记录上的那一份
-        // （UI 分派渲染器的精确匹配契约），不是 store 按文件名再推的那个。
-        return { bytes: artifact.bytes, mediaType: artifact.contentType };
-      })
-      .catch((error: unknown) => {
-        this.deleteBinaryReadCacheEntry(key);
-        throw error;
-      });
-    this.binaryReadCache.set(key, {
-      sessionId: params.sessionId,
-      accessedAt: now,
-      bytes: null,
-      payload,
-    });
-    return payload;
-  }
-
-  /**
-   * dwf 两个 journal 读面的宿主 record 前置。
-   *
-   * 这两个 query 都经 app 能力读 journal，而宿主按 sessionId 找 record——历史
-   * 会话的 record 只由**订阅**路径激活。renderer 里发现查询的 effect 声明在 lease/订阅
-   * effect 之前，而 CLI 严格串行派发请求（`zcode-protocol/transport.ts`，只有 session/stop
-   * 越队），于是「重启后打开历史会话」时它必然先于订阅被处理、必然拿到 sessionNotFound：
-   * 工具卡的 join 回退整块消失，卡片退回编译态，被打断的 run 连入口都没有。
-   *
-   * 只拉 record，**不**建 READY publisher：journal 与 conversation log 无关，读一页 run
-   * 不需要投影（同一判断见这两个 query 刻意不带 atSeq/atLogEpoch）。习语与 attachmentBegin
-   * 逐字相同；`ensureResumed` 自带按会话单飞，与并发订阅共享同一次 activation。
-   *
-   * 活性判定必须与 subscribe 同一条
-   * `hasLiveConversation`，不能只看 `sessionExists`。dwf actor transcript 是 detached live
-   * 会话——真 runtime 活在 run service 里、宿主刻意没有 record；嵌套 SessionPane 的发现
-   * 查询带着 actor id 打到这里，旧判定就对一条**正在运行**的会话物化出第二个（幽灵）
-   * runtime：它向同一份事件日志追加 SessionResumed、丢弃 pending steer、重放 resume hooks，
-   * 双写把序列账搞乱，transcript 从此定格（症状是直播冻结在「已工作 xx 秒」）。
-   */
-  private async ensureHostRecordForJournalRead(sessionId: string): Promise<void> {
-    if (this.hasLiveConversation(sessionId)) return;
-    await this.coldResume.ensureResumed(sessionId);
   }
 
   async fileChanges(rawParams: unknown): Promise<V4ConversationFileChangesResult> {
@@ -2736,7 +2337,6 @@ export class ConversationV4Gateway {
         this.host.onError?.("v4.sessionsIndex.remove", error);
       }
     }
-    this.indexFanoutThrottle.clearSession(sessionId);
     for (const [routeKey, state] of this.flushStates) {
       if (state.sessionId !== sessionId) continue;
       if (state.timer) clearTimeout(state.timer);
@@ -2785,7 +2385,6 @@ export class ConversationV4Gateway {
       );
     }
     clearInterval(this.attachmentPruneTimer);
-    this.indexFanoutThrottle.clear();
     this.attachmentUploads.clear();
     this.binaryReadCache.clear();
     this.binaryReadCacheBytes = 0;

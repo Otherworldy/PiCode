@@ -11,14 +11,6 @@ export * from "./session-mailbox.port.js";
 export * from "./session-store.port.js";
 export * from "./tool-artifact-store.port.js";
 export * from "./subagent.port.js";
-export * from "./workflow.port.js";
-export * from "./workflow-submit.port.js";
-export * from "./workflow-escalate.port.js";
-export * from "./dynamic-workflow-run.port.js";
-export * from "./dynamic-workflow-snippet.port.js";
-// 宿主已配置模型的只读目录：ListModels 与 dwf 的
-// `subagent_model` 解析都从这里拿「有哪些模型」。
-export * from "./model-catalog.port.js";
 export * from "./automation.port.js";
 export * from "./mcp.port.js";
 export * from "./browser-control.port.js";

@@ -31,16 +31,9 @@ import {
   openSubagentDirectorySidePane,
   openSelectionSideChatPane,
   openPlanDetailSidePane,
-  openWorkflowRunSidePane,
-  replaceWorkflowRunSidePane,
-  openWorkflowRunDirectorySidePane,
-  openWorkflowActorSessionSidePane,
-  openWorkflowWorkspaceSidePane,
-  openWorkflowArtifactSidePane,
   activateDeveloperToolsSidePane,
   openBrowserSidePane,
   openOrActivateBrowserSidePaneByUrl,
-  findBrowserSidePaneTabByUrl,
   applyBrowserUseSidePaneEvent,
   applyBrowserUseSidePaneVisibilityEvent,
   applyBrowserTabResidencyEvent,
@@ -69,11 +62,6 @@ import {
   type OpenScopedSubagentDirectorySideTabRequest,
   type OpenSelectionSideChatRequest,
   type OpenScopedPlanDetailSideTabRequest,
-  type OpenScopedWorkflowRunSideTabRequest,
-  type OpenScopedWorkflowRunDirectorySideTabRequest,
-  type OpenScopedWorkflowActorSessionSideTabRequest,
-  type OpenScopedWorkflowArtifactSideTabRequest,
-  type OpenScopedWorkflowWorkspaceSideTabRequest,
   type WorkspaceSidePaneState,
   type WorkspaceSidePaneTab,
 } from "@/lib/workspaceSidePane.js";
@@ -81,8 +69,7 @@ import { isSidePaneTabVisibleForParent } from "@/lib/workspaceSidePane.js";
 import { openPluginUiSidePane } from "@/plugin-ui/index.js";
 import type { OpenPluginUiSideTabRequest } from "@/plugin-ui/contract.js";
 import { logger } from "@/logger.js";
-import { getPathLeaf, joinFilePath, toFileUrl } from "@/lib/path.js";
-import { shouldOpenWorkflowArtifactInBrowser } from "@/lib/workflowArtifactOpen.js";
+import { getPathLeaf } from "@/lib/path.js";
 import { useWhiteboardStore } from "@/store/whiteboardStore.js";
 import { useServices } from "@/hooks/useServices.js";
 import { clearSelectionSideChat } from "@/lib/selectionSideChatRuntime.js";
@@ -171,7 +158,7 @@ export function useAppPanels(options: {
   } = options;
   const supportsEmbeddedBrowser = explicitSupportsEmbeddedBrowser ?? Boolean(isDesktop);
   const activeWorkspaceKey = workspaceIdentity?.trim() || workspaceAbsPath;
-  const { zcodeAgentService, zcodeSessionService } = useServices();
+  const { zcodeSessionService } = useServices();
   const sidePaneMemoryKey = useMemo(
     () =>
       buildTaskSidePaneMemoryKey({
@@ -509,10 +496,7 @@ export function useAppPanels(options: {
   // waitForGuest 10 秒超时并把 tab closeTabDurably 删掉，用户退出设置页就看到侧边栏空空如也。
   // 可见性只表达“现在给不给用户看”，不能决定“要不要接收权威事件”；是否抢焦点仍由 shouldReveal
   // 的 scope 匹配决定，因此这里不再依赖 isWorkspaceVisible。
-  useEffect(
-    () => registerEmbeddedBrowserOpener(handleOpenBrowserUrl),
-    [handleOpenBrowserUrl],
-  );
+  useEffect(() => registerEmbeddedBrowserOpener(handleOpenBrowserUrl), [handleOpenBrowserUrl]);
 
   useEffect(() => {
     if (!supportsEmbeddedBrowser || !isDesktop || !platform?.onOpenBrowserUrl) {
@@ -938,228 +922,6 @@ export function useAppPanels(options: {
     [commitOpenedSidePaneState, revealSidePaneForCurrentOwner],
   );
 
-  const handleOpenWorkflowRun = useCallback(
-    (request: OpenScopedWorkflowRunSideTabRequest) => {
-      const workspaceKey = request.workspaceIdentity?.trim() || request.workspacePath;
-      // 「配置」之后的原地替换不是一次打开：收起的侧栏保持收起。
-      const replaceRunId = request.replaceRunId;
-      if (replaceRunId === undefined) setIsSidePaneCollapsed(false);
-      commitOpenedSidePaneState((current) =>
-        replaceRunId === undefined
-          ? openWorkflowRunSidePane(current, { ...request, workspaceKey })
-          : replaceWorkflowRunSidePane(current, { ...request, workspaceKey, replaceRunId }),
-      );
-      logger.debug("[App] 打开工作流运行详情右侧 tab", {
-        parentSessionId: request.parentSessionId,
-        runId: request.runId,
-        toolCallId: request.toolCallId,
-        workspaceKey,
-      });
-    },
-    [commitOpenedSidePaneState],
-  );
-
-  const handleOpenWorkflowRunDirectory = useCallback(
-    (request: OpenScopedWorkflowRunDirectorySideTabRequest) => {
-      const workspaceKey = request.workspaceIdentity?.trim() || request.workspacePath;
-      setIsSidePaneCollapsed(false);
-      commitOpenedSidePaneState((current) =>
-        openWorkflowRunDirectorySidePane(current, {
-          ...request,
-          workspaceKey,
-        }),
-      );
-      logger.debug("[App] 打开工作流运行目录右侧 tab", {
-        parentSessionId: request.parentSessionId,
-        workspaceKey,
-      });
-    },
-    [commitOpenedSidePaneState],
-  );
-
-  const handleOpenWorkflowActorSession = useCallback(
-    (request: OpenScopedWorkflowActorSessionSideTabRequest) => {
-      const workspaceKey = request.workspaceIdentity?.trim() || request.workspacePath;
-      setIsSidePaneCollapsed(false);
-      commitOpenedSidePaneState((current) =>
-        openWorkflowActorSessionSidePane(current, {
-          ...request,
-          workspaceKey,
-        }),
-      );
-      logger.debug("[App] 打开工作流 actor 会话右侧 tab", {
-        actorSessionId: request.actorSessionId,
-        parentSessionId: request.parentSessionId,
-        runId: request.runId,
-        workspaceKey,
-      });
-    },
-    [commitOpenedSidePaneState],
-  );
-
-  const handleOpenWorkflowWorkspace = useCallback(
-    (request: OpenScopedWorkflowWorkspaceSideTabRequest) => {
-      const workspaceKey = request.workspaceIdentity?.trim() || request.workspacePath;
-      setIsSidePaneCollapsed(false);
-      commitOpenedSidePaneState((current) =>
-        openWorkflowWorkspaceSidePane(current, {
-          ...request,
-          workspaceKey,
-        }),
-      );
-      logger.debug("[App] 打开工作流工作区右侧 tab", {
-        parentSessionId: request.parentSessionId,
-        phaseId: request.phaseId,
-        runId: request.runId,
-        workspaceKey,
-      });
-    },
-    [commitOpenedSidePaneState],
-  );
-
-  /**
-   * 按 URL 复用的 browser tab（html 产物直开的落点）。
-   *
-   * 与 `handleOpenBrowserUrl` 有三条区别：
-   * ① 落点按 URL 认领而不是每次新开；② 命中已有 tab 时**仍然**发一次导航请求 —— webview
-   * 停在旧字节上，`initialUrl` 又没变，挂载时那次导航不会再跑
-   * （UnifiedBrowserView 的 `lastAppliedInitialUrlRef` 按 URL 去重），v2 就永远显示不出来；
-   * ③ 归属由调用方给定，且**恒激活**——这条路径只由用户点击产物触发，没有
-   * `isCurrentOwner` 那种后台挂载的情形（详见下面 ownerTaskId 处的注释）。
-   */
-  const openFileUrlInBrowserSidePane = useCallback(
-    (params: { url: string; ownerTaskId: string; workspaceKey: string }) => {
-      const state = latestSidePaneMemoryRef.current.sidePaneState;
-      const existing = findBrowserSidePaneTabByUrl(state, {
-        initialUrl: params.url,
-        ownerTaskId: params.ownerTaskId,
-        workspaceKey: params.workspaceKey,
-      });
-      const targetTabId = existing?.id ?? `browser:${createUuid()}`;
-      setBrowserNavigationRequest({ id: createUuid(), targetTabId, url: params.url });
-      // 与产物 tab 一样只置当前折叠态，不落盘偏好：归属写的是 params.ownerTaskId，
-      // 而 revealSidePaneForCurrentOwner 会把 false 记在**当前** owner 名下——中枢那条
-      // 路径上两者还不是同一个人。
-      setIsSidePaneCollapsed(false);
-      commitOpenedSidePaneState((current) =>
-        openOrActivateBrowserSidePaneByUrl(current, {
-          initialUrl: params.url,
-          tabId: targetTabId,
-          // 归属显式冻结，不靠 stampSidePaneTabsOwnership 盖当前 owner：中枢的产物 chip
-          // 先 handleSelectTaskInChat 再 handleOpenWorkflowArtifact，同一个同步块里
-          // sidePaneOwnerIdRef 还停在上一条会话上。browser tab 的可见性按 ownerTaskId 收窄
-          // （getVisibleSidePaneTabsByScope 的默认分支），盖错了这个 tab 切换落定后就再也看不见。
-          // 产物 tab 不怕这一手，是因为它按 parentSessionId 收窄。
-          ownerTaskId: params.ownerTaskId,
-          workspaceKey: params.workspaceKey,
-        }),
-      );
-      return targetTabId;
-    },
-    [commitOpenedSidePaneState],
-  );
-
-  /**
-   * 产物点击的**唯一**落点裁决处：html 且开得起内嵌浏览器就直接开页面，其余一律开产物 tab。
-   *
-   * 直开缺的那一段是 `sourcePath`：run 侧板带得到（它已经合过 journal），药丸摘要刻意不带
-   * （状态帧体积，见 `workflowRunArtifactSummarySchema`）。缺席时这里补查一次 journal。
-   * 查询失败、老 CLI 没有这条查询、产物根本没有出处，全部退回产物 tab —— 点击绝不落空。
-   */
-  const handleOpenWorkflowArtifact = useCallback(
-    (request: OpenScopedWorkflowArtifactSideTabRequest) => {
-      const workspaceKey = request.workspaceIdentity?.trim() || request.workspacePath;
-      const openArtifactTab = () => {
-        setIsSidePaneCollapsed(false);
-        commitOpenedSidePaneState((current) =>
-          openWorkflowArtifactSidePane(current, {
-            ...request,
-            workspaceKey,
-          }),
-        );
-        logger.debug("[App] 打开工作流产物右侧 tab", {
-          artifactId: request.artifactId,
-          parentSessionId: request.parentSessionId,
-          runId: request.runId,
-          workspaceKey,
-        });
-      };
-
-      if (
-        !shouldOpenWorkflowArtifactInBrowser({
-          contentType: request.contentType,
-          supportsEmbeddedBrowser,
-          workspaceIdentity: request.workspaceIdentity,
-          remoteSessionId: request.remoteSessionId,
-        })
-      ) {
-        openArtifactTab();
-        return;
-      }
-
-      const openInBrowser = (sourcePath: string) => {
-        // 工作区相对的 sourcePath 拼上 workspacePath 才是本机真实位置；与产物卡上
-        // 「在浏览器中打开」走同一条路径（WorkflowArtifactSidePane 的 localSourcePath）。
-        const url = toFileUrl(joinFilePath(request.workspacePath, sourcePath));
-        const tabId = openFileUrlInBrowserSidePane({
-          url,
-          ownerTaskId: request.parentSessionId,
-          workspaceKey,
-        });
-        logger.debug("[App] html 产物直接打开浏览器 tab", {
-          artifactId: request.artifactId,
-          parentSessionId: request.parentSessionId,
-          runId: request.runId,
-          tabId,
-          workspaceKey,
-        });
-      };
-
-      const knownSourcePath = request.sourcePath?.trim();
-      if (knownSourcePath) {
-        openInBrowser(knownSourcePath);
-        return;
-      }
-
-      void (async () => {
-        try {
-          // 判据已经保证是本地 workspace（无 workspaceIdentity / remoteSessionId），
-          // 这里只带 workspacePath。
-          const result = await zcodeAgentService.conversationWorkflowRunArtifactsV4({
-            workspacePath: request.workspacePath,
-            sessionId: request.parentSessionId,
-            runId: request.runId,
-          });
-          const sourcePath = result.artifacts
-            .find((artifact) => artifact.id === request.artifactId)
-            ?.sourcePath?.trim();
-          if (!sourcePath) {
-            logger.debug("[App] html 产物没有工作区出处，退回产物 tab", {
-              artifactId: request.artifactId,
-              runId: request.runId,
-            });
-            openArtifactTab();
-            return;
-          }
-          openInBrowser(sourcePath);
-        } catch (error) {
-          logger.warn("[App] 查产物出处失败，退回产物 tab", {
-            artifactId: request.artifactId,
-            error: error instanceof Error ? error.message : String(error),
-            runId: request.runId,
-          });
-          openArtifactTab();
-        }
-      })();
-    },
-    [
-      commitOpenedSidePaneState,
-      openFileUrlInBrowserSidePane,
-      supportsEmbeddedBrowser,
-      zcodeAgentService,
-    ],
-  );
-
   const closeSelectionSideChatRuntime = useCallback(
     (tab: Extract<WorkspaceSidePaneTab, { type: "selection-side-chat" }>) => {
       clearSelectionSideChat(tab.childSessionId);
@@ -1583,11 +1345,6 @@ export function useAppPanels(options: {
     handleOpenSelectionSideChat,
     handleOpenPlanDetail,
     handleOpenPluginUi,
-    handleOpenWorkflowRun,
-    handleOpenWorkflowRunDirectory,
-    handleOpenWorkflowActorSession,
-    handleOpenWorkflowWorkspace,
-    handleOpenWorkflowArtifact,
     handleToggleTerminal,
     handleToggleSidebar,
     handleToggleSidePaneCollapse,

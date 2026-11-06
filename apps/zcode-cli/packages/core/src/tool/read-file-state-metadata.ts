@@ -3,14 +3,7 @@ import { createReadFileStateKey } from "./read-file-state.js";
 import type { ReadFileStateEntry, ReadFileStateMap } from "./types.js";
 
 export const READ_FILE_STATE_METADATA_SCHEMA_VERSION = 1;
-// `CreateWorkflow` / `AmendWorkflow`：内联草稿的字节就是模型那次调用的 `script` 入参，与 Write
-// 同理记作完整视图（handlers/workflow-draft-read-state.ts）。
-export type PersistedReadFileStateTool =
-  | "Read"
-  | "Write"
-  | "Edit"
-  | "CreateWorkflow"
-  | "AmendWorkflow";
+export type PersistedReadFileStateTool = "Read" | "Write" | "Edit";
 
 export interface PersistedReadFileStateMetadata {
   schemaVersion: typeof READ_FILE_STATE_METADATA_SCHEMA_VERSION;
@@ -131,11 +124,7 @@ export function parseReadFileStateMetadata(
 
 function isPersistedReadFileStateTool(value: unknown): value is PersistedReadFileStateTool {
   return (
-    value === "Read" ||
-    value === "Write" ||
-    value === "Edit" ||
-    value === "CreateWorkflow" ||
-    value === "AmendWorkflow"
+    value === "Read" || value === "Write" || value === "Edit"
   );
 }
 

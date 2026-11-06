@@ -3,8 +3,6 @@
 // ============================================================
 
 import {
-  AMEND_WORKFLOW_TOOL_NAME,
-  isAmendWorkflowOwnedPredecessor,
   PermissionCapabilityGroup,
   type PermissionCapabilityGroup as PermissionCapabilityGroupType,
   type PermissionRuleValue,
@@ -18,7 +16,6 @@ import {
 import { OFFICIAL_CUA_PERMISSION_RULE_TOOL_NAME } from "@zcode/shared";
 import { resolvePlanModeTransitionPermission } from "./plan-mode-policy.js";
 import { webFetchRuleSubjects, wildcardToRegExp } from "./rule-matching.js";
-import { isPreapprovedWorkflowDraftWrite } from "./workflow-draft-path.js";
 import { applyPermissionUpdates } from "../tool/executor/permission-rules.js";
 import { isWebFetchPreapprovedUrl } from "../tool/webfetch-preapproved.js";
 import type { ToolPermissionRulePolicy } from "../tool/types.js";
@@ -27,9 +24,6 @@ import type { ToolPermissionRulePolicy } from "../tool/types.js";
 // Types
 // -----------------------------------------------
 
-/** 草稿免确认的规则号。 */
-const WORKFLOW_DRAFT_PREAPPROVED_RULE_ID = "tool.workflowDraft.preapproved";
-
 export interface PermissionContext {
   toolName: string;
   input: unknown;
@@ -37,11 +31,6 @@ export interface PermissionContext {
   mode: CollaborationMode;
   planEnabled?: boolean;
   prePlanMode?: Exclude<CollaborationMode, "plan">;
-  /**
-   * 会话工作目录。判定相对路径的落点用（目前只有 workflow 草稿免确认这一条），
-   * 可选：拿不到工作目录的调用方照常按其余规则判定，不会因此少一层确认。
-   */
-  workingDirectory?: string;
 }
 
 export interface PermissionToolCapability {
@@ -192,25 +181,6 @@ export class PermissionService {
         capability,
         "tool.webfetch.preapproved",
         "WebFetch URL is preapproved",
-      );
-    }
-
-    // workflow 草稿免确认：
-    // 与 WebFetch 预批同一位次——排在 plan 分支之后，因为 plan 模式必须继续拦下一切写入，
-    // 草稿也是写入；也排在项目 deny / ask 之后，项目规则照样压得过它。判定本身见
-    // workflow-draft-path.ts（含"为什么这样放行是安全的"）。
-    if (
-      isPreapprovedWorkflowDraftWrite({
-        input: context.input,
-        toolName: context.toolName,
-        workingDirectory: context.workingDirectory,
-      })
-    ) {
-      return this.allow(
-        context,
-        capability,
-        WORKFLOW_DRAFT_PREAPPROVED_RULE_ID,
-        "Workflow draft file is preapproved",
       );
     }
 
@@ -370,33 +340,12 @@ export class PermissionService {
         `Tool ${context.toolName} was allowed for this session`,
       );
     }
-    // 修订免确认：AmendWorkflow 的前驱是
-    // **本会话发起**的 run、且不是用户亲手停下的，即放行。与会话规则同位——阻断分支之后、ask 之前，
-    // 不看模式。事实来自 resolveInput 回填的 `predecessor`（journal 的 parent_session_id / stopReason），
-    // 不是内存表：重启、冷恢复后依然成立，也没有可播种、可撤销的东西。别的会话的 run、用户停过的
-    // run 照常 ask：钥匙是 run 的归属，不是字段的在场。
-    if (this.isOwnedWorkflowAmend(context)) {
-      return this.allow(
-        context,
-        capability,
-        "rule.session.workflowOwner",
-        `Tool ${context.toolName} amends a run this session started`,
-      );
-    }
     return this.ask(
       context,
       capability,
       "tool.alwaysAsk",
       `Tool ${context.toolName} always requires explicit approval`,
     );
-  }
-
-  /** AmendWorkflow 且回填的 `predecessor` 说「本会话的 run、非用户停下」。 */
-  private isOwnedWorkflowAmend(context: PermissionContext): boolean {
-    if (context.toolName !== AMEND_WORKFLOW_TOOL_NAME) return false;
-    if (!context.input || typeof context.input !== "object") return false;
-    // 谓词本体住在契约里：就地调并发落回修订时读的必须是同一条规则，不能各写一遍。
-    return isAmendWorkflowOwnedPredecessor((context.input as Record<string, unknown>).predecessor);
   }
 
   private checkPlanMode(

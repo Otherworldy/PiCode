@@ -33,7 +33,7 @@ const OFF_PEAK_MODEL_BYTES = 32_000;
  * 闲时派发轮的 handler 级拒绝（turn denylist 之外的第二层纵深）。
  * provider denylist 只是可见性约束；异常 provider 仍可能直接提交。handler 以
  * executor 传入的本轮事实做最终拒绝。注意：刻意不检查 automationTurn（cron 轮放行）。
- * SendMessage / Workflow 复用本函数——它们会绕开本轮 modelExecution 重新启动子 Agent
+ * SendMessage 复用本函数——它会绕开本轮 modelExecution 重新启动子 Agent
  * 并落到用户套餐；拒绝时给模型可恢复的替代路径提示。
  */
 export function assertNotOffPeakTurn(

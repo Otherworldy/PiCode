@@ -3,11 +3,6 @@ export type {
   WorkspaceGenerateTextInput,
   WorkspaceGenerateTextResult,
 } from "./runtime/methods/workspace-generate-text.js";
-export type { StartSavedWorkflowRunResult } from "./runtime/methods/dynamic-workflow-run-start.js";
-export type {
-  AmendWorkflowRunSettingsInput,
-  AmendWorkflowRunSettingsResult,
-} from "./runtime/methods/dynamic-workflow-run-settings.js";
 export type {
   ActiveTurnInfo,
   AgentRuntimeConfig,

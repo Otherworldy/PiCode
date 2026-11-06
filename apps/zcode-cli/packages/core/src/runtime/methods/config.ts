@@ -168,8 +168,8 @@ export function subscribeEvents(this: AgentRuntimeInternal, sink: SessionEventSi
 /**
  * 外部子 runtime 的接缝（一）：交出本 runtime 的会话事件 store。
  *
- * 在 class 外构造的子 runtime（bootstrap 的 dwf actor / legacy script workflow）必须与父
- * runtime 共享同一个 store，否则子会话事件只落在一个谁都读不到的私有 store 里，v4 的
+ * 在 class 外构造的子 runtime 必须与父 runtime 共享同一个 store，否则子会话事件只落在一个
+ * 谁都读不到的私有 store 里，v4 的
  * `loadPersistedEvents(childSessionId)` 恒为空——transcript 永久空白。子事件仍按子自己的
  * sessionId 落库，两条会话在同一个 store 里互不覆盖（`subagent.ts:280` 的
  * `eventStore: this.eventStore` 是同一条约定）。
@@ -203,15 +203,14 @@ export async function notifyExternalChildSessionEvent(
 /**
  * 外部子 runtime 的接缝（三）：铸造子 runtime 的**对外交互**端口。
  *
- * 子 runtime 的账本身份（子 sessionId）不是协议客户端能应答的身份。dwf actor 与 legacy
- * workflow child 过去直接从 `appOptions` 取 `providerRuntimeHeadersPort` / `permissionBroker`，
- * 于是带着 `sess_dwf-…`去问桌面；桌面回包路径上的 `requireSession` 抛错、response 永不发出，
- * 子代理在首个模型请求前永久挂起（8 个子代理、80 分钟无任何事件）。core 内建 subagent 当时靠
- * 两个私有 wrapper 绕开，三处装配两错一对——说明规则散落在调用点就一定会漂。
+ * 子 runtime 的账本身份（子 sessionId）不是协议客户端能应答的身份。子 runtime 过去直接从
+ * `appOptions` 取 `providerRuntimeHeadersPort` / `permissionBroker`，于是带着子会话 id 去问
+ * 桌面；桌面回包路径上的 `requireSession` 抛错、response 永不发出，子代理在首个模型请求前
+ * 永久挂起。core 内建 subagent 当时靠两个私有 wrapper 绕开，三处装配两错一对——说明规则散落
+ * 在调用点就一定会漂。
  *
  * 修法：派生收敛到 `deriveChildClientPorts`，且只能由**父 runtime** 调用——`parentSessionId`
- * 由父自己填，调用方给不了错的值。任何在 class 外构造子 runtime 的装配（dwf actor、legacy
- * workflow child）必须经这里取端口。
+ * 由父自己填，调用方给不了错的值。任何在 class 外构造子 runtime 的装配都必须经这里取端口。
  */
 export function createChildClientPorts(
   this: AgentRuntimeInternal,

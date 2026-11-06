@@ -365,15 +365,6 @@ export function shouldExposeSessionEventToProtocol(event: SessionEvent): boolean
     return false;
   }
 
-  if (event.type === SessionEventType.DynamicWorkflowRunProgress) {
-    // 与上面同一个 seam、同一个理由：workflow run 事件对 v3 完全同构——v4 面已有权威投影
-    // （workflowRuns 状态键），v3 mapper 不消费这些内部状态，继续透出只是把每个节点相位
-    // 迁移都跨进程搬一遍。**注意与前置特性的偏斜危害不同**：这里的剥离不是为了防丢事件，
-    // 新类型不会被 v3 拒收（mapSessionEventType 的 default 落到 session.updated，其 payload
-    // 是宽松的 jsonObjectSchema），纯粹是带宽与语义干净。
-    return false;
-  }
-
   if (event.type !== SessionEventType.ModelStreaming) {
     return true;
   }

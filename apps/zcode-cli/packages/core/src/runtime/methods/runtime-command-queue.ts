@@ -7,7 +7,6 @@ import {
   shouldSuppressTaskNotificationRuntimeCommand,
 } from "./background-notifications.js";
 import { persistSubagentMessageCommand } from "./subagent-messages.js";
-import { runControlOnlyTurnCommand } from "./control-only-turn.js";
 import { createTurnCancelledError } from "../helpers/index.js";
 import { executeTargetContinuationCommand } from "./target.js";
 import { runActiveTargetContinuationLoop } from "./target-continuation-loop.js";
@@ -289,10 +288,6 @@ async function runRuntimeCommand(
       });
       return;
     }
-    if (command.mode === "control-only-turn") {
-      await runControlOnlyTurnCommand.call(this, command);
-      return;
-    }
   } catch (error) {
     if (
       command.mode === "prompt" ||
@@ -350,10 +345,6 @@ async function runTaskNotificationBatch(
       // 批次展示 metadata 只保留代表任务，composition 必须检查整批，不能被首个 Bash 任务遮蔽。
       backgroundSubagentResultConsumed: eligibleCommands.some(
         (command) => command.originMeta?.backgroundSource === "subagent",
-      ),
-      // 同一规则的 workflow 维度：run 的完成 / 提问通知在批里。
-      workflowResultConsumed: eligibleCommands.some(
-        (command) => command.originMeta?.backgroundSource === "workflow",
       ),
       ...(persisted.backgroundSource ? { backgroundSource: persisted.backgroundSource } : {}),
       inputSource: "background_task",

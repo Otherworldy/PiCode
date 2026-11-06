@@ -9,19 +9,6 @@ import {
   MCP_APPS_WIDGET_META_MAX_BYTES,
 } from "@zcode/shared/mcp-apps";
 
-import {
-  CREATE_WORKFLOW_DISPLAY_MAX_DIAGNOSTICS,
-  CreateWorkflowCausalityGraphSchema,
-  createWorkflowToolResultDisplayDiagnosticSchema,
-} from "./create-workflow.js";
-import {
-  evalWorkflowSnippetToolResultDisplayPayloadSchema,
-  getWorkflowRunToolResultDisplayPayloadSchema,
-  listModelsToolResultDisplayPayloadSchema,
-  listWorkflowRunsToolResultDisplayPayloadSchema,
-  resumeWorkflowRunToolResultDisplayPayloadSchema,
-  savedWorkflowListToolResultDisplayPayloadSchema,
-} from "./workflow-observation-display.js";
 
 export const COMPLETED_TOOL_PART_METADATA_SCHEMA_VERSION = 1;
 export const TASK_OUTPUT_DISPLAY_MAX_STATUS_CHARS = 64;
@@ -60,9 +47,6 @@ export const cuaRequestAccessStatusDisplaySchema = z
     screenRecording: z.enum(["granted", "denied", "unknown"]),
   })
   .strict();
-
-// CreateWorkflow display 诊断的限长常量与条目 schema 已移至 create-workflow.ts
-// （被 create_workflow 与 eval_workflow_snippet 两个 display payload 复用，放这里会成环）。
 
 export const toolResultDisplayDiffHunkSchema = z
   .object({
@@ -250,26 +234,6 @@ export const mcpToolResultDisplayPayloadSchema = z
   })
   .strict();
 
-/**
- * ⚠ 这个字段集合是**冻结**的。既有 kind 上多出来的键不是「旧客户端少读一个字段」，而是整块 display
- * 校验不过：两个真实的 strict 解析点（packages/ui 的 create-workflow renderer safeParse，
- * 与 legacy v3 的按 kind 查表）会连带把整条工具结果丢掉。gate 专属的事实一律走**工具入参**
- * 通道（那一侧对所有版本都无 schema），可复用工作流的 saved 来源就是这么做的。
- */
-export const createWorkflowToolResultDisplayPayloadSchema = z
-  .object({
-    kind: z.literal("create_workflow"),
-    ok: z.boolean(),
-    errorCount: z.number().int().nonnegative(),
-    diagnostics: z
-      .array(createWorkflowToolResultDisplayDiagnosticSchema)
-      .max(CREATE_WORKFLOW_DISPLAY_MAX_DIAGNOSTICS),
-    // 工具输出边界已限长（见 create-workflow.ts 的图 schema），display 直接复用同一契约。
-    causalityGraph: CreateWorkflowCausalityGraphSchema.optional(),
-    truncated: z.boolean().optional(),
-  })
-  .strict();
-
 // contracts 使用 zod v3，App 使用 v4；与 shared/bash-output-display.ts 保持同一严格契约。
 const bashOutputDisplaySchema = z
   .object({
@@ -290,13 +254,6 @@ export const toolResultDisplayPayloadSchema = z.discriminatedUnion("kind", [
   cuaToolResultDisplayPayloadSchema,
   nodeReplImageToolResultDisplayPayloadSchema,
   mcpToolResultDisplayPayloadSchema,
-  createWorkflowToolResultDisplayPayloadSchema,
-  getWorkflowRunToolResultDisplayPayloadSchema,
-  listWorkflowRunsToolResultDisplayPayloadSchema,
-  evalWorkflowSnippetToolResultDisplayPayloadSchema,
-  savedWorkflowListToolResultDisplayPayloadSchema,
-  listModelsToolResultDisplayPayloadSchema,
-  resumeWorkflowRunToolResultDisplayPayloadSchema,
 ]);
 
 export type FileDiffToolResultDisplayPayload = z.infer<
@@ -322,9 +279,6 @@ export type NodeReplImageToolResultDisplayPayload = z.infer<
   typeof nodeReplImageToolResultDisplayPayloadSchema
 >;
 export type McpToolResultDisplayPayload = z.infer<typeof mcpToolResultDisplayPayloadSchema>;
-export type CreateWorkflowToolResultDisplayPayload = z.infer<
-  typeof createWorkflowToolResultDisplayPayloadSchema
->;
 export type NodeReplCuaAppDisplay = z.infer<typeof nodeReplCuaAppDisplaySchema>;
 
 export type ToolResultDisplayPayload = z.infer<typeof toolResultDisplayPayloadSchema>;
@@ -379,59 +333,7 @@ export function parseToolResultDisplayPayload(
  * 每个 stripper 只认自己那一个 kind，只改在场的键，别的 kind 原样进入解析。
  */
 function scrubPersistedDisplay(display: unknown): unknown {
-  return stripProviderStopFromGetWorkflowRunError(stripWithdrawnRefinedNames(display));
-}
-
-/**
- * 剥掉持久化 get_workflow_run 卡上的 `providerStop`。
- *
- * 早期构造侧曾把只属于模型通道的 `providerStop` 一并写进 display，而渲染端的
- * 镜像 schema 从来只认 `{code, message}`，那些帧一律被拒。构造侧已经改成只带
- * code / message，但历史持久化的 part 每次冷启动都会被重新读一遍，只能在这里剥。
- *
- * 只认 kind 为 get_workflow_run、且 error 是普通对象、且 `providerStop` 在场的载荷；不带
- * 该键的 error 与缺席的 error 原样返回，不凭空添一个 undefined。
- */
-function stripProviderStopFromGetWorkflowRunError(display: unknown): unknown {
-  if (!isPlainRecord(display) || display.kind !== "get_workflow_run") return display;
-  const error = display.error;
-  if (!isPlainRecord(error) || !("providerStop" in error)) return display;
-  const { providerStop: _dropped, ...rest } = error;
-  return { ...display, error: rest };
-}
-
-/**
- * 剥掉已撤回的模型精炼字段。
- *
- * 之前持久化的 create_workflow display 里，车道与阶段可能带 `refinedName`、
- * step 可能带 `refinedLabel`。这三个字段已从 schema 删除，而两个入口都是 `.strict()`
- * 解析：不先剥掉，旧会话的整个 display（连同图）会在这里被拒掉，而不只是丢一个名字。
- *
- * 只认 create_workflow 且带 causalityGraph 的载荷；别的 kind 原样进入解析。只改在场的
- * 键，不给缺席的 `phases` 之类凭空添一个 undefined。
- */
-function stripWithdrawnRefinedNames(display: unknown): unknown {
-  if (!isPlainRecord(display) || display.kind !== "create_workflow") return display;
-  const graph = display.causalityGraph;
-  if (!isPlainRecord(graph)) return display;
-  return {
-    ...display,
-    causalityGraph: {
-      ...graph,
-      ...("lanes" in graph ? { lanes: withoutKey(graph.lanes, "refinedName") } : {}),
-      ...("steps" in graph ? { steps: withoutKey(graph.steps, "refinedLabel") } : {}),
-      ...("phases" in graph ? { phases: withoutKey(graph.phases, "refinedName") } : {}),
-    },
-  };
-}
-
-function withoutKey(items: unknown, key: string): unknown {
-  if (!Array.isArray(items)) return items;
-  return items.map((item) => {
-    if (!isPlainRecord(item) || !(key in item)) return item;
-    const { [key]: _dropped, ...rest } = item;
-    return rest;
-  });
+  return display;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

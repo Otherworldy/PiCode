@@ -28,7 +28,6 @@
     "@zcode/bootstrap": "workspace:*",
     "@zcode/contracts": "workspace:*",
     "@zcode/core": "workspace:*",
-    "@zcode/dynamic-workflow-runtime": "workspace:*",
     "@zcode/i18n": "workspace:*",
     "@zcode/provider-node": "workspace:*",
     "@zcode/shared": "workspace:*",

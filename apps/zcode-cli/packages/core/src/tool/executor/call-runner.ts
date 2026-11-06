@@ -56,7 +56,6 @@ import {
   withAutomationCreateLimitTurnStop,
   withPlanExitDeniedTurnStop,
   withTerminalToolTurnStop,
-  withWorkflowRefineDeniedFollowUp,
 } from "./turn-control.js";
 import type { ToolExecuteOptions, ToolExecutorDeps } from "./types.js";
 import { validateInitialModelToolInput, validateInput, validateOutput } from "./validation.js";
@@ -191,7 +190,7 @@ async function executeToolCallImpl(
       const result = createErrorResult(canonicalToolCall, initialInputValidation);
       // schema 失败与 registry miss 同属 handler/ToolCallStarted 之前的早退；旧代码
       // 只把失败回灌模型，没有发布 ToolCallError，V4 tool row 因而在整个 turn 里停在
-      // inputStreaming（CreateWorkflow 卡持续显示「正在编写工作流」），模型重试后又叠一张。
+      // inputStreaming，模型重试后又叠一张。
       await emitToolCallError(deps, canonicalToolCall.id, traceContext, turnId, result.error);
       return result;
     }
@@ -220,12 +219,6 @@ async function executeToolCallImpl(
       const resolution = await entry.resolveInput(executionInput, {
         ...(workingDirectory === undefined ? {} : { workingDirectory }),
         runtimeTaskRegistry: deps.runtimeTaskRegistry,
-        ...(deps.dynamicWorkflowRunPort === undefined
-          ? {}
-          : { dynamicWorkflowRunPort: deps.dynamicWorkflowRunPort }),
-        ...(deps.modelCatalogPort === undefined ? {} : { modelCatalogPort: deps.modelCatalogPort }),
-        sessionId: deps.sessionId,
-        ...(deps.hasLoadedSkill === undefined ? {} : { hasLoadedSkill: deps.hasLoadedSkill }),
       });
       if (isToolHandlerFailure(resolution)) {
         // 与 validateInput 同一条生命周期出口：解析不出来是模型该立刻拿回去修的东西，
@@ -307,14 +300,11 @@ async function executeToolCallImpl(
     );
     if (!permissionResult.allowed) {
       const result = appendPreToolAdditionalContextsToErrorResult(
-        withWorkflowRefineDeniedFollowUp(
-          withPlanExitDeniedTurnStop(permissionResult.result, {
-            mode,
-            planEnabled: deps.sessionModePort?.isPlanEnabled?.(),
-            toolName: canonicalToolCall.name,
-          }),
-          { toolName: canonicalToolCall.name },
-        ),
+        withPlanExitDeniedTurnStop(permissionResult.result, {
+          mode,
+          planEnabled: deps.sessionModePort?.isPlanEnabled?.(),
+          toolName: canonicalToolCall.name,
+        }),
         preToolHookResult.additionalContexts,
       );
       if (result.error?.type === CoreErrorType.PermissionDenied) {
@@ -327,7 +317,7 @@ async function executeToolCallImpl(
 
     const startTime = Date.now();
     // 按**执行入参**解析一次副作用旗标（Bash 的只读命令判定就在这里落定），随 ToolCallStarted 发出：
-    // 事件先于 handler，所以订阅者（dynamic-workflow driver 的导入缓存关门）在第一个字节落盘前就知道。
+    // 事件先于 handler，所以订阅者在第一个字节落盘前就知道。
     await emitToolCallStarted(
       deps,
       canonicalToolCall,
@@ -403,17 +393,11 @@ async function executeToolCallImpl(
         skillPort: deps.skillPort,
         subagentPort: deps.subagentPort,
         coordinatorResponsePort: deps.coordinatorResponsePort,
-        workflowSubmitPort: deps.workflowSubmitPort,
-        workflowEscalatePort: deps.workflowEscalatePort,
         artifactStore: deps.artifactStore,
         automationPort: deps.automationPort,
         offPeakPort: deps.offPeakPort,
         sessionStore: deps.sessionStore,
         sessionModePort: deps.sessionModePort,
-        workflowPort: deps.workflowPort,
-        dynamicWorkflowRunPort: deps.dynamicWorkflowRunPort,
-        dynamicWorkflowSnippetPort: deps.dynamicWorkflowSnippetPort,
-        modelCatalogPort: deps.modelCatalogPort,
         runtimeTaskRegistry: deps.runtimeTaskRegistry,
         readFileState: deps.readFileState,
         recordReadFileStateMetadata: (metadata) => {
