@@ -1,5 +1,38 @@
 # Changelog
 
+## [3.21.0](https://github.com/Otherworldy/PiCode/compare/v3.20.0...v3.21.0) (2026-11-07)
+
+### Bug Fixes
+
+* 补回 dev 启动暴露的编译期遗漏 ([4af05af](https://github.com/Otherworldy/PiCode/commit/4af05af5b59e5dceb316bae51a6f73b3fa3b7896))
+  * synthetic-notice-metadata：workflow_launch 补回 user_prompt 映射。
+  * server.ts：删掉 checkPermission 的 workingDirectory 传参，
+  * build-desktop-agent-cli / mcp-apps-host-e2e：从构建清单移除
+  * node-repl-host：同步 dist-types source map 的行号偏移
+
+* 清理打包链路上对已删除 bundled-skills 的引用 ([6d909fb](https://github.com/Otherworldy/PiCode/commit/6d909fb8632ab65f064661bfd7067f20c3bfceb3))
+  * scripts/prepare-prebuilds.mjs：远端 mock-cdn 的 stage 步骤
+  * packages/desktop/scripts/prepare-agent-node-bundle.mjs：本机桌面包 stage
+  * apps/zcode-cli/packages/cli：SEA 构建的资产收集（删除
+
+* **model:** 生成中切换模型不生效 ([437f458](https://github.com/Otherworldy/PiCode/commit/437f4582ccb633c1bb84d400d4eb5373181f397e))
+  * 模型切换是 last-write-wins，却按投影 revision 做 CAS：turn 进行中
+  * handler 只调 setModel 就回 accepted：setModel 后校验 runtime Selection，
+  * pi-host 的同值判定与 getSessionModelSelection 读投影 config 而不是 Pi 事实，
+
+
+### Refactorings
+
+* 移除工作流功能 ([c753448](https://github.com/Otherworldy/PiCode/commit/c7534486b26dc207fbcdeeb3dcac722e72ea646d))
+  * 独立包 @zcode/dynamic-workflow 与 @zcode/dynamic-workflow-runtime
+  * 12 个工作流工具（CreateWorkflow / AmendWorkflow / SaveWorkflow /
+  * 3 条命令（resumeWorkflowRun / startSavedWorkflow / amendWorkflowRunSettings）
+  * v4 协议的 workflowRuns 状态键、workflowRun.* 增量与 7 条查询路由
+  * UI 侧板、时间线、因果图、saved-workflows 页、workflow-studio
+  * 自动化页的工作流标签页，现只剩定时任务 / 闲时任务
+  * CLI 的 --enable-workflow、/workflow、/expert、/dwf 与 __zcode-dwf-child
+  * 内置 dynamic-workflows 技能包
+
 ## [3.20.0](https://github.com/Otherworldy/PiCode/compare/v3.19.6...v3.20.0) (2026-11-03)
 
 ### Features
