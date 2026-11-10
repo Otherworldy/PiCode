@@ -3,11 +3,12 @@
 // 纯归约、无 IO；publisher（sessions-index-publisher）负责 seq 记账与帧构造，
 // 事件订阅与 flush 调度归 gateway（v4-gateway）。
 import { isBareSlashCommandTitle } from "@zcode/shared";
-import type {
-  ConversationSnapshot,
-  SessionSummary,
-  SessionsIndexDelta,
-  SessionsIndexSnapshot,
+import {
+  deriveSessionRunPhase,
+  type ConversationSnapshot,
+  type SessionSummary,
+  type SessionsIndexDelta,
+  type SessionsIndexSnapshot,
 } from "@zcode/shared/zcode-protocol-v4";
 
 /** 派生一条 summary 需要的、快照之外的会话级元信息（来自 session-store record / 事件时刻）。 */
@@ -117,7 +118,8 @@ function deriveSessionSummary(
     ...(extra.parentSessionId ? { parentSessionId: extra.parentSessionId } : {}),
     title: snapshot.meta.title,
     titleSource: snapshot.meta.titleSource,
-    phase: snapshot.control.phase,
+    // 空闲 compact 与后台子代理期间 control.phase 已是终态，列表要照常转圈。
+    phase: deriveSessionRunPhase(snapshot),
     // 忠实透传 control.sessionEnded（语义：成功轮收口后即 true，不代表已删除）。
     sessionEnded: snapshot.control.sessionEnded,
     hasBackgroundWork,

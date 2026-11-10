@@ -222,3 +222,72 @@ test("stored slash-command title falls through to the next real user message", (
   });
   assert.equal(title, "修登录");
 });
+
+function summaryOf(snapshot: Partial<ConversationSnapshot> & Record<string, unknown>) {
+  const projection = new SessionsIndexProjection("ws", "epoch");
+  const deltas = projection.upsertFromConversation(
+    {
+      sessionId: "s1",
+      meta: { title: "干活", titleSource: "generated" },
+      control: { phase: "completedSuccess", sessionEnded: true, activeWorks: [] },
+      rows: { window: [] },
+      backgroundWorks: [],
+      pendingInteractions: [],
+      goal: null,
+      ...snapshot,
+    } as unknown as ConversationSnapshot,
+    extra,
+  );
+  const [first] = deltas;
+  return first?.op === "session.upserted" ? first.session : undefined;
+}
+
+// 空闲时手动 compact 不新开一轮，control.phase 还是终态；列表要照常转圈。
+test("an idle compact is reported as running to the sidebar", () => {
+  assert.equal(
+    summaryOf({
+      control: {
+        phase: "completedSuccess",
+        sessionEnded: true,
+        activeWorks: [{ kind: "compact", startedAt: 1 }],
+      },
+    })?.phase,
+    "running",
+  );
+});
+
+test("a live subagent keeps the parent session running in the sidebar", () => {
+  assert.equal(
+    summaryOf({
+      backgroundWorks: [
+        {
+          workId: "child-1",
+          kind: "subagent",
+          title: "调研",
+          status: "running",
+          startedAt: 1,
+          anchorRowId: null,
+        },
+      ],
+    })?.phase,
+    "running",
+  );
+});
+
+test("a background bash does not turn the sidebar spinner on", () => {
+  assert.equal(
+    summaryOf({
+      backgroundWorks: [
+        {
+          workId: "bash-1",
+          kind: "bash",
+          title: "pnpm dev",
+          status: "running",
+          startedAt: 1,
+          anchorRowId: null,
+        },
+      ],
+    })?.phase,
+    "completedSuccess",
+  );
+});

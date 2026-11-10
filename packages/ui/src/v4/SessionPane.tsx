@@ -27,16 +27,17 @@ import type {
   ZCodeProvider,
   ZCodeTaskChangeSummary,
 } from "@zcode/shared";
-import type {
-  AttachmentRef,
-  CommandAck,
-  CommandEnvelope,
-  CommandType,
-  ConversationSnapshot,
-  ConversationRowTarget,
-  SessionErrorInfo,
-  SessionModelTransition,
-  V4ConversationFileChangesResult,
+import {
+  deriveSessionRunPhase,
+  type AttachmentRef,
+  type CommandAck,
+  type CommandEnvelope,
+  type CommandType,
+  type ConversationSnapshot,
+  type ConversationRowTarget,
+  type SessionErrorInfo,
+  type SessionModelTransition,
+  type V4ConversationFileChangesResult,
 } from "@zcode/shared/zcode-protocol-v4";
 import { logger } from "@/logger.js";
 import { PluginUiSessionProvider } from "@/plugin-ui/index.js";
@@ -517,13 +518,14 @@ export function SessionPane({
   const [lease, setLease] = useState<SessionLease | null>(null);
   const state = useConversationProjection(lease);
   const snapshot = state.snapshot;
+  const livePhase = snapshot?.sessionId === sessionId ? deriveSessionRunPhase(snapshot) : null;
   useEffect(() => {
     if (!sessionId) return;
     // 侧栏转圈读这份 phase。sessions-index 晚到时，打开中的行仍要转。
-    const phase = snapshot?.sessionId === sessionId ? snapshot.control.phase : null;
-    setSessionLivePhase(sessionId, phase);
+    // 空闲 compact 与活着的子代理不新开回合，这里与 sessions-index 用同一套折算。
+    setSessionLivePhase(sessionId, livePhase);
     return () => setSessionLivePhase(sessionId, null);
-  }, [sessionId, snapshot?.control.phase, snapshot?.sessionId]);
+  }, [sessionId, livePhase]);
   const shareDraft = useConversationShareSelectionStore((storeState) =>
     sessionId ? storeState.drafts[sessionId] : undefined,
   );

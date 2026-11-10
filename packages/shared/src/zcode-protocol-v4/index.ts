@@ -21,6 +21,7 @@ export * from "./wire-reassembly.js";
 export * from "./wire-assembler.js";
 export * from "./wire-fault.js";
 export * from "./sessions-index.js";
+export * from "./session-run-phase.js";
 export * from "./workspace-config.js";
 export * from "./command.js";
 export * from "./shared-context-ref.js";
