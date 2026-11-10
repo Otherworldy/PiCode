@@ -64,6 +64,9 @@ function isAssistantWorkRow(row: ConversationRow): row is AssistantWorkRow {
 }
 
 function staysOutsideWorkFold(row: AssistantWorkRow): boolean {
+  // 后台子代理的结算卡片是这一轮轮次唯一可见的结果；收进「已工作」默认折起后，
+  // 用户看到只剩一个标题，还必须再点一次才能读到报告——比直接铺一段正文更差。
+  if (row.kind === "assistantText" && row.subagentSettlement) return true;
   if (row.kind !== "toolCall") return false;
   const name = row.toolName
     .trim()

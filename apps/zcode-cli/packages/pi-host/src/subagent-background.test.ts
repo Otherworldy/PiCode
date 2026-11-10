@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { abortLiveSubagent, trackLiveSubagent, type LiveSubagentModel } from "./live-subagents.js";
+import {
+  abortLiveSubagent,
+  trackLiveSubagent,
+  type LiveSubagentModel,
+} from "./live-subagents.js";
 import {
   createBackgroundSubagents,
   formatSubagentSettled,
+  type BackgroundSubagentNotification,
   MAX_BACKGROUND_RESULT_CHARS,
   truncateSubagentText,
 } from "./subagent-background.js";
@@ -17,7 +22,11 @@ const profile: ZcodeSubagentProfile = {
 
 const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
 
-const model: LiveSubagentModel = { provider: "acme", model: "small", thought: "low" };
+const model: LiveSubagentModel = {
+  provider: "acme",
+  model: "small",
+  thought: "low",
+};
 
 function registerLive(id: string, aborted: string[]) {
   return trackLiveSubagent(id, {
@@ -69,44 +78,52 @@ test("background dispatch returns before the subagent settles", async () => {
 });
 
 test("a settled subagent notifies exactly once with its body", async () => {
-  const notes: string[] = [];
+  const notes: BackgroundSubagentNotification[] = [];
   const runner = createBackgroundSubagents({
     run: async (_profile, _task, onStarted) => {
       onStarted("child-1");
       return "the answer";
     },
-    notify: (text) => notes.push(text),
+    notify: (notification) => notes.push(notification),
   });
 
   runner.start(profile, "look");
   await flush();
 
   assert.equal(notes.length, 1);
-  assert.match(notes[0] ?? "", /scout/u);
-  assert.match(notes[0] ?? "", /已完成/u);
-  assert.match(notes[0] ?? "", /child-1/u);
-  assert.match(notes[0] ?? "", /the answer/u);
+  assert.match(notes[0]?.text ?? "", /scout/u);
+  assert.match(notes[0]?.text ?? "", /已完成/u);
+  assert.match(notes[0]?.text ?? "", /child-1/u);
+  assert.match(notes[0]?.text ?? "", /the answer/u);
+  // 卡片用的结构化事实：正文不含角色与状态头，两边共用同一份截断。
+  assert.deepEqual(notes[0]?.settlement, {
+    agent: "scout",
+    status: "success",
+    childSessionId: "child-1",
+    text: "the answer",
+  });
 });
 
 test("a thrown subagent failure notifies as failed", async () => {
-  const notes: string[] = [];
+  const notes: BackgroundSubagentNotification[] = [];
   const runner = createBackgroundSubagents({
     run: async () => {
       throw new Error("boom");
     },
-    notify: (text) => notes.push(text),
+    notify: (notification) => notes.push(notification),
   });
 
   runner.start(profile, "look");
   await flush();
 
   assert.equal(notes.length, 1);
-  assert.match(notes[0] ?? "", /失败/u);
-  assert.match(notes[0] ?? "", /boom/u);
+  assert.match(notes[0]?.text ?? "", /失败/u);
+  assert.match(notes[0]?.text ?? "", /boom/u);
+  assert.equal(notes[0]?.settlement.status, "failed");
 });
 
 test("a cancelled subagent notifies once as cancelled and never repeats", async () => {
-  const notes: string[] = [];
+  const notes: BackgroundSubagentNotification[] = [];
   const aborted: string[] = [];
   let finish!: (text: string) => void;
   const runner = createBackgroundSubagents({
@@ -114,7 +131,7 @@ test("a cancelled subagent notifies once as cancelled and never repeats", async 
       onStarted("child-2");
       return new Promise<string>((resolve) => (finish = resolve));
     },
-    notify: (text) => notes.push(text),
+    notify: (notification) => notes.push(notification),
   });
 
   const release = registerLive("child-2", aborted);
@@ -130,7 +147,8 @@ test("a cancelled subagent notifies once as cancelled and never repeats", async 
   await flush();
 
   assert.equal(notes.length, 1);
-  assert.match(notes[0] ?? "", /已取消/u);
+  assert.match(notes[0]?.text ?? "", /已取消/u);
+  assert.equal(notes[0]?.settlement.status, "cancelled");
   assert.equal(runner.running, 0);
   release();
 });
@@ -183,14 +201,14 @@ test("abortAll only stops the dispatches of its own runner", async () => {
 
 test("abortAll before onStarted cancels as soon as the child id lands", async () => {
   const aborted: string[] = [];
-  const notes: string[] = [];
+  const notes: BackgroundSubagentNotification[] = [];
   let fireStarted!: (id: string) => void;
   const runner = createBackgroundSubagents({
     run: (_profile, _task, onStarted) => {
       fireStarted = onStarted;
       return new Promise<string>(() => undefined);
     },
-    notify: (text) => notes.push(text),
+    notify: (notification) => notes.push(notification),
   });
 
   runner.start(profile, "look");
@@ -220,31 +238,33 @@ test("abortAll stops accepting new dispatches", () => {
 });
 
 test("a resolved failure string notifies as failed", async () => {
-  const notes: string[] = [];
+  const notes: BackgroundSubagentNotification[] = [];
   const runner = createBackgroundSubagents({
     // `runZcodeSubagent` 的工具缺失与模型缺失走这条返回，不抛异常。
     run: async () => "subagent failed: tools not available: web_search",
-    notify: (text) => notes.push(text),
+    notify: (notification) => notes.push(notification),
   });
 
   runner.start(profile, "look");
   await flush();
 
   assert.equal(notes.length, 1);
-  assert.match(notes[0] ?? "", /失败/u);
+  assert.match(notes[0]?.text ?? "", /失败/u);
+  assert.equal(notes[0]?.settlement.status, "failed");
 });
 
 test("a dispatch that never started omits the childSessionId line", async () => {
-  const notes: string[] = [];
+  const notes: BackgroundSubagentNotification[] = [];
   const runner = createBackgroundSubagents({
     run: async () => "subagent failed: no model",
-    notify: (text) => notes.push(text),
+    notify: (notification) => notes.push(notification),
   });
 
   runner.start(profile, "look");
   await flush();
 
-  assert.doesNotMatch(notes[0] ?? "", /childSessionId/u);
+  assert.doesNotMatch(notes[0]?.text ?? "", /childSessionId/u);
+  assert.equal(notes[0]?.settlement.childSessionId, undefined);
 });
 
 test("a settled dispatch frees its concurrency slot", async () => {

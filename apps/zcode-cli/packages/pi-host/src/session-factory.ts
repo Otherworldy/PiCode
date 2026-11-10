@@ -528,11 +528,18 @@ export function createSdkSessionFactory(
     const backgroundSubagents = createBackgroundSubagents({
       run: (profile, task, onStarted, launch) =>
         launchSubagent(profile, task, { onStarted, ...launch }),
-      notify: (text) => {
+      notify: (notification) => {
         // 投递失败不改子代理的结算，但不能静默：这是结果的唯一副本。
+        // `details` 带着拆开的结构化事实，宿主投影把它写到 assistantText 行的
+        // `subagentSettlement`，UI 才能把这条通知画成工具卡而不是一大段正文。
         void live
           ?.sendCustomMessage(
-            { customType: "picode_subagent_result", display: true, content: text },
+            {
+              customType: "picode_subagent_result",
+              display: true,
+              content: notification.text,
+              details: notification.settlement,
+            },
             { triggerTurn: true, deliverAs: "followUp" },
           )
           .catch((error: unknown) => {

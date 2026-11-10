@@ -10,9 +10,9 @@ export function isProcessEventText(text: string): boolean {
   return trimmed.startsWith("<process_event") && trimmed.includes("</process_event>");
 }
 
-/** 正文判定：assistantText 行减去 process 通知。 */
+/** 正文判定：assistantText 行减去 process 通知与子代理结算卡片。 */
 export function isAssistantBodyTextRow(row: ConversationRow): row is AssistantTextRow {
-  return row.kind === "assistantText" && !isProcessEventText(row.text);
+  return row.kind === "assistantText" && !isProcessEventText(row.text) && !row.subagentSettlement;
 }
 
 /** 通知里给读者看的那一行。整段 XML 不是给人读的。 */

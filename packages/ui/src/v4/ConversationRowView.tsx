@@ -63,6 +63,7 @@ import type {
   V4ConversationFileRewindPreviewResult,
 } from "@zcode/shared/zcode-protocol-v4";
 import { AssistantPreviewCards } from "@/AssistantPreviewCards.js";
+import { ConversationSubagentSettlementCard } from "@/v4/ConversationSubagentSettlementCard.js";
 import { AssistantCodeCommentCards } from "@/AssistantCodeCommentCards.js";
 import { useAssistantCodeCommentFeatureEnabled } from "@/AssistantCodeCommentFeatureProvider.js";
 import {
@@ -1959,6 +1960,14 @@ const AssistantTextRowView = memo(function AssistantTextRowView({
     onFork && row.entityId
       ? () => onFork({ rowId: row.rowId, entityId: row.entityId! })
       : undefined;
+  // 子代理结算通知是状态 + 报告，不是模型答复：按工具卡画，不排队正文的间距与动作行。
+  if (row.subagentSettlement) {
+    return (
+      <RowShell rowId={row.rowId} className="group/assistant-row">
+        <ConversationSubagentSettlementCard row={row} context={context} />
+      </RowShell>
+    );
+  }
   const processSummary = processEventSummary(row.text);
   if (processSummary) {
     // process 插件的状态通知折在工作块里，与「思考」「终端」同一个图标列：

@@ -11,6 +11,7 @@ import {
   type PendingInteraction,
   type QueueState,
   type StatePatch,
+  type SubagentSettlement,
   type ToolCallRow,
   type TurnUsage,
 } from "@zcode/shared/zcode-protocol-v4";
@@ -49,6 +50,28 @@ function isBackgroundToolResult(details: unknown): boolean {
     details !== null &&
     (details as { backgrounded?: unknown }).backgrounded === true
   );
+}
+
+/**
+ * 后台子代理结算的结构化事实。字段不全就当普通 custom message：
+ * 一张只剩角色名的卡片比一段完整正文更糟。
+ */
+function parseSubagentSettlement(details: unknown): SubagentSettlement | undefined {
+  if (typeof details !== "object" || details === null) return undefined;
+  const record = details as Record<string, unknown>;
+  const agent = typeof record.agent === "string" ? record.agent.trim() : "";
+  const status = record.status;
+  const text = typeof record.text === "string" ? record.text : "";
+  const childSessionId =
+    typeof record.childSessionId === "string" ? record.childSessionId.trim() : "";
+  if (!agent) return undefined;
+  if (status !== "success" && status !== "failed" && status !== "cancelled") return undefined;
+  return {
+    agent,
+    status,
+    text,
+    ...(childSessionId ? { childSessionId } : {}),
+  };
 }
 
 function clipError(text: string | undefined): string | undefined {
@@ -907,8 +930,11 @@ export class PiToV4Projector {
    * 工具 / 扩展注入的 custom message（`pi.sendMessage`）。后台子代理的结果走这条路。
    *
    * 口径必须与 `jsonl-history.ts` 的回放一致：那里把 `display !== false` 的 custom_message
-   * 合成一条 assistant 正文，这里就画成同一种行；否则同一条消息在实时与重载后长得不一样，
-   * 实时则完全看不到。`display: false`（如 ui-design 的提醒）只进上下文，不占画面。
+   * 带 customType 与 details 重放成同一事件，实时与重载后才会长得一样。
+   * `display: false`（如 ui-design 的提醒）只进上下文，不占画面。
+   *
+   * 后台子代理的 details 带 `{agent, status, childSessionId, text}`，落成
+   * `subagentSettlement` 让 UI 把这条通知画成工具卡；其它 custom message 照旧只是正文行。
    */
   private appendCustomMessageEvent(
     event: Extract<PiHostEvent, { type: "message_start" }>,
@@ -916,11 +942,13 @@ export class PiToV4Projector {
     if (event.message.role !== "custom" || event.message.display === false) return [];
     const text = messageText(event.message.content).trim();
     if (!text) return [];
+    const settlement = parseSubagentSettlement(event.message.details);
     const row: ConversationRow = {
       ...this.base(),
       kind: "assistantText",
       text,
       state: "complete",
+      ...(settlement ? { subagentSettlement: settlement } : {}),
     };
     if (event.message.id) row.entityId = event.message.id;
     return [{ op: "row.appended", row }];
@@ -1579,8 +1607,9 @@ export class PiToV4Projector {
 
   private syncActions(): ConversationDelta[] {
     const running = this.snapshot.control.phase === "running";
+    // 子代理结算卡片不是答复：它既不能当分叉/重试的锚点，也不应挂上动作行。
     const assistants = this.snapshot.rows.window.filter(
-      (row) => row.kind === "assistantText" && row.state === "complete",
+      (row) => row.kind === "assistantText" && row.state === "complete" && !row.subagentSettlement,
     );
     const latestAssistant = assistants.at(-1);
     const forkRowByTurn = new Map<string, number>();
@@ -1595,7 +1624,10 @@ export class PiToV4Projector {
       }
       if (row.kind !== "userInput" && row.kind !== "assistantText") continue;
       const forkable =
-        !running && row.kind === "assistantText" && forkRowByTurn.get(row.turnId) === row.rowId;
+        !running &&
+        row.kind === "assistantText" &&
+        !row.subagentSettlement &&
+        forkRowByTurn.get(row.turnId) === row.rowId;
       const nextActions =
         !running && row.kind === "userInput" && row.origin === "realUser"
           ? { canEdit: true as const, editDisposition: "rewind" as const }

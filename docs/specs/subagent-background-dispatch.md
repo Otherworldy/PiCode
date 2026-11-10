@@ -72,21 +72,29 @@ picode_subagent({
 
 ## 通知格式
 
-子代理 settle 后，runner 调 `notify(text)`，由 `session-factory` 落成一条 custom message：
+子代理 settle 后，runner 调 `notify(notification)`，由 `session-factory` 落成一条 custom message：
 
 ```ts
 live.sendCustomMessage(
-  { customType: "picode_subagent_result", display: true, content: text },
+  {
+    customType: "picode_subagent_result",
+    display: true,
+    content: notification.text,
+    details: notification.settlement,
+  },
   { triggerTurn: true, deliverAs: "followUp" },
 )
 ```
 
 - `display: true` 是必需的：`jsonl-history.ts` 只把 `display !== false` 的 `custom_message`
   回放成消息，否则历史里看不到结果。
+- `details` 是同一份事实的拆开版（`{agent, status, childSessionId?, text}`），
+  宿主投影写到 `assistantText` 行的 `subagentSettlement`，UI 据此画工具卡。
+  两边共用同一次截断，卡片正文与模型正文不会在边界上对不上；字段不全时回退普通正文行。
 - `deliverAs: "followUp"`：父会话 streaming 时排到当前 turn 之后，空闲时立即开新 turn。
 - 投递失败（会话已关闭）静默吞掉，不改变子代理结果。
 
-正文形状：
+正文形状（模型看到的那一份，完整保留）：
 
 ```
 子代理 "<agent>" 已完成（success | failed | cancelled）。
@@ -130,7 +138,7 @@ childSessionId: <id>
 6. `abortAll()` 发生在 `onStarted` 之前时，真实 id 一到就立刻 abort，仍只通知一次。
 7. 缺省参数仍走同步分支，返回值与今天一致。
 8. 超过 16 KB 的正文被截断并带标注。
-9. 子代理结果在实时对话里以一条正文行出现（不必重载）。
+9. 子代理结果在实时对话里以一张结算卡片出现（不必重载），摘要行可打开子会话详情。
 10. 后台派发的工具卡摘要行带“后台”角标；同步派发不带。
 
 ## 实时与回放口径
@@ -138,9 +146,23 @@ childSessionId: <id>
 结果在 live 与重载后必须长得一样：
 
 - **live**：`projector.ts` 把 `role: "custom"` 且 `display !== false` 的 `message_start`
-  画成 `assistantText` / `complete` 行（`appendCustomMessageEvent`）。
-- **回放**：`jsonl-history.ts` 把同一条 `custom_message` 合成 `role: "assistant"` 的消息。
+  画成 `assistantText` / `complete` 行（`appendCustomMessageEvent`）。带 `details` 时
+  还写 `subagentSettlement`。
+- **回放**：`jsonl-history.ts` 把同一条 `custom_message` 连 customType 与 details 一起重放，
+  走同一个 `appendCustomMessageEvent`；只回放正文的话，刷新后卡片就退化成一大段文本。
 - `display: false`（如 ui-design 的提醒）只进上下文，不占画面。
+
+## 结算卡片的画法
+
+`subagentSettlement` 在的 `assistantText` 行不是正文，UI 按工具卡的形状渲染：
+
+- 摘要行：子智能体图标 + 「子智能体」 + 角色名 + 状态词（复用目录的 status 文案）。
+- 角色名就是右侧子会话详情的入口（`TID_V4_SUBAGENT_OPEN_SIDE_PANE`）。点击必须
+  `preventDefault` + `stopPropagation`：摘要行本身是展开触发器，否则会边开侧栏边折叠。
+- 报告正文收在展开区，默认收起；没有正文时不给展开箭头。
+- 它不是模型答复：`isAssistantBodyTextRow` 把它排除，所以不切工作折叠、不当最终答复、
+  不挂复制/分叉/重试动作（`projector.syncActions` 同样排除它）。
+- 但它也不进「已工作」折叠：那是这一轮唯一可见的结果，收起来比铺一段正文更难读。
 
 ## 后台角标
 

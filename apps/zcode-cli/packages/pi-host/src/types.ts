@@ -64,6 +64,8 @@ export type PiHostEvent =
         customType?: string;
         /** `role: "custom"` 是否上屏；`false` 只进上下文。 */
         display?: boolean;
+        /** `role: "custom"` 的结构化事实（`pi.sendMessage` 的 details）。 */
+        details?: unknown;
       };
     }
   | {

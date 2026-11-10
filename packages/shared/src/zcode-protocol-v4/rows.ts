@@ -5,6 +5,7 @@ import { z } from "zod";
 import { executionOutputPreviewSchema } from "../execution-output-preview.js";
 import { timestampSchema } from "./core.js";
 import { conversationInputSourceSchema } from "./input-intent.js";
+import { subagentSettlementSchema } from "./subagentSettlement.js";
 
 // RowBase。rowId：session 内单调、永不复用、事件日志的确定性纯函数。
 const rowBaseFields = {
@@ -165,6 +166,8 @@ export const assistantTextRowSchema = z.object({
   state: z.enum(["streaming", "complete", "interrupted", "failed"]),
   model: z.string().optional(),
   feedback: z.enum(["like", "dislike"]).optional(),
+  /** 存在时这行是一条子代理结算通知，UI 用工具卡样式渲染，不当普通正文。 */
+  subagentSettlement: subagentSettlementSchema.optional(),
 });
 export type AssistantTextRow = z.infer<typeof assistantTextRowSchema>;
 

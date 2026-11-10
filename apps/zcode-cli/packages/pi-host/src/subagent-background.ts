@@ -4,6 +4,7 @@ import {
   type SubagentLaunchOverride,
   type ZcodeSubagentProfile,
 } from "./host-capabilities.js";
+import type { SubagentSettlement } from "@zcode/shared/zcode-protocol-v4";
 import { abortLiveSubagent } from "./live-subagents.js";
 
 /**
@@ -20,6 +21,14 @@ export type BackgroundSubagentSettled = {
   childSessionId: string;
   status: BackgroundSubagentStatus;
   text: string;
+};
+
+/** 一次结算通知：模型看到完整正文，UI 另拿一份结构化事实画卡片。 */
+export type BackgroundSubagentNotification = {
+  /** 模型可见的完整文本（角色与状态头 + 正文）。仍然是模型侧的唯一副本。 */
+  text: string;
+  /** 同一份事实的拆开版；正文经同一截断，两边不会不一致。 */
+  settlement: SubagentSettlement;
 };
 
 /** 与 `runZcodeSubagent` 的取消返回值同源；面板 Stop 不经过本模块，只能靠它归类。 */
@@ -63,6 +72,25 @@ export function formatSubagentSettled(event: BackgroundSubagentSettled): string 
   return lines.join("\n");
 }
 
+/**
+ * 通知正文与结构化事实从同一个 `event` 算出，且共用一次截断。
+ * 分开算会让卡片正文与模型看到的正文在截断边界上对不上。
+ */
+export function formatSubagentNotification(
+  event: BackgroundSubagentSettled,
+): BackgroundSubagentNotification {
+  const body = truncateSubagentText(event.text);
+  return {
+    text: formatSubagentSettled({ ...event, text: body }),
+    settlement: {
+      agent: event.agent,
+      status: event.status,
+      ...(event.childSessionId ? { childSessionId: event.childSessionId } : {}),
+      text: body,
+    },
+  };
+}
+
 /** 面板 Stop 不经过本模块，只能从返回值归类；顺序不能反，失败前缀里也含 cancelled 的可能。 */
 function statusOf(text: string): BackgroundSubagentStatus {
   if (text.trim() === CANCELLED_TEXT) return "cancelled";
@@ -79,7 +107,7 @@ export function createBackgroundSubagents(input: {
     launch?: SubagentLaunchOverride,
   ) => Promise<string>;
   /** 把结算结果投回父会话。投递失败由调用方吞掉，不影响子代理结果。 */
-  notify: (text: string) => void;
+  notify: (notification: BackgroundSubagentNotification) => void;
   maxConcurrent?: number;
 }) {
   const pending = new Map<string, PendingDispatch>();
@@ -96,7 +124,7 @@ export function createBackgroundSubagents(input: {
     // 会话已经结束：投递只会往正在关闭的会话里塞一条消息，甚至起一轮无人收听的请求。
     if (closed) return;
     input.notify(
-      formatSubagentSettled({
+      formatSubagentNotification({
         agent: entry.agent,
         childSessionId: entry.childSessionId ?? "",
         status,

@@ -156,9 +156,11 @@ export function resolveWorkActivity(
       : { activity: "thinking", preparing: false };
   }
   return {
-    // process 通知借 assistantText 行承载，但它不是在写答案。
+    // process 通知与子代理结算卡片借 assistantText 行承载，但它们不是在写答案。
     activity:
-      lastVisible.kind === "assistantText" && !isProcessEventText(lastVisible.text)
+      lastVisible.kind === "assistantText" &&
+      !isProcessEventText(lastVisible.text) &&
+      !lastVisible.subagentSettlement
         ? "answer"
         : "thinking",
     preparing: false,

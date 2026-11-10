@@ -213,6 +213,34 @@ test("replay hydrates user, assistant, tools into projector", () => {
   assert.equal(projector.getSnapshot().control.phase === "running", false);
 });
 
+test("a replayed subagent settlement keeps the same card facts as live", () => {
+  const entry = {
+    type: "custom_message",
+    id: "p1",
+    customType: "picode_subagent_result",
+    display: true,
+    content: "subagent scout done.",
+    details: { agent: "scout", status: "success", childSessionId: "child-1", text: "report body" },
+    timestamp: "2026-01-02T03:04:06.000Z",
+  };
+  const content = [
+    JSON.stringify({ type: "session", id: "s1", timestamp: "2026-01-02T03:04:05.000Z" }),
+    JSON.stringify(entry),
+  ].join("\n");
+  const projector = new PiToV4Projector("s1", "e1", { profile: "continuous" });
+  for (const event of readPiJsonl(content).events) projector.apply(event);
+  const row = projector
+    .getSnapshot()
+    .rows.window.find((item) => item.kind === "assistantText");
+  // 重载后仍要画成同一张卡片；只回放正文会让它在刷新后退化成一大段文本。
+  assert.deepEqual(row?.kind === "assistantText" ? row.subagentSettlement : undefined, {
+    agent: "scout",
+    status: "success",
+    childSessionId: "child-1",
+    text: "report body",
+  });
+});
+
 test("replay keeps later assistant text after tools and plugin messages", () => {
   const content = [
     '{"type":"session","id":"s1","timestamp":"2026-01-02T03:04:05.000Z","cwd":"C:\\work"}',

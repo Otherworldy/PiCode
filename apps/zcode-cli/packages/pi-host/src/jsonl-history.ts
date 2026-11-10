@@ -283,8 +283,21 @@ export function readPiJsonl(
       beginTurn(timestamp);
       noteAt(timestamp);
       const id = typeof entry.id === "string" ? entry.id : undefined;
-      events.push({ type: "message_start", ...(timestamp > 0 ? { at: timestamp } : {}), message: { role: "assistant", id } });
-      events.push({ type: "message_end", ...(timestamp > 0 ? { at: timestamp } : {}), message: { role: "assistant", content: text, id } });
+      const customType = typeof entry.customType === "string" ? entry.customType : undefined;
+      // 重放带着 customType 与 details 走同一分支（见 `projector.appendCustomMessageEvent`）：
+      // 后台子代理的结算通知靠 details 画卡片，只回放正文的话重载后就退化成一大段文本。
+      events.push({
+        type: "message_start",
+        ...(timestamp > 0 ? { at: timestamp } : {}),
+        message: {
+          role: "custom",
+          ...(id ? { id } : {}),
+          ...(customType ? { customType } : {}),
+          display: true,
+          content: text,
+          details: entry.details,
+        },
+      });
       continue;
     }
     if (type !== "message") continue;
