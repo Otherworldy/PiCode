@@ -27,6 +27,28 @@ function registerLive(id: string, aborted: string[]) {
   });
 }
 
+test("background dispatch forwards the per-run model and thought", () => {
+  const launches: Array<{ model?: unknown; thought?: string } | undefined> = [];
+  const runner = createBackgroundSubagents({
+    run: (_profile, _task, _onStarted, launch) => {
+      launches.push(launch);
+      return new Promise<string>(() => undefined);
+    },
+    notify: () => undefined,
+  });
+
+  runner.start(profile, "look", {
+    model: { providerId: "acme", modelId: "large" },
+    thought: "max",
+  });
+  runner.start(profile, "look");
+  // 没指定时不能给个空对象顶上去，否则调用方无法区分“没给”与“给了空”。
+  assert.deepEqual(launches, [
+    { model: { providerId: "acme", modelId: "large" }, thought: "max" },
+    undefined,
+  ]);
+});
+
 test("background dispatch returns before the subagent settles", async () => {
   let finish!: (text: string) => void;
   const runner = createBackgroundSubagents({

@@ -1,6 +1,7 @@
 import {
   SUBAGENT_CANCELLED_TEXT,
   SUBAGENT_FAILED_PREFIX,
+  type SubagentLaunchOverride,
   type ZcodeSubagentProfile,
 } from "./host-capabilities.js";
 import { abortLiveSubagent } from "./live-subagents.js";
@@ -75,6 +76,7 @@ export function createBackgroundSubagents(input: {
     profile: ZcodeSubagentProfile,
     task: string,
     onStarted: (childSessionId: string) => void,
+    launch?: SubagentLaunchOverride,
   ) => Promise<string>;
   /** 把结算结果投回父会话。投递失败由调用方吞掉，不影响子代理结果。 */
   notify: (text: string) => void;
@@ -109,7 +111,7 @@ export function createBackgroundSubagents(input: {
     },
 
     /** 返回给模型的工具结果文本：启动说明或拒绝原因，都不含子代理正文。 */
-    start(profile: ZcodeSubagentProfile, task: string): string {
+    start(profile: ZcodeSubagentProfile, task: string, launch?: SubagentLaunchOverride): string {
       const agent = profile.name.trim();
       if (closed) return "The session is closing; background dispatch is not available.";
       if (pending.size >= maxConcurrent) {
@@ -119,11 +121,16 @@ export function createBackgroundSubagents(input: {
       const entry: PendingDispatch = { agent, abortRequested: false, settled: false };
       pending.set(token, entry);
       void input
-        .run(profile, task, (childSessionId) => {
-          entry.childSessionId = childSessionId;
-          // abortAll 早于 onStarted：真实 id 一到就补上取消。
-          if (entry.abortRequested) abortLiveSubagent(childSessionId);
-        })
+        .run(
+          profile,
+          task,
+          (childSessionId) => {
+            entry.childSessionId = childSessionId;
+            // abortAll 早于 onStarted：真实 id 一到就补上取消。
+            if (entry.abortRequested) abortLiveSubagent(childSessionId);
+          },
+          launch,
+        )
         .then((text) => {
           const status = entry.abortRequested ? "cancelled" : statusOf(text);
           settle(token, entry, status, status === "cancelled" ? "" : text);

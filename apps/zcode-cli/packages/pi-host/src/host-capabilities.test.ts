@@ -5,11 +5,15 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   createCapabilityTools,
+  normalizeSubagentThought,
+  parseRequestedSubagentModel,
   piToolNamesForAgent,
   resolveZcodeSubagentLaunchModel,
   runZcodeSubagent,
   subagentDefaultModelFromSettings,
+  thoughtLevelsOf,
   toZcodeSubagentProfile,
+  type ZcodeSubagentModel,
 } from "./host-capabilities.js";
 
 test("agent tool names map onto Pi tools", () => {
@@ -117,6 +121,214 @@ test("run_in_background forwards the flag and drops the tool signal", async () =
   assert.equal(result.content[0]?.text, "started in background");
   // 后台派发不能绑父工具 signal：工具返回后它就没有意义了。
   assert.deepEqual(options, [{ background: true }]);
+});
+
+test("model and thought overrides reach the subagent runner", async () => {
+  const options: Array<{ model?: ZcodeSubagentModel; thought?: string }> = [];
+  const tools = await createCapabilityTools({
+    cwd: "D:/work",
+    ports: {
+      listSubagents: async () => [{ name: "worker", description: "edit", systemPrompt: "go" }],
+    },
+    runSubagent: async (_profile, _task, runOptions) => {
+      options.push(runOptions);
+      return "done";
+    },
+  });
+  await tools[0]?.execute(
+    "3",
+    { agent: "worker", task: "fix", model: "acme/large", thought: " HIGH " },
+    undefined,
+    undefined,
+    undefined as never,
+  );
+  await tools[0]?.execute(
+    "4",
+    { agent: "worker", task: "fix", model: "acme/large", thought: "high", run_in_background: true },
+    undefined,
+    undefined,
+    undefined as never,
+  );
+  // 前后台同一套规则：临时模型和档位都是原样带过去。
+  assert.deepEqual(options, [
+    { signal: undefined, model: { providerId: "acme", modelId: "large" }, thought: "high" },
+    { background: true, model: { providerId: "acme", modelId: "large" }, thought: "high" },
+  ]);
+});
+
+test("inline reasoning level in model is rejected before launch", async () => {
+  const tools = await createCapabilityTools({
+    cwd: "D:/work",
+    ports: {
+      listSubagents: async () => [{ name: "worker", description: "edit", systemPrompt: "go" }],
+    },
+    runSubagent: async () => {
+      throw new Error("must not launch");
+    },
+  });
+  const result = await tools[0]?.execute(
+    "5",
+    { agent: "worker", task: "fix", model: "acme/large:high" },
+    undefined,
+    undefined,
+    undefined as never,
+  );
+  assert.match(result.content[0]?.text ?? "", /pass the reasoning level in thought/u);
+  const bare = await tools[0]?.execute(
+    "6",
+    { agent: "worker", task: "fix", model: "large" },
+    undefined,
+    undefined,
+    undefined as never,
+  );
+  assert.match(bare.content[0]?.text ?? "", /must be provider\/model/u);
+  const unknownThought = await tools[0]?.execute(
+    "7",
+    { agent: "worker", task: "fix", thought: "turbo" },
+    undefined,
+    undefined,
+    undefined as never,
+  );
+  assert.match(unknownThought.content[0]?.text ?? "", /thought "turbo" is not supported/u);
+});
+
+test("requested model and thought win over the role model", () => {
+  const requested = { id: "requested" };
+  const resolved = resolveZcodeSubagentLaunchModel({
+    requestedModel: { providerId: "acme", modelId: "large" },
+    requestedThought: "max",
+    profileModel: { providerId: "acme", modelId: "small", thought: "low" },
+    defaultModel: "acme/flash:medium",
+    parentModel: { id: "parent" },
+    parentThinkingLevel: "high",
+    getModel: (providerId, modelId) =>
+      providerId === "acme" && modelId === "large" ? requested : undefined,
+  });
+  assert.equal(resolved.model, requested);
+  assert.equal(resolved.thinkingLevel, "max");
+});
+
+test("a requested model keeps the role's own thought level", () => {
+  const requested = { id: "requested" };
+  const resolved = resolveZcodeSubagentLaunchModel({
+    requestedModel: { providerId: "acme", modelId: "large" },
+    // 设置页给角色配的档位挂在被替掉的那个模型选择上，不能跟着一起消失。
+    profileModel: { providerId: "acme", modelId: "small", thought: "high" },
+    parentThinkingLevel: "off",
+    getModel: () => requested,
+  });
+  assert.equal(resolved.model, requested);
+  assert.equal(resolved.thinkingLevel, "high");
+});
+
+test("requested thought applies without a requested model", () => {
+  const pinned = { id: "pinned" };
+  const resolved = resolveZcodeSubagentLaunchModel({
+    requestedThought: "minimal",
+    profileModel: { providerId: "acme", modelId: "small", thought: "low" },
+    parentThinkingLevel: "high",
+    getModel: () => pinned,
+  });
+  assert.equal(resolved.model, pinned);
+  assert.equal(resolved.thinkingLevel, "minimal");
+});
+
+test("a requested thought the model does not support lists the supported levels", () => {
+  const requested = { id: "flash" };
+  const resolved = resolveZcodeSubagentLaunchModel({
+    requestedModel: { providerId: "lens", modelId: "deepseek-v4.1-flash" },
+    requestedThought: "minimal",
+    parentThinkingLevel: "high",
+    getModel: () => requested,
+    thoughtLevelsOf: () => ["low", "high", "max"],
+    describeModel: () => "lens/deepseek-v4.1-flash",
+  });
+  assert.equal(resolved.model, undefined);
+  assert.equal(
+    resolved.error,
+    'thought "minimal" is not supported by lens/deepseek-v4.1-flash; supported: low, high, max',
+  );
+});
+
+test("a requested thought the model supports passes through", () => {
+  const requested = { id: "flash" };
+  const resolved = resolveZcodeSubagentLaunchModel({
+    requestedModel: { providerId: "lens", modelId: "deepseek-v4.1-flash" },
+    requestedThought: "high",
+    getModel: () => requested,
+    thoughtLevelsOf: () => ["low", "high", "max"],
+    describeModel: () => "lens/deepseek-v4.1-flash",
+  });
+  assert.equal(resolved.model, requested);
+  assert.equal(resolved.thinkingLevel, "high");
+});
+
+test("a model that supports no level reports none", () => {
+  const resolved = resolveZcodeSubagentLaunchModel({
+    requestedModel: { providerId: "acme", modelId: "plain" },
+    requestedThought: "low",
+    getModel: () => ({ id: "plain" }),
+    thoughtLevelsOf: () => [],
+    describeModel: () => "acme/plain",
+  });
+  assert.equal(
+    resolved.error,
+    'thought "low" is not supported by acme/plain; supported: none',
+  );
+});
+
+test("the role's own thought is not validated against the model", () => {
+  // 角色档位由设置页产生，与模型目录同步；这里只管调用期覆盖，避免旧配置突然起不来。
+  const pinned = { id: "small" };
+  const resolved = resolveZcodeSubagentLaunchModel({
+    profileModel: { providerId: "acme", modelId: "small", thought: "minimal" },
+    getModel: () => pinned,
+    thoughtLevelsOf: () => ["low"],
+  });
+  assert.equal(resolved.model, pinned);
+  assert.equal(resolved.thinkingLevel, "minimal");
+});
+
+test("a requested model that is missing from the catalog fails instead of falling back", () => {
+  const resolved = resolveZcodeSubagentLaunchModel({
+    requestedModel: { providerId: "acme", modelId: "gone" },
+    profileModel: { providerId: "acme", modelId: "small" },
+    parentModel: { id: "parent" },
+    getModel: () => undefined,
+  });
+  assert.equal(resolved.model, undefined);
+  assert.equal(resolved.error, "model acme/gone is not available");
+});
+
+test("unknown requested thought is rejected instead of mapping to off", () => {
+  const resolved = resolveZcodeSubagentLaunchModel({
+    requestedThought: "turbo",
+    parentModel: { id: "parent" },
+    getModel: () => undefined,
+  });
+  assert.equal(resolved.error, 'thought "turbo" is not supported; expected off, minimal, low, medium, high, xhigh, max');
+});
+
+test("requested model parsing keeps the first slash as the provider boundary", () => {
+  assert.deepEqual(parseRequestedSubagentModel(" openrouter/openai/gpt-4o "), {
+    model: { providerId: "openrouter", modelId: "openai/gpt-4o" },
+  });
+  // ollama 的 tag 也是冒号，不能被当成内联档位。
+  assert.deepEqual(parseRequestedSubagentModel("ollama/llama3:70b"), {
+    model: { providerId: "ollama", modelId: "llama3:70b" },
+  });
+  assert.equal(parseRequestedSubagentModel("").error, "model is empty");
+  assert.equal(normalizeSubagentThought("  ").thought, undefined);
+  assert.equal(normalizeSubagentThought("XHigh").thought, "xhigh");
+});
+
+test("thoughtLevelsOf reads thinkingLevelMap and falls back to four levels", () => {
+  assert.deepEqual(thoughtLevelsOf({ thinkingLevelMap: { off: null, low: "low", max: "max" } }), [
+    "low",
+    "max",
+  ]);
+  // 没有任何声明时按 PiCode 目录同步的默认四档算，不是“全支持”。
+  assert.deepEqual(thoughtLevelsOf({}), ["off", "low", "medium", "high"]);
 });
 
 test("subagent without a model inherits the parent model and thinking level", () => {

@@ -38,8 +38,22 @@ picode_subagent({
   agent: string;                    // 必填，角色名
   task: string;                     // 必填，完整任务
   run_in_background?: boolean;      // 缺省 false，现有同步语义不变
+  model?: string;                   // 本次指定模型，provider/model；不带档位
+  thought?: string;                 // 本次指定档位；模型留在角色/继承
 })
 ```
+
+`model` 与 `thought` 都是这次调用的临时覆盖，优先级高于设置页里角色固定的模型与档位，
+前后台同一套规则。只给 `model` 时角色自己的档位继续用。格式不对（后缀正好是档位名、缺 provider）
+或档位不在 `off`/`minimal`/`low`/`medium`/`high`/`xhigh`/`max` 里时，`execute` 直接返回参数错误文本，
+不启动子会话；模型目录里没有这个模型时由 `runZcodeSubagent` 返回
+`subagent failed: model … is not available`，不回退到角色或父会话。档位在七档内、但目标模型的
+`thinkingLevelMap` 没声明它时同样失败，并返回该模型支持的档位：
+`subagent failed: thought "minimal" is not supported by lens/deepseek-v4.1-flash; supported: low, high, max`。
+前台这一次调用就能看到这句报错；后台已经先返回了启动说明，失败会随后作为一条 followUp
+通知到达（与 `tools not available` 同一条路径）。
+
+优先级完整链、以及档位在 `model` 缺失时如何回落，见 `pi-host/SPEC.md` 的子会话模型优先级段落。
 
 - `false` / 缺省：`execute` 等到子代理给出最终答案，返回该文本。与今天完全一致。
 - `true`：`execute` 在子代理**启动后**立即返回一段说明文本，不含子代理正文。

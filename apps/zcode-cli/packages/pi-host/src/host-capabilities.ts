@@ -37,6 +37,19 @@ export interface ZcodeSubagentProfile {
 
 const THOUGHT_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 
+/** thinkingLevelMap 值为 null 表示没这个档；没有任何声明时按 PiCode 的默认四档算。 */
+export function thoughtLevelsOf(model: {
+  thinkingLevelMap?: Record<string, unknown>;
+}): string[] {
+  const map = model.thinkingLevelMap;
+  if (map && typeof map === "object") {
+    return Object.entries(map)
+      .filter(([, value]) => value !== null)
+      .map(([key]) => key);
+  }
+  return ["off", "low", "medium", "high"];
+}
+
 /** 子代理被取消时的返回值。后台 runner 靠它归类，两处必须同源。 */
 export const SUBAGENT_CANCELLED_TEXT = "subagent cancelled";
 /** 子代理失败的返回值前缀。后台 runner 靠它归类，两处必须同源。 */
@@ -116,8 +129,53 @@ function thinkingOf(
   return explicit?.trim() ? mapThought(explicit) : fallback;
 }
 
-/** 角色覆盖 > subagents.defaultModel > 父会话。写了但目录没有就失败。 */
+export interface SubagentLaunchOverride {
+  /** 这次调用指定的模型；优先级高于角色覆盖。 */
+  model?: ZcodeSubagentModel;
+  /** 这次调用指定的思考档位；优先级最高。 */
+  thought?: string;
+}
+
+/** `thought` 只认这些档位；未知值报错，不静默折成 off。 */
+export function normalizeSubagentThought(value: string | undefined): {
+  thought?: string;
+  error?: string;
+} {
+  const thought = value?.trim().toLowerCase();
+  if (!thought) return {};
+  if (!THOUGHT_LEVELS.has(thought)) {
+    return {
+      error: `thought "${value?.trim()}" is not supported; expected ${[...THOUGHT_LEVELS].join(", ")}`,
+    };
+  }
+  return { thought };
+}
+
+/** 工具入参只写 provider/model；只有冒号后缀恰好是档位时才当成内联档位拒绝。 */
+export function parseRequestedSubagentModel(raw: string): {
+  model?: ZcodeSubagentModel;
+  error?: string;
+} {
+  const value = raw.trim();
+  if (!value) return { error: "model is empty" };
+  // 模型名自己也可能带冒号（ollama 的 `llama3:70b`），不能拿冒号一律当档位。
+  const colon = value.lastIndexOf(":");
+  if (colon > 0 && THOUGHT_LEVELS.has(value.slice(colon + 1).trim().toLowerCase())) {
+    return { error: `model "${value}" must be provider/model; pass the reasoning level in thought` };
+  }
+  const slash = value.indexOf("/");
+  if (slash <= 0 || slash === value.length - 1) {
+    return { error: `model "${value}" must be provider/model` };
+  }
+  return {
+    model: { providerId: value.slice(0, slash), modelId: value.slice(slash + 1) },
+  };
+}
+
+/** 这次调用 > 角色覆盖 > subagents.defaultModel > 父会话。写了但目录没有就失败。 */
 export function resolveZcodeSubagentLaunchModel<TModel>(input: {
+  requestedModel?: ZcodeSubagentModel;
+  requestedThought?: string;
   profileModel?: ZcodeSubagentModel;
   profileThought?: string;
   defaultModel?: string;
@@ -126,34 +184,52 @@ export function resolveZcodeSubagentLaunchModel<TModel>(input: {
   parentThinkingLevel?: CreateAgentSessionOptions["thinkingLevel"];
   getModel: (providerId: string, modelId: string) => TModel | null | undefined;
   listModels?: () => readonly { providerId: string; modelId: string }[];
+  /** 目标模型实际支持的档位。缺席时不校验（不是所有调用方都能拿到模型能力）。 */
+  thoughtLevelsOf?: (model: TModel) => readonly string[];
+  /** 失败信息里的模型名字。 */
+  describeModel?: (model: TModel) => string;
 }): {
   model?: TModel;
   thinkingLevel?: CreateAgentSessionOptions["thinkingLevel"];
   error?: string;
 } {
-  const pinned = input.profileModel;
+  // 档位校验放在共用入口：工具层与这里都走同一套，非法值不会悄悄变成 off。
+  const requested = normalizeSubagentThought(input.requestedThought);
+  if (requested.error) return { error: requested.error };
+  const requestedThought = requested.thought;
+  const pinned = input.requestedModel ?? input.profileModel;
+  let model: TModel | undefined;
+  let roleThought: string | undefined;
   if (pinned) {
-    const model = input.getModel(pinned.providerId, pinned.modelId);
-    if (!model) return { error: `model ${pinned.providerId}/${pinned.modelId} is not available` };
-    return {
-      model,
-      thinkingLevel: thinkingOf(pinned.thought || input.profileThought, input.parentThinkingLevel),
-    };
+    const found = input.getModel(pinned.providerId, pinned.modelId);
+    if (!found) {
+      return { error: `model ${pinned.providerId}/${pinned.modelId} is not available` };
+    }
+    model = found;
+    // 调用方只换模型时不能连角色档位一起丢掉：角色档位可以挂在被替掉的那个选择上。
+    roleThought = pinned.thought || input.profileModel?.thought || input.profileThought;
+  } else {
+    const fallback = resolveDefaultModel(input);
+    if (fallback.error) return { error: fallback.error };
+    model = fallback.model ?? input.parentModel;
+    roleThought = fallback.model
+      ? (fallback.thought ?? input.profileThought)
+      : input.profileThought;
   }
-  const fallback = resolveDefaultModel(input);
-  if (fallback.error) return { error: fallback.error };
-  if (fallback.model) {
-    return {
-      model: fallback.model,
-      thinkingLevel: thinkingOf(
-        fallback.thought || input.profileThought,
-        input.parentThinkingLevel,
-      ),
-    };
+  // 模型不支持这个档位时 Pi 会自己夹到相邻档，用户看不到原因；这里直接拒绝并列出可选项。
+  if (requestedThought && model) {
+    const supported = input.thoughtLevelsOf?.(model);
+    if (supported && !supported.includes(requestedThought)) {
+      const label = input.describeModel?.(model) ?? "the selected model";
+      const options = supported.length > 0 ? supported.join(", ") : "none";
+      return {
+        error: `thought "${requestedThought}" is not supported by ${label}; supported: ${options}`,
+      };
+    }
   }
   return {
-    model: input.parentModel,
-    thinkingLevel: thinkingOf(input.profileThought, input.parentThinkingLevel),
+    model,
+    thinkingLevel: thinkingOf(requestedThought || roleThought, input.parentThinkingLevel),
   };
 }
 
@@ -329,10 +405,16 @@ export async function runZcodeSubagent(input: {
   sshTools?: readonly CodingTool[];
   /** 子会话建好后的真实 id。后台派发靠它接管取消与通知。 */
   onStarted?: (childSessionId: string) => void;
+  /** 这次调用指定的模型，优先级高于角色覆盖。`model` 已经是父模型，不能复用。 */
+  requestedModel?: ZcodeSubagentModel;
+  /** 这次调用指定的思考档位。 */
+  requestedThought?: string;
 }): Promise<string> {
   await ensurePiSdk();
   if (input.signal?.aborted) return SUBAGENT_CANCELLED_TEXT;
   const launchModel = resolveZcodeSubagentLaunchModel({
+    requestedModel: input.requestedModel,
+    requestedThought: input.requestedThought,
     profileModel: input.profile.model,
     profileThought: input.profile.thought,
     defaultModel: await readSubagentDefaultModel(input.agentDir),
@@ -345,6 +427,8 @@ export async function runZcodeSubagent(input: {
         providerId: model.provider,
         modelId: model.id,
       })) ?? [],
+    thoughtLevelsOf: (model) => thoughtLevelsOf(model),
+    describeModel: (model) => `${model.provider}/${model.id}`,
   });
   if (launchModel.error) return `${SUBAGENT_FAILED_PREFIX} ${launchModel.error}`;
   const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } = piCoding();
@@ -561,7 +645,12 @@ export async function createCapabilityTools(input: {
   runSubagent: (
     profile: ZcodeSubagentProfile,
     task: string,
-    options: { signal?: AbortSignal; background?: boolean },
+    options: {
+      signal?: AbortSignal;
+      background?: boolean;
+      model?: ZcodeSubagentModel;
+      thought?: string;
+    },
   ) => Promise<string>;
 }) {
   const agents = await input.ports.listSubagents(input.cwd).catch(() => []);
@@ -569,7 +658,13 @@ export async function createCapabilityTools(input: {
     agents.length > 0
       ? agents.map((agent) => `- ${agent.name}: ${agent.description}`).join("\n")
       : "- scout\n- researcher\n- evidence-auditor\n- worker\n- reviewer\n- oracle\n- delegate";
-  const subagent = tool<{ agent?: string; task?: string; run_in_background?: boolean }>({
+  const subagent = tool<{
+    agent?: string;
+    task?: string;
+    run_in_background?: boolean;
+    model?: string;
+    thought?: string;
+  }>({
     name: "picode_subagent",
     label: "Subagent",
     description: `Run a PiCode subagent and return its final answer. With run_in_background it returns immediately instead and the result arrives later as a message; do not poll for it.\n${catalog}`,
@@ -577,6 +672,7 @@ export async function createCapabilityTools(input: {
     promptGuidelines: [
       "Use picode_subagent for work that should run in a separate agent. Pick a name from the tool description.",
       "Set run_in_background only when you have other work to do while it runs; never poll, the result arrives as a message.",
+      "Pass model or thought only when this particular task needs a different model or reasoning level than the agent's own; otherwise leave both out.",
     ],
     parameters: {
       type: "object",
@@ -588,6 +684,16 @@ export async function createCapabilityTools(input: {
           type: "boolean",
           description:
             "Return immediately and deliver the result as a message when the subagent settles. Default false.",
+        },
+        model: {
+          type: "string",
+          description:
+            "Model for this run only, as provider/model (e.g. anthropic/claude-sonnet-4). Overrides the agent's own model. Do not append a reasoning level here.",
+        },
+        thought: {
+          type: "string",
+          description:
+            "Reasoning level for this run only: off, minimal, low, medium, high, xhigh, max. Overrides the agent's own level.",
         },
       },
     },
@@ -604,12 +710,29 @@ export async function createCapabilityTools(input: {
         return textResult(`Unknown subagent "${agent}". Available: ${names}`);
       }
       if (!task) return textResult("Subagent task is empty");
+      // 不合法的模型/档位在这里就报，不把子会话起起来再失败。
+      const rawModel = typeof params.model === "string" ? params.model.trim() : "";
+      const requested = rawModel ? parseRequestedSubagentModel(rawModel) : {};
+      if (requested.error) return textResult(requested.error);
+      const requestedThought = normalizeSubagentThought(
+        typeof params.thought === "string" ? params.thought : undefined,
+      );
+      if (requestedThought.error) return textResult(requestedThought.error);
+      const launch = {
+        ...(requested.model ? { model: requested.model } : {}),
+        ...(requestedThought.thought ? { thought: requestedThought.thought } : {}),
+      };
       // ponytail: one child depth and no MCP inside the child. Add both when a subagent must call them.
       const background = params.run_in_background === true;
       // 后台派发不绑父工具 signal：工具返回后 signal 的语义到此为止，
       // 取消走面板 Stop（abortLiveSubagent）或父会话关闭（runner.abortAll）。
+      // 临时模型/档位前后台同一套规则，后台不降级成角色或继承。
       return textResult(
-        await input.runSubagent(profile, task, background ? { background: true } : { signal }),
+        await input.runSubagent(
+          profile,
+          task,
+          background ? { background: true, ...launch } : { signal, ...launch },
+        ),
         // projector 靠这个 details 给工具行标 backgrounded，UI 才知道结果稍后到。
         background ? { backgrounded: true } : {},
       );

@@ -22,7 +22,9 @@ import { lowestPiThought, piAssistantText } from "./pi-assistant-text.js";
 import {
   createCapabilityTools,
   runZcodeSubagent,
+  thoughtLevelsOf,
   type PiCapabilityPorts,
+  type ZcodeSubagentModel,
   type ZcodeSubagentProfile,
 } from "./host-capabilities.js";
 import { createBackgroundSubagents } from "./subagent-background.js";
@@ -159,17 +161,6 @@ export async function completePiPrompt(input: {
   }
   if (!message) throw new Error("模型响应缺少文本内容。");
   return piAssistantText(message);
-}
-
-// thinkingLevelMap 值为 null 表示没有该思考等级，目录列表同步时过滤掉。
-function thoughtLevelsOf(model: { thinkingLevelMap?: Record<string, unknown> }): string[] {
-  const map = model.thinkingLevelMap;
-  if (map && typeof map === "object") {
-    return Object.entries(map)
-      .filter(([, value]) => value !== null)
-      .map(([key]) => key);
-  }
-  return ["off", "low", "medium", "high"];
 }
 
 function catalogContextWindow(model: { contextWindow?: number }): number | undefined {
@@ -508,9 +499,15 @@ export function createSdkSessionFactory(
     const launchSubagent = (
       profile: ZcodeSubagentProfile,
       task: string,
-      extra: { signal?: AbortSignal; onStarted?: (childSessionId: string) => void },
-    ) =>
-      runZcodeSubagent({
+      extra: {
+        signal?: AbortSignal;
+        onStarted?: (childSessionId: string) => void;
+        model?: ZcodeSubagentModel;
+        thought?: string;
+      },
+    ) => {
+      const { model: requestedModel, thought: requestedThought, ...rest } = extra;
+      return runZcodeSubagent({
         cwd: input.cwd,
         // Pi 落盘文件名带自己的时间戳，和注册表预先拼的路径不是同一个。
         parentSessionFile: live?.sessionFile || input.sessionFile,
@@ -521,12 +518,16 @@ export function createSdkSessionFactory(
         model: live?.model,
         thinkingLevel: live?.thinkingLevel,
         agentDir,
-        ...extra,
+        ...rest,
+        ...(requestedModel ? { requestedModel } : {}),
+        ...(requestedThought ? { requestedThought } : {}),
         ...(sshTools.length > 0 ? { sshTools } : {}),
       });
+    };
     // 后台派发的所有者是这个会话：并发上限、取消与结果投递都只在它这里。
     const backgroundSubagents = createBackgroundSubagents({
-      run: (profile, task, onStarted) => launchSubagent(profile, task, { onStarted }),
+      run: (profile, task, onStarted, launch) =>
+        launchSubagent(profile, task, { onStarted, ...launch }),
       notify: (text) => {
         // 投递失败不改子代理的结算，但不能静默：这是结果的唯一副本。
         void live
@@ -545,10 +546,15 @@ export function createSdkSessionFactory(
           ports: options.capabilities,
           check: input.checkPermission,
           sessionId: input.sessionId,
-          runSubagent: (profile, task, runOptions) =>
-            runOptions.background
-              ? Promise.resolve(backgroundSubagents.start(profile, task))
-              : launchSubagent(profile, task, { signal: runOptions.signal }),
+          runSubagent: (profile, task, runOptions) => {
+            const launch = {
+              ...(runOptions.model ? { model: runOptions.model } : {}),
+              ...(runOptions.thought ? { thought: runOptions.thought } : {}),
+            };
+            return runOptions.background
+              ? Promise.resolve(backgroundSubagents.start(profile, task, launch))
+              : launchSubagent(profile, task, { signal: runOptions.signal, ...launch });
+          },
         })
       : [];
     const created = await piCoding().createAgentSession({
