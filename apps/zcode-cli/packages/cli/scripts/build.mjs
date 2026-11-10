@@ -25,6 +25,35 @@ export const resolveBuildExternal = () => ["playwright-core", "koffi"];
  */
 const bundleFilename = "globalThis.__zcodeBundleFilename";
 
+/**
+ * Pi 的 `VERSION` 是 `pkg.version || "0.0.0"`，`pkg` 来自沿 `import.meta.url` 向上找到的
+ * 第一个 package.json。打进 zcode.cjs 后起点变成 bundle 所在目录：桌面 dev 撞上无 version
+ * 的 packages/desktop/package.json，安装包与 SEA 一路到盘根都找不到，上游看到的
+ * User-Agent 全是 `pi/0.0.0`。这里把版本钉到构建时读到的内置 Pi 版本 —— banner 在 Agent
+ * 初始化前已写好 globalThis.__zcodeBundledPiVersion，config.js 顶层求值时就能取到。
+ *
+ * 不能用 esbuild 的 define：`VERSION` 在模块里已由 `export const` 声明，esbuild 对本地声明
+ * 不做 define 替换（实测无效）。命中不到原声明必须报错，不允许静默退回 0.0.0。
+ *
+ * 改写合并在 import.meta.url 插件里：esbuild 同一文件只有第一个返回内容的 onLoad 生效，
+ * 单独注册会把 config.js 的 fileURLToPath(import.meta.url) 还原掉，CJS 下 Module 初始化直接崩。
+ */
+const piVersionDeclaration = 'export const VERSION = pkg.version || "0.0.0";';
+const piVersionReplacement =
+  'export const VERSION = globalThis.__zcodeBundledPiVersion || pkg.version || "0.0.0";';
+const piConfigFilter = /[/\\]pi-coding-agent[/\\]dist[/\\]config\.js$/;
+
+function applyPiVersionRewrite(text, path) {
+  if (text.includes(piVersionReplacement)) return text;
+  if (!text.includes(piVersionDeclaration)) {
+    throw new Error(
+      `[zcode-pi-version] ${path} 中找不到 \`${piVersionDeclaration}\`；` +
+        "Pi 改版本声明后必须同步更新 scripts/build.mjs，否则上游会收到 pi/0.0.0。",
+    );
+  }
+  return text.replace(piVersionDeclaration, piVersionReplacement);
+}
+
 function createCjsImportMetaUrlPlugin() {
   const filter =
     /[/\\]node_modules[/\\](?:@earendil-works[/\\][^/\\]+|jiti)[/\\].*\.(cjs|mjs|js)$/;
@@ -32,8 +61,12 @@ function createCjsImportMetaUrlPlugin() {
     name: "zcode-cjs-import-meta-url",
     setup(builder) {
       builder.onLoad({ filter }, async (args) => {
-        const text = await readFile(args.path, "utf8");
-        if (!text.includes("import.meta")) return;
+        const raw = await readFile(args.path, "utf8");
+        const text = piConfigFilter.test(args.path)
+          ? applyPiVersionRewrite(raw, args.path)
+          : raw;
+        // 没改写也没有 import.meta 时交回 esbuild 默认装载，保持原有 loader 判定不变。
+        if (text === raw && !text.includes("import.meta")) return;
         return {
           contents: text
             .replaceAll("fileURLToPath(import.meta.url)", bundleFilename)
