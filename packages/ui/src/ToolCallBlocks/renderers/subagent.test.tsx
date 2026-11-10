@@ -46,11 +46,20 @@ describe("picode_subagent 摘要行", () => {
     );
 
     expect(html).toContain("子智能体");
-    expect(html).toContain("reviewer");
+    // 中文界面按词条显示，wire 名不直接出在摘要行上。
+    expect(html).toContain("复核");
     expect(html).toContain("lucide-bot");
     expect(html).not.toContain("工具调用");
     expect(html).not.toContain("Picode_subagent");
     expect(html).not.toContain("lucide-wrench");
+  });
+
+  it("用户自建角色名不翻译，原样显示", () => {
+    const html = render(
+      <SubagentToolCallBlock {...makeContext("picode_subagent", { agent: "my-helper" })} />,
+    );
+
+    expect(html).toContain("my-helper");
   });
 
   it("流式输入还没读到角色时只留「子智能体」", () => {
@@ -80,7 +89,7 @@ describe("picode_subagent 摘要行", () => {
 
     expect(html).toContain("后台");
     expect(html).toContain('data-subagent-background="true"');
-    expect(html).toContain("reviewer");
+    expect(html).toContain("复核");
   });
 
   it("同步派发不挂角标", () => {

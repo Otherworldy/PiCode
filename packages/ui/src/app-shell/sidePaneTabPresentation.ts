@@ -10,6 +10,8 @@ export interface SidePaneTabPresentationLabels {
   developerToolsTitle: string;
   terminalTitle: string;
   subagentTypeLabel: string;
+  /** 内置角色名 → 当前语言的展示名；词条缺失时回退 wire 名。 */
+  subagentName: (name: string) => string;
   subagentDirectoryTitle: string;
   selectionChatTitle: string;
   planTitle: string;
@@ -76,7 +78,9 @@ export function getSidePaneTabTypeLabel(
   if (tab.type === "plugin-ui") return tab.title;
   if (tab.type === "selection-side-chat") return labels.selectionChatTitle;
   if (tab.type === "subagent-session") {
-    return tab.subagentType.trim() || labels.subagentTypeLabel;
+    return tab.subagentType.trim()
+      ? labels.subagentName(tab.subagentType)
+      : labels.subagentTypeLabel;
   }
   if (tab.type === "subagent-directory") return labels.subagentDirectoryTitle;
   if (tab.type === "browser" || tab.type === "browser-use") return labels.browserTitle;

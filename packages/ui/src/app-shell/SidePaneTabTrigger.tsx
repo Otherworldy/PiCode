@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/context-menu.js";
 import { TabsTrigger } from "@/components/ui/tabs.js";
 import { FileDisplayIcon, resolveFileDisplayDescriptor } from "@/lib/fileDisplay.js";
+import { subagentDisplayTitle } from "@/lib/subagentDisplayName.js";
 import type { WorkspaceSidePaneTab } from "@/lib/workspaceSidePane.js";
 import { Button } from "@/components/ui/button.js";
 import { BrowserUseTabIcon } from "@/app-shell/BrowserUseTabIcon.js";
@@ -453,7 +454,12 @@ export function getSidePaneTabTitle(
     return `${formatMessage({ id: "sidePane.selectionChat" })} ${tab.ordinal}`;
   }
   if (tab.type === "subagent-session") {
-    return tab.title?.trim() || formatMessage({ id: "sidePane.subagent" });
+    // 子会话没有自己的标题时宿主拿角色名兜底，那串恰好是内置角色名，按语言展示。
+    // 存储的 title 不动：换语言后已有的 tab 也跟着变。
+    const title = tab.title?.trim();
+    return title
+      ? subagentDisplayTitle(title, formatMessage)
+      : formatMessage({ id: "sidePane.subagent" });
   }
 
   if (tab.type === "subagent-directory") {

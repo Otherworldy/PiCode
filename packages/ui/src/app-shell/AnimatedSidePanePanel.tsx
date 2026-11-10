@@ -65,6 +65,7 @@ import { useDeveloperToolsVisibility } from "@/hooks/useDeveloperToolsVisibility
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { logger } from "@/logger.js";
 import { formatTaskRelativeTime } from "@/lib/taskListItemPresentation.js";
+import { subagentDisplayName } from "@/lib/subagentDisplayName.js";
 import {
   shouldMountSidePaneContent,
   shouldMountBrowserTabGuest,
@@ -872,6 +873,7 @@ export function AnimatedSidePanePanel({
         }),
         terminalTitle: intl.formatMessage({ id: "terminal.title" }),
         subagentTypeLabel: intl.formatMessage({ id: "sidePane.subagent" }),
+        subagentName: (name) => subagentDisplayName(name, intl.formatMessage),
         subagentDirectoryTitle: intl.formatMessage({
           id: "sidePane.subagentDirectory",
         }),

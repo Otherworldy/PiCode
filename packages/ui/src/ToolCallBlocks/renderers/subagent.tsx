@@ -2,6 +2,7 @@ import { BotIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { resolveSubagentColorFromName } from "@/lib/subagentColors.js";
+import { subagentDisplayName } from "@/lib/subagentDisplayName.js";
 import { readSubagentBackgrounded, readSubagentDispatchRole } from "@/lib/subagentToolNames.js";
 import type { ToolCallBlockRenderContext } from "../shared.js";
 import { AgentNameText } from "./agent.js";
@@ -35,7 +36,13 @@ export function SubagentToolCallBlock(context: ToolCallBlockRenderContext) {
         ) : undefined
       }
       primaryTextOverride={
-        role ? <AgentNameText color={resolveSubagentColorFromName(role)} name={role} /> : null
+        role ? (
+          // 颜色按 wire 名算，名字按当前语言展示：换语言时同一个角色的颜色不跟着变。
+          <AgentNameText
+            color={resolveSubagentColorFromName(role)}
+            name={subagentDisplayName(role, intl.formatMessage)}
+          />
+        ) : null
       }
     />
   );

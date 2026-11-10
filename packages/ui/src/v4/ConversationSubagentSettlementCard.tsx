@@ -5,6 +5,7 @@ import { TID_V4_SUBAGENT_OPEN_SIDE_PANE, testId } from "@zcode/shared";
 import { MessageResponse } from "@/components/ai-elements/message.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { resolveSubagentColorFromName } from "@/lib/subagentColors.js";
+import { subagentDisplayName } from "@/lib/subagentDisplayName.js";
 import { AgentNameText } from "@/ToolCallBlocks/renderers/agent.js";
 import { ToolLayout } from "@/ToolCallBlocks/ToolLayout.js";
 import type { ConversationRowRenderContext } from "@/v4/conversationRowContext.js";
@@ -38,8 +39,13 @@ export function ConversationSubagentSettlementCard({
   const parentSessionId = context.sessionId ?? undefined;
   const canOpen = Boolean(childSessionId && parentSessionId && context.onOpenSubagentSession);
   const primaryText = useMemo(
-    () => <AgentNameText color={resolveSubagentColorFromName(agent)} name={agent} />,
-    [agent],
+    () => (
+      <AgentNameText
+        color={resolveSubagentColorFromName(agent)}
+        name={subagentDisplayName(agent, intl.formatMessage)}
+      />
+    ),
+    [agent, intl],
   );
   const openChildSession = useCallback(() => {
     if (!childSessionId || !parentSessionId) return;

@@ -5,6 +5,7 @@ import { MessageResponse } from "@/components/ai-elements/message.js";
 import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { resolveSubagentColorFromName, SUBAGENT_TEXT_COLOR_CLASS } from "@/lib/subagentColors.js";
+import { subagentDisplayName } from "@/lib/subagentDisplayName.js";
 import { useSubagentsContextStore } from "@/store/subagentsContextStore.js";
 import { useSubagentsStore } from "@/store/subagentsStore.js";
 import { ToolCallBlock } from "@/ToolCallBlocks.js";
@@ -247,7 +248,9 @@ export function AgentToolCallBlock(context: ToolCallBlockRenderContext) {
     ? (configuredAgentColor ?? getAgentColor(toolCall) ?? resolveSubagentColorFromName(agentName))
     : null;
   const agentNameDetail =
-    agentName && agentColor ? <AgentNameText color={agentColor} name={agentName} /> : null;
+    agentName && agentColor ? (
+      <AgentNameText color={agentColor} name={subagentDisplayName(agentName, intl.formatMessage)} />
+    ) : null;
   // Agent 父块的完成/进行中边界只由父 Agent tool 决定。
   // 子 tool 是展开区明细，不能反向续住父块运行态，否则父 Agent completed 后
   // 仍会显示渐变和子工具摘要，和协议里的父工具生命周期不一致。

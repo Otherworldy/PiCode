@@ -55,6 +55,7 @@ import { resolveModelThoughtOption } from "@/lib/modelThoughtOption.js";
 import { parseModelPickerValue } from "@/lib/zcodeSessionProjection.js";
 import { encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
 import { SUBAGENT_COLORS, SUBAGENT_COLOR_CLASS } from "@/lib/subagentColors.js";
+import { subagentDisplayName } from "@/lib/subagentDisplayName.js";
 import { SettingsResourceGroupHeader } from "@/settings/SettingsResourceGroupHeader.js";
 import { SettingsResourceHeaderActions } from "@/settings/SettingsResourceHeaderActions.js";
 import { SettingsBreadcrumbReporter } from "@/settings/SettingsHeaderBreadcrumb.js";
@@ -532,7 +533,7 @@ function AgentListRow({
   const displayName =
     agent.source === "plugin" && agent.name.includes(":")
       ? agent.name.slice(agent.name.indexOf(":") + 1)
-      : agent.name;
+      : subagentDisplayName(agent.name, intl.formatMessage);
 
   return (
     <div
@@ -1836,6 +1837,8 @@ export function SubagentsSection({ onManageModels }: SubagentsSectionProps) {
       if (!normalizedQuery) return true;
       const haystack = [
         agent.name,
+        // 中文界面下列表显示「实现」，用户会按看到的字搜；wire 名也留着。
+        subagentDisplayName(agent.name, intl.formatMessage),
         agent.description,
         agent.modelSelection
           ? `${agent.modelSelection.providerId}/${agent.modelSelection.modelId}`
@@ -1852,7 +1855,7 @@ export function SubagentsSection({ onManageModels }: SubagentsSectionProps) {
         .toLowerCase();
       return haystack.includes(normalizedQuery);
     });
-  }, [activeScope, agents, query, targetWorkspacePath]);
+  }, [activeScope, agents, intl, query, targetWorkspacePath]);
 
   const groupedAgents = useMemo(() => groupAgentsByScope(filteredAgents), [filteredAgents]);
   const pluginGroups = useMemo(

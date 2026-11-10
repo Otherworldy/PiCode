@@ -134,7 +134,7 @@ widget 文本的所有者是 Pi extension UI（`setWidget` → 快照 `extension
 
 ## 行为
 
-- 正在运行的一行只显示角色名（`subagentType`，例如 `scout`），不显示任务摘要，也不把工具名 `subagent` 当成角色。角色名为空时留空，不回退到摘要。角色名右侧同一行是这次子会话的用量 pill。
+- 正在运行的一行只显示角色名（`subagentType`，例如 `scout`，中文界面显示「侦察」），不显示任务摘要，也不把工具名 `subagent` 当成角色。角色名为空时留空，不回退到摘要。角色名右侧同一行是这次子会话的用量 pill。
 - 用量 pill 写「总量 + 单位」（`83K tok`，24px 高，和模型 chip 同高），点击在卡片内展开或收起明细；点它不打开子会话。没有 `usage` 时不画 pill。
 - 等待或阻塞且没有用量时，pill 的位置换成一个小胶囊状态文字（复用 `subagentDirectory.status.waiting` / `blocked`，虚线边框）。
 - 时长独占一行。模型、思考档和停止排在下一行，高度都是 24px。停止是同高的图标按钮，不带「停止」文字，也不和下拉框挤在同一行里换行。
@@ -157,6 +157,41 @@ widget 文本的所有者是 Pi extension UI（`setWidget` → 快照 `extension
 
 没有 usage 时 pill、构成条和明细都不渲染，卡片回到三行；明细里的缺失值写「—」。用量不写进 `EndedSubagent`：结束后的卡片不在这个面板里。
 
+# 子智能体角色名的展示语言
+
+## 行为
+
+内置角色的名字是英文 wire 名（`worker`、`evidence-auditor`），它同时是 `picode_subagent` 的 `agent` 入参、`.role` 文件内容、设置页 md 文件名和日志里的值。界面按当前语言展示它们，但不改这些名字本身。
+
+- 中文界面显示中文名（`worker` → 「实现」，`evidence-auditor` → 「证据核对」）；英文界面仍是 wire 名，所以英文界面的观感不变。
+- 只翻内置角色。用户自建角色、插件角色和宿主兜底值（`subagent`）原样展示：那些名字是人给的，不是词条。
+- 词条缺失时回退 wire 名，不把 i18n key 打到界面上（`formatMessage` 缺 key 会原样返回 id）。
+- 子会话没有自己的标题时，宿主拿角色名当标题，侧边面板 tab 因此会显示成 `worker`。只有整串等于内置角色名才翻译，任务标题是自由文本，不做词条匹配。
+- 翻的是展示：点角色名打开的侧栏、日志、`~/.pi` 里的文件和派发参数都还是 wire 名。换语言不会让历史会话指向另一个角色。
+
+## 所有者
+
+`packages/ui/src/lib/subagentDisplayName.ts` 是唯一所有者。词条放在两个 locale 文件的 `subagent.builtin.<name>` 下，不放进 `@zcode/shared` 的角色定义：那份定义同时供 CLI、宿主和系统提示词消费，翻译进去会污染提示词和派发名。
+
+改名字表时两边一起改：`BUILT_IN_SUBAGENT_NAMES`（`packages/shared/src/subagents-types.ts`）是角色清单，locale 文件是展示名。清单里有、词条缺失时按上文的回退规则显示 wire 名。
+
+## 展示点
+
+返回角色名的入口统一调 `subagentDisplayName`：
+
+- 子智能体工具卡摘要行（`ToolCallBlocks/renderers/subagent.tsx`）与 Agent 卡（`renderers/agent.tsx`）。
+- 状态面板运行列表（`v4/ConversationStatusPanel.tsx`）。
+- 后台结算卡（`v4/ConversationSubagentSettlementCard.tsx`）。
+- 子智能体目录（`app-shell/SubagentDirectorySidePane.tsx`）。
+- 侧边面板 tab 标题与类型标签（`app-shell/SidePaneTabTrigger.tsx`、`app-shell/sidePaneTabPresentation.ts`）。
+- 设置页内置角色列表（`settings/SubagentsSection.tsx`）。
+
+设置页的搜索仍按 wire 名匹配：用户可能搜 `worker`，也可能搜「实现」；两边的词都进 `haystack`。
+
+## 失败
+
+没有词条不是错误：回退 wire 名，不在界面报错。角色名为空时各展示点自行处理（摘要行只留「子智能体」，标题回退到通用文案）。
+
 # 子智能体工具卡的摘要行
 
 ## 行为
@@ -168,6 +203,7 @@ widget 文本的所有者是 Pi extension UI（`setWidget` → 快照 `extension
 ## 所有者
 
 - 工具名认领与角色名读取：`packages/ui/src/lib/subagentToolNames.ts`。工具名比对 `toolName` / `kind` / `title` / raw 里的 wire 名（抹掉大小写与分隔符）；角色名是工具输入里的 `agent`（流式半截 JSON 解析不出来就当没有）。
+- 角色名的展示名：`packages/ui/src/lib/subagentDisplayName.ts`。内置角色按 `subagent.builtin.<name>` 词条翻成当前语言（`worker` → 中文「实现」），词条缺失时回退 wire 名；用户自建与插件角色不翻，原样展示。
 - 卡面：`packages/ui/src/ToolCallBlocks/renderers/subagent.tsx`，由 `resolveRenderer.ts` 在 family 分流之前认领。
 - 文案：`chat.toolCall.kind.subagent`（中文「子智能体」/ 英文 `SubAgent`）。
 

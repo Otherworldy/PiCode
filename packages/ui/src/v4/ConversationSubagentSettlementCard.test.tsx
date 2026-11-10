@@ -51,7 +51,7 @@ describe("后台子代理结算卡片", () => {
     const html = render(<ConversationSubagentSettlementCard row={row()} context={context()} />);
 
     expect(html).toContain("子智能体");
-    expect(html).toContain("reviewer");
+    expect(html).toContain("复核");
     expect(html).toContain("已完成");
     expect(html).toContain("lucide-bot");
     // 正文是展开区内容，收起态不该把它铺在摘要行上。
@@ -80,7 +80,7 @@ describe("后台子代理结算卡片", () => {
     );
 
     expect(html).not.toContain("v4-subagent-open-side-pane");
-    expect(html).toContain("reviewer");
+    expect(html).toContain("复核");
   });
 
   it("失败态带失败状态词", () => {

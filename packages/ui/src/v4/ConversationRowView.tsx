@@ -1,6 +1,7 @@
 import { GenUiMessageResponse } from "@/gen-ui/index.js";
 /* oxlint-disable eslint(max-lines) -- v4 逐行 row 渲染分发集中收口（每种 row 一个 memo 叶子 + timelineMarker 分隔线），拆分会打散行类型对照。 */
 import { compactFailureText } from "@/v4/compactFailureText.js";
+import { subagentDisplayName } from "@/lib/subagentDisplayName.js";
 import { ConversationCappedScroll } from "@/v4/ConversationCappedScroll.js";
 import { processEventSummary } from "@/v4/processEventText.js";
 import {
@@ -2479,9 +2480,10 @@ const ToolCallRowView = memo(function ToolCallRowView({
 const SubagentRowView = memo(function SubagentRowView({ row }: { row: SubagentRow }) {
   // subagent 行已经和 Agent/Task 工具行配对渲染；裸行只保留异常兜底摘要，
   // 避免再生成一个“子会话”卡片或第二套下钻入口。
+  const { intl } = useZCodeIntl();
   const summary = (
     <>
-      {row.subagentType} · {row.status}
+      {subagentDisplayName(row.subagentType, intl.formatMessage)} · {row.status}
       {row.summaryText ? ` — ${row.summaryText}` : ""}
     </>
   );

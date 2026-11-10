@@ -96,6 +96,7 @@ import {
   type ConversationStatusPanelModel,
   type ConversationStatusPanelSessionPlanItem,
 } from "@/v4/conversationStatusPanelModel.js";
+import { subagentDisplayName } from "@/lib/subagentDisplayName.js";
 import {
   buildConversationGoalIterationSummaries,
   getConversationGoalElapsedSeconds,
@@ -999,8 +1000,11 @@ function RunningWorkCancelButton({
 }
 
 /** 运行列表只展示角色。空角色不回退到任务摘要。 */
-function runningSubagentListLabel(subagent: { subagentType: string }): string {
-  return subagent.subagentType.trim();
+function runningSubagentListLabel(
+  subagent: { subagentType: string },
+  formatMessage: (descriptor: { id: string }) => string,
+): string {
+  return subagentDisplayName(subagent.subagentType, formatMessage);
 }
 
 function buildRunningSubagentOpenRequest({
@@ -1301,7 +1305,7 @@ function SubagentStatusSection({
               <div className="pointer-events-none relative z-[1] flex min-w-0 flex-1 flex-col gap-1">
                 <div className="flex min-w-0 items-center gap-1">
                   <span className="min-w-0 flex-1 truncate text-ui-base leading-5 text-[var(--color-foreground)]">
-                    {runningSubagentListLabel(subagent)}
+                    {runningSubagentListLabel(subagent, intl.formatMessage)}
                   </span>
                   {subagent.usage ? (
                     <RunningSubagentUsagePill

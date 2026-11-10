@@ -54,7 +54,7 @@ describe("ConversationStatusPanel subagents", () => {
       />,
     );
 
-    expect(html).toContain("scout");
+    expect(html).toContain("侦察");
     expect(html).not.toContain("TypeScript monorepo");
     expect(html).toContain('data-subagent-directory-trigger="section-title"');
     expect(html).toContain('aria-label="打开子智能体目录"');
@@ -82,7 +82,7 @@ describe("ConversationStatusPanel subagents", () => {
       />,
     );
 
-    expect(html).toContain("researcher");
+    expect(html).toContain("调研");
     expect(html).not.toContain("data-subagent-directory-trigger");
     expect(html).toContain('data-status-section-trigger="agent"');
   });

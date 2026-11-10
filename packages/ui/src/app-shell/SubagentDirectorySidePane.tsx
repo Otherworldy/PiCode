@@ -17,6 +17,7 @@ import type {
   SubagentDirectorySidePaneTab,
 } from "@/lib/workspaceSidePane.js";
 import { formatTaskRelativeTime } from "@/lib/taskListItemPresentation.js";
+import { subagentDisplayTitle } from "@/lib/subagentDisplayName.js";
 import type { PaneWorkspaceScope } from "@/v4/paneLayoutStore.js";
 import type { SessionLease } from "@/v4/sessionDataLayer.js";
 import { V4PaneConversationProvider, useV4Conversation } from "@/v4/V4ConversationContext.js";
@@ -38,6 +39,7 @@ function buildSubagentDirectoryOpenRequest(
     parentSessionId: tab.parentSessionId,
     childSessionId: item.childSessionId,
     subagentType: item.subagentType,
+    // 标题存原样的 wire 名或任务标题，翻译只在渲染时做。
     title: item.title,
   };
 }
@@ -81,7 +83,9 @@ const DirectoryRow = memo(function DirectoryRow({
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-2">
-          <span className="truncate font-medium text-foreground">{item.title}</span>
+          <span className="truncate font-medium text-foreground">
+            {subagentDisplayTitle(item.title, intl.formatMessage)}
+          </span>
           <span className="shrink-0 text-ui-sm text-foreground-subtlest">
             {intl.formatMessage({ id: `subagentDirectory.status.${item.status}` })}
           </span>
