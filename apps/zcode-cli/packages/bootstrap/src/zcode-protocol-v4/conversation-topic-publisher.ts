@@ -44,7 +44,7 @@ import {
   type SessionUsageSeed,
   type StableForkCandidateResolution,
 } from "./product-projection.js";
-import { capRowForWire } from "./projection-rows.js";
+import { capRowForWire, wireTailRows } from "./projection-rows.js";
 import type { TopicFrameReservation } from "./topic-frame-reservation.js";
 
 interface LogEntry {
@@ -312,9 +312,8 @@ export class ConversationTopicPublisher {
       },
     };
     const limit = PROTOCOL_V4_LIMITS.snapshotTailWindowRows;
-    const window = (visibleRows.length <= limit ? visibleRows : visibleRows.slice(-limit)).map(
-      capRowForWire,
-    );
+    // 尾窗不裁最后一轮的 header：它是轮次权威边界，不是展示细节。
+    const window = wireTailRows(visibleRows, limit).map(capRowForWire);
     return {
       ...visibleSnapshot,
       rows: { ...visibleSnapshot.rows, window },
@@ -680,11 +679,9 @@ export class ConversationTopicPublisher {
             delta.op === "embeddedBrowser.open"
           )
             return false;
-          wireRowIds ??= new Set(
-            snapshot.rows.window
-              .slice(-PROTOCOL_V4_LIMITS.snapshotTailWindowRows)
-              .map((row) => row.rowId),
-          );
+          // 尾窗现在含最后一轮的行首锚点，增量可见性判定跟下发窗口同一套规则，
+          // 否则保底行上的 row.upserted 会被当成窗口外行丢掉。
+          wireRowIds ??= new Set(wireTailRows(snapshot.rows.window).map((row) => row.rowId));
           const rowId = delta.op === "row.upserted" ? delta.row.rowId : delta.rowId;
           return wireRowIds.has(rowId);
         });
@@ -697,8 +694,7 @@ export class ConversationTopicPublisher {
 
       const actionBytesUpperBound = finalEvent
         ? 0
-        : Math.min(snapshot.rows.window.length, PROTOCOL_V4_LIMITS.snapshotTailWindowRows) *
-          HYDRATION_ACTION_BYTES_PER_WIRE_ROW;
+        : wireTailRows(snapshot.rows.window).length * HYDRATION_ACTION_BYTES_PER_WIRE_ROW;
       const currentSequenceNumberBytes = hydrationSequenceNumberBytes(snapshot.seq);
       const sequenceNumberGrowth = Math.max(
         0,

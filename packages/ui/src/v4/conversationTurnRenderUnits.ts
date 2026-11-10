@@ -198,6 +198,7 @@ function isCompletionBlockingWorkRowRunning(row: AssistantWorkRow): boolean {
 function resolveTurnRunning(
   draft: DraftTurnRenderUnit,
   options: BuildConversationTurnRenderUnitsOptions,
+  isLastTurn: boolean,
 ): boolean {
   if (draft.header) {
     if (draft.header.executionKind === "controlOnly") return false;
@@ -214,6 +215,10 @@ function resolveTurnRunning(
     // 孤立的 inputStreaming/running tool row 重新推成 thinking，终态 control 必须优先。
     return false;
   }
+  // 尾窗可能把最后一轮的 turnHeader 留在外面（docs/specs/conversation-tail-window-turn-header.md）。
+  // 那一轮仍在跑时，窗口里剩下的往往全是已落定的工具行（backgrounded 子代理结果也不阻塞完成），
+  // 行级证据不足。会话相位是此时唯一可用的事实；只认最后一轮，不让中间轮凭相位点亮。
+  if (isLastTurn && options.sessionPhase === "running") return true;
   // 仅兼容缺少 turnHeader 的旧投影；background-only work 不阻塞主轮完成。
   return draft.assistantWorkRows.some(isCompletionBlockingWorkRowRunning);
 }
@@ -261,7 +266,7 @@ function materializeDraftUnit(
     : splitTurnTailRows(nonBrowserRows);
 
   const isLastTurn = index === total - 1;
-  const isRunning = resolveTurnRunning(draft, options);
+  const isRunning = resolveTurnRunning(draft, options, isLastTurn);
   const isInterrupted = draft.header
     ? draft.header.state === "completedInterrupted"
     : options.sessionPhase === "completedInterrupted";

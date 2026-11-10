@@ -185,6 +185,51 @@ export function buildToolOutput(result: ToolResultPayload, toolCallId: string): 
 }
 
 /**
+ * 尾窗保底：最后一轮的 `turnHeader` 与首条 `userInput` 必须随快照下发。
+ *
+ * `turnHeader` 落在每轮起点，长轮次必然被 60 行尾窗切掉；客户端判断「本轮在跑」读的
+ * 是它，裁掉之后运行行整行消失（见 docs/specs/conversation-tail-window-turn-header.md）。
+ * 这里只向上补到这两个锚点：更早的历史仍走 rows/range，窗口不做任意扩张。
+ */
+export function includeLeadingTurnAnchors(
+  rows: readonly ConversationRow[],
+  tail: readonly ConversationRow[],
+): ConversationRow[] {
+  if (tail.length === 0) return [...tail];
+  const turnId = tail[tail.length - 1]!.turnId;
+  let anchorIndex = -1;
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index]!;
+    if (row.turnId !== turnId) continue;
+    if (row.kind === "turnHeader") {
+      anchorIndex = index;
+      break;
+    }
+    // 还没遇到 header 就先遇到的 userInput 不是首条可见输入：
+    // 冷快照可能从轮中间截断，header 更靠前，继续往前找。
+  }
+  if (anchorIndex < 0) return [...tail];
+  const firstTailRowId = tail[0]!.rowId;
+  const anchors = rows
+    .slice(anchorIndex)
+    .filter(
+      (row) =>
+        row.rowId < firstTailRowId &&
+        row.turnId === turnId &&
+        (row.kind === "turnHeader" || row.kind === "userInput"),
+    );
+  return anchors.length === 0 ? [...tail] : [...anchors, ...tail];
+}
+
+/** 下发尾窗的唯一定义：最后 N 行，外加最后一轮的行首锚点。 */
+export function wireTailRows(
+  rows: readonly ConversationRow[],
+  limit: number = PROTOCOL_V4_LIMITS.snapshotTailWindowRows,
+): ConversationRow[] {
+  return includeLeadingTurnAnchors(rows, rows.length <= limit ? rows : rows.slice(-limit));
+}
+
+/**
  * 下发到页面的工具行只留 head+tail。宿主投影仍保留全文，文件回滚继续读原文。
  * 长会话尾窗里若带上完整工具输出，订阅帧会超过 16MB，会话打不开。
  */
