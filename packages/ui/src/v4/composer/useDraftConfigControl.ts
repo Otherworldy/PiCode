@@ -26,6 +26,7 @@ import { prepareWorkspaceWithZCodeSessionService } from "@/hooks/useWorkspacePre
 import { useZCodeSessionService } from "@/hooks/useZCodeSessionService.js";
 import { useSettings } from "@/hooks/useSettingService.js";
 import { parseModelPickerValue } from "@/lib/zcodeSessionProjection.js";
+import { deriveDraftModelFallback } from "@/v4/composer/draftModelRepair.js";
 import { initializeNewTaskDraft } from "@/v4/composer/newTaskDraft.js";
 import {
   clearV4ComposerDraft,
@@ -140,6 +141,8 @@ export function useDraftConfigControl(params: {
     [scopeKey],
   );
   const [storedState, setStoredState] = useState(loadedScope);
+  // 派生回退值的去重键（scope + 值），只为日志去重，不参与任何决策。
+  const lastDerivedFallbackRef = useRef<string | null>(null);
   let currentState = storedState.scopeKey === scopeKey ? storedState : loadedScope;
   let draft = currentState.draft;
   const modelSelectionRead = useModelSelectionServiceView(
@@ -168,13 +171,35 @@ export function useDraftConfigControl(params: {
             modelSelection: sessionConfig?.modelSelection,
           };
   }
-  // Pi 目录晚于 Composer 首次落 mode 时，补默认模型，否则触发器一直停在「选择模型」。
-  if (
-    initializeAsNewTask &&
-    modelSelectionView?.preferredSelection &&
-    !draft.modelSelection
-  ) {
-    draft = { ...draft, modelSelection: modelSelectionView.preferredSelection };
+  // 记住的模型（会话草稿 / 会话真值 / 项目上次提交）可能在目录里改名或下线。Host 解析不到
+  // 时只派生一个回退值供展示与提交，**不回写草稿**：草稿继续持有用户记住的原意，目录恢复
+  // （或切换到 Pi 目录）后它自动重新生效。规则见 docs/specs/composer-model-selection-restore.md。
+  const derivedFallback = deriveDraftModelFallback({
+    view: modelSelectionView,
+    current: draft.modelSelection,
+    draftInitialized: draft.mode !== undefined,
+    awaitingFirstImport: draft.initializeFromNewTask === true,
+    isNewTask: sessionId === null,
+    hasSessionConfig: sessionConfig != null,
+    sessionConfigSelection: sessionConfig?.modelSelection,
+  });
+  const derivedFallbackKey = derivedFallback
+    ? `${scopeKey}|${derivedFallback.providerId}/${derivedFallback.modelId}`
+    : null;
+  // 派生值会跨重渲染持续存在，只在它首次出现时记一条，避免流式输出期间刷日志。
+  if (derivedFallbackKey !== lastDerivedFallbackRef.current) {
+    lastDerivedFallbackRef.current = derivedFallbackKey;
+    if (derivedFallback) {
+      logger.info("[v4-draft-config] 记住的模型在目录中解析不到，暂用回退值", {
+        fromProviderId: draft.modelSelection?.providerId ?? null,
+        fromModelId: draft.modelSelection?.modelId ?? null,
+        scope: initializeAsNewTask ? "new-task" : "session",
+        toProviderId: derivedFallback.providerId,
+        toModelId: derivedFallback.modelId,
+        workspaceIdentity: workspaceIdentity ?? null,
+        workspacePath,
+      });
+    }
   }
   if (sessionConfig) {
     draft = applyComposerPlanTransition(draft, sessionConfig.planTransition);
@@ -187,7 +212,7 @@ export function useDraftConfigControl(params: {
   // 原因：按 revision 清草稿会把短暂不可用永久写成空选择。这里只派生当前结果，
   // 正文/模式自动保存继续保存 draft 中的原意图；读取未就绪时保留展示，提交由 View 门禁阻断。
   const effectiveSelection = modelSelectionView
-    ? (modelSelectionView.effectiveSelection ?? undefined)
+    ? (modelSelectionView.effectiveSelection ?? derivedFallback ?? undefined)
     : draft.modelSelection;
   const draftConfig = useMemo<Partial<SessionConfigState> & { uiDesignEnabled?: boolean }>(
     () => ({
