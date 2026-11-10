@@ -34,6 +34,7 @@ export {
   listPiSubagentChildren,
   piSubagentRevision,
   sessionIdFromPiJsonlName,
+  sortPiSubagentChildrenNewestFirst,
   type PiSubagentChild,
 } from "./pi-subagent-index.js";
 export { hasLiveSubagent, liveSubagentPanelStatus, selectLiveSubagents } from "./live-subagents.js";

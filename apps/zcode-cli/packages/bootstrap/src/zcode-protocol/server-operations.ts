@@ -7,6 +7,7 @@ import {
   piSubagentRevision,
   queryPiSessionUsage,
   selectLiveSubagents,
+  sortPiSubagentChildrenNewestFirst,
   workspaceKey,
   type PiSubagentChild,
 } from "@zcode/pi-host";
@@ -1701,7 +1702,9 @@ function pagePiSubagentChildren(
         (child) =>
           child.status === "running" || child.status === "waiting" || child.status === "blocked",
       );
-  const ended = children.filter((child) => !running.includes(child));
+  const ended = sortPiSubagentChildrenNewestFirst(
+    children.filter((child) => !running.includes(child)),
+  );
   const offset = cursor && /^\d+$/u.test(cursor) ? Number(cursor) : 0;
   const items = ended.slice(offset, offset + limit);
   const next = offset + limit < ended.length ? String(offset + limit) : undefined;

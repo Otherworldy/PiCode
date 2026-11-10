@@ -146,6 +146,22 @@ function roleFromSources(...values: readonly string[]): string {
   return "subagent";
 }
 
+/**
+ * 已结束的子代理倒序：目录里最新完成的最靠上。子会话文件是按时间戳命名的，
+ * 直接用目录顺序会变成旧→新；分页游标又按 offset 切，所以顺序必须在这里定。
+ */
+export function sortPiSubagentChildrenNewestFirst(
+  children: readonly PiSubagentChild[],
+): PiSubagentChild[] {
+  const settledAt = (child: PiSubagentChild) => child.endedAt ?? child.startedAt ?? 0;
+  // 同一毫秒内完成的子会话按 id 倒序兑底，与 legacy 投影的排序口径一致，避免两次请求顺序互换。
+  return [...children].sort(
+    (left, right) =>
+      settledAt(right) - settledAt(left) ||
+      right.childSessionId.localeCompare(left.childSessionId),
+  );
+}
+
 export function piSubagentRevision(children: readonly PiSubagentChild[]): number {
   if (children.length === 0) return 0;
   let revision = 1;

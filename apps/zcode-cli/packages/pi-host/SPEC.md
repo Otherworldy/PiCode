@@ -147,6 +147,8 @@ UI 设计模式是输入框模式菜单里的勾选，不是斜杠命令。点�
 
 `subagents.running` 只收录本进程活表里还在的子会话。扫 jsonl 时同样以这张表为准：表里还有的子会话保持 `running`（`waiting` / `blocked` 保留），并去掉 `endedAt`。表里没有的，即使文件没有助手正文、最后一条仍是 `toolUse`、或已经写下 `aborted`，也不再标成正在运行。
 
+已结束的子代理按结束时间倒序：最新结束的最先列出。顺序在服务端定（`sortPiSubagentChildrenNewestFirst`），因为分页游标是按 offset 切的，把排序放在客户端会让「再显示」混页。`endedAt` 缺席时用 `startedAt` 兜底；同一毫秒完成时按 `childSessionId` 倒序，两次请求的顺序才不会互换。两者都没有的排到最后。
+
 仍在跑的子会话打开侧栏时，jsonl 重放不把最后一轮收成完成。轮次保持 `running`，工时用消息时间戳，不用重放当时的墙钟。侧栏因此显示「工作中」并展开工具，而不是「已工作 1 秒」。文件在子会话结束前按秒重读；结束后再按完整轮次收口。已结束的历史文件仍按消息时间戳计工时。
 
 正在跑的 `picode_subagent` 只活在当前进程里。父会话把这些活会话写进 `backgroundWorks`（`kind: subagent`，`workId` 和 `childSessionId` 都是子会话 id，`cancellable: true`），状态面板因此出现停止按钮。`cancelBackgroundWork` 只 abort 这个子会话，不停父会话。按下停止后这一行立刻离开「正在运行」，即使 jsonl 还没写成终态。

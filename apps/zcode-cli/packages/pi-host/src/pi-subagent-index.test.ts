@@ -4,7 +4,42 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { trackLiveSubagent } from "./live-subagents.js";
-import { listPiSubagentChildren, subagentRoleFromSessionText } from "./pi-subagent-index.js";
+import {
+  listPiSubagentChildren,
+  sortPiSubagentChildrenNewestFirst,
+  subagentRoleFromSessionText,
+} from "./pi-subagent-index.js";
+
+test("ended subagents list newest first", () => {
+  const children = [
+    { childSessionId: "a", subagentType: "worker", title: "a", status: "success", endedAt: 100 },
+    { childSessionId: "c", subagentType: "worker", title: "c", status: "success", endedAt: 300 },
+    { childSessionId: "b", subagentType: "worker", title: "b", status: "failed", endedAt: 200 },
+  ] as const;
+  assert.deepEqual(
+    sortPiSubagentChildrenNewestFirst(children).map((child) => child.childSessionId),
+    ["c", "b", "a"],
+  );
+  // 没有 endedAt 的用 startedAt 兜底，两者都没有就排到最后。
+  const mixed = [
+    { childSessionId: "old", subagentType: "worker", title: "old", status: "success", startedAt: 10 },
+    { childSessionId: "unknown", subagentType: "worker", title: "u", status: "success" },
+    { childSessionId: "new", subagentType: "worker", title: "new", status: "success", endedAt: 50 },
+  ] as const;
+  assert.deepEqual(
+    sortPiSubagentChildrenNewestFirst(mixed).map((child) => child.childSessionId),
+    ["new", "old", "unknown"],
+  );
+  // 同一毫秒完成时按 id 倒序兜底，两次请求的顺序才不会互换。
+  const tied = [
+    { childSessionId: "aa", subagentType: "worker", title: "aa", status: "success", endedAt: 7 },
+    { childSessionId: "zz", subagentType: "worker", title: "zz", status: "success", endedAt: 7 },
+  ] as const;
+  assert.deepEqual(
+    sortPiSubagentChildrenNewestFirst(tied).map((child) => child.childSessionId),
+    ["zz", "aa"],
+  );
+});
 
 test("subagent role comes from the system prompt, not the tool name", () => {
   assert.equal(
