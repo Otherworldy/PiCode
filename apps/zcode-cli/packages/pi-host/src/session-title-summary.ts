@@ -223,6 +223,7 @@ export type TitleSummaryModel = { providerId: string; modelId: string };
 /**
  * 依次请求候选模型，清洗后为空就换下一个。
  * 返回空字符串表示所有候选都没给出可用标题。
+ * 候选失败必须留日志：静默改用对话模型会让「总结模型」设置看起来从未生效。
  */
 export async function requestSummarizedTitle(input: {
   prompt: string;
@@ -253,11 +254,24 @@ export async function requestSummarizedTitle(input: {
     } catch (error) {
       // 指定总结模型失败时还有对话模型可试，不要让这一次失败结束掉标题生成。
       lastError = error;
+      console.warn(
+        "session title summary candidate failed",
+        key,
+        error instanceof Error ? error.message : String(error),
+      );
       continue;
     }
     answered = true;
     const title = raw ? cleanSummarizedTitle(raw) : "";
-    if (title) return title;
+    if (title) {
+      console.info("session title summarized by", key);
+      return title;
+    }
+    console.warn(
+      "session title summary candidate returned no usable title",
+      key,
+      raw === null ? "model missing from runtime or empty prompt" : "unusable reply",
+    );
   }
   // 模型答过但内容不能用，就当没有标题；只有全部候选都失败才把错误抛出去。
   if (!answered && lastError) throw lastError;

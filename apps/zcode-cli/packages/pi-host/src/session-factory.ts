@@ -112,11 +112,14 @@ function getProductionModelRuntime(): Promise<ModelRuntime> {
 
 /**
  * One-shot Pi completion for auxiliary calls (git commit message).
- * Returns null when the catalog has no such model so the caller can fall back.
+ * Returns null when the catalog has no such model so the caller can fall back;
+ * pass `missingModel: "throw"` when the caller must tell "no such model" apart
+ * from "the model answered nothing" (session title summary).
  */
 export async function completePiPrompt(input: {
   providerId: string;
   modelId: string;
+  missingModel?: "null" | "throw";
   prompt: string;
   system?: string;
   signal?: AbortSignal;
@@ -128,7 +131,14 @@ export async function completePiPrompt(input: {
   if (!providerId || !modelId || !prompt) return null;
   const runtime = await getProductionModelRuntime();
   const model = runtime.getModel(providerId, modelId);
-  if (!model) return null;
+  if (!model) {
+    // 模型不在运行时里（未配置、远端未下发）与"答了空内容"是两种事实，
+    // 混成 null 会让上层把不可用模型当成已尝试并静默换成别的模型。
+    if (input.missingModel === "throw") {
+      throw new Error(`model not available in runtime: ${providerId}/${modelId}`);
+    }
+    return null;
+  }
   const thought = lowestPiThought(model);
   let message: AssistantMessage | undefined;
   for await (const event of runtime.streamSimple(

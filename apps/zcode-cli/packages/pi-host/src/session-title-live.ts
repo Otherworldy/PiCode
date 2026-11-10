@@ -43,7 +43,12 @@ export function scheduleLiveSessionTitleSummary(input: {
     complete: async (request) => {
       await input.ready?.();
       if (!input.stillEligible()) return null;
-      return (input.complete ?? completePiPrompt)({
+      // 设置里指定的总结模型不在运行时里时要能看出来，否则只会静默用对话模型。
+      const complete =
+        input.complete ??
+        ((next: typeof request) =>
+          completePiPrompt({ ...next, missingModel: "throw" as const }));
+      return complete({
         providerId: request.providerId,
         modelId: request.modelId,
         prompt: request.prompt,
@@ -84,7 +89,8 @@ export async function generateSessionTitleText(input: {
   const title = await requestSummarizedTitle({
     prompt,
     models: [configured, fallback],
-    complete: completePiPrompt,
+    // 右键手动总结时，用户选的模型不可用不能悄无声息地换成别的模型。
+    complete: (request) => completePiPrompt({ ...request, missingModel: "throw" }),
   });
   if (!title) throw new Error("session title summary was empty");
   return title;
