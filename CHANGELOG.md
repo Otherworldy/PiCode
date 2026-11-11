@@ -1,5 +1,60 @@
 # Changelog
 
+## [3.21.1](https://github.com/Otherworldy/PiCode/compare/v3.21.0...v3.21.1) (2026-11-11)
+
+### 新功能
+
+* **i18n** 内置子智能体角色名按界面语言展示 ([4aaa386](https://github.com/Otherworldy/PiCode/commit/4aaa386a1e0e1d0d5cbd2809ba9c54181dffda5d))
+  - 只翻内置角色。用户自建、插件角色和宿主兜底值（`subagent`）原样展示。
+  - 词条缺失时回退 wire 名：`formatMessage` 缺 key 会把 id 原样打出来。
+  - 子会话没有自己的标题时宿主拿角色名当标题，侧栏 tab 会显示成 `worker`；只有整串恰好等于内置角色名才翻译，任务标题是自由文本，不做词条匹配。
+  - 存储的 title 一律保持 wire 名，翻译只在渲染时做——否则切语言后已经打开的 tab 不会跟着变。
+
+* **i18n** 内置子智能体描述按界面语言展示 ([6477015](https://github.com/Otherworldy/PiCode/commit/6477015091f71f86db5a10b17159df1d6d3f5107))
+  - subagentDisplayDescription 查 subagent.builtin.<name>.description，非内置角色与词条缺失时回退传入的原文
+  - 接入设置页内置角色列表、/ 与 @ 提及列表（标签走展示名，描述走展示描述）
+  - 搜索 haystack 收录 wire 名与展示名两侧的词
+  - 提及条目的 value / markdown 仍是 wire 名，插入输入框的是真正的派发名
+  - 测试遍历 BUILT_IN_SUBAGENTS，校验英文词条与源定义逐字一致
+
+* **subagent** 调用时可指定模型与思考档位 ([8f49936](https://github.com/Otherworldy/PiCode/commit/8f49936b598e977632ab1d9dd829692c6d0505f3))
+  - `model` 里带 `:档位`、或缺 provider/模型名 → 参数错误。
+  - 模型目录里没有这个模型 → `subagent failed: model … is not available`，不回退。
+  - `thought` 不在七档内 → 参数错误，不静默折成 `off`。
+  - 七档内但目标模型的 `thinkingLevelMap` 没声明它 → 失败并列出支持的档位（`thought "minimal" is not supported by …; supported: low, high, max`），不交给 Pi 自己夹到相邻档。一个档都不支持时写 `supported: none`。
+
+
+### 问题修复
+
+* 上游请求头改为实际上报内置 Pi 版本 ([efad31d](https://github.com/Otherworldy/PiCode/commit/efad31deccdee6ae81bf97d548be7f8de1c0617e))
+  - 不用 esbuild define：VERSION 在模块内已由 export const 声明，esbuild 对本地声明不做 define 替换（实测输出原样）
+  - 改写合并进已有的 import.meta.url 插件：同一文件只有第一个返回内容的 onLoad 生效，单独注册会抢掉 config.js 的 fileURLToPath 改写，CJS 下 Module 初始化直接崩
+  - 找不到原声明时构建抛错并给出文件路径，Pi 若改实现必须当场暴露，不允许静默退回 0.0.0
+
+* **session-title** 总结模型不可用时不再静默改用对话模型 ([be1c070](https://github.com/Otherworldy/PiCode/commit/be1c07011ab779a99325307d5dd512e1486410e8))
+  - completePiPrompt 增 missingModel 选项，默认仍走 null 契约，git commit message 等调用方不受影响；自动标题总结与右键手动总结传 throw，让两种事实分开。
+  - requestSummarizedTitle 为每次候选失败、候选返回不可用各记一条 warn（带 provider/model 与原因），成功记一条 info 指明实际使用的模型，保留回退但不留静默分支。
+  - 同步 SPEC：侧栏相位折算的适用范围，以及总结模型候选失败要可追踪。
+
+* **session** 压缩与子代理运行期间侧栏照常显示运行中 ([6615bda](https://github.com/Otherworldy/PiCode/commit/6615bdada3aabff09acddec9ce5bcdade8951ff4))
+  - 新增 deriveSessionRunPhase：control.activeWorks 里有 compact，或 backgroundWorks 里有 running 子代理时，把列表相位折算成 running。不回写 control.phase，canStop、队列推进与输入可用性仍按真实相位判定。
+  - sessions-index 投影与打开中的 pane（livePhase）共用这个函数，两个数据源口径一致；后台 bash 不折算，error 仍为 error，失败点优先于转圈。
+  - 补测试：projector 事件链覆盖空闲 compact 与活子代理的进出，投影派生覆盖 compact / subagent / 后台 bash 三种来源。
+
+* **subagent** 后台结算通知画成工具卡 ([cffcf5c](https://github.com/Otherworldy/PiCode/commit/cffcf5ccb1f079401630c55ba2ddbe3c7abc5a5f))
+
+* **subagent** 已结束子代理按结束时间倒序 ([ffc53d6](https://github.com/Otherworldy/PiCode/commit/ffc53d6b141168c7cebc31386cec99418fad0035))
+
+* **v4** 记住的模型在目录改名后不再让输入框停在空选 ([fe197a4](https://github.com/Otherworldy/PiCode/commit/fe197a4dfdbd576b46dc4d43ccb0c813e45d9452))
+  - 不做身份比对：account-plan 会被 resolveEffectiveModelSelection 改写到当前连接，按身份判失效会误覆盖本来可解析的选择
+  - 已有会话先等会话快照再回退，否则 Host 默认会抢在会话真值之前占位；草稿未初始化与等待首次分享导入时不回退
+  - 不补档位：回退值缺档位时仍要求用户显式选择，发送门禁语义不变
+  - 回退链不读 localStorage，render 期零 IO
+
+* **v4** 尾窗不再裁掉最后一轮的 turnHeader ([46d6ebd](https://github.com/Otherworldy/PiCode/commit/46d6ebddbe655e32f756b996b2b0648f3ca0cebf))
+  - 下发侧新增 wireTailRows：最后 60 行外加最后一轮的 turnHeader 与首条 userInput，上限 62 行，不做任意扩张。增量可见性判定与字节预算改用同一函数，避免保底行上的 upsert 被当成窗口外行丢掉。
+  - 客户端仅在没有 header 且是最后一轮时接受 sessionPhase === "running" 作为依据。有 header 时 header.state 仍是唯一权威，不覆盖计划审查、后台子代理收口时的 phase 分叉。
+
 ## [3.21.0](https://github.com/Otherworldy/PiCode/compare/v3.20.0...v3.21.0) (2026-11-07)
 
 ### 问题修复
