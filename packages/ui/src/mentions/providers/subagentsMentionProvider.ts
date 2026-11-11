@@ -1,6 +1,10 @@
 import type { AgentSummary } from "@zcode/shared";
 import { buildSubagentMentionMarkdown } from "@/mentions/mentionMarkdown.js";
 import type { MentionItem } from "@/mentions/mentionTypes.js";
+import type { SubagentMessageFormatter } from "@/lib/subagentDisplayName.js";
+import { subagentDisplayDescription, subagentDisplayName } from "@/lib/subagentDisplayName.js";
+
+type MessageFormatter = SubagentMessageFormatter;
 
 type SubagentMentionInput = Pick<
   AgentSummary,
@@ -30,7 +34,10 @@ function getSubagentSourceLabel(agent: SubagentMentionInput): string {
   return "User";
 }
 
-export function mapSubagentsToMentionItemsForTest(agents: SubagentMentionInput[]): MentionItem[] {
+export function mapSubagentsToMentionItems(
+  agents: SubagentMentionInput[],
+  formatMessage: MessageFormatter,
+): MentionItem[] {
   const uniqueAgentsByName = new Map<string, SubagentMentionInput>();
   for (const agent of agents) {
     if (!agent.enabled) {
@@ -51,15 +58,20 @@ export function mapSubagentsToMentionItemsForTest(agents: SubagentMentionInput[]
     const model = agent.modelSelection
       ? `${agent.modelSelection.providerId}/${agent.modelSelection.modelId}`
       : undefined;
+    // 展示走当前语言，关键词两种名字都收：列表里能看见「实现」，用户也会搜 `worker`。
+    const displayName = subagentDisplayName(agent.name, formatMessage);
+    const description = subagentDisplayDescription(agent.name, agent.description, formatMessage);
     return {
       id: `subagent:${agent.id}`,
       category: "subagents",
-      label: agent.name,
-      description: agent.description ? `${sourceLabel} · ${agent.description}` : sourceLabel,
+      label: displayName,
+      description: description ? `${sourceLabel} · ${description}` : sourceLabel,
       value: agent.name,
       markdown: buildSubagentMentionMarkdown(agent.name),
       keywords: [
+        displayName,
         agent.name,
+        description,
         agent.description,
         agent.scope,
         agent.source,

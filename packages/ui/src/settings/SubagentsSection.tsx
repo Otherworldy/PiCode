@@ -55,7 +55,7 @@ import { resolveModelThoughtOption } from "@/lib/modelThoughtOption.js";
 import { parseModelPickerValue } from "@/lib/zcodeSessionProjection.js";
 import { encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
 import { SUBAGENT_COLORS, SUBAGENT_COLOR_CLASS } from "@/lib/subagentColors.js";
-import { subagentDisplayName } from "@/lib/subagentDisplayName.js";
+import { subagentDisplayDescription, subagentDisplayName } from "@/lib/subagentDisplayName.js";
 import { SettingsResourceGroupHeader } from "@/settings/SettingsResourceGroupHeader.js";
 import { SettingsResourceHeaderActions } from "@/settings/SettingsResourceHeaderActions.js";
 import { SettingsBreadcrumbReporter } from "@/settings/SettingsHeaderBreadcrumb.js";
@@ -574,7 +574,9 @@ function AgentListRow({
           <AgentBadge>{toolsLabel}</AgentBadge>
         </div>
         <p className="mt-0.5 line-clamp-2 text-ui-sm text-foreground-subtle">
-          {agent.description || intl.formatMessage({ id: "settings.subagents.noDescription" })}
+          {agent.description
+            ? subagentDisplayDescription(agent.name, agent.description, intl.formatMessage)
+            : intl.formatMessage({ id: "settings.subagents.noDescription" })}
         </p>
       </div>
 
@@ -1840,6 +1842,7 @@ export function SubagentsSection({ onManageModels }: SubagentsSectionProps) {
         // 中文界面下列表显示「实现」，用户会按看到的字搜；wire 名也留着。
         subagentDisplayName(agent.name, intl.formatMessage),
         agent.description,
+        subagentDisplayDescription(agent.name, agent.description, intl.formatMessage),
         agent.modelSelection
           ? `${agent.modelSelection.providerId}/${agent.modelSelection.modelId}`
           : undefined,

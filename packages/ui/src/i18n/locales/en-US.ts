@@ -4964,6 +4964,20 @@ const enUS: Record<string, string> = {
   "subagent.builtin.reviewer": "reviewer",
   "subagent.builtin.oracle": "oracle",
   "subagent.builtin.delegate": "delegate",
+  "subagent.builtin.scout.description":
+    "Fast local codebase recon: relevant files, entry points, data flow, and risks.",
+  "subagent.builtin.researcher.description":
+    "Web and docs research that returns a concise sourced brief.",
+  "subagent.builtin.evidence-auditor.description":
+    "Checks whether important research claims are actually supported by their sources.",
+  "subagent.builtin.worker.description":
+    "Implementation agent. Edits the approved task and escalates unapproved decisions.",
+  "subagent.builtin.reviewer.description":
+    "Reviews a diff, plan, or proposed change for correctness, tests, and extra complexity.",
+  "subagent.builtin.oracle.description":
+    "Challenges a plan or decision without editing. Protects earlier constraints from drift.",
+  "subagent.builtin.delegate.description":
+    "Lightweight general delegate that stays close to the parent session.",
   "chat.toolCall.subagent.background": "Background",
   "chat.toolCall.goal.label": "Goal",
   "chat.toolCall.edit.writing": "Writing",

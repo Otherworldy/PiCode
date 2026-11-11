@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BUILT_IN_SUBAGENT_NAMES } from "@zcode/shared";
+import { BUILT_IN_SUBAGENTS, BUILT_IN_SUBAGENT_NAMES } from "@zcode/shared";
 import enUS from "../i18n/locales/en-US.js";
 import zhCN from "../i18n/locales/zh-CN.js";
 import {
   isBuiltInSubagentName,
+  subagentDisplayDescription,
   subagentDisplayName,
   subagentDisplayTitle,
 } from "./subagentDisplayName.js";
@@ -55,5 +56,30 @@ test("every built-in role has a message in both locales", () => {
     const id = `subagent.builtin.${name}`;
     assert.ok(zhCN[id], `zh-CN 缺少 ${id}`);
     assert.ok(enUS[id], `en-US 缺少 ${id}`);
+  }
+});
+
+test("translates built-in role descriptions", () => {
+  const wire = "Fast local codebase recon: relevant files, entry points, data flow, and risks.";
+  assert.equal(
+    subagentDisplayDescription("scout", wire, zh),
+    "快速摸清本地代码：相关文件、入口、数据流和风险。",
+  );
+  // 英文词条必须与源定义逐字一致，否则英文界面会跟工具说明对不上。
+  assert.equal(subagentDisplayDescription("scout", wire, en), wire);
+});
+
+test("leaves descriptions of non-built-in roles untouched", () => {
+  assert.equal(subagentDisplayDescription("my-helper", "我自己写的角色", zh), "我自己写的角色");
+  // 词条缺失时回退调用方传进来的原文，而不是打出 i18n key。
+  assert.equal(subagentDisplayDescription("worker", "原文", formatterFor({})), "原文");
+});
+
+test("every built-in role has a description in both locales, matching the source", () => {
+  // 描述既出现在设置页，也会被拼进 `picode_subagent` 的工具说明。
+  for (const role of BUILT_IN_SUBAGENTS) {
+    const id = `subagent.builtin.${role.name}.description`;
+    assert.ok(zhCN[id], `zh-CN 缺少 ${id}`);
+    assert.equal(enUS[id], role.description, `en-US 的 ${id} 与源定义不一致`);
   }
 });

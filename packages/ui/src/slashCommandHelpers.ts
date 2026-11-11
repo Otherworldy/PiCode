@@ -11,7 +11,8 @@ import {
   type ZCodeSlashCommand,
 } from "@zcode/shared";
 import type { MentionItem } from "@/mentions/mentionTypes.js";
-import { mapSubagentsToMentionItemsForTest } from "@/mentions/providers/subagentsMentionProvider.js";
+import { mapSubagentsToMentionItems } from "@/mentions/providers/subagentsMentionProvider.js";
+import type { SubagentMessageFormatter } from "@/lib/subagentDisplayName.js";
 import { mapSkillsToMentionItemsForTest } from "@/mentions/providers/skillsMentionProvider.js";
 import type { PromptInputSuggestionItem } from "./lib/promptInputTriggers.js";
 
@@ -126,8 +127,9 @@ export function buildSubagentSuggestions(
       "id" | "name" | "description" | "path" | "scope" | "source" | "enabled" | "modelSelection"
     >
   >,
+  formatMessage?: SubagentMessageFormatter,
 ): PromptInputSuggestionItem[] {
-  return mapSubagentsToMentionItemsForTest(agents).map((item) =>
+  return mapSubagentsToMentionItems(agents, formatMessage ?? (({ id }) => id)).map((item) =>
     mapSubagentMentionItemToSuggestion(item),
   );
 }

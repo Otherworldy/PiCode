@@ -11,7 +11,10 @@ import { BUILT_IN_SUBAGENT_NAMES, type BuiltInSubagentName } from "@zcode/shared
  */
 const BUILT_IN_SUBAGENT_NAME_SET = new Set<string>(BUILT_IN_SUBAGENT_NAMES);
 
-type MessageFormatter = (descriptor: { id: string }) => string;
+/** 只认 `id`：调用方传的就是 `intl.formatMessage`，没词条时它原样返回 id。 */
+export type SubagentMessageFormatter = (descriptor: { id: string }) => string;
+
+type MessageFormatter = SubagentMessageFormatter;
 
 export function isBuiltInSubagentName(name: string): name is BuiltInSubagentName {
   return BUILT_IN_SUBAGENT_NAME_SET.has(name);
@@ -42,4 +45,25 @@ export function subagentDisplayTitle(title: string, formatMessage: MessageFormat
   const trimmed = title.trim();
   if (!trimmed || !isBuiltInSubagentName(trimmed)) return title;
   return subagentDisplayName(trimmed, formatMessage);
+}
+
+/**
+ * 内置角色的描述。
+ *
+ * 描述不只是设置页的说明文字：`host-capabilities.ts` 把它拼进 `picode_subagent`
+ * 的工具说明交给模型选角色。所以和名字一样只翻展示层，`description` 本身不动。
+ *
+ * 与 `builtinSkillI18n.ts` 的 `resolveSkillDisplayDescription` 同一口径：只有内置角色
+ * 有词条，用户自建与插件角色的描述是人写的，原样返回。
+ */
+export function subagentDisplayDescription(
+  name: string,
+  description: string,
+  formatMessage: MessageFormatter,
+): string {
+  const trimmed = name.trim();
+  if (!trimmed || !isBuiltInSubagentName(trimmed)) return description;
+  const id = `subagent.builtin.${trimmed}.description`;
+  const message = formatMessage({ id });
+  return message === id ? description : message;
 }

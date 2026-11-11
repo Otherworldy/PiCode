@@ -161,36 +161,37 @@ widget 文本的所有者是 Pi extension UI（`setWidget` → 快照 `extension
 
 ## 行为
 
-内置角色的名字是英文 wire 名（`worker`、`evidence-auditor`），它同时是 `picode_subagent` 的 `agent` 入参、`.role` 文件内容、设置页 md 文件名和日志里的值。界面按当前语言展示它们，但不改这些名字本身。
+内置角色的名字是英文 wire 名（`worker`、`evidence-auditor`），它同时是 `picode_subagent` 的 `agent` 入参、`.role` 文件内容、设置页 md 文件名和日志里的值。界面按当前语言展示它们，但不改这些名字本身。描述同样处理。
 
-- 中文界面显示中文名（`worker` → 「实现」，`evidence-auditor` → 「证据核对」）；英文界面仍是 wire 名，所以英文界面的观感不变。
-- 只翻内置角色。用户自建角色、插件角色和宿主兜底值（`subagent`）原样展示：那些名字是人给的，不是词条。
-- 词条缺失时回退 wire 名，不把 i18n key 打到界面上（`formatMessage` 缺 key 会原样返回 id）。
+- 中文界面显示中文名（`worker` → 「实现」，`evidence-auditor` → 「证据核对」）和中文描述；英文界面仍是源定义里的原文，观感不变。
+- 只翻内置角色。用户自建角色、插件角色和宿主兜底值（`subagent`）原样展示：那些名字和描述是人给的，不是词条。
+- 词条缺失时回退 wire 名或原文，不把 i18n key 打到界面上（`formatMessage` 缺 key 会原样返回 id）。
 - 子会话没有自己的标题时，宿主拿角色名当标题，侧边面板 tab 因此会显示成 `worker`。只有整串等于内置角色名才翻译，任务标题是自由文本，不做词条匹配。
-- 翻的是展示：点角色名打开的侧栏、日志、`~/.pi` 里的文件和派发参数都还是 wire 名。换语言不会让历史会话指向另一个角色。
+- 翻的是展示：点角色名打开的侧栏、日志、`~/.pi` 里的文件、派发参数、以及拼进 `picode_subagent` 工具说明的角色目录（`host-capabilities.ts` 的 `- <name>: <description>`）都还是原文。换语言不会让历史会话指向另一个角色。
 
 ## 所有者
 
-`packages/ui/src/lib/subagentDisplayName.ts` 是唯一所有者。词条放在两个 locale 文件的 `subagent.builtin.<name>` 下，不放进 `@zcode/shared` 的角色定义：那份定义同时供 CLI、宿主和系统提示词消费，翻译进去会污染提示词和派发名。
+`packages/ui/src/lib/subagentDisplayName.ts` 是唯一所有者。词条放在两个 locale 文件的 `subagent.builtin.<name>`（名字）与 `subagent.builtin.<name>.description`（描述）下，不放进 `@zcode/shared` 的角色定义：那份定义同时供 CLI、宿主和系统提示词消费，翻译进去会污染提示词和派发名。
 
-改名字表时两边一起改：`BUILT_IN_SUBAGENT_NAMES`（`packages/shared/src/subagents-types.ts`）是角色清单，locale 文件是展示名。清单里有、词条缺失时按上文的回退规则显示 wire 名。
+改名字表时两边一起改：`BUILT_IN_SUBAGENTS` / `BUILT_IN_SUBAGENT_NAMES`（`packages/shared`）是角色清单与英文原文，locale 文件是展示名与译名。英文描述词条必须与源定义逐字一致，有测试卡住这一点。
 
 ## 展示点
 
-返回角色名的入口统一调 `subagentDisplayName`：
+返回角色名的入口调 `subagentDisplayName`，返回描述的入口调 `subagentDisplayDescription`：
 
 - 子智能体工具卡摘要行（`ToolCallBlocks/renderers/subagent.tsx`）与 Agent 卡（`renderers/agent.tsx`）。
 - 状态面板运行列表（`v4/ConversationStatusPanel.tsx`）。
 - 后台结算卡（`v4/ConversationSubagentSettlementCard.tsx`）。
 - 子智能体目录（`app-shell/SubagentDirectorySidePane.tsx`）。
 - 侧边面板 tab 标题与类型标签（`app-shell/SidePaneTabTrigger.tsx`、`app-shell/sidePaneTabPresentation.ts`）。
-- 设置页内置角色列表（`settings/SubagentsSection.tsx`）。
+- 设置页内置角色列表的名字与描述（`settings/SubagentsSection.tsx`）。
+- `/` 与 `@` 提及列表（`mentions/providers/subagentsMentionProvider.ts`）：标签走展示名，描述走展示描述。
 
-设置页的搜索仍按 wire 名匹配：用户可能搜 `worker`，也可能搜「实现」；两边的词都进 `haystack`。
+搜索两边都认：设置页的 `haystack` 同时放 wire 名、展示名、原文描述和展示描述，用户搜 `worker` 和搜「实现」都能命中。提及列表的关键词同理。`value` / `markdown` 仍是 wire 名：用户插入到输入框的是真正的派发名。
 
 ## 失败
 
-没有词条不是错误：回退 wire 名，不在界面报错。角色名为空时各展示点自行处理（摘要行只留「子智能体」，标题回退到通用文案）。
+没有词条不是错误：回退 wire 名或原文，不在界面报错。角色名为空时各展示点自行处理（摘要行只留「子智能体」，标题回退到通用文案）。
 
 # 子智能体工具卡的摘要行
 

@@ -76,9 +76,18 @@ export function SlashCommandPlugin({
   // 远程 workspace 的 slashCommands 写在 workspaceIdentity 桶。
   // 这里只按 workspacePath 读取会落到 path 桶，表现为 PiCode Agent 已收到 available_commands_update 但 / 面板为空。
   const commands = useSlashCommands(workspacePath, workspaceIdentity);
-  const servicesResolution = useWorkspaceServicesResolution(workspacePath, undefined, workspaceIdentity);
+  const servicesResolution = useWorkspaceServicesResolution(
+    workspacePath,
+    undefined,
+    workspaceIdentity,
+  );
   useEffect(() => {
-    if (disabled || activeTrigger?.trigger !== "/" || !workspacePath || !servicesResolution.rpcReady) {
+    if (
+      disabled ||
+      activeTrigger?.trigger !== "/" ||
+      !workspacePath ||
+      !servicesResolution.rpcReady
+    ) {
       return;
     }
     let cancelled = false;
@@ -137,7 +146,10 @@ export function SlashCommandPlugin({
     );
     return [...cliSuggestions, ...appSuggestions];
   }, [appCommands, commands, excludedCommandNames]);
-  const subagentSuggestions = useMemo(() => buildSubagentSuggestions(agents), [agents]);
+  const subagentSuggestions = useMemo(
+    () => buildSubagentSuggestions(agents, intl.formatMessage),
+    [agents, intl],
+  );
   const skillSuggestions = useMemo(
     () =>
       buildSkillSuggestions(
