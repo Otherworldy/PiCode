@@ -199,6 +199,46 @@ test("context usage is a ring input and ignores an unchanged value", () => {
   assert.equal(projector.setContextUsage(1200, 8000).length, 0);
 });
 
+test("turn transitions publish routing from the new phase for live and replayed history", () => {
+  for (const followupMode of ["queue", "guide"] as const) {
+    for (const replay of [false, true]) {
+      const projector = new PiToV4Projector("s", "epoch");
+      projector.setConfig({ followupMode });
+      const start = { type: "agent_start" as const };
+      if (replay) projector.replay([start]);
+      else projector.apply(start);
+      assert.equal(
+        projector.getSnapshot().inputRouting.mode,
+        followupMode === "queue" ? "enqueue" : "guide",
+      );
+      const end = { type: "agent_settled" as const };
+      if (replay) projector.replay([end]);
+      else projector.apply(end);
+      assert.equal(projector.getSnapshot().control.phase, "completedSuccess");
+      assert.equal(projector.getSnapshot().inputRouting.mode, "startNow");
+    }
+  }
+});
+
+test("settled routing retains the paused queue choice", () => {
+  const projector = new PiToV4Projector("s", "epoch");
+  const queue = new HostQueue();
+  queue.autoDrain = false;
+  queue.enqueue(
+    queue.createItem({
+      sourceCommandId: "queued",
+      clientId: "c",
+      text: "next",
+      admitted: "queue",
+    }),
+  );
+  projector.replaceQueue(queue.snapshot());
+  projector.apply({ type: "agent_start" });
+  assert.equal(projector.getSnapshot().inputRouting.mode, "enqueue");
+  projector.apply({ type: "agent_settled" });
+  assert.equal(projector.getSnapshot().inputRouting.mode, "choice");
+});
+
 test("projects text, tools, abort, compact", () => {
   const projector = new PiToV4Projector("s1", "e1", { profile: "continuous" });
   projector.apply({ type: "agent_start" });
@@ -523,6 +563,29 @@ test("plannotator feedback stays a user message", () => {
   assert.equal(isAnnotationReviewDone("Code review closed (no feedback)."), false);
   assert.equal(isAnnotationReviewNotice("Annotation session closed."), true);
   assert.equal(isAnnotationReviewNotice("Annotation opened"), false);
+});
+
+test("恢复会话时投影档位读 Pi 活事实与模型档位表，而不是硬编码 medium", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "pi-host-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const registry = new HostSessionRegistry({
+    storageRoot: root,
+    nativeSessionsRoot: join(root, "pi-sessions"),
+    createSession: async (input) => {
+      const fake = new FakePiSession(input.sessionId, input.sessionFile);
+      // 模拟 Pi 已恢复的档位，模型只支持 low/high/max。
+      fake.currentModel = { providerId: "lens", modelId: "free/deepseek-v4.1-flash" };
+      fake.thinkingLevel = "high";
+      fake.thoughtLevelValues = ["low", "high", "max"];
+      return fake;
+    },
+  });
+  const hosted = await registry.create({ workspacePath: root });
+  t.after(() => hosted.dispose());
+  const config = hosted.projector.getSnapshot().config;
+  assert.equal(config.thought, "high");
+  assert.deepEqual(config.thoughtLevels, ["low", "high", "max"]);
+  assert.equal(config.thoughtLevels.includes(config.thought), true);
 });
 
 test("PLANNOTATOR_BROWSER=none 时审查页地址从通知进内置浏览器", async () => {

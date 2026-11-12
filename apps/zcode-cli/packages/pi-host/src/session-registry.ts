@@ -1771,11 +1771,15 @@ export class HostSessionRegistry {
       pi.bindUi?.(createHostExtensionUi(ui, handleUi)),
     ).catch(() => undefined);
     if (pi.currentModel) {
+      // 档位读 Pi 的活事实与可用档位接口：冷恢复时硬编码 medium
+      // 会在只支持 low/high/max 的模型上留下非法档位，桌面端因此无法提交。
+      const levels = pi.thoughtLevels?.() ?? [];
+      const live = pi.thinkingLevel;
       projector.setConfig({
         provider: pi.currentModel.providerId,
         model: pi.currentModel.modelId,
-        thought: "medium",
-        thoughtLevels: ["off", "minimal", "low", "medium", "high"],
+        ...(live ? { thought: live } : {}),
+        ...(levels.length > 0 ? { thoughtLevels: levels } : {}),
       });
     }
     publishContext();

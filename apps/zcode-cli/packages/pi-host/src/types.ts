@@ -229,6 +229,10 @@ export interface PiSessionPort {
   /** 压缩、重试或轮次还没结束。缺省时按 !isStreaming。 */
   readonly isIdle?: boolean;
   readonly currentModel?: { providerId: string; modelId: string };
+  /** Pi 当前思考档位；恢复会话时投影要按它对齐，不能用默认值。 */
+  readonly thinkingLevel?: string;
+  /** 当前模型支持的档位（thinkingLevelMap）。缺席时投影保留默认列表。 */
+  thoughtLevels?(): string[];
   listModels?(): Array<{ providerId: string; modelId: string; name?: string }>;
   /** 这个会话里 Pi 已经加载的技能，含用户目录、项目目录和包技能。 */
   listSkills?(): PiSkillView[];

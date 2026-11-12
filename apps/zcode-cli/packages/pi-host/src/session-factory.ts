@@ -642,6 +642,12 @@ export function createSdkSessionFactory(
       get currentModel() {
         return readCurrentModel();
       },
+      // 冷恢复时直接读取 Pi 的当前档位，避免投影用固定 medium 覆盖已恢复的值。
+      get thinkingLevel() {
+        return session.thinkingLevel;
+      },
+      // 通用默认表会给非推理模型多报档位，也会漏掉 Pi 的缺省 minimal；以会话接口为准。
+      thoughtLevels: () => session.getAvailableThinkingLevels(),
       listModels: () =>
         modelRuntime.getAvailableSnapshot().map((model) => ({
           providerId: model.provider,

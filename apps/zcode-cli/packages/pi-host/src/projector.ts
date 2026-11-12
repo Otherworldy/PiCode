@@ -546,8 +546,10 @@ export class PiToV4Projector {
     return hasState ? mapped : [...mapped, { op: "state.updated", patch: { revision } }];
   }
 
-  private routing(queue: QueueState): ConversationSnapshot["inputRouting"] {
-    const running = this.snapshot.control.phase === "running";
+  private routing(
+    queue: QueueState,
+    running = this.snapshot.control.phase === "running",
+  ): ConversationSnapshot["inputRouting"] {
     const followup = this.snapshot.config.followupMode;
     if (running) return { mode: followup === "guide" ? "guide" : "enqueue" };
     if (queue.items.length > 0 && !queue.autoDrain) return { mode: "choice" };
@@ -780,7 +782,8 @@ export class PiToV4Projector {
             apiRetry: null,
           },
           availability: emptyAvailability(true),
-          inputRouting: this.routing(this.snapshot.queue),
+          // control 尚未提交；路由按这一批的新相位派生，避免实时和冷恢复落后一拍。
+          inputRouting: this.routing(this.snapshot.queue, true),
         },
       },
     ];
@@ -1597,7 +1600,8 @@ export class PiToV4Projector {
           apiRetry: null,
         },
         availability: emptyAvailability(false),
-        inputRouting: this.routing(this.snapshot.queue),
+        // 结束增量与 control 同步；仍在等审查时保留入队语义，其余按已结束处理。
+        inputRouting: this.routing(this.snapshot.queue, holdPlanReview),
       },
     });
     this.aborted = false;

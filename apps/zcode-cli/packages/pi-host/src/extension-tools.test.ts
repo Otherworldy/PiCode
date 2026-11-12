@@ -118,6 +118,8 @@ test("extension tools are sent upstream with PiCode tools", async () => {
       checkPermission: async () => "allow",
     });
     await session.setModel?.("mock", "mock-model", "off");
+    assert.equal(session.thinkingLevel, "off");
+    assert.deepEqual(session.thoughtLevels?.(), ["off"]);
     await session.prompt("Reply with ok.");
     await session.waitTurn?.();
     session.dispose();

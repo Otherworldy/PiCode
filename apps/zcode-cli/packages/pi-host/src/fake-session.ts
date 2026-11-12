@@ -33,6 +33,13 @@ export class FakePiSession implements PiSessionPort {
   sessionName?: string;
   /** Pi session 的事实模型；setModel 成功后就地更新，模拟 agent.state.model。 */
   currentModel?: { providerId: string; modelId: string };
+  /** 模拟 Pi 的当前思考档位；恢复会话时投影要对齐它。 */
+  thinkingLevel?: string;
+  /** 模拟当前模型 thinkingLevelMap 派生的档位列表。 */
+  thoughtLevelValues = ["off", "low", "medium", "high"];
+  thoughtLevels(): string[] {
+    return this.thoughtLevelValues;
+  }
   modelSwitchCalls: Array<{ provider: string; modelId: string; thought?: string }> = [];
   /** false 模拟目标模型不在 ModelRuntime。 */
   acceptSetModel = true;

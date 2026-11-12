@@ -67,6 +67,7 @@ test("pi sdk agent loop: prompt \u2192 read \u2192 text", async () => {
       loadExtensions: false,
       checkPermission: async () => "allow",
     });
+    assert.deepEqual(session.thoughtLevels?.(), ["off", "minimal", "low", "medium", "high"]);
     const events: PiHostEvent[] = [];
     session.subscribe((event) => {
       events.push(event);

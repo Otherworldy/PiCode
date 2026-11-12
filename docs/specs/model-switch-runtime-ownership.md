@@ -69,6 +69,8 @@ Pi SDK 在下一次 model 请求前由 `_installAgentRequestProjection` 重读 `
 
 7. **同模型只切思考档位也发布真实增量。** `HostedSession.setThinkingLevel` 先调用 Pi setter，再发布 `projector.setConfig` 返回的 delta；协议层不补造 Core `ModelSelected`。Desktop 连续流和手机可回放流都必须收到同一 `config.thought` 变化，不能只改变 Host 内存快照。
 
+8. **冷恢复从 Pi 读取真实档位。** 初始 `config.thought` 与 `thoughtLevels` 分别来自 Pi 当前 `thinkingLevel` 与 `getAvailableThinkingLevels()`；非推理模型只允许 `off`，推理模型由 Pi 解释默认档位与 `thinkingLevelMap`，不能以固定 `medium` 和固定五档替代。首份配置必须与 Pi 恢复结果一致，避免只支持 low/high/max 的模型因非法 medium 无法提交。既有 Composer 草稿仍按自己的有效性规则处理，不靠回写草稿掩盖恢复错误。
+
 ## 事件顺序
 
 ```

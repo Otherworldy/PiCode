@@ -35,6 +35,10 @@ Registry drain 与 V4 提升共用 `HostQueue` 的真实 consumer claim，在模
 
 同一所有者，两套 flush。jsonl 为对话树真相；V4 snapshot 为 UI/远控派生缓存，可从 jsonl 重建。打开时若 publisher 还没有行，订阅前用 jsonl 再画一次；否则会交出空快照，加载结束后只剩输入框。runtime `dispose` 后从注册表摘掉，不删 jsonl；留着已关掉的实例会让下次打开直接复用它，冷恢复不再读文件，画面仍是空的。
 
+冷恢复的模型身份、当前思考档位和支持档位均读取 Pi 会话的实时接口，不能以固定 `medium` 或固定档位表覆盖 Pi 从 jsonl 恢复的值。支持档位直接取 `getAvailableThinkingLevels()`：非推理模型只提供 `off`；推理模型遵循 Pi 对缺省档位和 `thinkingLevelMap` 的处理，不能用宿主通用默认表代替。初始化完成后才允许交出首份配置；已有 Composer 草稿仍保留自己的意图，不因恢复过程被回写。
+
+`agent_start` 与 `agent_end` / `agent_settled` 的同一份状态增量必须包含按新运行状态派生的 `inputRouting`：运行时按 followupMode 走 enqueue/guide，完成或中断后空队列回到 startNow，暂停且有队列时为 choice。实时与 jsonl 重放遵守同一规则，不能在提交新 control 前读取旧 phase 导致路由落后一拍。
+
 常驻池只卸真正空闲的会话。投影 `phase` 已经离开 `running`，但 Pi 仍在 streaming、压缩或重试（`isStreaming` / `isCompacting` / `isIdle === false`），或队列、后台任务、子会话、分支总结、未决交互还在，都不算空闲。只看 `phase === "running"` 会在超过高水位或空闲超时后把还在跑的 runtime 拆掉，内存里的对话投影一起没了。再点开要冷恢复，界面停在「正在加载会话」。事实归 `HostedSession.hasResidencyBlockingWork`，常驻池只读这一个布尔。
 
 冷打开（注册表里还没有这个会话，真正走了 `openFile`）打一行 `pi_host.conversation.open_timing`。已经在注册表里的再次 `create` 不打。打开失败也不打。三段互不包含：
