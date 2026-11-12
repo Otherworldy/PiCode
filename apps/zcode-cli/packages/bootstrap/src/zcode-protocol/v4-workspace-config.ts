@@ -1,10 +1,12 @@
+import { hostedProtocolSnapshot } from "./hosted-snapshot.js";
+import { legacyApp } from "./session-owner.js";
 // v4 workspace-config 只承载 workspace presentation；模型候选与首选项由目标 Host
 // ModelSelectionView 提供，不能再从 live Session settings 反向建立第二份模型目录。
 import { getZCodeAgentModeSelectOptions, normalizeAvailableZCodeMode } from "@zcode/shared";
 import type { ZCodeSessionSettingsState, ZCodeSlashCommand } from "@zcode/shared";
 import type { WorkspaceConfigState } from "@zcode/shared/zcode-protocol-v4";
 import { mapSessionSettings } from "./mapper.js";
-import { listProtocolSlashCommands, piSlashCommandsFromApp } from "./slash-commands.js";
+import { listProtocolSlashCommands } from "./slash-commands.js";
 import type { ZCodeProtocolAgentServerContext } from "./server-types.js";
 
 /** Session settings 只投影非模型的 workspace mode 与 slash commands。 */
@@ -47,12 +49,14 @@ export async function buildLiveWorkspaceConfigStateV4(
     (candidate) => candidate.workspace.workspaceKey === workspaceId,
   );
   if (!record) return null;
-  const settings = await mapSessionSettings(record.app);
+  const settings = record.hosted
+    ? hostedProtocolSnapshot(record).settings
+    : await mapSessionSettings(legacyApp(record));
   const slashCommands = await listProtocolSlashCommands({
     env: context.deps.env,
     logger: context.logger,
     workingDirectory: record.workspace.workspacePath,
-    piCommands: piSlashCommandsFromApp(record.app),
+    piCommands: record.hosted?.listSlashCommands(),
   });
   return toV4WorkspaceConfigState(settings, slashCommands);
 }

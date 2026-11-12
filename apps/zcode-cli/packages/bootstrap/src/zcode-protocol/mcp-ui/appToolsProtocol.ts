@@ -1,3 +1,4 @@
+import { legacyApp } from "../session-owner.js";
 import {
   SessionEventType,
   createEventId,
@@ -40,7 +41,7 @@ export function getMcpUiAppToolRegistry(
       applyTools: (sessionId, definitions, execute) => {
         const record = context.sessions.get(sessionId);
         return record
-          ? record.app.replaceMcpAppProvidedTools(
+          ? legacyApp(record).replaceMcpAppProvidedTools(
               definitions.map((definition) => ({
                 ...definition,
                 retainExecution: (callId: string) =>
@@ -132,7 +133,7 @@ export async function claimMcpUiAppToolCall(
   mcpUiInstances.validate(
     params.instance,
     params,
-    record.app.getMcpAppConnectionSnapshot(params.serverName),
+    legacyApp(record).getMcpAppConnectionSnapshot(params.serverName),
   );
   if (params.scopeId !== params.instance.token || params.generation !== params.instance.generation)
     throw new Error("Invalid MCP App binding");
@@ -150,7 +151,7 @@ export async function resolveMcpUiAppToolCall(
   mcpUiInstances.validate(
     params.instance,
     params,
-    record.app.getMcpAppConnectionSnapshot(params.serverName),
+    legacyApp(record).getMcpAppConnectionSnapshot(params.serverName),
   );
   if (params.scopeId !== params.instance.token || params.generation !== params.instance.generation)
     throw new Error("Invalid MCP App binding");

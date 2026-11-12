@@ -1,5 +1,5 @@
 import type { AttachmentRef } from "@zcode/shared/zcode-protocol-v4";
-import type { HostQueue } from "./host-queue.js";
+import type { HostQueue, QueueConsumerClaim } from "./host-queue.js";
 import {
   appendFileAttachments,
   loadPromptImages,
@@ -81,6 +81,8 @@ export interface AdmitSendInput {
   commandId: string;
   delivery: SendDelivery;
   streaming: boolean;
+  requireIdle?: boolean;
+  consumer?: QueueConsumerClaim;
   modelSelection?: SubmissionModel;
   attachments?: PiPromptAttachment[];
 }
@@ -117,74 +119,107 @@ export class CommandBridge {
   ) {}
 
   async admitSend(input: AdmitSendInput): Promise<AdmitSendResult> {
-    // 声明给模型的工具列表是宿主的责任：插件把 `plannotator` 的激活放在自己的
-    // `session_start` 里，而绑 UI 是异步的，会话重放和阶段恢复还会重算这份列表。
-    // 少了这一下，这一轮请求里就没有 UI 设计模式要用的工具。同步、幂等。
     if (this.session.toolLoadout) ensurePlannotatorToolActive(this.session.toolLoadout);
+    if (input.consumer && !this.queue.ownsConsumer(input.consumer)) throw this.consumerBusy();
     const extensionText = registeredExtensionCommandText(
       input.text,
       this.session.listSlashCommands?.(),
     );
-    if (extensionText) {
-      await this.extensionCommands?.uiReady;
-      const command = /^\/([^\s]+)/.exec(extensionText)?.[1] ?? "";
-      // 命令里的 select/input 要等用户答。答走另一条 RPC，而 stdio 队列要等这条发送返回。
-      // 所以这里只负责启动，不跟着命令内部的提问一起挂起。
-      const pending = this.extensionCommands
-        ? this.extensionCommands.run(command, () =>
-            this.promptNow("prompt", extensionText, input.attachments, true).then(() => undefined),
-          )
-        : this.promptNow("prompt", extensionText, input.attachments, true).then(() => undefined);
-      void pending.catch(() => undefined);
-      return { kind: "handled" };
+    // 扩展问答通过另一条 RPC 回答，保留流式期间也能非阻塞执行的命令路径。
+    if (extensionText && !input.requireIdle) return this.runExtension(input, extensionText, true);
+    const consumer = input.consumer ?? this.queue.tryAcquireConsumer();
+    if (!consumer) {
+      if (input.requireIdle) throw this.consumerBusy();
+      // Registry 正在读取模型/附件时 Pi 可能仍 idle；新输入只能排队，不能超车或 steer。
+      return this.enqueue(input);
     }
-    // 调用方的 streaming 只看投影 phase。Pi 仍在跑时这里必须自己再判一次，
-    // 否则会裸 prompt，Pi 抛 "already processing" 把进程打退出。
-    const busy = input.streaming || piSessionBusy(this.session);
-    // 压缩中不能 steer，只能排队。guide 只在这一轮真的还在流式输出时生效。
-    if (busy && input.delivery === "guide" && this.session.isStreaming) {
+    try {
+      const busy = input.streaming || piSessionBusy(this.session);
+      if (input.requireIdle && busy) throw this.consumerBusy();
+      if (extensionText) return await this.runExtension(input, extensionText, false);
+      if (!input.requireIdle && busy && input.delivery === "guide" && this.session.isStreaming) {
+        await this.useModel(input.modelSelection);
+        await this.promptNow("steer", input.text, input.attachments);
+        return { kind: "steer" };
+      }
+      if (!input.requireIdle && (busy || input.delivery === "queue")) return this.enqueue(input);
       await this.useModel(input.modelSelection);
-      await this.promptNow("steer", input.text, input.attachments);
-      return { kind: "steer" };
+      const kind = await this.promptNow("prompt", input.text, input.attachments);
+      return { kind };
+    } finally {
+      if (!input.consumer) consumer.release();
     }
-    if (busy || input.delivery === "queue") {
-      const item = this.queue.createItem({
-        sourceCommandId: input.commandId,
-        clientId: input.clientId,
-        text: input.text,
-        admitted: "queue",
-        modelSelection: queuedSelection(input.modelSelection),
-        attachments: promptAttachmentRefs(input.attachments),
-      });
-      this.queue.enqueue(item);
-      return { kind: "queued", queueItemId: item.queueItemId };
-    }
-    await this.useModel(input.modelSelection);
-    await this.promptNow("prompt", input.text, input.attachments);
-    return { kind: "prompt" };
+  }
+
+  private enqueue(input: AdmitSendInput): AdmitSendResult {
+    const item = this.queue.createItem({
+      sourceCommandId: input.commandId,
+      clientId: input.clientId,
+      text: input.text,
+      admitted: "queue",
+      modelSelection: queuedSelection(input.modelSelection),
+      attachments: promptAttachmentRefs(input.attachments),
+    });
+    this.queue.enqueue(item);
+    return { kind: "queued", queueItemId: item.queueItemId };
+  }
+
+  private consumerBusy(): Error {
+    return Object.assign(new Error("Pi queue consumer requires an idle admission"), {
+      reasonCode: "guard.queuePromotionBusy",
+    });
+  }
+
+  private async runExtension(
+    input: AdmitSendInput,
+    text: string,
+    allowBusy: boolean,
+  ): Promise<AdmitSendResult> {
+    await this.extensionCommands?.uiReady;
+    if (!allowBusy && piSessionBusy(this.session)) throw this.consumerBusy();
+    const command = /^\/([^\s]+)/.exec(text)?.[1] ?? "";
+    const admitted = allowBusy ? undefined : Promise.withResolvers<void>();
+    const execute = () =>
+      this.promptNow("prompt", text, input.attachments, allowBusy, admitted?.resolve).then(
+        () => undefined,
+      );
+    const pending = this.extensionCommands
+      ? this.extensionCommands.run(command, execute)
+      : execute();
+    // idle-only 扩展先完成附件准备及最终 busy 检查；调用 Pi 后即返回，问卷仍由另一条 RPC 继续。
+    void pending.catch((error: unknown) => admitted?.reject(error));
+    await admitted?.promise;
+    return { kind: "handled" };
   }
 
   async drainNext(): Promise<boolean> {
-    if (!this.queue.autoDrain) return false;
-    if (piSessionBusy(this.session)) return false;
-    const item = this.queue.shift();
-    if (!item) return false;
-    const selected = item.modelSelection;
+    if (!this.queue.canAutoDrain || piSessionBusy(this.session)) return false;
+    const consumer = this.queue.tryAcquireConsumer();
+    if (!consumer) return false;
     try {
-      await this.useModel(
-        selected
-          ? {
-              providerId: selected.providerId,
-              modelId: selected.modelId,
-              ...(selected.options?.reasoningLevel ? { thought: selected.options.reasoningLevel } : {}),
-            }
-          : undefined,
-      );
-      await this.promptNow("prompt", item.text, item.attachments);
-      return true;
-    } catch (error) {
-      this.queue.unshift(item);
-      throw error;
+      const item = this.queue.shift();
+      if (!item) return false;
+      const selected = item.modelSelection;
+      try {
+        await this.useModel(
+          selected
+            ? {
+                providerId: selected.providerId,
+                modelId: selected.modelId,
+                ...(selected.options?.reasoningLevel
+                  ? { thought: selected.options.reasoningLevel }
+                  : {}),
+              }
+            : undefined,
+        );
+        await this.promptNow("prompt", item.text, item.attachments);
+        return true;
+      } catch (error) {
+        this.queue.unshift(item);
+        throw error;
+      }
+    } finally {
+      consumer.release();
     }
   }
 
@@ -193,21 +228,27 @@ export class CommandBridge {
     text: string,
     attachments: readonly PiPromptAttachment[] | undefined,
     allowBusy = false,
+    onPromptInvoked?: () => void,
   ): Promise<"prompt" | "steer" | "handled"> {
     const body = await appendFileAttachments(text, attachments);
     const images = await loadPromptImages(attachments);
     const refs = promptAttachmentRefs(attachments);
-    if (refs.length > 0) this.noteAttachments?.(refs);
     if (kind === "steer") {
+      if (refs.length > 0) this.noteAttachments?.(refs);
       await this.session.steer(body, images.length > 0 ? images : undefined);
       return "steer";
     }
     // 等附件的空档里上一轮可能又开始跑。这时不能再 prompt。
     // 扩展命令例外：Pi 在流式输出时也会立刻执行。
     if (!allowBusy && piSessionBusy(this.session)) {
-      throw new Error("pi prompt rejected: already streaming");
+      throw Object.assign(new Error("pi prompt rejected: already streaming"), {
+        reasonCode: "guard.queuePromotionBusy",
+      });
     }
-    const accepted = await this.session.prompt(body, images.length > 0 ? { images } : undefined);
+    if (refs.length > 0) this.noteAttachments?.(refs);
+    const pending = this.session.prompt(body, images.length > 0 ? { images } : undefined);
+    onPromptInvoked?.();
+    const accepted = await pending;
     if (accepted === "handled") return "handled";
     if (!accepted) {
       if (refs.length > 0) this.noteAttachments?.([]);

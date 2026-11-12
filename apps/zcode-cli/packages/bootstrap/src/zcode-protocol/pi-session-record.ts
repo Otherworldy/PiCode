@@ -1,3 +1,6 @@
+import { withSessionCreation } from "./runtime-resources.js";
+import { abortInflightNetworkFetches } from "@zcode/adapters/network";
+import { setInflightNetworkAbort } from "@zcode/pi-host";
 import { copyFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -30,7 +33,7 @@ import {
 } from "@zcode/pi-host";
 import { isBareSlashCommandTitle, type ZCodeWorkspaceRef } from "@zcode/shared";
 import { projectIdFromDirectory } from "../app/paths.js";
-import { createPiHostedApp } from "../app/pi-hosted-app.js";
+
 import {
   permissionWithCollaborationMode,
   storedCollaborationMode,
@@ -43,8 +46,10 @@ import type {
 
 /** publisher 还是空的时，按 jsonl 重画。生成中不重画，避免冲掉还没落盘的这一轮。 */
 export async function restoreHostedProjection(hosted: HostedSession): Promise<void> {
-  if (!hosted.isIdle) return;
+  if (!hosted.isIdle || hosted.projector.getSnapshot().rows.window.length > 0) return;
   const content = await readFile(hosted.sessionFile, "utf8").catch(() => "");
+  // 读取期间可能已有新事件落行；快照只补空投影，不能重放并抹掉反馈或正在生成的内容。
+  if (!hosted.isIdle || hosted.projector.getSnapshot().rows.window.length > 0) return;
   if (readPiJsonl(content).events.length === 0) return;
   hosted.reloadHistory(content);
 }
@@ -54,55 +59,36 @@ export async function bindHostedSession(
   hosted: HostedSession,
   workspace: ZCodeWorkspaceRef,
 ): Promise<ZCodeProtocolSessionRecord> {
+  await context.trackHosted?.(hosted);
+  try {
+    return await withSessionCreation(context, () =>
+      bindHostedSessionRecord(context, hosted, workspace),
+    );
+  } catch (error) {
+    // 恢复存储或订阅失败时，分叉/导航入口也必须释放已创建的 Pi 会话。
+    const record = context.sessions.get(hosted.sessionId);
+    if (record?.hosted === hosted) {
+      record.unsubscribe?.();
+      context.sessions.delete(hosted.sessionId);
+    }
+    await hosted.dispose();
+    throw error;
+  }
+}
+
+async function bindHostedSessionRecord(
+  context: ZCodeProtocolAgentServerContext,
+  hosted: HostedSession,
+  workspace: ZCodeWorkspaceRef,
+): Promise<ZCodeProtocolSessionRecord> {
+  setInflightNetworkAbort(abortInflightNetworkFetches);
   const sessionId = hosted.sessionId as SessionId;
-  const app = createPiHostedApp(hosted, {
-    abortWork: (workId) => {
-      if (!context.piHost) return Promise.resolve(false);
-      return context.piHost.abort(workId);
-    },
-    persistSession: async (title) => {
-      const store = context.deps.sessionStore;
-      if (!store) return;
-      const compact = title.trim().replace(/\s+/g, " ");
-      // 计划模式的第一条 admission 是 /plannotator-plan-mode。写进 first_input 后，
-      // 侧栏会一直显示这条命令，直到点开会话才按 jsonl 重算。
-      const visibleTitle = compact && !isBareSlashCommandTitle(compact) ? compact.slice(0, 60) : "";
-      const existing = await store.getSession(sessionId);
-      await store.createSession({
-        id: sessionId,
-        projectID: projectIdFromDirectory(workspace.workspacePath),
-        ...(workspace.workspaceIdentity
-          ? { workspaceID: workspace.workspaceIdentity as WorkspaceId }
-          : {}),
-        slug: sessionId.toLowerCase().replace(/[^a-z0-9._-]+/g, "-") || "session",
-        directory: workspace.workspacePath,
-        path: workspace.workspacePath,
-        title: visibleTitle || "Untitled session",
-        titleSource: "first_input",
-        version: context.deps.version ?? "0.0.0",
-        // 冲突更新会整份换掉 permission。写死 build 会把已经保存的完全访问抹掉，
-        // 进程重启后工具闸回到 build，输入框却还显示完全访问。
-        permission: permissionWithCollaborationMode(
-          existing?.permission,
-          hosted.projector.getSnapshot().config.mode,
-        ),
-        traceID: createRootTraceContext({ sessionId }).traceId,
-        // 打开子代理转录会走到这里。写成普通会话后，左侧列表会多出一行。
-        ...(isPicodeSubagentSessionFile(hosted.sessionFile)
-          ? { taskType: "subagent_child" as const }
-          : {}),
-      });
-    },
-    onCollaborationMode: (mode) => {
-      void persistHostedCollaborationMode(context, sessionId, mode);
-    },
-  });
   const summary = summarizePiJsonl(await readFile(hosted.sessionFile, "utf8").catch(() => ""));
   // jsonl 已有内容会标成 immediate，admission 就不再补 session 行。
   // session_input 外键要求这行先在，否则打开旧会话后的第一条发送直接 FOREIGN KEY constraint failed。
   if (summary && context.deps.sessionStore) {
     const existing = await context.deps.sessionStore.getSession(sessionId);
-    if (!existing) await app.runtime.ensureSessionPersistedForExternalActivity(summary.title);
+    if (!existing) await persistHostedSession(context, hosted, workspace, summary.title);
     else if (
       isBareSlashCommandTitle(existing.title) &&
       summary.title &&
@@ -118,7 +104,10 @@ export async function bindHostedSession(
     }
   }
   const record: ZCodeProtocolSessionRecord = {
-    app,
+    hosted,
+    persistMode: (mode) => persistHostedCollaborationMode(context, sessionId, mode),
+    persistSession: (title) => persistHostedSession(context, hosted, workspace, title),
+    abortWork: (workId) => context.piHost?.abort(workId) ?? Promise.resolve(false),
     memoryEnabled: hosted.memoryEnabledAtCreation,
     nativeSearchEnhancementsEnabled: false,
     modelContextBudgetStrategy: "legacy",
@@ -140,6 +129,8 @@ export async function bindHostedSession(
   };
   // 必须先恢复模式再入注册表。命令进来时若还是 build，完全访问下的工具会先弹窗。
   await restoreHostedCollaborationMode(context, hosted);
+  // 创建与恢复跨 await，EOF 后迟到的结果只能释放，不能重新入表。
+  context.assertServing?.();
   // 历史 delta 在订阅时一次性吐出。必须先入注册表，sessions-index 才能按 workspace 挂上侧栏。
   context.sessions.set(sessionId, record);
   const unsubscribeDeltas = hosted.onDeltas((deltas) => {
@@ -147,7 +138,6 @@ export async function bindHostedSession(
   });
   record.unsubscribe = () => {
     unsubscribeDeltas();
-    hosted.dispose();
   };
   const snapshot = hosted.projector.getSnapshot();
   const title = snapshot.meta.title.trim() || summary?.title || "";
@@ -180,7 +170,7 @@ export async function bindHostedSession(
 }
 
 /** 模式只活在内存里的话，进程退出后重建的会话会回到 build，完全访问仍会弹窗。 */
-async function persistHostedCollaborationMode(
+export async function persistHostedCollaborationMode(
   context: ZCodeProtocolAgentServerContext,
   sessionId: SessionId,
   mode: string,
@@ -216,20 +206,30 @@ async function restoreHostedCollaborationMode(
   hosted.setCollaborationMode(mode);
 }
 
-export async function createPiSessionRecord(
+type PiSessionRecordParams = {
+  workspace: ZCodeWorkspaceRef;
+  sessionId?: string;
+  parentSessionId?: string;
+  mcpServers?: ZCodeProtocolMcpServer[];
+  workingDirectory?: string;
+  /** 冷恢复在 create 之前那次 find 的耗时，并进 open timing 的 readJsonlMs。 */
+  openReadMs?: number;
+  /** 冷恢复已经找到的 jsonl。传入后 create 不再 find。 */
+  storedSession?: PiStoredSession;
+};
+
+export function createPiSessionRecord(
   context: ZCodeProtocolAgentServerContext,
-  params: {
-    workspace: ZCodeWorkspaceRef;
-    sessionId?: string;
-    parentSessionId?: string;
-    mcpServers?: ZCodeProtocolMcpServer[];
-    workingDirectory?: string;
-    /** 冷恢复在 create 之前那次 find 的耗时，并进 open timing 的 readJsonlMs。 */
-    openReadMs?: number;
-    /** 冷恢复已经找到的 jsonl。传入后 create 不再 find。 */
-    storedSession?: PiStoredSession;
-  },
+  params: PiSessionRecordParams,
 ): Promise<ZCodeProtocolSessionRecord> {
+  return withSessionCreation(context, () => createPiSessionRecordInternal(context, params));
+}
+
+async function createPiSessionRecordInternal(
+  context: ZCodeProtocolAgentServerContext,
+  params: PiSessionRecordParams,
+): Promise<ZCodeProtocolSessionRecord> {
+  context.assertServing?.();
   const registry = context.piHost;
   if (!registry) throw new Error("pi-host registry missing");
   // 能力位与开关分开：能力位决定是否注册注入扩展，开关每轮由扩展重读。
@@ -373,4 +373,44 @@ export async function listPiStoredSummaries(registry: HostSessionRegistry, works
     // forked_from_task_id 永远为空，分支图谱和父会话追溯都拿不到边。
     ...(item.parentSessionId ? { parentSessionId: item.parentSessionId } : {}),
   }));
+}
+
+export async function persistHostedSession(
+  context: ZCodeProtocolAgentServerContext,
+  hosted: HostedSession,
+  workspace: ZCodeWorkspaceRef,
+  title: string,
+): Promise<void> {
+  const sessionId = hosted.sessionId as SessionId;
+  const store = context.deps.sessionStore;
+  if (!store) return;
+  const compact = title.trim().replace(/\s+/g, " ");
+  // 计划模式的第一条 admission 是 /plannotator-plan-mode。写进 first_input 后，
+  // 侧栏会一直显示这条命令，直到点开会话才按 jsonl 重算。
+  const visibleTitle = compact && !isBareSlashCommandTitle(compact) ? compact.slice(0, 60) : "";
+  const existing = await store.getSession(sessionId);
+  await store.createSession({
+    id: sessionId,
+    projectID: projectIdFromDirectory(workspace.workspacePath),
+    ...(workspace.workspaceIdentity
+      ? { workspaceID: workspace.workspaceIdentity as WorkspaceId }
+      : {}),
+    slug: sessionId.toLowerCase().replace(/[^a-z0-9._-]+/g, "-") || "session",
+    directory: workspace.workspacePath,
+    path: workspace.workspacePath,
+    title: visibleTitle || "Untitled session",
+    titleSource: "first_input",
+    version: context.deps.version ?? "0.0.0",
+    // 冲突更新会整份换掉 permission。写死 build 会把已经保存的完全访问抹掉，
+    // 进程重启后工具闸回到 build，输入框却还显示完全访问。
+    permission: permissionWithCollaborationMode(
+      existing?.permission,
+      hosted.projector.getSnapshot().config.mode,
+    ),
+    traceID: createRootTraceContext({ sessionId }).traceId,
+    // 打开子代理转录会走到这里。写成普通会话后，左侧列表会多出一行。
+    ...(isPicodeSubagentSessionFile(hosted.sessionFile)
+      ? { taskType: "subagent_child" as const }
+      : {}),
+  });
 }

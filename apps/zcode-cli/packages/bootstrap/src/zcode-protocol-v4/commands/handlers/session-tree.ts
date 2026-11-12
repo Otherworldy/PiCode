@@ -1,3 +1,4 @@
+import { sessionIdOf } from "../../../zcode-protocol/session-owner.js";
 import type {
   CommandEnvelope,
   CommandPayloadMap,
@@ -18,7 +19,7 @@ async function readSessionTree(
 ): Promise<CommandResult | undefined> {
   const record = requireRecord(host, envelope.sessionId);
   if (!host.readSessionTree) throw unsupported();
-  return host.readSessionTree(record.app.sessionId);
+  return host.readSessionTree(sessionIdOf(record));
 }
 
 async function navigateSessionTree(
@@ -28,7 +29,7 @@ async function navigateSessionTree(
   const record = requireRecord(host, envelope.sessionId);
   if (!host.navigateSessionTree) throw unsupported();
   const payload = envelope.payload as CommandPayloadMap["navigateSessionTree"];
-  return host.navigateSessionTree(record.app.sessionId, payload);
+  return host.navigateSessionTree(sessionIdOf(record), payload);
 }
 
 async function labelSessionEntry(
@@ -38,7 +39,7 @@ async function labelSessionEntry(
   const record = requireRecord(host, envelope.sessionId);
   if (!host.labelSessionEntry) throw unsupported();
   const payload = envelope.payload as CommandPayloadMap["labelSessionEntry"];
-  return host.labelSessionEntry(record.app.sessionId, payload);
+  return host.labelSessionEntry(sessionIdOf(record), payload);
 }
 
 async function deleteSessionBranch(
@@ -48,7 +49,7 @@ async function deleteSessionBranch(
   const record = requireRecord(host, envelope.sessionId);
   if (!host.deleteSessionBranch) throw unsupported();
   const payload = envelope.payload as CommandPayloadMap["deleteSessionBranch"];
-  return host.deleteSessionBranch(record.app.sessionId, payload);
+  return host.deleteSessionBranch(sessionIdOf(record), payload);
 }
 
 export const sessionTreeHandlers = {

@@ -1,3 +1,5 @@
+import { sessionConfigOwner, sessionSelection } from "./session-config.js";
+import { legacyApp } from "./session-owner.js";
 /* eslint-disable max-lines -- workspace 模型协议与兼容请求处理仍集中在本文件。 */
 import { createInMemorySessionEventStore } from "@zcode/adapters/storage";
 import type { ModelSelection } from "@zcode/contracts";
@@ -168,7 +170,7 @@ export async function testProviderModelConnectivity(
     );
     return { success: true as const };
   } finally {
-    if (!active) await app.close?.();
+    if (active?.app !== app) await app.close?.();
   }
 }
 
@@ -209,10 +211,14 @@ export async function createWorkspaceZCodeApp(
 
 export function hasSessionModelProvider(
   _context: ZCodeProtocolAgentServerContext,
-  record: Pick<ZCodeProtocolSessionRecord, "app" | "workspace">,
+  record: ZCodeProtocolSessionRecord,
   providerId: string,
 ): boolean {
-  return record.app.listModels().some((model) => model.ref.providerId === providerId);
+  if (record.hosted)
+    return record.hosted.listModels().some((model) => model.providerId === providerId);
+  return legacyApp(record)
+    .listModels()
+    .some((model) => model.ref.providerId === providerId);
 }
 
 async function ensureSessionModelAvailableUnlocked(
@@ -231,17 +237,18 @@ export async function ensureSessionModelAvailable(
   context: ZCodeProtocolAgentServerContext,
   record: ZCodeProtocolSessionRecord,
 ): Promise<boolean> {
-  return runSessionModelConfigMutation(record.app, () =>
+  return runSessionModelConfigMutation(sessionConfigOwner(record), () =>
     ensureSessionModelAvailableUnlocked(context, record),
   );
 }
 
 export function resolveSessionModelContextWindow(
   _context: ZCodeProtocolAgentServerContext,
-  record: Pick<ZCodeProtocolSessionRecord, "app" | "workspace" | "restoredModelSelection">,
+  record: ZCodeProtocolSessionRecord,
 ): number | undefined {
   // 缺档位会让恢复选择暂不绑定 Runtime，但模型身份仍可只读查询容量，不能伪造 20 万。
-  const selection = record.app.runtime.getSessionModelSelection() ?? record.restoredModelSelection;
-  const value = selection && record.app.getModelOption?.(selection)?.contextWindow;
+  if (record.hosted) return record.hosted.projector.getSnapshot().usage.contextWindow?.maxTokens;
+  const selection = sessionSelection(record) ?? record.restoredModelSelection;
+  const value = selection && legacyApp(record).getModelOption?.(selection)?.contextWindow;
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
 }

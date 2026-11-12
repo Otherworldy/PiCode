@@ -1,3 +1,5 @@
+import { applySessionFileRewind } from "../../../zcode-protocol/session-files.js";
+import { sessionIdOf } from "../../../zcode-protocol/session-owner.js";
 import type {
   CommandEnvelope,
   CommandPayloadMap,
@@ -15,7 +17,7 @@ async function applyFileRewind(
   const payload = envelope.payload as CommandPayloadMap["applyFileRewind"];
   const record = requireRecord(host, envelope.sessionId);
   const resolution = host.resolveRowActionTarget?.(
-    record.app.sessionId,
+    sessionIdOf(record),
     payload.target,
     "applyFileRewind",
   );
@@ -24,7 +26,7 @@ async function applyFileRewind(
   }
   const targetMessageIds = (resolution.messageIds ?? []) as MessageId[];
   const targetTurnId = resolution.row.turnId as TurnId;
-  const result = await record.app.runtime.applyWorkspaceFileRewind({
+  const result = await applySessionFileRewind(record, {
     targetMessageIds,
     ...(targetTurnId ? { targetTurnId } : {}),
   });

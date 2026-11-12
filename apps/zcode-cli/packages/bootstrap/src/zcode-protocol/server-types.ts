@@ -1,3 +1,4 @@
+import type { SessionOwner } from "./session-owner.js";
 import {
   createRootTraceContext,
   createTraceId,
@@ -25,7 +26,6 @@ import {
   type ZCodeProtocolRequest,
   type ZCodeProtocolRequestId,
   type ZCodeProtocolTrace,
-  type ZCodeSessionMode,
   type ZCodeSessionPersistence,
   type ZCodeWorkspaceRef,
 } from "@zcode/shared";
@@ -84,8 +84,7 @@ export interface ZCodeProtocolToolInputTransmissionState {
   streamedToolCallIdsWithInput: Set<string>;
 }
 
-export interface ZCodeProtocolSessionRecord {
-  app: ZCodeApp;
+export type ZCodeProtocolSessionRecord = SessionOwner & {
   memoryEnabled: boolean;
   nativeSearchEnhancementsEnabled: boolean;
   modelContextBudgetStrategy: ZCodeModelContextBudgetStrategy;
@@ -117,7 +116,7 @@ export interface ZCodeProtocolSessionRecord {
   restoreWarning?: { message: string; type: string };
   /** 冷恢复候选只供初始投影；新的选模事件立即清除，不能替代 Runtime 执行绑定。 */
   restoredModelSelection?: ModelSelection;
-}
+};
 
 export interface ZCodeProtocolClientRequestOptions {
   signal?: AbortSignal;
@@ -129,6 +128,9 @@ export interface ZCodeProtocolClientRequestOptions {
 export interface ZCodeProtocolAgentServerContext {
   /** 进程退出期间，迟到的异步物化不能重新登记 session。 */
   assertServing?: () => void;
+  trackHosted?: (hosted: import("@zcode/pi-host").HostedSession) => Promise<void>;
+  /** 包含工厂尚未返回、绑定和迟到结果释放，shutdown 必须等待整个操作。 */
+  runSessionCreation?: <T>(create: () => Promise<T>) => Promise<T>;
   deps: ZCodeProtocolAgentResolvedDependencies;
   logger?: Logger;
   appRuntimePreferences: {

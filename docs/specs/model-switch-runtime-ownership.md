@@ -15,7 +15,7 @@ Composer 点击
       └─ applyRunningModelSelection
           └─ configCommandBarrier → dispatchConfigCas("switchModelConfig")
               └─ host: switchModelConfig handler   (bootstrap/zcode-protocol-v4/commands/handlers/model-config.ts)
-                  └─ record.app.setModel
+                  └─ record.hosted.setModel
                       └─ pi-host applyModel        (pi-host/src/session-registry.ts)
                           └─ session.setModel       (Pi SDK：只改 agent.state.model)
 ```
@@ -30,7 +30,7 @@ Pi SDK 在下一次 model 请求前由 `_installAgentRequestProjection` 重读 `
 | --- | --- | --- |
 | `command-inbox.decide` | `switchModelConfig` 属 CAS 命令，`baseRevision` 不精确匹配即 stale；UI 只重试 3 次后放弃 | 命令被丢弃，runtime 从未切换 |
 | `session-registry.applyModel` | 同值判定读的是投影 config；`pi.setModel` 返回 `false` 时直接 `return` | 投影与 Pi 脱节后永久 noop，或目标模型不可解析时假装成功 |
-| `pi-hosted-app.getSessionModelSelection` | 读投影 config 当作"当前模型" | noop 判定建立在派生数据上，而不是 Pi 事实 |
+| 协议读取当前模型 | 读投影 config 当作"当前模型" | noop 判定建立在派生数据上，而不是 Pi 事实；当前 Pi 路径直接读 `HostedSession.getCurrentModelSelection()` |
 
 三者共同的用户可见结果完全相同：选择器显示新模型、ACK 为 `accepted`、上游仍是旧模型。
 
@@ -41,7 +41,7 @@ Pi SDK 在下一次 model 请求前由 `_installAgentRequestProjection` 重读 `
 | Session 当前模型 | **Pi `session.model`**（`agent.state.model`） | 唯一执行事实；`switchModelConfig` 与 `sendText` 都改它 |
 | V4 投影 `config.provider/model/thought` | ProductProjection | 派生展示。只由真实切换成功后 emit，不得作为切换判据 |
 | Renderer 草稿 `modelSelection` | Composer（`useDraftConfigControl`） | 下一次提交意图，允许与运行时不同（空闭时） |
-| 模型切换串行化 | `runSessionModelConfigMutation`（以 app 为 key） | 同一 app 的 setModel/setThought 单临界区 |
+| 模型切换串行化 | `runSessionModelConfigMutation`（Pi 以 hosted session 为 key，旧 Core 以 app 为 key） | 同一会话的 setModel/setThought 单临界区 |
 
 ## 规则
 
@@ -66,6 +66,8 @@ Pi SDK 在下一次 model 请求前由 `_installAgentRequestProjection` 重读 `
    （`chat.model.switchFailed`）。草稿保留用户意图，不回滚。
 6. **空闭时切换仍只写草稿。** 立即下发命令仅限 `control.phase === "running"`，避免把
    "浏览选择器"变成会话写操作。
+
+7. **同模型只切思考档位也发布真实增量。** `HostedSession.setThinkingLevel` 先调用 Pi setter，再发布 `projector.setConfig` 返回的 delta；协议层不补造 Core `ModelSelected`。Desktop 连续流和手机可回放流都必须收到同一 `config.thought` 变化，不能只改变 Host 内存快照。
 
 ## 事件顺序
 

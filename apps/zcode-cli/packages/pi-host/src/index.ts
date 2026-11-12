@@ -15,7 +15,7 @@ export {
 } from "./ssh-remote.js";
 export { createEmptySnapshot } from "./snapshot.js";
 export { PiToV4Projector } from "./projector.js";
-export { HostQueue } from "./host-queue.js";
+export { HostQueue, type QueueConsumerClaim } from "./host-queue.js";
 export { ExtensionUiHost } from "./extension-ui-host.js";
 export { CommandBridge, sendDelivery } from "./command-bridge.js";
 export {

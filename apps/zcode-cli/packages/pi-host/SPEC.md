@@ -31,6 +31,8 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
   → desktop-continuous 30ms / web-remote-replayable 150ms
 ```
 
+Registry drain 与 V4 提升共用 `HostQueue` 的真实 consumer claim，在模型、附件、抢占的第一个 await 前取得，准入结束后释放；两条消费入口保持原职责。claim 不改写 `autoDrain` 授权，释放不能覆盖 compact 失败或用户暂停。在途 consumer 存在时普通输入排队，不能超车或 steer；idle-only 提升在所有异步窗口后 busy 时拒绝，原项不重复入队。claim 释放按真实 Promise 边界唤醒已有 V4 ready 检查，不新增调度器。
+
 同一所有者，两套 flush。jsonl 为对话树真相；V4 snapshot 为 UI/远控派生缓存，可从 jsonl 重建。打开时若 publisher 还没有行，订阅前用 jsonl 再画一次；否则会交出空快照，加载结束后只剩输入框。runtime `dispose` 后从注册表摘掉，不删 jsonl；留着已关掉的实例会让下次打开直接复用它，冷恢复不再读文件，画面仍是空的。
 
 常驻池只卸真正空闲的会话。投影 `phase` 已经离开 `running`，但 Pi 仍在 streaming、压缩或重试（`isStreaming` / `isCompacting` / `isIdle === false`），或队列、后台任务、子会话、分支总结、未决交互还在，都不算空闲。只看 `phase === "running"` 会在超过高水位或空闲超时后把还在跑的 runtime 拆掉，内存里的对话投影一起没了。再点开要冷恢复，界面停在「正在加载会话」。事实归 `HostedSession.hasResidencyBlockingWork`，常驻池只读这一个布尔。

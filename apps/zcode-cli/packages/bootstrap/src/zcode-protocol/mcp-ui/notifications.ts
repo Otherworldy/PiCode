@@ -1,3 +1,4 @@
+import { legacyApp } from "../session-owner.js";
 import {
   SessionEventType,
   createEventId,
@@ -62,7 +63,7 @@ export function routeMcpServerNotification(
               pluginId: active.binding.pluginId,
               serverName: notification.serverName,
             },
-            record.app.getMcpAppConnectionSnapshot(notification.serverName),
+            legacyApp(record).getMcpAppConnectionSnapshot(notification.serverName),
           );
         } catch {
           continue;
@@ -82,7 +83,7 @@ export function routeMcpServerNotification(
         const record = context.sessions.get(sessionId);
         if (!record) continue;
         const pluginId =
-          record.app
+          legacyApp(record)
             .getPluginReferenceCatalog()
             .plugins.find((plugin) => plugin.mcpServerNames.includes(notification.serverName))
             ?.pluginId ?? "";

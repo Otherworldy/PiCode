@@ -1,3 +1,4 @@
+import { sessionIdOf } from "./session-owner.js";
 import type { OffPeakPort, OffPeakTaskSummary } from "@zcode/contracts";
 import {
   zcodeOffPeakCreateResultSchema,
@@ -45,7 +46,8 @@ export function createProtocolOffPeakPort(
         // 该判断是 turn denylist 与 handler offPeakTurn 之外的第三层纵深。
         throw new Error(OFF_PEAK_CREATE_FROM_OFF_PEAK_RUN_ERROR);
       }
-      const boundSessionId = createContext?.sessionId ?? activeSession?.app.sessionId;
+      const boundSessionId =
+        createContext?.sessionId ?? (activeSession ? sessionIdOf(activeSession) : undefined);
       if (boundSessionId) {
         let bound: boolean;
         try {

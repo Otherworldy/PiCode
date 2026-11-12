@@ -17,11 +17,7 @@ async function dismissExtensionNotice(
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["dismissExtensionNotice"];
   const record = requireRecord(host, envelope.sessionId);
-  const hosted = (
-    record.app as {
-      piHosted?: { dismissExtensionNotice?: (noticeId: string) => boolean };
-    }
-  ).piHosted;
+  const hosted = record.hosted;
   if (!hosted?.dismissExtensionNotice) {
     throw Object.assign(new Error("Extension notice is unavailable"), {
       reasonCode: "fault.command.extensionNoticeUnsupported",

@@ -1,6 +1,41 @@
 import type { AttachmentRef, QueueItem, QueueState } from "@zcode/shared/zcode-protocol-v4";
 
+export interface QueueConsumerClaim {
+  readonly released: Promise<void>;
+  release(): void;
+}
+
 export class HostQueue {
+  private consumer?: QueueConsumerClaim;
+
+  get canAutoDrain(): boolean {
+    return this.autoDrain && !this.consumer;
+  }
+
+  get consumerReleased(): Promise<void> | undefined {
+    return this.consumer?.released;
+  }
+
+  ownsConsumer(consumer: QueueConsumerClaim): boolean {
+    return this.consumer === consumer;
+  }
+
+  tryAcquireConsumer(): QueueConsumerClaim | undefined {
+    if (this.consumer) return undefined;
+    const settled = Promise.withResolvers<void>();
+    const consumer: QueueConsumerClaim = {
+      released: settled.promise,
+      release: () => {
+        if (this.consumer !== consumer) return;
+        // 占用和自动消费授权分离，释放不能覆盖用户暂停或 compact 失败产生的 hold。
+        this.consumer = undefined;
+        settled.resolve();
+      },
+    };
+    this.consumer = consumer;
+    return consumer;
+  }
+
   private items: QueueItem[] = [];
   autoDrain = true;
   followupMode: "queue" | "guide" = "queue";

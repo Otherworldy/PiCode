@@ -51,7 +51,6 @@ import {
 } from "./permission-options.js";
 import {
   listProtocolSlashCommands,
-  piSlashCommandsFromApp,
   type ListProtocolSlashCommandsOptions,
 } from "./slash-commands.js";
 
@@ -129,7 +128,6 @@ export async function buildSessionSnapshot(input: {
     slashCommands: await listProtocolSlashCommands({
       ...input.slashCommandOptions,
       workingDirectory: input.workspace.workspacePath,
-      piCommands: piSlashCommandsFromApp(input.app),
     }),
     goalStats: buildGoalStats(projection, input.messages),
     todos: input.todos?.map(mapTodoItem) ?? [],

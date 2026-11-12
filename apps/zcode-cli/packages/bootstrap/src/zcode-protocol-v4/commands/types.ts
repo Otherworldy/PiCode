@@ -1,3 +1,4 @@
+import type { SessionOwner } from "../../zcode-protocol/session-owner.js";
 // v4 原生命令层的 core 能力契约（原生重做版）。
 //
 // 分层纪律（不做桥接）：
@@ -23,7 +24,7 @@ import type {
   StableForkTargetResolution,
   ConversationRowTarget,
 } from "@zcode/shared/zcode-protocol-v4";
-import type { ZCodeApp } from "../../app/types.js";
+
 import type { V4InteractionRegistry } from "../interaction-registry.js";
 import type {
   ConversationEditTarget,
@@ -51,8 +52,7 @@ export type V4StableForkTargetResolution =
  * 旧 ZCodeProtocolSessionRecord 的结构化窄视图（只声明命令层需要的字段）。
  * 结构兼容：binder 直接把旧 record 对象透传进来；v4 自持会话注册表后由其提供同形对象。
  */
-export interface V4SessionRecordView {
-  app: ZCodeApp;
+export type V4SessionRecordView = SessionOwner & {
   /**
    * 会话根 traceContext（traceId 位于 sessionId 之上，对应整条任务链）。
    * 命令层调 runtime 方法/补发 core 事件时透传沿用，不得中途另起 trace。
@@ -73,7 +73,7 @@ export interface V4SessionRecordView {
   /** 恢复失败告警：存在时拒绝新 turn（历史损坏不能静默续写）。 */
   restoreWarning?: { message: string; type: string };
   taskType?: SessionTaskType;
-}
+};
 
 export interface V4CommandCoreHost {
   /** 会话查找（同一注册表对象引用；不存在返回 undefined → handler 拒绝）。 */

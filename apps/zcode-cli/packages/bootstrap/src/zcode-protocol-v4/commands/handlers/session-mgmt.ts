@@ -1,3 +1,4 @@
+import { legacyApp, sessionIdOf } from "../../../zcode-protocol/session-owner.js";
 // 会话管理命令组：createSession / renameSession / deleteSession。
 // 每个命令组一个文件：handler 纯函数 (host, envelope) → CommandResult|undefined，
 // 决策逻辑直驱 core，环境能力走 host 钩子（见 ../types.ts 的过渡标注）。
@@ -152,10 +153,12 @@ async function renameSession(
   const payload = envelope.payload as CommandPayloadMap["renameSession"];
   const record = requireRecord(host, envelope.sessionId);
   // 注意：方法必须经 runtime 调用（不可解构，实现依赖 this 绑定，见 methods/index.ts 挂载方式）。
-  await record.app.runtime.setCustomSessionTitle({
-    title: payload.title,
-    traceContext: record.traceContext,
-  });
+  if (record.hosted) record.hosted.publishCustomTitle(payload.title);
+  else
+    await legacyApp(record).runtime.setCustomSessionTitle({
+      title: payload.title,
+      traceContext: record.traceContext,
+    });
   return undefined;
 }
 
@@ -174,7 +177,7 @@ async function deleteSession(
     // 关闭不能静默降级：钩子缺失说明 binder 接线不完整，直接失败（ACK failed）。
     throw new Error("v4 deleteSession requires host.closeSession capability");
   }
-  await host.closeSession(record.app.sessionId);
+  await host.closeSession(sessionIdOf(record));
   return undefined;
 }
 

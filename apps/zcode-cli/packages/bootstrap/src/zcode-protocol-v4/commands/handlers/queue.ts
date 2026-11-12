@@ -1,3 +1,8 @@
+import {
+  setSessionAutoDrain,
+  setSessionFollowupMode,
+} from "../../../zcode-protocol/session-config.js";
+import { legacyApp, sessionIdOf } from "../../../zcode-protocol/session-owner.js";
 // queue 命令组：deleteQueueItem / editQueueItem / reorderQueueItem / setAutoDrain /
 // setFollowupMode / sendQueuedNow（原生重做，组文件样板见 session-flow.ts）。
 // 决策逻辑直驱 core（app 层 queue API，批1 已搬运）；queueItemId ≡ core 的
@@ -12,7 +17,7 @@ import { mapAttachmentRefsToTurnAttachments } from "../attachment-refs.js";
 import { inputIntentMetadataFromQueueItem } from "../input-intent.js";
 import { startPromptTurn } from "../prompt-turn.js";
 import { requireRecord } from "../record-access.js";
-import type { V4CommandCoreHost, V4SessionRecordView } from "../types.js";
+import type { V4CommandCoreHost } from "../types.js";
 import {
   applyGoalCommand,
   parseGoalObjectiveFromCommandText,
@@ -74,12 +79,19 @@ async function deleteQueueItem(
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["deleteQueueItem"];
   const record = requireRecord(host, envelope.sessionId);
+  // 自动提升不经过外部 CommandInbox；消费占用期间不能改写它已读取的队列事实。
+  if (record.hosted?.queue.consumerReleased)
+    throw new V4QueueItemReservedError(payload.queueItemId);
   // 未命中（并发 drain/重复删除的竞态）= noop，不算失败；留 warn 供观测。
-  const removed = await record.app.removeQueueItem(payload.queueItemId);
+  const removed = record.hosted
+    ? record.hosted.queue.remove(payload.queueItemId)
+    : await legacyApp(record).removeQueueItem(payload.queueItemId);
+  if (record.hosted && removed)
+    record.hosted.projector.replaceQueue(record.hosted.queue.snapshot());
   if (!removed) {
     host.logger?.warn?.("v4 deleteQueueItem missed", {
       queueItemId: payload.queueItemId,
-      sessionId: record.app.sessionId,
+      sessionId: sessionIdOf(record),
     });
     // 未命中曾返回 undefined，gateway 会把并发 drain/重复删除误报为 accepted；
     // queue 撤回编辑因此可能把已消费的旧投影再次恢复到 composer。
@@ -94,18 +106,23 @@ async function editQueueItem(
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["editQueueItem"];
   const record = requireRecord(host, envelope.sessionId);
-  const queueItem = host.getQueueItem?.(record.app.sessionId, payload.queueItemId) ?? null;
+  if (record.hosted?.queue.consumerReleased)
+    throw new V4QueueItemReservedError(payload.queueItemId);
+  const queueItem = host.getQueueItem?.(sessionIdOf(record), payload.queueItemId) ?? null;
   if (queueItem?.kind === "compact") {
     // compact 是 typed maintenance intent；允许改文本会把它伪装成普通输入，
     // 但 commandKind 仍是 compact，消费时产生与 UI 文案不一致的压缩副作用。
     throw new V4QueueItemNotEditableError(payload.queueItemId);
   }
   // core reducer 同 id 原地更新（保位）；未命中 = noop + warn（同 delete 的竞态语义）。
-  const edited = await record.app.editQueueItem(payload.queueItemId, payload.newText);
+  const edited = record.hosted
+    ? record.hosted.queue.edit(payload.queueItemId, payload.newText)
+    : await legacyApp(record).editQueueItem(payload.queueItemId, payload.newText);
+  if (record.hosted && edited) record.hosted.projector.replaceQueue(record.hosted.queue.snapshot());
   if (!edited) {
     host.logger?.warn?.("v4 editQueueItem missed", {
       queueItemId: payload.queueItemId,
-      sessionId: record.app.sessionId,
+      sessionId: sessionIdOf(record),
     });
   }
   return undefined;
@@ -117,12 +134,17 @@ async function reorderQueueItem(
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["reorderQueueItem"];
   const record = requireRecord(host, envelope.sessionId);
+  if (record.hosted?.queue.consumerReleased)
+    throw new V4QueueItemReservedError(payload.queueItemId);
   // beforeQueueItemId = null → 移到队尾（协议与 app API 同形，直传）。
-  const moved = await record.app.reorderQueueItem(payload.queueItemId, payload.beforeQueueItemId);
+  const moved = record.hosted
+    ? record.hosted.queue.reorder(payload.queueItemId, payload.beforeQueueItemId)
+    : await legacyApp(record).reorderQueueItem(payload.queueItemId, payload.beforeQueueItemId);
+  if (record.hosted && moved) record.hosted.projector.replaceQueue(record.hosted.queue.snapshot());
   if (!moved) {
     host.logger?.warn?.("v4 reorderQueueItem missed", {
       queueItemId: payload.queueItemId,
-      sessionId: record.app.sessionId,
+      sessionId: sessionIdOf(record),
     });
   }
   return undefined;
@@ -134,7 +156,7 @@ async function setAutoDrain(
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["setAutoDrain"];
   const record = requireRecord(host, envelope.sessionId);
-  await record.app.setQueueAutoDrain(payload.autoDrain);
+  await setSessionAutoDrain(record, payload.autoDrain);
   if (payload.autoDrain) {
     // 不能只翻授权位：idle 暂停队列没有 active turn 可替它启动队首。复用 CLI
     // 权威 ready hook，busy 时只武装，idle 时立即按 sendQueuedNow 原子路径提升。
@@ -149,7 +171,7 @@ async function setFollowupMode(
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["setFollowupMode"];
   const record = requireRecord(host, envelope.sessionId);
-  await record.app.setFollowupMode(payload.mode);
+  await setSessionFollowupMode(record, payload.mode);
   return undefined;
 }
 
@@ -168,6 +190,57 @@ async function sendQueuedNow(
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["sendQueuedNow"];
   const record = requireRecord(host, envelope.sessionId);
+  if (record.hosted) {
+    const hosted = record.hosted;
+    const item = hosted.queue
+      .snapshot()
+      .items.find((item) => item.queueItemId === payload.queueItemId);
+    if (!item) throw new V4QueueItemTextUnavailableError(payload.queueItemId);
+    const automatic = commandExecutionContextOf(envelope)?.autoDrainPromotion === true;
+    if (automatic && (!hosted.isIdle || !hosted.queue.canAutoDrain)) {
+      throw new V4QueuePromotionLeaseUnavailableError();
+    }
+    // 与 Registry 共用真实消费占用，覆盖模型、附件和抢占的所有 await 窗口。
+    const consumer = hosted.queue.tryAcquireConsumer();
+    if (!consumer) throw new V4QueuePromotionLeaseUnavailableError();
+    try {
+      if (!automatic)
+        await preemptActiveTurnAndWait(host, record, {
+          abortMessage: "send queued now",
+          goalPausedMutationReason: "send_queued_now",
+          preserveQueueAutoDrainOnCancel: true,
+        });
+      if (item.kind === "compact")
+        await startManualCompact(
+          host,
+          record,
+          item.sourceCommandId,
+          undefined,
+          item.modelSelection,
+        );
+      else {
+        if (item.kind !== "sendText") throw new Error("guard.capabilityUnsupported");
+        const attachments = await mapAttachmentRefsToTurnAttachments(record.app, item.attachments);
+        const started = await startPromptTurn(host, record, {
+          content: item.text,
+          inputId: item.sourceCommandId,
+          intent: inputIntentMetadataFromQueueItem(item, item.text),
+          requireIdle: true,
+          hostedConsumer: consumer,
+          ...(attachments ? { attachments } : {}),
+        });
+        if (started.admission.kind === "queued" || started.admission.kind === "rejected")
+          throw new V4QueuePromotionLeaseUnavailableError();
+      }
+      if (!hosted.queue.remove(item.queueItemId))
+        throw new V4QueuePromotionCommitError(item.queueItemId);
+    } finally {
+      consumer.release();
+      hosted.projector.replaceQueue(hosted.queue.snapshot());
+    }
+    await host.afterLegacyStateMutation?.(record, "queue_promoted");
+    return undefined;
+  }
   const reservationId = envelope.commandId;
   const autoDrainPromotion = commandExecutionContextOf(envelope)?.autoDrainPromotion === true;
   const foregroundPromotionLeaseId = `queue-promotion:${reservationId}`;
@@ -177,12 +250,12 @@ async function sendQueuedNow(
   let leaseReleaseOwnedByBackground = false;
   let foregroundPromotionLeaseAcquired = false;
   try {
-    const queueItem = host.getQueueItem?.(record.app.sessionId, payload.queueItemId) ?? null;
+    const queueItem = host.getQueueItem?.(sessionIdOf(record), payload.queueItemId) ?? null;
     if (queueItem === null) {
       throw new V4QueueItemTextUnavailableError(payload.queueItemId);
     }
     const acquirePromotionLease = (mode: "after-current" | "idle-only"): void => {
-      const leaseResult = record.app.runtime.acquireForegroundPromotionLease({
+      const leaseResult = legacyApp(record).runtime.acquireForegroundPromotionLease({
         leaseId: foregroundPromotionLeaseId,
         mode,
         promotedInputId: queueItem.sourceCommandId,
@@ -195,7 +268,9 @@ async function sendQueuedNow(
       foregroundPromotionLeaseAcquired = true;
     };
     if (autoDrainPromotion) acquirePromotionLease("idle-only");
-    if (!(await record.app.reserveQueueItem(payload.queueItemId, reservationId, traceOptions))) {
+    if (
+      !(await legacyApp(record).reserveQueueItem(payload.queueItemId, reservationId, traceOptions))
+    ) {
       throw new V4QueueItemReservedError(payload.queueItemId);
     }
     queueItemReserved = true;
@@ -220,7 +295,11 @@ async function sendQueuedNow(
       });
     }
     if (
-      !(await record.app.markQueueItemPromoting(payload.queueItemId, reservationId, traceOptions))
+      !(await legacyApp(record).markQueueItemPromoting(
+        payload.queueItemId,
+        reservationId,
+        traceOptions,
+      ))
     ) {
       throw new V4QueueItemReservedError(payload.queueItemId);
     }
@@ -237,8 +316,8 @@ async function sendQueuedNow(
       const intent = inputIntentMetadataFromQueueItem(queueItem, objective ?? queueItem.text);
       const goalContinuationWillStart = !(
         intent.planEnabled ??
-        record.app.runtime?.getPlanEnabled?.() ??
-        record.app.getMode?.() === "plan"
+        legacyApp(record).runtime?.getPlanEnabled?.() ??
+        legacyApp(record).getMode?.() === "plan"
       );
       await applyGoalCommand(host, record, {
         displayText: queueItem.text,
@@ -267,7 +346,7 @@ async function sendQueuedNow(
       }
     }
     startAdmitted = true;
-    const removed = await record.app.removeQueueItem(payload.queueItemId, {
+    const removed = await legacyApp(record).removeQueueItem(payload.queueItemId, {
       reason: "promoted",
       reservationId,
       ...traceOptions,
@@ -282,12 +361,12 @@ async function sendQueuedNow(
     return undefined;
   } finally {
     if (foregroundPromotionLeaseAcquired && !leaseReleaseOwnedByBackground) {
-      record.app.runtime.releaseForegroundPromotionLease(foregroundPromotionLeaseId);
+      legacyApp(record).runtime.releaseForegroundPromotionLease(foregroundPromotionLeaseId);
     }
     // start 一旦 admitted 就不能 release，否则 remove 异常时另一端会重复执行；此时保持
     // promoting 供显式 resync/故障处理。start 前失败则安全回滚到 queued。
     if (queueItemReserved && !startAdmitted) {
-      await record.app.releaseQueueItemReservation(
+      await legacyApp(record).releaseQueueItemReservation(
         payload.queueItemId,
         reservationId,
         traceOptions,

@@ -58,7 +58,10 @@ function decodeDataUrlText(content: string): string | undefined {
   }
 }
 
-async function mapAttachmentRef(app: ZCodeApp, ref: AttachmentRef): Promise<TurnAttachment> {
+async function mapAttachmentRef(
+  app: Pick<ZCodeApp, "readToolResultArtifact"> | undefined,
+  ref: AttachmentRef,
+): Promise<TurnAttachment> {
   const displayMeta = displayMetaOf(ref);
   if (!isUriAttachmentRef(ref.ref)) {
     // 本地路径引用：交给 core 的文件/图片读取链路（阈值与降级已内建）。
@@ -89,8 +92,8 @@ async function mapAttachmentRef(app: ZCodeApp, ref: AttachmentRef): Promise<Turn
     return { type: "file", ...displayMeta };
   }
   try {
-    const artifact = await app.readToolResultArtifact(ref.ref);
-    const text = decodeDataUrlText(artifact.content);
+    const artifact = await app?.readToolResultArtifact(ref.ref);
+    const text = artifact ? decodeDataUrlText(artifact.content) : undefined;
     return text !== undefined
       ? { content: text, path: ref.fileName, type: "file", ...displayMeta }
       : { type: "file", ...displayMeta };
@@ -105,7 +108,7 @@ async function mapAttachmentRef(app: ZCodeApp, ref: AttachmentRef): Promise<Turn
  * 空数组/缺省 → undefined（sendInput 语义：无附件不带字段）。
  */
 export async function mapAttachmentRefsToTurnAttachments(
-  app: ZCodeApp,
+  app: Pick<ZCodeApp, "readToolResultArtifact"> | undefined,
   refs: readonly AttachmentRef[] | undefined,
 ): Promise<TurnAttachment[] | undefined> {
   if (!refs || refs.length === 0) return undefined;

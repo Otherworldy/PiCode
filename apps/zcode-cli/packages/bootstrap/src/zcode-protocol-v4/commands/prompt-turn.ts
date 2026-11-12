@@ -1,3 +1,10 @@
+import type { QueueConsumerClaim } from "@zcode/pi-host";
+import {
+  sendHostedInput,
+  isHostedExtensionCommand,
+  type HostedInputAdmission,
+} from "../../zcode-protocol/hosted-input.js";
+import { legacyApp, sessionIdOf } from "../../zcode-protocol/session-owner.js";
 // 原生 prompt turn 运行器。
 //
 // Core admission 只负责接受输入并建立 session-scoped reservation；本文件不再拥有
@@ -24,6 +31,7 @@ interface StartPromptTurnParamsBase {
   toolDisallowlist?: readonly string[];
   /** sendQueuedNow 已持有 Core promotion lease，要求这次 admission 只能占用空闲位。 */
   requireIdle?: boolean;
+  hostedConsumer?: QueueConsumerClaim;
 }
 
 type StartPromptTurnParams = StartPromptTurnParamsBase & TurnBackgroundAttribution;
@@ -33,7 +41,7 @@ interface PromptTurnStartResult {
   turnStarted: Promise<void>;
   /** Core 真实完成 promise，仅供生命周期清理使用，不属于 ACK 边界。 */
   completion?: Promise<unknown>;
-  admission: SendInputResult;
+  admission: SendInputResult | HostedInputAdmission;
   /** 兼容旧调用方；初始 ACK 不再依赖 messageId。 */
   messageId?: string;
 }
@@ -69,7 +77,7 @@ export async function startPromptTurn(
     // 仍无可用模型/宿主不支持 → 维持拒绝。
     if (host.hasUsableRuntimeModelTarget?.(record) === true) {
       host.logger?.info?.("v4 restoreWarning cleared by model catalog recovery", {
-        sessionId: record.app.sessionId,
+        sessionId: sessionIdOf(record),
         warningType: record.restoreWarning.type,
       });
       record.restoreWarning = undefined;
@@ -101,39 +109,51 @@ export async function startPromptTurn(
     record.activeOffPeakTaskId = activeOffPeakTaskId;
   }
 
-  let admission: SendInputResult;
+  let admission: SendInputResult | HostedInputAdmission;
   try {
-    admission = await record.app.sendInput(
-      {
-        text: params.content,
-        ...(params.attachments ? { attachments: params.attachments } : {}),
-      },
-      {
-        // Bootstrap controller 曾经被当成 Core busy 真相，并由 projection watchdog
-        // 清理它；现在 Core admission 自己持有 reservation，Stop 也直接调用 Core execution。
-        delivery: "start_turn",
-        ...(params.intent?.requestedDelivery === "guide"
-          ? { queueDelivery: "guide" as const }
-          : {}),
-        ...(params.browserAmbientContext
-          ? { browserAmbientContext: params.browserAmbientContext }
-          : {}),
-        inputId: params.inputId,
-        ...(params.inputPresentation ? { inputPresentation: params.inputPresentation } : {}),
-        ...turnBackgroundAttributionOf({
-          automationId: activeAutomationId,
-          // 归因用解析后的 id：resume 段仅靠 inputId 前缀兜底时也要进 core loop state。
-          offPeakTaskId: activeOffPeakTaskId,
-          offPeakRunType: params.offPeakRunType,
-        }),
-        intent: params.intent,
-        ...(params.modelExecution ? { modelExecution: params.modelExecution } : {}),
-        ...(params.sharedContextRefs ? { sharedContextRefs: params.sharedContextRefs } : {}),
-        ...(turnToolDisallowlist ? { toolDisallowlist: turnToolDisallowlist } : {}),
-        ...(params.requireIdle ? { requireIdle: true } : {}),
-        queryId: params.inputId as SendInputOptions["queryId"],
-      },
-    );
+    admission = record.hosted
+      ? await sendHostedInput(record.hosted, {
+          text: params.content,
+          inputId: params.inputId,
+          requireIdle: params.requireIdle,
+          consumer: params.hostedConsumer,
+          ...(params.attachments ? { attachments: params.attachments } : {}),
+          ...(params.intent?.requestedDelivery === "guide" ? { delivery: "guide" as const } : {}),
+          ...(params.intent?.modelSelection
+            ? { modelSelection: params.intent.modelSelection }
+            : {}),
+        })
+      : await legacyApp(record).sendInput(
+          {
+            text: params.content,
+            ...(params.attachments ? { attachments: params.attachments } : {}),
+          },
+          {
+            // Bootstrap controller 曾经被当成 Core busy 真相，并由 projection watchdog
+            // 清理它；现在 Core admission 自己持有 reservation，Stop 也直接调用 Core execution。
+            delivery: "start_turn",
+            ...(params.intent?.requestedDelivery === "guide"
+              ? { queueDelivery: "guide" as const }
+              : {}),
+            ...(params.browserAmbientContext
+              ? { browserAmbientContext: params.browserAmbientContext }
+              : {}),
+            inputId: params.inputId,
+            ...(params.inputPresentation ? { inputPresentation: params.inputPresentation } : {}),
+            ...turnBackgroundAttributionOf({
+              automationId: activeAutomationId,
+              // 归因用解析后的 id：resume 段仅靠 inputId 前缀兜底时也要进 core loop state。
+              offPeakTaskId: activeOffPeakTaskId,
+              offPeakRunType: params.offPeakRunType,
+            }),
+            intent: params.intent,
+            ...(params.modelExecution ? { modelExecution: params.modelExecution } : {}),
+            ...(params.sharedContextRefs ? { sharedContextRefs: params.sharedContextRefs } : {}),
+            ...(turnToolDisallowlist ? { toolDisallowlist: turnToolDisallowlist } : {}),
+            ...(params.requireIdle ? { requireIdle: true } : {}),
+            queryId: params.inputId as SendInputOptions["queryId"],
+          },
+        );
   } catch (error) {
     clearPromptRecordState(record, previousAutomationId, previousOffPeakTaskId);
     await host.afterLegacyStateMutation?.(record, "prompt_failed");
@@ -153,6 +173,11 @@ export async function startPromptTurn(
     return { admission, turnStarted: Promise.resolve() };
   }
 
+  if (!("completion" in admission)) {
+    clearPromptRecordState(record, previousAutomationId, previousOffPeakTaskId);
+    return { admission, turnStarted: Promise.resolve() };
+  }
+
   const completion = runWithSessionResidencyFinalization(record, async () => {
     let mutationReason = "prompt_completed";
     try {
@@ -162,7 +187,7 @@ export async function startPromptTurn(
       host.logger?.warn?.("v4 background turn failed", {
         error: error instanceof Error ? error.message : String(error),
         inputId: params.inputId,
-        sessionId: record.app.sessionId,
+        sessionId: sessionIdOf(record),
       });
     } finally {
       clearPromptRecordState(record, previousAutomationId, previousOffPeakTaskId);
@@ -173,27 +198,15 @@ export async function startPromptTurn(
   host.logger?.info?.("v4 prompt admitted", {
     attachmentCount: params.attachments?.length ?? 0,
     inputId: params.inputId,
-    sessionId: record.app.sessionId,
+    sessionId: sessionIdOf(record),
     textLength: params.content.length,
   });
   return { admission, completion, turnStarted: Promise.resolve() };
 }
 
 function isExtensionSlashText(record: V4SessionRecordView, text: string): boolean {
-  const name = /^\/([^\s]+)/.exec(text.trim())?.[1]?.toLowerCase();
-  if (!name) return false;
-  const commands =
-    (
-      record.app as {
-        piHosted?: {
-          listSlashCommands?: () => Array<{ name: string; source?: string }>;
-        };
-      }
-    ).piHosted?.listSlashCommands?.() ?? [];
-  return commands.some(
-    (command) =>
-      command.source === "extension" && command.name.replace(/^\/+/, "").toLowerCase() === name,
-  );
+  if (record.hosted) return isHostedExtensionCommand(record.hosted, text);
+  return false;
 }
 
 function clearPromptRecordState(

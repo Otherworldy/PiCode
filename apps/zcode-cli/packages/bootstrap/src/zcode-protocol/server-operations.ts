@@ -1,3 +1,19 @@
+import { createPiSessionRecord, restoreHostedProjection } from "./pi-session-record.js";
+import { sendHostedInput, isHostedExtensionCommand } from "./hosted-input.js";
+import { hostedProtocolSnapshot } from "./hosted-snapshot.js";
+import {
+  closeSessionOwner,
+  sessionConfigOwner,
+  sessionForegroundBusy,
+  sessionMode,
+  sessionModel,
+  sessionThought,
+  sessionThoughtLevels,
+  setSessionMode,
+  setSessionModel,
+  setSessionThought,
+} from "./session-config.js";
+import { legacyApp, sessionIdOf } from "./session-owner.js";
 /* eslint-disable max-lines -- PiCode Protocol 的 session/workspace 方法共享同一个 server context 与 snapshot helpers，迁移期先集中维护。 */
 import {
   completePiPrompt,
@@ -137,7 +153,7 @@ const PLAN_MODE_GOAL_CONTINUATION_SKIPPED_MESSAGE = "Plan mode 下已记录 goal
 const SLOW_SNAPSHOT_LOG_THRESHOLD_MS = 1000;
 
 type ProtocolGoalTarget = NonNullable<
-  Awaited<ReturnType<NonNullable<ZCodeProtocolSessionRecord["app"]["readTarget"]>>>
+  Awaited<ReturnType<NonNullable<NonNullable<ZCodeProtocolSessionRecord["app"]>["readTarget"]>>>
 >;
 
 type ZCodeSessionRecordParams = (
@@ -165,7 +181,7 @@ type SessionStartupPreferencesSource =
   | { kind: "inherit"; parent: ZCodeProtocolSessionRecord };
 
 function resolveSupportedAppThoughtLevel(
-  app: Pick<ZCodeProtocolSessionRecord["app"], "listThoughtLevels">,
+  app: Pick<NonNullable<ZCodeProtocolSessionRecord["app"]>, "listThoughtLevels">,
   thoughtLevel: string | undefined,
 ): string | undefined {
   const normalizedThoughtLevel = thoughtLevel?.trim();
@@ -688,7 +704,7 @@ async function readProtocolSessionEvents(
   deliveryKind?: ZCodeDeliveryKind,
   options: { afterSeq?: number; limit?: number } = {},
 ): Promise<ZCodeSessionEvent[]> {
-  const events = await record.eventStore.getEvents(record.app.sessionId as SessionId);
+  const events = await record.eventStore.getEvents(sessionIdOf(record) as SessionId);
   const visibleEvents: ZCodeSessionEvent[] = [];
   const toolInputTransmissions: ZCodeProtocolToolInputTransmissionState = {
     streamedToolCallIdsWithInput: new Set(),
@@ -1034,7 +1050,7 @@ async function persistImportedSessionHistory(params: {
       ? (importedHistory.updatedAt ?? importedHistory.messages.at(-1)?.timestamp ?? createdAt)
       : createdAt;
   // 历史导入不执行模型；未绑定时保留消息内容，不能要求当前选择或伪造消息来源。
-  const currentModel = optionalModelSelectionFromString(params.record.app.getModel());
+  const currentModel = optionalModelSelectionFromString(sessionModel(params.record));
   const providerId = currentModel?.providerId as ModelProviderId | undefined;
   const modelId = currentModel?.modelId as ModelId | undefined;
 
@@ -1062,7 +1078,7 @@ async function persistImportedSessionHistory(params: {
         title: importedHistory.title,
         titleSource: "custom",
         version: params.context.deps.version ?? "0.0.0",
-        permission: { mode: params.record.app.getMode() },
+        permission: { mode: sessionMode(params.record) },
         time: { created: importedAt, updated: importedAt },
       },
       contextMessage: {
@@ -1139,7 +1155,7 @@ async function persistImportedSessionHistory(params: {
     titleSource: "custom",
     version: params.context.deps.version ?? "0.0.0",
     permission: {
-      mode: params.record.app.getMode(),
+      mode: sessionMode(params.record),
     },
     time: {
       created: createdAt,
@@ -1184,7 +1200,7 @@ async function persistImportedSessionHistory(params: {
         parentID:
           lastUserMessageId ?? createMessageId(`${params.sessionId}_import_parent_${index}`),
         ...(currentModel ? { modelId, providerId } : {}),
-        mode: params.record.app.getMode(),
+        mode: sessionMode(params.record),
         agent: "zcode-agent",
         path: {
           cwd: workspace.workspacePath,
@@ -1244,7 +1260,7 @@ export async function createSessionRecordForV4(
   rawParams: unknown,
 ) {
   return createSessionWithProjection(context, rawParams, undefined, async (record) => ({
-    value: { sessionId: record.app.sessionId },
+    value: { sessionId: sessionIdOf(record) },
   }));
 }
 
@@ -1299,22 +1315,22 @@ async function createSessionWithProjection<T>(
   const initialModel = params.model;
   const initialThoughtLevel = params.thoughtLevel;
   try {
-    await runSessionModelConfigMutation(record.app, async () => {
+    await runSessionModelConfigMutation(sessionConfigOwner(record), async () => {
       if (initialModel) {
         const setInitialModelStartedAt = Date.now();
-        await record.app.setModel(formatProtocolModelSelection(initialModel));
+        await setSessionModel(record, formatProtocolModelSelection(initialModel));
         setInitialModelDurationMs = Date.now() - setInitialModelStartedAt;
         record.stateRevision++;
       }
       const supportedInitialThoughtLevel = resolveSupportedAppThoughtLevel(
-        record.app,
+        { listThoughtLevels: () => sessionThoughtLevels(record) },
         initialThoughtLevel,
       );
       if (supportedInitialThoughtLevel) {
         // app 已接管默认模型/思考深度持久化，session/create 会显式传入 thoughtLevel。
         // Workspace Preferences 必须持久化读取：只读 Agent 内存会在重启后丢掉用户上次选择。
         const setInitialThoughtLevelStartedAt = Date.now();
-        await record.app.setThoughtLevel(supportedInitialThoughtLevel);
+        await setSessionThought(record, supportedInitialThoughtLevel);
         setInitialThoughtLevelDurationMs = Date.now() - setInitialThoughtLevelStartedAt;
         record.stateRevision++;
       } else if (initialThoughtLevel) {
@@ -1325,7 +1341,7 @@ async function createSessionWithProjection<T>(
           module: "bootstrap.zcode_protocol",
           requestedThoughtLevel: initialThoughtLevel,
           sessionId,
-          supportedThoughtLevels: record.app.listThoughtLevels(),
+          supportedThoughtLevels: sessionThoughtLevels(record),
           workspaceKey: workspace.workspaceKey,
           workspacePath: workspace.workspacePath,
         });
@@ -1341,7 +1357,7 @@ async function createSessionWithProjection<T>(
         sessionId,
         createParams: params,
       });
-      await record.app.resume();
+      await legacyApp(record).resume();
       record.stateRevision++;
     }
     const snapshotStartedAt = Date.now();
@@ -1396,7 +1412,7 @@ async function createSessionWithProjection<T>(
     context.v4Gateway?.disposeSession(sessionId);
     context.sessions.delete(sessionId);
     try {
-      await record.app.close?.();
+      await closeSessionOwner(record);
     } catch {
       // 保留原始 create 失败原因；close 只是清理半初始化 runtime 的 best-effort 动作。
     }
@@ -1439,7 +1455,26 @@ export async function activateSessionForResume(
   await context.sessionResidentPool?.waitForDeactivation(params.sessionId);
   const existing = context.sessions.get(params.sessionId);
   if (existing) {
+    if (existing.hosted) await restoreHostedProjection(existing.hosted);
     return { record: existing };
+  }
+  if (context.piHost) {
+    // Pi 历史由原生 jsonl 恢复，不能调用仅 Core 提供的 resume。
+    const stored = await context.piHost.find(params.sessionId);
+    if (stored) {
+      const record = await createPiSessionRecord(context, {
+        sessionId: params.sessionId,
+        workspace:
+          params.workspace ??
+          buildWorkspaceRef({
+            workspaceIdentity: stored.identity,
+            workspacePath:
+              parseRemoteWorkspaceIdentity(stored.identity)?.workspacePath ?? stored.identity,
+          }),
+        storedSession: stored,
+      });
+      return { record };
+    }
   }
   let session = await getPersistedSession(context, params.sessionId);
   if (!session) {
@@ -1501,10 +1536,10 @@ export async function activateSessionForResume(
   if (session.time?.updated) record.updatedAt = session.time.updated;
   context.assertServing?.();
   context.sessions.set(params.sessionId, record);
-  const resumeResult = await runSessionModelConfigMutation(record.app, async () => {
+  const resumeResult = await runSessionModelConfigMutation(sessionConfigOwner(record), async () => {
     const result = options.reusePersistedMessages
-      ? await record.app.resume({ persistedMessages })
-      : await record.app.resume();
+      ? await legacyApp(record).resume({ persistedMessages })
+      : await legacyApp(record).resume();
     // 仅用于首次投影种子，包含有效模型+空档位；它不是第二份可执行 Runtime 选择。
     record.restoredModelSelection = result.modelSelection;
     return result;
@@ -1675,12 +1710,16 @@ export async function listSessions(context: ZCodeProtocolAgentServerContext, raw
   for (const record of context.sessions.values()) {
     if (record.persistence === "deferred") continue;
     if (!isTaskListSessionType(record.taskType)) continue;
-    if (storedIds.has(record.app.sessionId)) continue;
+    if (storedIds.has(sessionIdOf(record))) continue;
     if (params.workspace && params.workspace.workspaceKey !== record.workspace.workspaceKey)
       continue;
+    if (record.hosted) {
+      sessions.push(hostedProtocolSnapshot(record).session);
+      continue;
+    }
     sessions.push(
       mapSessionInfo({
-        app: record.app,
+        app: legacyApp(record),
         workspace: record.workspace,
         taskType: record.taskType,
         parentSessionId: record.parentSessionId,
@@ -1799,18 +1838,24 @@ export async function listSessionSubagents(
         sessionID: childSession.id,
       });
       const liveChild = context.sessions.get(childSessionId);
-      const childProjection = liveChild
-        ? await liveChild.app.runtime.getProjection().catch(() => undefined)
-        : undefined;
+      const childProjection =
+        liveChild && !liveChild.hosted
+          ? await legacyApp(liveChild)
+              .runtime.getProjection()
+              .catch(() => undefined)
+          : undefined;
       return { childMessages, childProjection, childSession, childSessionId };
     }),
   );
   const persistedChildren = childEntries.filter(
     (entry): entry is NonNullable<typeof entry> => entry !== null,
   );
-  const parentProjection = liveParent
-    ? await liveParent.app.runtime.getProjection().catch(() => undefined)
-    : undefined;
+  const parentProjection =
+    liveParent && !liveParent.hosted
+      ? await legacyApp(liveParent)
+          .runtime.getProjection()
+          .catch(() => undefined)
+      : undefined;
   const projection = projectSessionSubagents({
     revision: liveParent?.stateRevision ?? parentSession.time.updated,
     parentSession,
@@ -1891,6 +1936,17 @@ export async function readSessionContextUsage(
 ) {
   const record = context.sessions.get(sessionId);
   if (!record) return undefined;
+  if (record.hosted) {
+    const usage = record.hosted.projector.getSnapshot().usage.contextWindow;
+    return usage && usage.maxTokens > 0
+      ? {
+          used: usage.usedTokens,
+          size: usage.maxTokens,
+          ...(usage.cache ? { cache: usage.cache } : {}),
+          ...(usage.breakdown ? { breakdown: usage.breakdown } : {}),
+        }
+      : undefined;
+  }
   const [resolvedPersistedMessages, session, events] = await Promise.all([
     persistedMessages ?? readSessionMessages(context, record),
     getPersistedSession(context, sessionId),
@@ -1899,7 +1955,7 @@ export async function readSessionContextUsage(
   // 保持 legacy buildSessionSnapshot 的取数顺序：先固定持久事实，再读取 runtime
   // projection。运行中首订阅若恰逢 ModelComplete/rewind，不能因窄读把 projection
   // 提前到并行阶段而制造新的跨水位组合。
-  const projection = await record.app.runtime.getProjection();
+  const projection = await legacyApp(record).runtime.getProjection();
   const messages = projectActiveSessionMessages(
     resolvedPersistedMessages,
     session,
@@ -1915,6 +1971,9 @@ export async function readSessionContextUsage(
 export async function readMessages(context: ZCodeProtocolAgentServerContext, rawParams: unknown) {
   const params = parseParams(zcodeSessionMessagesParamsSchema, rawParams);
   const record = requireSession(context, params.sessionId);
+  // Pi 对话历史属于原生投影，不能把 Core 消息表的空结果当成真实历史。
+  if (record.hosted)
+    throw new ProtocolRequestError(-32031, "Core message history is not supported by Pi sessions");
   const allMessages = await readActiveSessionMessages(context, record);
   const afterMessageIndex = params.afterMessageId
     ? allMessages.findIndex((message) => String(message.info.id) === params.afterMessageId)
@@ -1988,12 +2047,16 @@ export async function sendPrompt(context: ZCodeProtocolAgentServerContext, rawPa
   if (record.restoreWarning) {
     throw new ProtocolRequestError(-32031, record.restoreWarning.message, {
       code: record.restoreWarning.type,
-      sessionId: record.app.sessionId,
+      sessionId: sessionIdOf(record),
       workspace: record.workspace,
     });
   }
   await ensureSessionModelAvailableForNextTurn(context, record);
-  if (record.persistence === "deferred") {
+  if (
+    record.persistence === "deferred" &&
+    !isHostedExtensionCommand(record.hosted, params.content)
+  ) {
+    if (record.hosted) await record.persistSession?.(params.content);
     // 未发送前的 draft session 不进入两份 sqlite；用户真正发送首条消息时，
     // 才把它提升为普通 session，让后续 list/syncer/task index 按真实任务处理。
     record.persistence = "immediate";
@@ -2064,7 +2127,7 @@ export async function compactSession(context: ZCodeProtocolAgentServerContext, r
   const params = parseParams(zcodeSessionCompactParamsSchema, rawParams);
   const record = requireSession(context, params.sessionId);
   assertExpectedRevision(record, params.expectedRevision);
-  const activeTurn = record.app.runtime.getActiveTurnInfo();
+  const activeTurn = record.hosted ? undefined : record.app.runtime.getActiveTurnInfo();
   if (activeTurn?.kind === "compact") {
     // 重复 `/compact` 是同一 session 的上下文维护请求；压缩中再收到时应直接丢弃，
     // 不能进入普通 prompt/steer 队列，也不能渲染成一次失败的压缩横条。
@@ -2083,12 +2146,18 @@ export async function compactSession(context: ZCodeProtocolAgentServerContext, r
   if (record.restoreWarning) {
     throw new ProtocolRequestError(-32031, record.restoreWarning.message, {
       code: record.restoreWarning.type,
-      sessionId: record.app.sessionId,
+      sessionId: sessionIdOf(record),
       workspace: record.workspace,
     });
   }
   await ensureSessionModelAvailableForNextTurn(context, record);
   const instructions = params.instructions?.trim();
+  if (record.hosted && instructions) {
+    throw new ProtocolRequestError(
+      -32031,
+      "Custom compaction instructions are not supported by Pi sessions",
+    );
+  }
   const command = instructions ? `/compact ${instructions}` : "/compact";
   const abortController = new AbortController();
   // compact 的真实模型请求在后台执行，但 Stop 仍通过 record.activeAbortController 中断。
@@ -2132,18 +2201,33 @@ async function runCompactTurnInBackground(
   let mutationReason = "session_compacted";
   context.logger?.info("PiCode Protocol background compact started", {
     inputId: params.inputId,
-    sessionId: record.app.sessionId,
+    sessionId: sessionIdOf(record),
     workspacePath: record.workspace.workspacePath,
   });
   try {
-    await record.app.submitPrompt(params.command, {
-      abortSignal: params.abortController.signal,
-      inputId: params.inputId,
-    });
+    if (record.hosted) {
+      const hosted = record.hosted;
+      const signal = params.abortController.signal;
+      const stop = () => {
+        void hosted.abort();
+      };
+      if (signal.aborted) throw signal.reason;
+      signal.addEventListener("abort", stop, { once: true });
+      try {
+        await hosted.compact();
+      } finally {
+        signal.removeEventListener("abort", stop);
+      }
+    } else {
+      await record.app.submitPrompt(params.command, {
+        abortSignal: params.abortController.signal,
+        inputId: params.inputId,
+      });
+    }
     context.logger?.info("PiCode Protocol background compact completed", {
       durationMs: Date.now() - startedAt,
       inputId: params.inputId,
-      sessionId: record.app.sessionId,
+      sessionId: sessionIdOf(record),
       workspacePath: record.workspace.workspacePath,
     });
   } catch (error) {
@@ -2154,7 +2238,7 @@ async function runCompactTurnInBackground(
       durationMs: Date.now() - startedAt,
       error: error instanceof Error ? error.message : String(error),
       inputId: params.inputId,
-      sessionId: record.app.sessionId,
+      sessionId: sessionIdOf(record),
       workspacePath: record.workspace.workspacePath,
     });
   } finally {
@@ -2171,6 +2255,8 @@ export async function goalSession(context: ZCodeProtocolAgentServerContext, rawP
   const params = parseParams(zcodeSessionGoalParamsSchema, rawParams);
   const record = requireSession(context, params.sessionId);
   assertExpectedRevision(record, params.expectedRevision);
+  if (record.hosted)
+    throw new ProtocolRequestError(-32031, "Goal management is not supported by Pi sessions");
   // /goal 是目标状态写入，不是普通 prompt；除 pause 外运行中允许执行会绕过前端队列并污染当前 turn。
   // pause 是用户显式停止 active goal 的控制面命令，必须能打断当前 assistant turn 或 verifier。
   const goalPauseMayInterruptActiveTurn = params.action === "pause";
@@ -2179,10 +2265,10 @@ export async function goalSession(context: ZCodeProtocolAgentServerContext, rawP
   }
 
   if (
-    !record.app.readTarget ||
-    !record.app.setTarget ||
-    !record.app.updateTargetStatus ||
-    !record.app.clearTarget
+    !legacyApp(record).readTarget ||
+    !legacyApp(record).setTarget ||
+    !legacyApp(record).updateTargetStatus ||
+    !legacyApp(record).clearTarget
   ) {
     return {
       response: "Goal management is not available in this client.",
@@ -2193,7 +2279,7 @@ export async function goalSession(context: ZCodeProtocolAgentServerContext, rawP
 
   if (params.action === "show") {
     return {
-      response: formatGoalSummary(await record.app.readTarget()),
+      response: formatGoalSummary(await legacyApp(record).readTarget()),
       snapshot: await snapshot(context, record),
       startedTurn: false,
     };
@@ -2201,7 +2287,7 @@ export async function goalSession(context: ZCodeProtocolAgentServerContext, rawP
 
   if (params.action === "pause") {
     const activeAbortController = record.activeAbortController;
-    const target = await record.app.updateTargetStatus("paused");
+    const target = await legacyApp(record).updateTargetStatus("paused");
     if (target && activeAbortController) {
       context.logger?.info("PiCode Protocol goal pause aborting active turn", {
         inputId: params.inputId,
@@ -2222,7 +2308,7 @@ export async function goalSession(context: ZCodeProtocolAgentServerContext, rawP
   }
 
   if (params.action === "resume") {
-    const target = await record.app.updateTargetStatus("active");
+    const target = await legacyApp(record).updateTargetStatus("active");
     if (!target) {
       return {
         response: "No goal to resume.",
@@ -2239,7 +2325,7 @@ export async function goalSession(context: ZCodeProtocolAgentServerContext, rawP
   }
 
   if (params.action === "clear") {
-    const cleared = await record.app.clearTarget();
+    const cleared = await legacyApp(record).clearTarget();
     const snapshotAfterGoal = await afterStateMutation(context, record, "goal_cleared");
     return {
       response: cleared ? "Goal cleared." : "No goal to clear.",
@@ -2263,9 +2349,9 @@ export async function goalSession(context: ZCodeProtocolAgentServerContext, rawP
   // App 输入框里的 `/goal 新目标` 是用户显式提交的新目标；已有目标时继续要求
   // replace 会让用户以为目标已变更但数据库仍保留旧目标。这里把重复 set 收敛成 replace 语义。
   const replacesExistingGoal =
-    params.action === "replace" || Boolean(await record.app.readTarget());
+    params.action === "replace" || Boolean(await legacyApp(record).readTarget());
 
-  const target = await record.app.setTarget({ objective, status: "active" });
+  const target = await legacyApp(record).setTarget({ objective, status: "active" });
   return await continueGoalAfterChange(context, record, {
     inputId: params.inputId,
     reason: replacesExistingGoal ? "goal_replaced" : "goal_set",
@@ -2278,12 +2364,17 @@ export async function forkSession(context: ZCodeProtocolAgentServerContext, rawP
   const params = parseParams(zcodeSessionForkParamsSchema, rawParams);
   const record = requireSession(context, params.sessionId);
   assertExpectedRevision(record, params.expectedRevision);
+  if (record.hosted)
+    throw new ProtocolRequestError(
+      -32031,
+      "Core checkpoint forks are not supported by Pi sessions",
+    );
   ensureNoActiveTurn(record, "Cannot fork while a prompt is running");
   const forkTarget = await resolveForkTarget(context, record, params.target);
-  const parentMode = record.app.getMode();
-  const parentModel = record.app.getModel();
-  const parentThoughtLevel = record.app.getThoughtLevel();
-  const fork = await record.app.forkFromCheckpoint({
+  const parentMode = sessionMode(record);
+  const parentModel = sessionModel(record);
+  const parentThoughtLevel = sessionThought(record);
+  const fork = await legacyApp(record).forkFromCheckpoint({
     targetCheckpointId: forkTarget.targetCheckpointId,
     targetMessageId: forkTarget.targetMessageId,
   });
@@ -2304,7 +2395,7 @@ export async function forkSession(context: ZCodeProtocolAgentServerContext, rawP
 export async function registerForkedSession(
   context: ZCodeProtocolAgentServerContext,
   record: ZCodeProtocolSessionRecord,
-  fork: Awaited<ReturnType<ZCodeProtocolSessionRecord["app"]["forkFromCheckpoint"]>>,
+  fork: Awaited<ReturnType<NonNullable<ZCodeProtocolSessionRecord["app"]>["forkFromCheckpoint"]>>,
   options: {
     runtimeConfig: {
       mode: CollaborationMode;
@@ -2315,6 +2406,11 @@ export async function registerForkedSession(
     inheritLatestTarget: boolean;
   },
 ) {
+  if (record.hosted)
+    throw new ProtocolRequestError(
+      -32031,
+      "Core fork registration is not supported by Pi sessions",
+    );
   const parentMode = options.runtimeConfig.mode;
   const parentModel = options.runtimeConfig.model;
   const parentThoughtLevel = options.runtimeConfig.thoughtLevel;
@@ -2340,30 +2436,30 @@ export async function registerForkedSession(
   );
   context.assertServing?.();
   context.sessions.set(fork.forkedSessionId, forkRecord);
-  await runSessionModelConfigMutation(forkRecord.app, async () => {
+  await runSessionModelConfigMutation(sessionConfigOwner(forkRecord), async () => {
     // fork 是父会话运行态的分支；只复制消息的话新 record 会从 workspace 默认值恢复，
     // 于是 fork 后的当前模型/模式会被最新默认设置覆盖。这里在 resume 前显式继承父会话设置。
-    if (forkRecord.app.getMode() !== parentMode) {
-      await forkRecord.app.setMode(parentMode);
+    if (legacyApp(forkRecord).getMode() !== parentMode) {
+      await legacyApp(forkRecord).setMode(parentMode);
       forkRecord.stateRevision++;
     }
-    if (parentModel && forkRecord.app.getModel() !== parentModel) {
-      await forkRecord.app.setModel(parentModel);
+    if (parentModel && legacyApp(forkRecord).getModel() !== parentModel) {
+      await legacyApp(forkRecord).setModel(parentModel);
       forkRecord.stateRevision++;
     }
-    if (parentThoughtLevel && forkRecord.app.getThoughtLevel() !== parentThoughtLevel) {
-      await forkRecord.app.setThoughtLevel(parentThoughtLevel);
+    if (parentThoughtLevel && legacyApp(forkRecord).getThoughtLevel() !== parentThoughtLevel) {
+      await legacyApp(forkRecord).setThoughtLevel(parentThoughtLevel);
       forkRecord.stateRevision++;
     }
     if (parentFollowupMode && parentFollowupMode !== "queue") {
-      await forkRecord.app.setFollowupMode(parentFollowupMode);
+      await legacyApp(forkRecord).setFollowupMode(parentFollowupMode);
       forkRecord.stateRevision++;
     }
   });
   if (options.inheritLatestTarget) {
     await inheritForkedSessionTarget(context, record, forkRecord, fork.forkedSessionId);
   }
-  await forkRecord.app.resume();
+  await legacyApp(forkRecord).resume();
   return {
     forkedSessionId: fork.forkedSessionId,
     parentSessionId: fork.parentSessionId,
@@ -2380,6 +2476,7 @@ async function inheritForkedSessionTarget(
   forkRecord: ZCodeProtocolSessionRecord,
   forkedSessionId: string,
 ) {
+  if (parentRecord.hosted || forkRecord.hosted) return;
   const parentTarget = await parentRecord.app.readTarget();
   if (!parentTarget || !context.deps.sessionStore) {
     return;
@@ -2427,7 +2524,7 @@ async function runPromptTurnInBackground(
   context.logger?.info("PiCode Protocol background turn started", {
     inputId: params.inputId,
     queryId: params.queryId,
-    sessionId: record.app.sessionId,
+    sessionId: sessionIdOf(record),
     textLength: params.content.length,
     workspacePath: record.workspace.workspacePath,
   });
@@ -2452,32 +2549,41 @@ async function runPromptTurnInBackground(
     record.activeOffPeakTaskId = activeOffPeakTaskId;
   }
   try {
-    const admission = await record.app.sendInput(
-      {
-        attachments: mapProtocolPromptAttachments(params.attachments),
-        text: params.content,
-      },
-      {
-        abortSignal: params.abortController.signal,
-        intent: params.intent,
-        modelExecution: params.modelExecution,
-        browserAmbientContext: params.browserAmbientContext,
-        inputId: params.inputId,
-        queryId: params.queryId,
-        ...(params.automationId
-          ? { automationId: params.automationId }
-          : params.offPeakTaskId
-            ? {
-                offPeakTaskId: params.offPeakTaskId,
-                ...(params.offPeakRunType ? { offPeakRunType: params.offPeakRunType } : {}),
-              }
+    const admission = record.hosted
+      ? await sendHostedInput(record.hosted, {
+          text: params.content,
+          inputId: params.inputId ?? crypto.randomUUID(),
+          attachments: mapProtocolPromptAttachments(params.attachments),
+          ...(params.intent?.modelSelection
+            ? { modelSelection: params.intent.modelSelection }
             : {}),
-        // legacy session/send 同样可能复用 active runtime；只做 port 拒绝时模型仍看得到
-        // CronCreate，并可能在失败后改调 CronDelete。automation turn 与 cron task 会话后续输入
-        // 都直接从本轮 provider 工具面移除。
-        ...(turnToolDisallowlist ? { toolDisallowlist: turnToolDisallowlist } : {}),
-      },
-    );
+        })
+      : await record.app.sendInput(
+          {
+            attachments: mapProtocolPromptAttachments(params.attachments),
+            text: params.content,
+          },
+          {
+            abortSignal: params.abortController.signal,
+            intent: params.intent,
+            modelExecution: params.modelExecution,
+            browserAmbientContext: params.browserAmbientContext,
+            inputId: params.inputId,
+            queryId: params.queryId,
+            ...(params.automationId
+              ? { automationId: params.automationId }
+              : params.offPeakTaskId
+                ? {
+                    offPeakTaskId: params.offPeakTaskId,
+                    ...(params.offPeakRunType ? { offPeakRunType: params.offPeakRunType } : {}),
+                  }
+                : {}),
+            // legacy session/send 同样可能复用 active runtime；只做 port 拒绝时模型仍看得到
+            // CronCreate，并可能在失败后改调 CronDelete。automation turn 与 cron task 会话后续输入
+            // 都直接从本轮 provider 工具面移除。
+            ...(turnToolDisallowlist ? { toolDisallowlist: turnToolDisallowlist } : {}),
+          },
+        );
     // admission 不是整轮结束。提前清理会丢失 automation 归属及 Stop controller；
     // ACK 已由 session/send 返回，后台只在真实 completion 后释放本轮资源。
     if (admission.kind === "rejected") {
@@ -2488,7 +2594,7 @@ async function runPromptTurnInBackground(
       durationMs: Date.now() - startedAt,
       inputId: params.inputId,
       queryId: params.queryId,
-      sessionId: record.app.sessionId,
+      sessionId: sessionIdOf(record),
       workspacePath: record.workspace.workspacePath,
     });
   } catch (error) {
@@ -2497,7 +2603,7 @@ async function runPromptTurnInBackground(
       durationMs: Date.now() - startedAt,
       error: error instanceof Error ? error.message : String(error),
       inputId: params.inputId,
-      sessionId: record.app.sessionId,
+      sessionId: sessionIdOf(record),
       workspacePath: record.workspace.workspacePath,
     });
   } finally {
@@ -2509,7 +2615,7 @@ async function runPromptTurnInBackground(
       context.logger?.info("PiCode Protocol background turn cleared active controller", {
         durationMs: Date.now() - startedAt,
         inputId: params.inputId,
-        sessionId: record.app.sessionId,
+        sessionId: sessionIdOf(record),
         workspacePath: record.workspace.workspacePath,
       });
     }
@@ -2579,7 +2685,8 @@ async function continueGoalAfterChange(
   },
 ) {
   const response = formatGoalChanged(params.title, params.target);
-  const isPlanMode = record.app.runtime.getPlanEnabled?.() ?? record.app.getMode?.() === "plan";
+  const isPlanMode =
+    legacyApp(record).runtime.getPlanEnabled?.() ?? legacyApp(record).getMode?.() === "plan";
   // continueActiveTarget 是 App 的必选能力；能否继续只取决于当前模式和是否已有活跃 turn。
   const canContinue = !isPlanMode && !record.activeAbortController;
 
@@ -2615,7 +2722,7 @@ async function runGoalContinuationInBackground(
 ): Promise<void> {
   let mutationReason = "goal_continuation_completed";
   try {
-    await record.app.continueActiveTarget?.({
+    await legacyApp(record).continueActiveTarget?.({
       abortSignal: params.abortController.signal,
       inputId: params.inputId,
     });
@@ -2647,6 +2754,7 @@ export async function stopSession(context: ZCodeProtocolAgentServerContext, rawP
     });
   }
   record.activeAbortController?.abort(new Error("PiCode Protocol session stopped"));
+  if (record.hosted) await record.hosted.abort();
   if (pausedTarget) {
     await afterStateMutation(context, record, "session_stop_goal_paused");
   }
@@ -2658,10 +2766,11 @@ async function pauseActiveGoalForSessionStop(
   record: ZCodeProtocolSessionRecord,
   params: { sessionId: string },
 ): Promise<ProtocolGoalTarget | null> {
+  if (record.hosted) return null;
   if (!record.app.readTarget || !record.app.updateTargetStatus) {
     return null;
   }
-  const target = await record.app.readTarget();
+  const target = await legacyApp(record).readTarget();
   if (!target || target.status !== "active") {
     return null;
   }
@@ -2669,7 +2778,7 @@ async function pauseActiveGoalForSessionStop(
   try {
     // Stop 只 abort controller 时，goal verifier 若没及时收到 abort，
     // 会在队列仍持有 stopRequested 的情况下保留 active goal，导致后续队列无法 drain。
-    const pausedTarget = await record.app.updateTargetStatus("paused");
+    const pausedTarget = await legacyApp(record).updateTargetStatus("paused");
     if (pausedTarget) {
       context.logger?.info("PiCode Protocol session/stop paused active goal", {
         sessionId: params.sessionId,
@@ -2701,6 +2810,15 @@ export async function cancelBackgroundTask(
     workspacePath: record.workspace.workspacePath,
   });
 
+  if (record.hosted) {
+    // 先取消托管进程/子代理；找不到任务时不能误停父会话。
+    const managed = await record.hosted.cancelManagedProcess(params.taskId);
+    const cancelled =
+      managed === "killed" ||
+      (managed === "unrelated" && (await context.piHost?.abort(params.taskId)));
+    await afterStateMutation(context, record, "background_task_cancelled");
+    return cancelled ? {} : { reason: "not_found" as const };
+  }
   if (!record.app.cancelBackgroundTask) {
     throw new ProtocolRequestError(
       -32031,
@@ -2723,9 +2841,9 @@ export async function setModel(context: ZCodeProtocolAgentServerContext, rawPara
   const params = parseParams(zcodeSessionSetModelParamsSchema, rawParams);
   const record = requireSession(context, params.sessionId);
   assertExpectedRevision(record, params.expectedRevision);
-  await runSessionModelConfigMutation(record.app, async () => {
+  await runSessionModelConfigMutation(sessionConfigOwner(record), async () => {
     // 完整 Session 配置命令不能经身份字符串丢掉 reasoning；由共享 setter 原子校验/保存。
-    await record.app.setModel(params.model);
+    await setSessionModel(record, params.model);
   });
   return await afterStateMutation(context, record, "model_changed");
 }
@@ -2741,8 +2859,8 @@ export async function setThoughtLevel(
   const thoughtLevel = params.thoughtLevel;
   const record = requireSession(context, params.sessionId);
   assertExpectedRevision(record, params.expectedRevision);
-  await runSessionModelConfigMutation(record.app, async () => {
-    await record.app.setThoughtLevel(thoughtLevel);
+  await runSessionModelConfigMutation(sessionConfigOwner(record), async () => {
+    await setSessionThought(record, thoughtLevel);
   });
   return await afterStateMutation(context, record, "thought_level_changed");
 }
@@ -2751,7 +2869,7 @@ export async function setMode(context: ZCodeProtocolAgentServerContext, rawParam
   const params = parseParams(zcodeSessionSetModeParamsSchema, rawParams);
   const record = requireSession(context, params.sessionId);
   assertExpectedRevision(record, params.expectedRevision);
-  await record.app.setMode(params.mode);
+  await setSessionMode(record, params.mode);
   return await afterStateMutation(context, record, "mode_changed");
 }
 
@@ -2788,8 +2906,8 @@ export async function closeSession(context: ZCodeProtocolAgentServerContext, raw
   // App-Provided Tools：结束本会话全部待执行的页面调用并丢弃登记。
   clearMcpUiAppToolsForSession(context, params.sessionId);
   // 清掉本会话全部资源订阅（refcount 归零的 uri 才真正向 server 退订）。
-  await record.app.unsubscribeMcpResourcesForUi?.(`${params.sessionId}|`).catch(() => 0);
-  await record.app.close?.();
+  await record.app?.unsubscribeMcpResourcesForUi?.(`${params.sessionId}|`).catch(() => 0);
+  await closeSessionOwner(record);
   // v4 通道：会话关闭同时清 publisher / 订阅调度；重开会话走 snapshot 冷启动。
   // dispose 必须先于注册表删除——gateway 靠 getSessionWorkspaceId
   // （读 context.sessions）定位 workspace 才能推 session.removed 给 sessions-index 订阅者。
@@ -2812,11 +2930,11 @@ function livePiModel(
   workspaceKeyValue: string,
 ): { providerId: string; modelId: string } | undefined {
   let best: { updatedAt: number; providerId: string; modelId: string } | undefined;
-  for (const [sessionId, record] of context.sessions) {
+  for (const record of context.sessions.values()) {
     if (record.workspace.workspaceKey !== workspaceKeyValue) continue;
-    const config = context.piHost?.get(sessionId)?.projector.getSnapshot().config;
-    const providerId = config?.provider?.trim() ?? "";
-    const modelId = config?.model?.trim() ?? "";
+    const config = record.hosted?.getCurrentModelSelection();
+    const providerId = config?.providerId?.trim() ?? "";
+    const modelId = config?.modelId?.trim() ?? "";
     if (!providerId || !modelId) continue;
     if (!best || record.updatedAt >= best.updatedAt) {
       best = { updatedAt: record.updatedAt, providerId, modelId };
@@ -2863,8 +2981,21 @@ export async function generateWorkspaceText(
     }
   }
   const active = Array.from(context.sessions.values()).find(
-    (record) => record.workspace.workspaceKey === params.workspace.workspaceKey,
+    (record) => !record.hosted && record.workspace.workspaceKey === params.workspace.workspaceKey,
   );
+  if (
+    !active &&
+    (context.piHost ||
+      Array.from(context.sessions.values()).some(
+        (record) =>
+          record.hosted && record.workspace.workspaceKey === params.workspace.workspaceKey,
+      ))
+  ) {
+    throw new ProtocolRequestError(
+      -32031,
+      "Workspace text generation is not supported by Pi sessions for this request",
+    );
+  }
   const input = {
     selection: params.selection,
     ...(params.prompt ? { prompt: params.prompt } : {}),
@@ -2910,7 +3041,7 @@ export async function generateWorkspaceText(
 }
 
 function ensureNoActiveTurn(record: ZCodeProtocolSessionRecord, message: string): void {
-  if (!record.activeAbortController) {
+  if (!record.activeAbortController && !(record.hosted && sessionForegroundBusy(record))) {
     return;
   }
   throw new ProtocolRequestError(-32010, message);
@@ -3099,7 +3230,9 @@ function isNonActivitySessionEvent(event: SessionEvent): boolean {
  */
 function reconcileRecordPersistence(record: ZCodeProtocolSessionRecord): void {
   if (record.persistence !== "deferred") return;
-  if (record.app.runtime?.isSessionPersisted?.() === true) record.persistence = "immediate";
+  // Pi 持久化由 hosted admission/binder 同步；Core 继续读取真实 runtime 事实。
+  if (!record.hosted && record.app.runtime?.isSessionPersisted?.() === true)
+    record.persistence = "immediate";
 }
 
 export function onSessionEvent(
@@ -3137,7 +3270,7 @@ export function onSessionEvent(
       });
     }
   }
-  if (String(event.sessionId) !== record.app.sessionId) {
+  if (String(event.sessionId) !== sessionIdOf(record)) {
     // subagent runtime 复用父 runtime 的外部 event sink，但 raw child event
     // 仍属于 child session。无条件用 parent record id ingest 会让 child topic 打开后
     // 不再更新，同时还可能错误 bump 父任务活动时间。这里必须先按事件自己的 sessionId
@@ -3145,7 +3278,7 @@ export function onSessionEvent(
     context.v4Gateway?.ingestDetachedLiveSession(
       String(event.sessionId),
       event,
-      record.app.sessionId,
+      sessionIdOf(record),
     );
     return;
   }
@@ -3165,7 +3298,7 @@ export function onSessionEvent(
   observeSessionDebug(record, event);
   // v4 通道：权威事件无条件喂给 v4 投影/发布器——v4 订阅不依赖旧协议的
   // deliveryKind 订阅态，帧节奏由 gateway 按订阅者 profile 自行调度。
-  context.v4Gateway?.ingest(record.app.sessionId, event);
+  context.v4Gateway?.ingest(sessionIdOf(record), event);
   if (!record.deliveryKind) return;
   const deltaInfo = readStreamingDeltaBatchableEvent(event);
   if (deltaInfo && !shouldHideProtocolSessionEvent(record, event)) {
@@ -3353,7 +3486,9 @@ async function resolveSessionStartupPreferences(
   trace?: ZCodeProtocolTrace,
 ): Promise<SessionStartupPreferences> {
   if (source.kind === "inherit") {
-    const inheritedShellSelection = source.parent.app.runtime.getSessionShellSelection();
+    const inheritedShellSelection = source.parent.hosted
+      ? undefined
+      : source.parent.app.runtime.getSessionShellSelection();
     return {
       memoryEnabled: source.parent.memoryEnabled,
       modelContextBudgetStrategy: DEFAULT_ZCODE_MODEL_CONTEXT_BUDGET_STRATEGY,
@@ -3613,6 +3748,26 @@ async function snapshotWithDiagnostics(
     modelAvailability?: "all" | "current";
   } = {},
 ): Promise<SnapshotWithDiagnostics> {
+  if (record.hosted) {
+    await restoreHostedProjection(record.hosted);
+    return {
+      snapshot: hostedProtocolSnapshot(
+        record,
+        limitMessages(await readSessionMessages(context, record), options.messageLimit),
+      ),
+      phaseDurationsMs: {
+        contextUsageBreakdownEvents: 0,
+        eventSeq: 0,
+        goalVerificationEvents: 0,
+        persistedMessages: 0,
+        persistedSession: 0,
+        rewindEvents: 0,
+        target: 0,
+        todos: 0,
+        buildSnapshot: 0,
+      },
+    };
+  }
   const snapshotStartedAt = Date.now();
   const phaseDurationsMs: SnapshotPhaseDurationsMs = {
     contextUsageBreakdownEvents: 0,
@@ -3652,7 +3807,7 @@ async function snapshotWithDiagnostics(
     measureSnapshotPhase("persistedMessages", () => readSessionMessages(context, record)),
     knownSession === undefined
       ? measureSnapshotPhase("persistedSession", () =>
-          getPersistedSession(context, record.app.sessionId),
+          getPersistedSession(context, sessionIdOf(record)),
         )
       : knownSession,
     measureSnapshotPhase("rewindEvents", () => readSessionRewindEvents(record)),
@@ -3668,7 +3823,7 @@ async function snapshotWithDiagnostics(
   const messages = projectActiveSessionMessages(persistedMessages, session, rewindEvents);
   const buildStartedAt = Date.now();
   const builtSnapshot = await buildSessionSnapshot({
-    app: record.app,
+    app: legacyApp(record),
     deliveryKind: record.deliveryKind,
     eventSeq,
     fallbackCreatedAt: record.createdAt,
@@ -3699,7 +3854,7 @@ async function snapshotWithDiagnostics(
       messageCount: messages.length,
       module: "bootstrap.zcode_protocol",
       phaseDurationsMs,
-      sessionId: record.app.sessionId,
+      sessionId: sessionIdOf(record),
       status: "completed",
       workspaceKey: record.workspace.workspaceKey,
       workspacePath: record.workspace.workspacePath,
@@ -3712,6 +3867,7 @@ async function readSnapshotTarget(
   context: ZCodeProtocolAgentServerContext,
   record: ZCodeProtocolSessionRecord,
 ) {
+  if (record.hosted) return null;
   try {
     return await record.app.readTarget();
   } catch (error) {
@@ -3720,7 +3876,7 @@ async function readSnapshotTarget(
     context.logger?.warn("Failed to read persisted session goal for protocol snapshot", {
       errorMessage: error instanceof Error ? error.message : String(error),
       event: "zcode_protocol.snapshot.target_read_failed",
-      sessionId: record.app.sessionId,
+      sessionId: sessionIdOf(record),
     });
     return undefined;
   }
@@ -3730,6 +3886,7 @@ async function readSnapshotTodos(
   context: ZCodeProtocolAgentServerContext,
   record: ZCodeProtocolSessionRecord,
 ) {
+  if (record.hosted) return [];
   try {
     return await record.app.readTodos();
   } catch (error) {
@@ -3738,7 +3895,7 @@ async function readSnapshotTodos(
     context.logger?.warn("Failed to read persisted session todos for protocol snapshot", {
       errorMessage: error instanceof Error ? error.message : String(error),
       event: "zcode_protocol.snapshot.todos_read_failed",
-      sessionId: record.app.sessionId,
+      sessionId: sessionIdOf(record),
     });
     return [];
   }
@@ -3754,12 +3911,12 @@ async function readSessionTargetCompletionVerificationEvents(
   }
   try {
     const entries = await sessionStore.sessionEntries({
-      sessionID: record.app.sessionId as SessionId,
+      sessionID: sessionIdOf(record) as SessionId,
       type: SESSION_ENTRY_TARGET_COMPLETION_VERIFICATION,
     });
     return entries
       .map((entry, index) =>
-        sessionEntryToTargetCompletionVerificationEvent(entry, record.app.sessionId, index),
+        sessionEntryToTargetCompletionVerificationEvent(entry, sessionIdOf(record), index),
       )
       .filter((event): event is SessionEvent => event !== null);
   } catch (error) {
@@ -3768,7 +3925,7 @@ async function readSessionTargetCompletionVerificationEvents(
     context.logger?.warn("Failed to read persisted goal verification entries", {
       errorMessage: error instanceof Error ? error.message : String(error),
       event: "zcode_protocol.snapshot.goal_verification_entries_read_failed",
-      sessionId: record.app.sessionId,
+      sessionId: sessionIdOf(record),
     });
     return [];
   }
@@ -3868,16 +4025,16 @@ async function readSessionMessages(
   context: ZCodeProtocolAgentServerContext,
   record: ZCodeProtocolSessionRecord,
 ) {
-  if (!context.deps.sessionStore) return [];
+  if (record.hosted || !context.deps.sessionStore) return [];
   return await context.deps.sessionStore.messages({
-    sessionID: record.app.sessionId as SessionId,
+    sessionID: sessionIdOf(record) as SessionId,
   });
 }
 
 async function readSessionContextUsageBreakdownEvents(
   record: ZCodeProtocolSessionRecord,
 ): Promise<SessionEvent[]> {
-  const events = await record.eventStore.getEvents(record.app.sessionId as SessionId);
+  const events = await record.eventStore.getEvents(sessionIdOf(record) as SessionId);
   return events.filter((event) => event.type === SessionEventType.ModelComplete);
 }
 
@@ -3887,7 +4044,7 @@ async function readActiveSessionMessages(
 ): Promise<MessageWithParts[]> {
   const [messages, session, rewindEvents] = await Promise.all([
     readSessionMessages(context, record),
-    getPersistedSession(context, record.app.sessionId),
+    getPersistedSession(context, sessionIdOf(record)),
     readSessionRewindEvents(record),
   ]);
   return projectActiveSessionMessages(messages, session, rewindEvents);
@@ -3896,7 +4053,7 @@ async function readActiveSessionMessages(
 async function readSessionRewindEvents(
   record: ZCodeProtocolSessionRecord,
 ): Promise<SessionEvent[]> {
-  const events = await record.eventStore.getEvents(record.app.sessionId as SessionId);
+  const events = await record.eventStore.getEvents(sessionIdOf(record) as SessionId);
   return events.filter((event) => event.type === SessionEventType.RewindTriggered);
 }
 
@@ -4130,7 +4287,7 @@ function afterPromptAccepted(
   emitStateUpdated(context, record, reason, { status: "running" });
   return {
     accepted: true as const,
-    sessionId: record.app.sessionId,
+    sessionId: sessionIdOf(record),
     stateRevision: record.stateRevision,
   };
 }
@@ -4146,7 +4303,7 @@ function emitStateUpdated(
     reason,
     revision: record.stateRevision,
     scope: "session",
-    sessionId: record.app.sessionId,
+    sessionId: sessionIdOf(record),
     type: "state.updated",
     workspace: record.workspace,
   };

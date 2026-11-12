@@ -15,7 +15,7 @@ export async function updateModelIoPreferences(
 
   let updatedSessionCount = 0;
   for (const record of context.sessions.values()) {
-    if (!record.app.setModelIoFullRetentionEnabled) continue;
+    if (!record.app?.setModelIoFullRetentionEnabled) continue;
     record.app.setModelIoFullRetentionEnabled(enabled);
     updatedSessionCount += 1;
   }

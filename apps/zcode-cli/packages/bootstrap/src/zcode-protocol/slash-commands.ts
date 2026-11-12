@@ -44,24 +44,22 @@ export async function listProtocolSlashCommands(
 }
 
 export function livePiSlashCommands(
-  sessions: Iterable<{ parentSessionId?: string; app: object; workspace: { workspacePath: string } }>,
+  sessions: Iterable<{
+    parentSessionId?: string;
+    hosted?: import("@zcode/pi-host").HostedSession;
+    workspace: { workspacePath: string };
+  }>,
   workspacePath: string,
 ): { piCommands: PiSlashCommandView[] } | undefined {
   let fallback: PiSlashCommandView[] | undefined;
   for (const record of sessions) {
     if (record.workspace.workspacePath !== workspacePath) continue;
-    const commands = piSlashCommandsFromApp(record.app);
+    const commands = record.hosted?.listSlashCommands();
     if (!commands) continue;
     if (!record.parentSessionId) return { piCommands: commands };
     fallback ??= commands;
   }
   return fallback ? { piCommands: fallback } : undefined;
-}
-
-export function piSlashCommandsFromApp(app: object): PiSlashCommandView[] | undefined {
-  const list = (app as { piHosted?: { listSlashCommands?: () => PiSlashCommandView[] } }).piHosted
-    ?.listSlashCommands;
-  return list ? list() : undefined;
 }
 
 /** 活会话的快照留着扩展命令和包模板。磁盘上新建的提示词文件按名字补进去。 */

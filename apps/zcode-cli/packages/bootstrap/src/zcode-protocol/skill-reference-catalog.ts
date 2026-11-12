@@ -1,3 +1,4 @@
+import { legacyApp } from "./session-owner.js";
 // Composer Skill 只读 catalog。
 // 与 Skills Settings 管理接口分离：这里的 sessionId 决定 authority，不提供启停/删除能力。
 import {
@@ -20,12 +21,10 @@ export async function getSkillReferenceCatalog(
   const params = parseParams(zcodeSkillsReferenceCatalogParamsSchema, rawParams);
   if (params.sessionId) {
     const record = requireSession(context, params.sessionId);
-    const loaded = (
-      record.app as { piHosted?: { listSkills?: () => PiSkillView[] } }
-    ).piHosted?.listSkills?.();
+    const loaded = record.hosted?.listSkills();
     if (loaded) return toResult("session", piSkillsToOutcome(loaded));
-    if (typeof record.app.getSkillCatalog === "function") {
-      return toResult("session", await record.app.getSkillCatalog());
+    if (typeof legacyApp(record).getSkillCatalog === "function") {
+      return toResult("session", await legacyApp(record).getSkillCatalog());
     }
     return toResult("session", piSkillsToOutcome(await listPiSkills(record.workspace.workspacePath)));
   }

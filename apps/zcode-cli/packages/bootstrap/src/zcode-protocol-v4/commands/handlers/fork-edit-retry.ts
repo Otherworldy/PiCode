@@ -1,3 +1,9 @@
+import {
+  applySessionFileRewind,
+  previewSessionFileRewind,
+  restoreSessionHistory,
+} from "../../../zcode-protocol/session-files.js";
+import { sessionIdOf } from "../../../zcode-protocol/session-owner.js";
 // fork/edit/retry 命令组：forkAssistant / editUserQuery / retryTurn。
 // 共同点：都以 {rowId, entityId} 定位历史实体，经 host 的 v4 投影翻译面换成 transcript messageId
 // （翻译是 v4 原生决策，翻译不到直接 reject，绝不静默兜底 latestCheckpoint——会错点）。
@@ -101,7 +107,7 @@ async function editUserQuery(
     ? { summarize: true as const, customInstructions: payload.customInstructions }
     : undefined;
   const resolution = host.resolveRowActionTarget?.(
-    record.app.sessionId,
+    sessionIdOf(record),
     payload.target,
     "editUserQuery",
   );
@@ -138,7 +144,7 @@ async function editUserQuery(
   let conversationRewindCommitted = false;
   if ((payload.workspaceMode ?? "preserve") === "rewind") {
     const turnMessageIds = resolution.messageIds ??
-      host.getMessageIdsForTurnRow?.(record.app.sessionId, resolution.row.rowId) ?? [
+      host.getMessageIdsForTurnRow?.(sessionIdOf(record), resolution.row.rowId) ?? [
         editTarget.transcriptMessageId,
       ];
     const fileOptions = {
@@ -146,7 +152,7 @@ async function editUserQuery(
       targetTurnId: resolution.row.turnId as TurnId,
       traceContext: record.traceContext,
     };
-    const preview = await record.app.runtime.previewWorkspaceFileRewind(fileOptions);
+    const preview = await previewSessionFileRewind(record, fileOptions);
     // shell/ignored 变更无法证明完整回滚。组合模式 fail closed，并把最新 preview 原样返回 UI。
     if (!preview.canApply || preview.ignoredFiles.length > 0 || preview.safeFiles.length === 0) {
       const reasonCode =
@@ -158,19 +164,19 @@ async function editUserQuery(
               ? "guard.workspaceRewindUnavailable"
               : "guard.workspaceRewindApplyConflict";
       await host.cancelInputCommand?.(
-        record.app.sessionId,
+        sessionIdOf(record),
         commandAdmissionOf(envelope).queueItemId,
         reasonCode,
       );
       return {
         type: "editUserQuery",
         disposition: "blocked",
-        sessionId: record.app.sessionId,
+        sessionId: sessionIdOf(record),
         reasonCode,
         preview,
       };
     }
-    const applied = await record.app.runtime.applyWorkspaceFileRewind({
+    const applied = await applySessionFileRewind(record, {
       ...fileOptions,
       commitAfterApply: async () => {
         await submitConversationRewind(host, record, editTarget.transcriptMessageId, summary);
@@ -179,14 +185,14 @@ async function editUserQuery(
     });
     if (!applied.applied) {
       await host.cancelInputCommand?.(
-        record.app.sessionId,
+        sessionIdOf(record),
         commandAdmissionOf(envelope).queueItemId,
         "guard.workspaceRewindApplyConflict",
       );
       return {
         type: "editUserQuery",
         disposition: "blocked",
-        sessionId: record.app.sessionId,
+        sessionId: sessionIdOf(record),
         reasonCode: "guard.workspaceRewindApplyConflict",
         preview: applied.preview,
       };
@@ -211,7 +217,7 @@ async function editUserQuery(
     );
   } catch (error) {
     // rewind 之后的 snapshot/重发失败都会把旧行留在截断态。jsonl 还在就画回去。
-    if (rewound) await record.app.restoreRewoundConversation?.();
+    if (rewound) await restoreSessionHistory(record);
     throw error;
   }
   // 生产 renderer 不落日志，过去只能从通用 rewind + send 猜测发生过编辑，
@@ -224,7 +230,7 @@ async function editUserQuery(
     event: EDIT_USER_QUERY_COMPLETED_EVENT,
     intentKind: editTarget.intent.kind,
     module: CONVERSATION_COMMAND_LOG_MODULE,
-    sessionId: record.app.sessionId,
+    sessionId: sessionIdOf(record),
     status: "completed",
     targetEntityId: payload.target.entityId,
     targetRowId: payload.target.rowId,
@@ -233,7 +239,7 @@ async function editUserQuery(
   return {
     type: "editUserQuery",
     disposition: "rewind",
-    sessionId: record.app.sessionId,
+    sessionId: sessionIdOf(record),
   };
 }
 
@@ -252,7 +258,7 @@ async function retryTurn(
   const payload = envelope.payload as CommandPayloadMap["retryTurn"];
   const record = requireRecord(host, envelope.sessionId);
   const resolution = host.resolveRowActionTarget?.(
-    record.app.sessionId,
+    sessionIdOf(record),
     payload.target,
     "retryTurn",
   );
@@ -273,7 +279,7 @@ async function retryTurn(
       attachments,
     );
   } catch (error) {
-    await record.app.restoreRewoundConversation?.();
+    await restoreSessionHistory(record);
     throw error;
   }
   return undefined;
@@ -291,7 +297,7 @@ async function forkAssistant(
   const payload = envelope.payload as CommandPayloadMap["forkAssistant"];
   const record = requireRecord(host, envelope.sessionId);
   const targetResolution = host.resolveRowActionTarget?.(
-    record.app.sessionId,
+    sessionIdOf(record),
     payload.target,
     "forkAssistant",
   );
@@ -301,14 +307,14 @@ async function forkAssistant(
   if (!host.resolveStableForkTarget) {
     throw new Error("v4 forkAssistant requires host.resolveStableForkTarget capability");
   }
-  const resolution = await host.resolveStableForkTarget(record.app.sessionId, payload.target.rowId);
+  const resolution = await host.resolveStableForkTarget(sessionIdOf(record), payload.target.rowId);
   if (!resolution.ok) {
     throw new V4ForkTargetGuardError(resolution.reasonCode, payload.target.rowId);
   }
   if (!host.forkStableConversation) {
     throw new Error("v4 forkAssistant requires host.forkStableConversation capability");
   }
-  const { forkedSessionId } = await host.forkStableConversation(record.app.sessionId, {
+  const { forkedSessionId } = await host.forkStableConversation(sessionIdOf(record), {
     target: resolution.target,
     goalBoundary: resolution.goalBoundary,
     sourceCommandId: envelope.commandId,
@@ -323,9 +329,9 @@ async function forkAssistant(
     commandId: envelope.commandId,
     event: FORK_ASSISTANT_COMPLETED_EVENT,
     module: CONVERSATION_COMMAND_LOG_MODULE,
-    parentSessionId: record.app.sessionId,
+    parentSessionId: sessionIdOf(record),
     revisionAtDecision: envelope.baseRevision ?? 0,
-    sessionId: record.app.sessionId,
+    sessionId: sessionIdOf(record),
     status: "completed",
     targetBoundaryMessageId: resolution.target.boundaryMessageId,
     targetEntityId: payload.target.entityId,

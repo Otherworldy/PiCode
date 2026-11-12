@@ -1,3 +1,4 @@
+import { legacyApp } from "../session-owner.js";
 import { SessionEventType, createEventId } from "@zcode/contracts";
 import {
   zcodeMcpReadResourceParamsSchema,
@@ -43,7 +44,7 @@ export async function readMcpUiResource(
   const active = mcpUiInstances.validate(
     params.instance,
     params,
-    record.app.getMcpAppConnectionSnapshot(params.serverName),
+    legacyApp(record).getMcpAppConnectionSnapshot(params.serverName),
   );
   if (active.binding.resourceUri !== params.uri)
     throw new ProtocolRequestError(-32602, "MCP App resource binding mismatch");
@@ -219,7 +220,7 @@ export async function openMcpUiInstance(
 ) {
   const params = parseParams(zcodeMcpUiOpenInstanceParamsSchema, rawParams);
   const record = requireSession(context, params.sessionId, { operation: "mcp/uiOpenInstance" });
-  const source = record.app.getMcpAppConnectionSnapshot(params.serverName);
+  const source = legacyApp(record).getMcpAppConnectionSnapshot(params.serverName);
   if (!source) throw new ProtocolRequestError(-32001, "MCP App connection is unavailable");
   const lease = mcpUiInstances.open(
     {
@@ -255,7 +256,7 @@ export async function openMcpUiInstance(
         activity,
       },
     });
-  const off = record.app.onMcpAppConnectionInvalidated(params.serverName, () =>
+  const off = legacyApp(record).onMcpAppConnectionInvalidated(params.serverName, () =>
     mcpUiInstances.close(lease),
   );
   active.cancel.signal.addEventListener(
@@ -267,7 +268,7 @@ export async function openMcpUiInstance(
         scopeId: lease.token,
         generation: lease.generation,
       });
-      void record.app
+      void legacyApp(record)
         .unsubscribeMcpResourcesForUi(`${params.sessionId}|${lease.token}|`)
         .catch(() => undefined);
       context.v4Gateway?.ingest(params.sessionId, {
@@ -304,7 +305,7 @@ export async function closeMcpUiInstance(
     });
     await context.sessions
       .get(params.sessionId)
-      ?.app.unsubscribeMcpResourcesForUi(`${params.sessionId}|${params.instance.token}|`);
+      ?.app?.unsubscribeMcpResourcesForUi(`${params.sessionId}|${params.instance.token}|`);
   }
   return { closed: true };
 }
@@ -318,7 +319,7 @@ export async function validateMcpUiInstance(
   mcpUiInstances.validate(
     params.instance,
     params,
-    record.app.getMcpAppConnectionSnapshot(params.serverName),
+    legacyApp(record).getMcpAppConnectionSnapshot(params.serverName),
   );
   return {};
 }

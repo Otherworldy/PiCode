@@ -1,3 +1,4 @@
+import { sessionIdOf } from "../../../zcode-protocol/session-owner.js";
 import type {
   CommandEnvelope,
   CommandPayloadMap,
@@ -14,7 +15,7 @@ async function setAssistantFeedback(
   const payload = envelope.payload as CommandPayloadMap["setAssistantFeedback"];
   const record = requireRecord(host, envelope.sessionId);
   const resolution = host.resolveRowActionTarget?.(
-    record.app.sessionId,
+    sessionIdOf(record),
     payload.target,
     "setAssistantFeedback",
   );
@@ -24,7 +25,7 @@ async function setAssistantFeedback(
   if (!host.setAssistantFeedback) {
     throw new Error("fault.command.assistantFeedbackUnsupported");
   }
-  await host.setAssistantFeedback(record.app.sessionId, {
+  await host.setAssistantFeedback(sessionIdOf(record), {
     entityId: payload.target.entityId,
     messageId: resolution.messageId,
     feedback: payload.feedback,

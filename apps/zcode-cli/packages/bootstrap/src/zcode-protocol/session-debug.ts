@@ -1,3 +1,4 @@
+import { sessionIdOf } from "./session-owner.js";
 import {
   SessionEventType,
   type ModelNetworkStatusPayload,
@@ -12,7 +13,7 @@ import {
 } from "@zcode/shared";
 import { requireSession, type ZCodeProtocolAgentServerContext } from "./server-types.js";
 
-type SessionRecord = { app: { sessionId: string } };
+type SessionRecord = import("./session-owner.js").SessionOwner;
 interface Observation {
   snapshot: SessionDebugSnapshot;
   seenEvents: Set<string>;
@@ -52,12 +53,12 @@ function token(value: number | undefined): number | undefined {
 export function observeSessionDebug(record: SessionRecord, event: SessionEvent): void {
   if (
     event.type !== SessionEventType.ModelNetworkStatus ||
-    String(event.sessionId) !== record.app.sessionId
+    String(event.sessionId) !== sessionIdOf(record)
   )
     return;
   const payload = event.payload as ModelNetworkStatusPayload;
   const mapped = zcodeTaskNetworkDebugStatusFromPayload({
-    taskId: record.app.sessionId,
+    taskId: sessionIdOf(record),
     traceId: event.traceId,
     eventId: String(event.id),
     payload: { ...payload, model: { providerId: payload.providerId, modelId: payload.modelId } },
@@ -66,7 +67,7 @@ export function observeSessionDebug(record: SessionRecord, event: SessionEvent):
   let observation = observations.get(record);
   if (!observation) {
     observation = {
-      snapshot: emptySnapshot(record.app.sessionId),
+      snapshot: emptySnapshot(sessionIdOf(record)),
       seenEvents: new Set(),
       completedRequests: new Set(),
       hasUnknownCacheUsage: false,
@@ -148,7 +149,7 @@ export function observeSessionDebug(record: SessionRecord, event: SessionEvent):
 }
 
 export function readSessionDebug(record: SessionRecord): SessionDebugSnapshot {
-  return observations.get(record)?.snapshot ?? emptySnapshot(record.app.sessionId);
+  return observations.get(record)?.snapshot ?? emptySnapshot(sessionIdOf(record));
 }
 
 export function querySessionDebug(

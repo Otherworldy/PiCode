@@ -1,3 +1,9 @@
+import {
+  applySessionFileRewind,
+  previewSessionFileRewind,
+  restoreSessionHistory,
+} from "../../../zcode-protocol/session-files.js";
+import { legacyApp, sessionIdOf } from "../../../zcode-protocol/session-owner.js";
 // 对话裁切 primitive 与「回退到此处」入口。
 // 共同点：都以 anchor messageId 直接驱动 core 的 rewind，不伪造 /rewind slash turn。
 import {
@@ -35,7 +41,19 @@ export async function submitConversationRewind(
   anchorMessageId: string,
   summary?: { summarize?: boolean; customInstructions?: string },
 ): Promise<void> {
-  const result = await record.app.runtime.rewindConversationToMessage({
+  if (record.hosted) {
+    const navigated = await record.hosted.navigateTree(anchorMessageId, {
+      ...(summary?.summarize ? { summarize: true } : {}),
+      ...(summary?.customInstructions ? { customInstructions: summary.customInstructions } : {}),
+    });
+    if (navigated?.cancelled)
+      throw Object.assign(new Error("branch summary cancelled"), {
+        reasonCode: "guard.branchSummaryCancelled",
+      });
+    await host.afterLegacyStateMutation?.(record, "session_rewound");
+    return;
+  }
+  const result = await legacyApp(record).runtime.rewindConversationToMessage({
     events: [],
     targetMessageId: anchorMessageId as MessageId,
     traceContext: record.traceContext,
@@ -85,7 +103,7 @@ export async function restoreUserQueryToInput(input: {
       });
       if (blocked) {
         // 文件已按 journal 补偿写回；裁切若已在 commit 里发生，把 jsonl 也画回去。
-        if (rewound) await record.app.restoreRewoundConversation?.();
+        if (rewound) await restoreSessionHistory(record);
         return blocked;
       }
     } else {
@@ -93,7 +111,7 @@ export async function restoreUserQueryToInput(input: {
       await submitConversationRewind(host, record, editTarget.transcriptMessageId, summary);
     }
   } catch (error) {
-    if (rewound) await record.app.restoreRewoundConversation?.();
+    if (rewound) await restoreSessionHistory(record);
     throw error;
   }
   host.logger?.info?.("v4 editUserQuery restored to input", {
@@ -102,7 +120,7 @@ export async function restoreUserQueryToInput(input: {
     commandId: envelope.commandId,
     event: "conversation.command.edit_user_query.restored_to_input",
     module: CONVERSATION_COMMAND_LOG_MODULE,
-    sessionId: record.app.sessionId,
+    sessionId: sessionIdOf(record),
     status: "completed",
     targetEntityId: payload.target.entityId,
     targetRowId: payload.target.rowId,
@@ -111,7 +129,7 @@ export async function restoreUserQueryToInput(input: {
   return {
     type: "editUserQuery",
     disposition: "rewind",
-    sessionId: record.app.sessionId,
+    sessionId: sessionIdOf(record),
   };
 }
 
@@ -135,12 +153,12 @@ async function rewindFilesFirst(
     targetTurnId: editTarget.productTurnId as TurnId,
     traceContext: record.traceContext,
   };
-  const preview = await record.app.runtime.previewWorkspaceFileRewind(fileOptions);
+  const preview = await previewSessionFileRewind(record, fileOptions);
   // 确认框已经让用户看过 ignored（bash）文件，这里只拦「不能安全撤销」。
   if (!preview.canApply) {
     return blockRestore(host, record, envelope, "guard.workspaceRewindUnsafeFiles", preview);
   }
-  const applied = await record.app.runtime.applyWorkspaceFileRewind({
+  const applied = await applySessionFileRewind(record, {
     ...fileOptions,
     commitAfterApply: commitRewind,
   });
@@ -161,10 +179,12 @@ async function blockRestore(
   record: V4SessionRecordView,
   envelope: CommandEnvelope,
   reasonCode: string,
-  preview: Awaited<ReturnType<V4SessionRecordView["app"]["runtime"]["previewWorkspaceFileRewind"]>>,
+  preview: Awaited<
+    ReturnType<NonNullable<V4SessionRecordView["app"]>["runtime"]["previewWorkspaceFileRewind"]>
+  >,
 ): Promise<CommandResult> {
   await host.cancelInputCommand?.(
-    record.app.sessionId,
+    sessionIdOf(record),
     commandAdmissionOf(envelope).queueItemId,
     reasonCode,
   );
@@ -174,12 +194,12 @@ async function blockRestore(
     event: "conversation.command.edit_user_query.restore_blocked",
     module: CONVERSATION_COMMAND_LOG_MODULE,
     reasonCode,
-    sessionId: record.app.sessionId,
+    sessionId: sessionIdOf(record),
   });
   return {
     type: "editUserQuery",
     disposition: "blocked",
-    sessionId: record.app.sessionId,
+    sessionId: sessionIdOf(record),
     reasonCode,
     preview,
   };

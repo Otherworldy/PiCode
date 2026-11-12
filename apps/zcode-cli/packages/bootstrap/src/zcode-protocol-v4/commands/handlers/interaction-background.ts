@@ -1,3 +1,4 @@
+import { legacyApp, sessionIdOf } from "../../../zcode-protocol/session-owner.js";
 import { PERMISSION_FULL_ACCESS_OPTION_ID } from "@zcode/shared/zcode-protocol-v4";
 // 权限/后台命令组：resolveInteraction / cancelBackgroundWork。
 // - resolveInteraction：前向命令收口反向请求（permission/AskUserQuestion），经
@@ -80,26 +81,7 @@ async function resolveInteraction(
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["resolveInteraction"];
   const hosted =
-    envelope.sessionId === null
-      ? undefined
-      : (
-          host.getRecord(envelope.sessionId)?.app as
-            | {
-                piHosted?: {
-                  ui: {
-                    respond: (r: {
-                      id: string;
-                      confirmed?: boolean;
-                      value?: string;
-                      cancelled?: boolean;
-                      content?: Record<string, unknown>;
-                    }) => boolean;
-                  };
-                  publishUi?: () => void;
-                };
-              }
-            | undefined
-        )?.piHosted;
+    envelope.sessionId === null ? undefined : host.getRecord(envelope.sessionId)?.hosted;
   if (hosted) {
     const answer = payload.answer;
     const picked = askSelection(answer);
@@ -184,7 +166,7 @@ async function respondWorkspaceHookReview(
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["respondWorkspaceHookReview"];
   const record = requireWorkspaceHookReviewRecord(host, envelope, payload.sessionId);
-  const result = await record.app.respondWorkspaceHookReview(payload);
+  const result = await legacyApp(record).respondWorkspaceHookReview(payload);
   if (!result.accepted) throw new V4WorkspaceHookReviewRejectedError(result.reasonCode);
   return undefined;
 }
@@ -195,7 +177,7 @@ async function toggleWorkspaceHookReviewItem(
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["toggleWorkspaceHookReviewItem"];
   const record = requireWorkspaceHookReviewRecord(host, envelope, payload.sessionId);
-  const result = await record.app.toggleWorkspaceHookReviewItem(payload);
+  const result = await legacyApp(record).toggleWorkspaceHookReviewItem(payload);
   if (!result.accepted) throw new V4WorkspaceHookReviewRejectedError(result.reasonCode);
   return undefined;
 }
@@ -206,7 +188,7 @@ async function revokeWorkspaceHookTrust(
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["revokeWorkspaceHookTrust"];
   const record = requireWorkspaceHookReviewRecord(host, envelope, payload.sessionId);
-  const result = await record.app.revokeWorkspaceHookTrust(payload);
+  const result = await legacyApp(record).revokeWorkspaceHookTrust(payload);
   if (!result.accepted) throw new V4WorkspaceHookReviewRejectedError(result.reasonCode);
   return undefined;
 }
@@ -223,7 +205,7 @@ async function requestWorkspaceHookReview(
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["requestWorkspaceHookReview"];
   const record = requireWorkspaceHookReviewRecord(host, envelope, payload.sessionId);
-  const result = await record.app.requestWorkspaceHookReview({
+  const result = await legacyApp(record).requestWorkspaceHookReview({
     workspaceIdentity: payload.workspaceIdentity,
     bundleDigest: payload.bundleDigest,
   });
@@ -273,11 +255,22 @@ async function cancelBackgroundWork(
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["cancelBackgroundWork"];
   const record = requireRecord(host, envelope.sessionId);
-  if (!record.app.cancelBackgroundTask) {
-    throw new V4CapabilityUnsupportedError("cancelBackgroundTask", record.app.sessionId);
+  if (record.hosted) {
+    const result = await record.hosted.cancelManagedProcess(payload.workId);
+    if (
+      result === "missing" ||
+      (result === "unrelated" && !(await record.abortWork?.(payload.workId)))
+    ) {
+      throw new V4BackgroundWorkCancelRejectedError("not_found", payload.workId);
+    }
+    return undefined;
+  }
+  const app = legacyApp(record);
+  if (!app.cancelBackgroundTask) {
+    throw new V4CapabilityUnsupportedError("cancelBackgroundTask", sessionIdOf(record));
   }
   // 注意：方法必须经 app 调用（不可解构，实现可能依赖 this 绑定）。
-  const result = await record.app.cancelBackgroundTask(payload.workId);
+  const result = await app.cancelBackgroundTask(payload.workId);
   if (result?.reason !== undefined) {
     throw new V4BackgroundWorkCancelRejectedError(result.reason, payload.workId);
   }
@@ -300,10 +293,11 @@ async function setRunningSubagentModel(
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["setRunningSubagentModel"];
   const record = requireRecord(host, envelope.sessionId);
-  if (!record.app.setRunningSubagentModel) {
-    throw new V4CapabilityUnsupportedError("setRunningSubagentModel", record.app.sessionId);
+  const app = record.hosted ?? legacyApp(record);
+  if (!app.setRunningSubagentModel) {
+    throw new V4CapabilityUnsupportedError("setRunningSubagentModel", sessionIdOf(record));
   }
-  const ok = await record.app.setRunningSubagentModel({
+  const ok = await app.setRunningSubagentModel({
     childSessionId: payload.childSessionId,
     provider: payload.provider,
     model: payload.model,

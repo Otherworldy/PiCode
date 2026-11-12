@@ -155,7 +155,7 @@ async function notifyWorkspaceHookTrustGrantSessions(input: {
   await Promise.all(
     [...input.sessions.values()]
       .filter((record) => record.workspace.workspaceKey === input.grantedWorkspaceKey)
-      .map((record) => record.app.reloadWorkspaceHookTrust()),
+      .flatMap((record) => (record.app ? [record.app.reloadWorkspaceHookTrust()] : [])),
   );
 }
 
@@ -267,6 +267,8 @@ export class ZCodeProtocolAgentServer {
     this.logger = createProtocolLogger(resolvedDeps);
     this.context = {
       assertServing: () => this.runtimeResources.assertServing(),
+      trackHosted: (hosted) => this.runtimeResources.trackHosted(hosted),
+      runSessionCreation: (create) => this.runtimeResources.runSessionCreation(create),
       deps: resolvedDeps,
       logger: this.logger,
       appRuntimePreferences: {

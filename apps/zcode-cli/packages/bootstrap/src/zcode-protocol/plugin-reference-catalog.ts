@@ -1,3 +1,4 @@
+import { legacyApp } from "./session-owner.js";
 // Plugin 对话引用 catalog 的协议 handler。
 // 与 plugins.ts（安装/市场/启停等管理面）分文件：本查询是会话/草稿 Picker 的只读投影，
 // 且 plugins.ts 已接近 max-lines 门禁。
@@ -40,7 +41,7 @@ export async function getPluginReferenceCatalog(
     );
     return {
       authority: "session",
-      plugins: record.app
+      plugins: legacyApp(record)
         .getPluginReferenceCatalog()
         .plugins.map((entry) => toReferenceCatalogEntry(entry, displayByPluginId, includeCategory)),
     };

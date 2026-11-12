@@ -1,3 +1,4 @@
+import { legacyApp } from "./session-owner.js";
 import { randomUUID } from "node:crypto";
 import { raceClientRequestWithV4Interaction } from "./interaction-response-race.js";
 import {
@@ -114,7 +115,7 @@ async function requestPermission(
               options.signal?.throwIfAborted();
               const record = context.sessions.get(String(request.sessionId));
               if (!record) throw new Error("Permission session unavailable");
-              const eventId = await record.app.runtime.grantPermissionFullAccess(
+              const eventId = await legacyApp(record).runtime.grantPermissionFullAccess(
                 request.requestId,
                 options.signal,
               );
@@ -516,7 +517,7 @@ async function persistUserInputAutoResolution(
   const record = context.sessions.get(String(request.sessionId));
   if (!record) return;
   try {
-    await record.app.runtime.recordUserInputAutoResolutionUpdate({
+    await legacyApp(record).runtime.recordUserInputAutoResolutionUpdate({
       interactionId: request.requestId,
       toolCallId: request.toolCallId,
       autoResolution,

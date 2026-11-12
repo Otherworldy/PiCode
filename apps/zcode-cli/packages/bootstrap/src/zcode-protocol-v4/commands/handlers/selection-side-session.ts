@@ -1,3 +1,4 @@
+import { sessionIdOf } from "../../../zcode-protocol/session-owner.js";
 import type {
   CommandEnvelope,
   CommandPayloadMap,
@@ -18,7 +19,7 @@ async function createSelectionSideSession(
   if (!host.createSelectionSideSession) {
     throw new Error("v4 createSelectionSideSession requires host capability");
   }
-  const result = await host.createSelectionSideSession(record.app.sessionId, {
+  const result = await host.createSelectionSideSession(sessionIdOf(record), {
     sourceCommandId: envelope.commandId,
     revisionAtDecision: envelope.baseRevision ?? 0,
     ...(payload.firstInput?.modelSelection

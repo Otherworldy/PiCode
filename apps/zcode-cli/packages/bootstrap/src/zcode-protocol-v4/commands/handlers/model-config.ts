@@ -1,3 +1,17 @@
+import {
+  emitSessionModelSelected,
+  sessionConfigOwner,
+  sessionMode,
+  sessionPlanEnabled,
+  sessionSelection,
+  sessionThought,
+  sessionThoughtLevels,
+  setSessionFollowupMode,
+  setSessionMode,
+  setSessionModel,
+  setSessionThought,
+} from "../../../zcode-protocol/session-config.js";
+import { legacyApp, sessionIdOf } from "../../../zcode-protocol/session-owner.js";
 // 模型配置命令组：switchModelConfig（自旧 server-operations.switchModelConfig 语义搬运）
 // + switchCollaborationMode（additive，UI 模式选择器）
 // + applyRequestedSessionConfig（createSession.config 消费共用件）。
@@ -69,7 +83,7 @@ function readActualThought(
   record: V4SessionRecordView,
   fallbackSelection?: ModelSelection,
 ): string {
-  const thought = record.app.getThoughtLevel();
+  const thought = sessionThought(record);
   if (thought !== undefined) return thought;
   return fallbackSelection?.options?.reasoningLevel ?? "";
 }
@@ -90,10 +104,10 @@ async function switchModelConfig(
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["switchModelConfig"];
   const record = requireRecord(host, envelope.sessionId);
-  return runSessionModelConfigMutation(record.app, async () => {
+  return runSessionModelConfigMutation(sessionConfigOwner(record), async () => {
     // previous 必须在串行化临界区内、setModel 之前快照。registry fallback 可能排在本命令
     // 前面，若在排队前读取会拿到过期 previous，并让 noop/事件顺序与 runtime 真值分裂。
-    const previousSelection = record.app.runtime.getSessionModelSelection();
+    const previousSelection = sessionSelection(record);
     const previousModelSelection =
       previousSelection &&
       createModelSelection(
@@ -115,45 +129,45 @@ async function switchModelConfig(
       throw new V4CommandNoopError(CONFIG_UNCHANGED);
     }
     // setModel 前由当前 Environment Registry 确认目标 Provider 可用。
-    await ensureProviderClientReady(host, record.app.sessionId, payload.provider);
+    await ensureProviderClientReady(host, sessionIdOf(record), payload.provider);
     let actualThought = previousThought;
     let nextModelSelection: ModelSelection;
     if (modelIdentityChanged) {
-      const result = await record.app.setModel(`${payload.provider}/${payload.model}`);
+      const result = await setSessionModel(record, `${payload.provider}/${payload.model}`);
       actualThought = result.thoughtLevel ?? readActualThought(record);
       // 以结果为准：runtime 未真正切到目标时不得以 accepted 结束（见
       // docs/specs/model-switch-runtime-ownership.md）。noop/投影闩锁都在这一层暴露。
-      const appliedSelection = record.app.runtime.getSessionModelSelection();
+      const appliedSelection = sessionSelection(record);
       if (
         appliedSelection?.providerId !== payload.provider ||
         appliedSelection.modelId !== payload.model
       ) {
         throw new V4ModelNotAppliedError(payload.provider, payload.model);
       }
-      if (requestedThought && record.app.listThoughtLevels().includes(requestedThought)) {
+      if (requestedThought && sessionThoughtLevels(record).includes(requestedThought)) {
         // 用户即使显式选择了与默认值相同的档位，也是一项 pin。必须调用 setter 让
         // Session Selection 保存这个显式叶子，不能因为 effective 值相同而吞掉意图。
-        const thoughtResult = await record.app.setThoughtLevel(requestedThought);
+        const thoughtResult = await setSessionThought(record, requestedThought);
         actualThought = thoughtResult.thoughtLevel;
       }
       nextModelSelection = createModelSelection(
         payload.provider,
         payload.model,
-        requestedThought && record.app.listThoughtLevels().includes(requestedThought)
+        requestedThought && sessionThoughtLevels(record).includes(requestedThought)
           ? requestedThought
           : undefined,
       );
     } else {
       // provider/model 相同才表示用户显式切 thought；非法值在任何模型变更前失败。
-      const result = await record.app.setThoughtLevel(requestedThought);
+      const result = await setSessionThought(record, requestedThought);
       actualThought = result.thoughtLevel;
       nextModelSelection = createModelSelection(payload.provider, payload.model, actualThought);
     }
-    await record.app.runtime.emitModelSelected({
+    await emitSessionModelSelected(record, {
       modelSelection: nextModelSelection,
       ...(actualThought ? { effectiveReasoningLevel: actualThought } : {}),
       previousModelSelection,
-      supportedThoughtLevels: record.app.listThoughtLevels(),
+      supportedThoughtLevels: sessionThoughtLevels(record),
       // trace 链路结构透传自 record（会话根 trace），不在命令层另起无关联 traceId。
       traceContext: record.traceContext,
     });
@@ -177,11 +191,11 @@ async function switchCollaborationMode(
   const payload = envelope.payload as CommandPayloadMap["switchCollaborationMode"];
   const record = requireRecord(host, envelope.sessionId);
   const mode = payload.mode as CollaborationMode;
-  const previousMode = record.app.getMode();
-  if (previousMode === mode && !record.app.runtime.getPlanEnabled()) {
+  const previousMode = sessionMode(record);
+  if (previousMode === mode && !sessionPlanEnabled(record)) {
     throw new V4CommandNoopError(CONFIG_UNCHANGED);
   }
-  await record.app.setMode(mode);
+  await setSessionMode(record, mode);
   return undefined;
 }
 
@@ -192,14 +206,7 @@ function setUiDesignMode(
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["setUiDesignMode"];
   const record = requireRecord(host, envelope.sessionId);
-  const hosted = (
-    record.app as {
-      piHosted?: {
-        isUiDesignMode?: () => boolean;
-        setUiDesignMode?: (enabled: boolean) => void;
-      };
-    }
-  ).piHosted;
+  const hosted = record.hosted;
   if (!hosted?.setUiDesignMode) {
     throw new Error("UI design mode is unavailable");
   }
@@ -229,8 +236,8 @@ export async function applyRequestedSessionConfig(
   record: V4SessionRecordView,
   config: NonNullable<CommandPayloadMap["createSession"]["config"]>,
 ): Promise<void> {
-  await runSessionModelConfigMutation(record.app, async () => {
-    const previousSelection = record.app.runtime.getSessionModelSelection();
+  await runSessionModelConfigMutation(sessionConfigOwner(record), async () => {
+    const previousSelection = sessionSelection(record);
     const previousModelSelection =
       previousSelection &&
       createModelSelection(
@@ -256,34 +263,34 @@ export async function applyRequestedSessionConfig(
     if (targetProvider && targetModel && (modelIdentityChanged || thoughtChanged)) {
       // 首发 Provider 不在 Registry 时抛 provider.notInRegistry，createSession 处捕获降级为
       // warn（会话保持 runtime 缺省，不连坐创建），语义与既有 config 应用失败一致。
-      await ensureProviderClientReady(host, record.app.sessionId, targetProvider);
+      await ensureProviderClientReady(host, sessionIdOf(record), targetProvider);
       let actualThought = previousThought;
       if (modelIdentityChanged) {
-        const result = await record.app.setModel(`${targetProvider}/${targetModel}`);
+        const result = await setSessionModel(record, `${targetProvider}/${targetModel}`);
         actualThought = result.thoughtLevel ?? readActualThought(record);
       }
-      if (targetThought && record.app.listThoughtLevels().includes(targetThought)) {
-        const result = await record.app.setThoughtLevel(targetThought);
+      if (targetThought && sessionThoughtLevels(record).includes(targetThought)) {
+        const result = await setSessionThought(record, targetThought);
         actualThought = result.thoughtLevel;
       } else if (requestedSelection?.options?.reasoningLevel) {
         // 正式结构化 Selection 的显式 option 必须 fail-closed；只有旧 flat config
         // 保留“目标不支持则使用默认值”的已发布兼容行为。
-        await record.app.setThoughtLevel(targetThought);
+        await setSessionThought(record, targetThought);
       }
       if (modelIdentityChanged || actualThought !== previousThought) {
         // 草稿预热 config 可能携带上一模型的 thought。目标模型不支持时保留
         // setModel 已解析出的兼容档位，仍发布目标模型事件，避免创建出 runtime/投影分裂的 session。
-        await record.app.runtime.emitModelSelected({
+        await emitSessionModelSelected(record, {
           modelSelection: createModelSelection(
             targetProvider,
             targetModel,
-            targetThought && record.app.listThoughtLevels().includes(targetThought)
+            targetThought && sessionThoughtLevels(record).includes(targetThought)
               ? targetThought
               : undefined,
           ),
           ...(actualThought ? { effectiveReasoningLevel: actualThought } : {}),
           previousModelSelection,
-          supportedThoughtLevels: record.app.listThoughtLevels(),
+          supportedThoughtLevels: sessionThoughtLevels(record),
           traceContext: record.traceContext,
         });
       }
@@ -293,19 +300,28 @@ export async function applyRequestedSessionConfig(
   // mode：payload.config.mode 是宽 string（schema default 兼容），值域在此收口。
   const mode = config.mode;
   if ((mode && SWITCHABLE_MODES.has(mode)) || config.planEnabled !== undefined) {
-    await record.app.runtime.setExecutionState(
-      {
-        ...(mode && SWITCHABLE_MODES.has(mode) ? { mode } : {}),
-        ...(config.planEnabled !== undefined ? { planEnabled: config.planEnabled } : {}),
-      },
-      record.traceContext,
-    );
+    if (record.hosted) {
+      if (config.planEnabled === true)
+        throw Object.assign(new Error("Core plan execution is unavailable for Pi sessions"), {
+          reasonCode: "fault.command.capabilityUnsupported",
+        });
+      // 只有 planEnabled 的兼容配置不能把 undefined 当 mode，关闭已有的完全访问。
+      if (mode && SWITCHABLE_MODES.has(mode))
+        await setSessionMode(record, mode as CollaborationMode);
+    } else
+      await legacyApp(record).runtime.setExecutionState(
+        {
+          ...(mode && SWITCHABLE_MODES.has(mode) ? { mode } : {}),
+          ...(config.planEnabled !== undefined ? { planEnabled: config.planEnabled } : {}),
+        },
+        record.traceContext,
+      );
   }
 
   // followupMode：runtime 缺省即 queue（投影初值同），仅非缺省值需要显式写——
   // runtime.setFollowupMode 无同值守卫（无条件追加事件），显式传 "queue" 会产空转 delta。
   if (config.followupMode && config.followupMode !== "queue") {
-    await record.app.setFollowupMode(config.followupMode);
+    await setSessionFollowupMode(record, config.followupMode);
   }
 }
 

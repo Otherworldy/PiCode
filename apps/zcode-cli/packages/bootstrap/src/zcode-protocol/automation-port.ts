@@ -1,3 +1,5 @@
+import { sessionIdOf } from "./session-owner.js";
+import { sessionSelection, sessionMode } from "./session-config.js";
 import {
   AutomationCreateLimitError,
   hasRelativeDelayMinutes,
@@ -55,7 +57,8 @@ export function createProtocolAutomationPort(
       // 只要当前会话已经是某个 automation 的绑定会话（= 定时任务会话），就拒绝再次创建；普通会话
       // 首次创建时还没有绑定，正常放行。归属判断必须走专用 EXISTS 协议，不能读取完整列表；否则
       // 任意历史任务的展示字段损坏都会让当前会话误报“无法验证”。
-      const ownSessionId = createContext?.sessionId ?? activeSession?.app.sessionId;
+      const ownSessionId =
+        createContext?.sessionId ?? (activeSession ? sessionIdOf(activeSession) : undefined);
       if (ownSessionId) {
         let bound: boolean;
         try {
@@ -99,7 +102,7 @@ export function createProtocolAutomationPort(
       // CronCreate 的工具上下文只携带了部分配置，导致权限或思考等级在跨层时丢失。
       // 协议边界按 sessionId 读取活跃 runtime，确保保存的是用户触发工具当下看到的配置。
       const runtimeModelSelection =
-        activeSession?.app.runtime.getSessionModelSelection() ??
+        (activeSession ? sessionSelection(activeSession) : undefined) ??
         (() => {
           try {
             return createContext?.model ? parseModelPickerValue(createContext.model) : undefined;
@@ -107,7 +110,7 @@ export function createProtocolAutomationPort(
             return undefined;
           }
         })();
-      const runtimeMode = activeSession?.app.getMode();
+      const runtimeMode = activeSession ? sessionMode(activeSession) : undefined;
       const hasIntervalCarrier = input.intervalUnit !== undefined && input.interval !== undefined;
       let result;
       try {
@@ -159,10 +162,12 @@ export function createProtocolAutomationPort(
           // 会话内 CronCreate 会在首轮回复中创建 automation，但首条消息触发的
           // session_title sidecar 可能迟到并根据助手解释生成标题，导致标题变成“我无法...”。
           // CronCreate 成功后把当前会话标题固定为 automation 标题，阻止 generated 标题覆盖。
-          await activeSession.app.setCustomSessionTitle({
-            title,
-            traceContext: activeSession.traceContext,
-          });
+          if (activeSession.hosted) activeSession.hosted.publishCustomTitle(title);
+          else
+            await activeSession.app.setCustomSessionTitle({
+              title,
+              traceContext: activeSession.traceContext,
+            });
         } catch (error) {
           context.logger?.warn("Failed to freeze session title after CronCreate", {
             errorMessage: error instanceof Error ? error.message : String(error),

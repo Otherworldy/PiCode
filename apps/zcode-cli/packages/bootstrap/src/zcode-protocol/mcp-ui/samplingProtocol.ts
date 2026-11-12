@@ -1,3 +1,4 @@
+import { legacyApp } from "../session-owner.js";
 import {
   zcodeMcpUiSamplingParamsSchema,
   zcodeMcpUiCancelSamplingParamsSchema,
@@ -19,7 +20,7 @@ export async function sampleMcpUi(context: ZCodeProtocolAgentServerContext, raw:
     mcpUiInstances.validate(
       params.instance,
       params,
-      record.app.getMcpAppConnectionSnapshot(params.serverName),
+      legacyApp(record).getMcpAppConnectionSnapshot(params.serverName),
     );
   const active = validate();
   return calls.execute(
@@ -32,7 +33,7 @@ export async function sampleMcpUi(context: ZCodeProtocolAgentServerContext, raw:
       try {
         signal.throwIfAborted();
         validate();
-        const result = await record.app.sampleModel(
+        const result = await legacyApp(record).sampleModel(
           {
             request: params.request,
             source: {
@@ -59,7 +60,7 @@ export function cancelMcpUiSampling(context: ZCodeProtocolAgentServerContext, ra
   const active = mcpUiInstances.validate(
     params.instance,
     params,
-    record.app.getMcpAppConnectionSnapshot(params.serverName),
+    legacyApp(record).getMcpAppConnectionSnapshot(params.serverName),
   );
   return calls.cancel(
     { token: params.instance.token, sessionId: params.sessionId, signal: active.cancel.signal },

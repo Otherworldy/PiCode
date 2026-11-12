@@ -1887,8 +1887,9 @@ export class HostSessionRegistry {
         };
       },
       setThinkingLevel: (level) => {
-        projector.setConfig({ thought: level });
         pi.setThinkingLevel?.(mapThought(level));
+        // 协议层不再伪造 Core 选模事件，真实 setter 必须把档位变化发布给所有订阅者。
+        emit(projector.setConfig({ thought: level }));
       },
       setSessionName: (name) => {
         pi.setSessionName?.(name);

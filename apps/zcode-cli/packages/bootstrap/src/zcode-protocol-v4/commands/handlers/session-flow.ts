@@ -1,3 +1,13 @@
+import type { QueueConsumerClaim } from "@zcode/pi-host";
+import { sessionSelection, sessionPlanEnabled } from "../../../zcode-protocol/session-config.js";
+import { sendHostedInput } from "../../../zcode-protocol/hosted-input.js";
+import {
+  sessionMode,
+  sessionModel,
+  setSessionAutoDrain,
+  setSessionMode,
+} from "../../../zcode-protocol/session-config.js";
+import { legacyApp, sessionIdOf } from "../../../zcode-protocol/session-owner.js";
 // 会话流命令组：sendText / stop（模式样板）。
 // 每个命令组一个文件：handler 纯函数 (host, envelope) → CommandResult|undefined，
 // 决策逻辑直驱 core，环境能力走 host 钩子（见 ../types.ts 的过渡标注）。
@@ -68,8 +78,19 @@ export async function enqueueDeferredInputForBusyWork(
     toolDisallowlist?: SteerTurnOptions["toolDisallowlist"];
   },
 ): Promise<boolean> {
-  if (!record.app.enqueueDeferredInput) return false;
-  const result = await record.app.enqueueDeferredInput(text, {
+  if (record.hosted) {
+    const result = await sendHostedInput(record.hosted, {
+      text,
+      inputId: options.inputId,
+      delivery: "queue",
+      attachments: options.attachments,
+      modelSelection: options.intent?.modelSelection,
+    });
+    return result.kind === "queued";
+  }
+  const app = legacyApp(record);
+  if (!app.enqueueDeferredInput) return false;
+  const result = await app.enqueueDeferredInput(text, {
     ...(options.commandKind ? { commandKind: options.commandKind } : {}),
     delivery: "queue",
     inputId: options.inputId,
@@ -108,7 +129,7 @@ export async function applyHeldQueueDisposition(
   disposition: "clearQueueAndSend" | "keepQueueAndSend" | undefined,
   expectedQueueItemIds?: readonly string[],
 ): Promise<void> {
-  const routing = host.getInputRoutingMode?.(record.app.sessionId) ?? null;
+  const routing = host.getInputRoutingMode?.(sessionIdOf(record)) ?? null;
   if (routing !== "choice") return;
   if (!disposition) {
     throw new V4HeldQueueDispositionRequiredError();
@@ -117,16 +138,17 @@ export async function applyHeldQueueDisposition(
     const expected = new Set(expectedQueueItemIds);
     const sameItems =
       expected.size === expectedQueueItemIds.length &&
-      host.getQueueLength?.(record.app.sessionId) === expected.size &&
+      host.getQueueLength?.(sessionIdOf(record)) === expected.size &&
       expectedQueueItemIds.every(
-        (queueItemId) => host.getQueueItem?.(record.app.sessionId, queueItemId) !== null,
+        (queueItemId) => host.getQueueItem?.(sessionIdOf(record), queueItemId) !== null,
       );
     if (!sameItems) {
       throw new V4HeldQueueConfirmationStaleError();
     }
   }
   if (disposition === "clearQueueAndSend") {
-    await record.app.clearQueueItems();
+    if (record.hosted) record.hosted.projector.replaceQueue(record.hosted.queue.clear());
+    else await legacyApp(record).clearQueueItems();
   }
 }
 
@@ -144,12 +166,12 @@ export function resolveSubmittedExecutionState(
 ): { modelSelection: ModelSelection; mode: SubmissionMode; planEnabled: boolean } {
   let modelSelection = payload.modelSelection;
   if (!modelSelection) {
-    const runtimeSelection = record.app.runtime?.getSessionModelSelection?.();
+    const runtimeSelection = sessionSelection(record);
     const entrySelection = runtimeSelection
       ? undefined
-      : parseProviderQualifiedModelSelection(record.app.getModel());
+      : parseProviderQualifiedModelSelection(sessionModel(record));
     if (!runtimeSelection && !entrySelection) {
-      throw new Error(`Session model must be provider-qualified: ${record.app.getModel()}`);
+      throw new Error(`Session model must be provider-qualified: ${sessionModel(record)}`);
     }
     // getThoughtLevel() 是 Active Model 的 effective 展示事实。把它补回
     // canonical intent 会把 Config 默认值伪装成显式 pin；旧发送端只能固定 Session
@@ -167,8 +189,8 @@ export function resolveSubmittedExecutionState(
         };
   }
   const current = resolveExecutionState({
-    mode: record.app.getMode?.(),
-    planEnabled: record.app.runtime?.getPlanEnabled?.(),
+    mode: sessionMode(record),
+    planEnabled: sessionPlanEnabled(record),
   });
   const state = resolveExecutionState(payload, current);
   return {
@@ -186,8 +208,8 @@ export async function applySubmittedMode(
   record: V4SessionRecordView,
   mode: SubmissionMode,
 ): Promise<void> {
-  if (record.app.getMode() === mode) return;
-  await record.app.setMode(mode);
+  if (sessionMode(record) === mode) return;
+  await setSessionMode(record, mode);
 }
 /**
  * sendText：只做协议/held/model/附件校验，start/queue 交给同一 session 的 Core admission。
@@ -196,6 +218,31 @@ export async function applySubmittedMode(
 async function sendText(
   host: V4CommandCoreHost,
   envelope: CommandEnvelope,
+): Promise<CommandResult | undefined> {
+  const record = requireRecord(host, envelope.sessionId);
+  const payload = envelope.payload as CommandPayloadMap["sendText"];
+  if (!record.hosted || payload.requestedDelivery !== "startNow") {
+    return sendTextWithAdmission(host, envelope);
+  }
+  const hosted = record.hosted;
+  // Registry 已在加载模型/附件时不能抢占该次准入，也不能借临时 false 覆盖真实暂停。
+  const consumer = hosted.queue.tryAcquireConsumer();
+  if (!consumer)
+    throw new V4InputAdmissionRejectedError(
+      "guard.queuePromotionBusy",
+      "Pi queue consumer is busy",
+    );
+  try {
+    return await sendTextWithAdmission(host, envelope, consumer);
+  } finally {
+    consumer.release();
+  }
+}
+
+async function sendTextWithAdmission(
+  host: V4CommandCoreHost,
+  envelope: CommandEnvelope,
+  hostedConsumer?: QueueConsumerClaim,
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["sendText"];
   const record = requireRecord(host, envelope.sessionId);
@@ -215,24 +262,26 @@ async function sendText(
   let preempted = false;
   const releaseForegroundPromotionLease = () => {
     if (!foregroundPromotionLeaseAcquired || !foregroundPromotionLeaseId) return;
-    record.app.runtime.releaseForegroundPromotionLease(foregroundPromotionLeaseId);
+    legacyApp(record).runtime.releaseForegroundPromotionLease(foregroundPromotionLeaseId);
     foregroundPromotionLeaseAcquired = false;
   };
   if (forceStartNow) {
     // 修饰键的“立即发送”若先进入 Core busy admission 会短暂创建 queue item。
     // 先取得唯一前台租约并抢占当前轮，再交给 Core 以 idle start_turn 原子启动。
-    const leaseResult = record.app.runtime.acquireForegroundPromotionLease({
-      leaseId: foregroundPromotionLeaseId!,
-      mode: "after-current",
-      promotedInputId: envelope.commandId,
-    });
-    if (leaseResult.kind !== "acquired") {
-      throw new V4InputAdmissionRejectedError(
-        "fault.command.inputRejected",
-        "send now foreground promotion is busy",
-      );
+    if (!record.hosted) {
+      const leaseResult = legacyApp(record).runtime.acquireForegroundPromotionLease({
+        leaseId: foregroundPromotionLeaseId!,
+        mode: "after-current",
+        promotedInputId: envelope.commandId,
+      });
+      if (leaseResult.kind !== "acquired") {
+        throw new V4InputAdmissionRejectedError(
+          "fault.command.inputRejected",
+          "send now foreground promotion is busy",
+        );
+      }
+      foregroundPromotionLeaseAcquired = true;
     }
-    foregroundPromotionLeaseAcquired = true;
     try {
       // startNow 旧分支把 held queue 裁决误当成默认路由的一部分整体跳过，
       // 导致用户确认“清空队列并发送”后旧输入仍可能被 drain。单条消息的
@@ -278,6 +327,7 @@ async function sendText(
     });
     started = await startPromptTurn(host, record, {
       content: payload.text,
+      ...(hostedConsumer ? { hostedConsumer, requireIdle: true } : {}),
       ...(payload.browserAmbientContext
         ? { browserAmbientContext: payload.browserAmbientContext }
         : {}),
@@ -328,7 +378,20 @@ async function stop(
 ): Promise<CommandResult | undefined> {
   const record = requireRecord(host, envelope.sessionId);
   const payload = envelope.payload as CommandPayloadMap["stop"];
-  const runtimeStop = record.app.runtime?.stopActiveForegroundExecution?.({
+  if (record.hosted) {
+    // Pi 的 workId 只存在于真实子执行；晚到 Stop 不得误停另一个执行。
+    if (
+      payload.expectedForegroundExecutionId &&
+      payload.expectedForegroundExecutionId !== record.hosted.workId
+    )
+      throw new V4CommandNoopError("guard.stopTargetChanged");
+    if (record.hosted.queue.snapshot().items.length) await setSessionAutoDrain(record, false);
+    // compact 可能在 abort 的 await 内完成并清除 controller，取消信号必须先于终态收尾。
+    record.activeAbortController?.abort(new Error("v4 session stopped"));
+    await record.hosted.abort();
+    return undefined;
+  }
+  const runtimeStop = legacyApp(record).runtime?.stopActiveForegroundExecution?.({
     expectedForegroundExecutionId: payload.expectedForegroundExecutionId,
     reason: "v4 session stopped",
   });
@@ -343,7 +406,7 @@ async function stop(
     expectedForegroundExecutionId: payload.expectedForegroundExecutionId,
     module: "bootstrap.zcode_protocol_v4.commands",
     runtimeStopKind: runtimeStop?.kind ?? "unsupported",
-    sessionId: record.app.sessionId,
+    sessionId: sessionIdOf(record),
   });
   if (
     payload.expectedForegroundExecutionId !== undefined &&
@@ -357,15 +420,15 @@ async function stop(
     // 先打断 runtime-owned verifier/continuation，再等待 goal pause；否则 verifier 可能在
     // pause RPC 完成前通过并接入下一次 continuation。
     record.activeAbortController?.abort(new Error("v4 session stopped"));
-    if ((host.getQueueLength?.(record.app.sessionId) ?? 0) > 0) {
+    if ((host.getQueueLength?.(sessionIdOf(record)) ?? 0) > 0) {
       try {
         // verifier 已越过普通 turn catch，不能依赖 TurnComplete(cancelled)
         // 翻转 runtime queue gate；显式写入 false，确保 future queue 原位 held。
-        await record.app.setQueueAutoDrain(false);
+        await setSessionAutoDrain(record, false);
       } catch (error) {
         host.logger?.warn?.("v4 stop failed to hold following queue", {
           error: error instanceof Error ? error.message : String(error),
-          sessionId: record.app.sessionId,
+          sessionId: sessionIdOf(record),
         });
       }
     }
@@ -396,17 +459,18 @@ async function pauseActiveGoal(
   record: V4SessionRecordView,
 ): Promise<boolean> {
   // 注意：方法必须经 app 调用（不可解构，实现可能依赖 this 绑定）。
-  const target = await record.app.readTarget();
+  if (record.hosted) return false;
+  const target = await legacyApp(record).readTarget();
   if (!target || target.status !== "active") {
     return false;
   }
   try {
-    const paused = await record.app.updateTargetStatus("paused");
+    const paused = await legacyApp(record).updateTargetStatus("paused");
     return Boolean(paused);
   } catch (error) {
     host.logger?.warn?.("v4 stop failed to pause active goal", {
       error: error instanceof Error ? error.message : String(error),
-      sessionId: record.app.sessionId,
+      sessionId: sessionIdOf(record),
     });
     return false;
   }
@@ -417,10 +481,10 @@ async function waitForSessionIdle(record: V4SessionRecordView): Promise<void> {
   const deadline = Date.now() + IDLE_POLL_TIMEOUT_MS;
   while (
     record.activeAbortController !== undefined ||
-    record.app.runtime?.getActiveForegroundExecutionId?.() !== undefined
+    legacyApp(record).runtime?.getActiveForegroundExecutionId?.() !== undefined
   ) {
     if (Date.now() >= deadline) {
-      throw new V4SessionIdleTimeoutError(record.app.sessionId);
+      throw new V4SessionIdleTimeoutError(sessionIdOf(record));
     }
     await new Promise((resolve) => setTimeout(resolve, IDLE_POLL_INTERVAL_MS));
   }
@@ -436,11 +500,19 @@ export async function preemptActiveTurnAndWait(
     preserveQueueAutoDrainOnCancel?: boolean;
   },
 ): Promise<boolean> {
+  if (record.hosted) {
+    const busy =
+      !record.hosted.isIdle || record.hosted.projector.getSnapshot().control.phase === "running";
+    record.activeAbortController?.abort(new Error(options.abortMessage));
+    if (busy) await record.hosted.abort();
+    if (busy) await record.hosted.waitTurn();
+    return busy;
+  }
   const bootstrapAbortController = record.activeAbortController;
   // background notification 的 model-only turn 由 Core runtime command
   // 独立持有 foreground authority，不会创建 Bootstrap activeAbortController。
   // 忽略这点会误判 idle，随后把被提升的 queue item steer 回旧 notification turn。
-  const runtimeStop = record.app.runtime?.stopActiveForegroundExecution?.({
+  const runtimeStop = legacyApp(record).runtime?.stopActiveForegroundExecution?.({
     preserveQueueAutoDrainOnCancel: options.preserveQueueAutoDrainOnCancel === true,
     reason: options.abortMessage,
   });
@@ -463,10 +535,15 @@ async function continueAfterError(
   envelope: CommandEnvelope,
 ): Promise<CommandResult | undefined> {
   const record = requireRecord(host, envelope.sessionId);
-  if (!record.app.continueAfterModelError) {
+  if (record.hosted) {
+    await record.hosted.continueAfterError();
+    return undefined;
+  }
+  const app = legacyApp(record);
+  if (!app.continueAfterModelError) {
     throw new Error("continueAfterModelError unsupported");
   }
-  await record.app.continueAfterModelError();
+  await app.continueAfterModelError();
   return undefined;
 }
 

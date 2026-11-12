@@ -1,3 +1,12 @@
+import {
+  sessionModel,
+  sessionThought,
+  sessionThoughtLevels,
+  setSessionAutoDrain,
+  setSessionModel,
+  setSessionThought,
+} from "../../../zcode-protocol/session-config.js";
+import { legacyApp, sessionIdOf } from "../../../zcode-protocol/session-owner.js";
 // goal/compact 命令组：compact / sendGoalCommand / pauseGoal / resumeGoal。
 // 语义自旧 server-operations compactSession/goalSession/continueGoalAfterChange 搬运，
 // 决策逻辑（compact 去重 / active turn barrier / goal 续跑）直驱 core，不经旧协议 op。
@@ -55,22 +64,19 @@ async function compact(
   envelope: CommandEnvelope,
 ): Promise<CommandResult | undefined> {
   const record = requireRecord(host, envelope.sessionId);
-  const activeTurn = record.app.runtime.getActiveTurnInfo();
+  const activeTurn = record.app?.runtime.getActiveTurnInfo();
   const activeController = record.activeAbortController;
   if (
     activeTurn?.kind === "compact" ||
     (activeController ? manualCompactControllers.has(activeController) : false) ||
-    host.hasQueueItemKind?.(record.app.sessionId, "compact")
+    host.hasQueueItemKind?.(sessionIdOf(record), "compact")
   ) {
     host.logger?.info?.("v4 compact already running, rejected", {
       commandId: envelope.commandId,
-      sessionId: record.app.sessionId,
+      sessionId: sessionIdOf(record),
       workspacePath: record.workspace.workspacePath,
     });
-    throw new V4GoalCompactRejectedError(
-      "compactOperationLock",
-      "Compact is already running",
-    );
+    throw new V4GoalCompactRejectedError("compactOperationLock", "Compact is already running");
   }
   if (record.restoreWarning) {
     // 与 prompt-turn 相同的闸门：恢复失败的会话不能静默续写（含 compact turn）。
@@ -121,15 +127,19 @@ async function useCompactModel(
   const model = selection?.modelId?.trim();
   if (!provider || !model) return;
   const wanted = `${provider}/${model}`;
-  if (record.app.getModel() !== wanted) {
-    await record.app.setModel(wanted);
+  if (sessionModel(record) !== wanted) {
+    await setSessionModel(record, wanted);
   }
-  if (record.app.getModel() !== wanted) {
+  if (sessionModel(record) !== wanted) {
     throw new V4GoalCompactRejectedError("modelUnavailable", `Model not available: ${wanted}`);
   }
   const thought = selection?.options?.reasoningLevel?.trim();
-  if (thought && record.app.listThoughtLevels().includes(thought) && record.app.getThoughtLevel() !== thought) {
-    await record.app.setThoughtLevel(thought);
+  if (
+    thought &&
+    sessionThoughtLevels(record).includes(thought) &&
+    sessionThought(record) !== thought
+  ) {
+    await setSessionThought(record, thought);
   }
 }
 
@@ -147,28 +157,41 @@ async function runCompactTurnInBackground(
   let lifecycleStatus: "success" | "failed" | "cancelled" = "success";
   host.logger?.info?.("v4 background compact started", {
     inputId: params.inputId,
-    sessionId: record.app.sessionId,
+    sessionId: sessionIdOf(record),
     workspacePath: record.workspace.workspacePath,
   });
   try {
-    await record.app.submitPrompt("/compact", {
-      abortSignal: params.abortController.signal,
-      inputId: params.inputId,
-    });
+    if (record.hosted) {
+      const hosted = record.hosted;
+      const abort = () => {
+        void hosted.abort();
+      };
+      params.abortController.signal.addEventListener("abort", abort, { once: true });
+      try {
+        if (params.abortController.signal.aborted) throw new Error("Compaction cancelled");
+        await hosted.compact();
+      } finally {
+        params.abortController.signal.removeEventListener("abort", abort);
+      }
+    } else
+      await legacyApp(record).submitPrompt("/compact", {
+        abortSignal: params.abortController.signal,
+        inputId: params.inputId,
+      });
   } catch (error) {
     lifecycleStatus = params.abortController.signal.aborted ? "cancelled" : "failed";
     mutationReason =
       lifecycleStatus === "cancelled" ? "session_compact_cancelled" : "session_compact_failed";
-    if ((host.getQueueLength?.(record.app.sessionId) ?? 0) > 0) {
+    if ((host.getQueueLength?.(sessionIdOf(record)) ?? 0) > 0) {
       try {
         // queued compact 是 FIFO barrier；失败/Stop 后若继续 auto-drain，
         // 后续文本会越过用户显式维护意图。与普通 Stop 一致切为 held。
-        await record.app.setQueueAutoDrain(false);
+        await setSessionAutoDrain(record, false);
       } catch (holdError) {
         host.logger?.warn?.("v4 compact failed to hold following queue", {
           error: holdError instanceof Error ? holdError.message : String(holdError),
           inputId: params.inputId,
-          sessionId: record.app.sessionId,
+          sessionId: sessionIdOf(record),
         });
       }
     }
@@ -176,12 +199,12 @@ async function runCompactTurnInBackground(
       durationMs: Date.now() - startedAt,
       error: error instanceof Error ? error.message : String(error),
       inputId: params.inputId,
-      sessionId: record.app.sessionId,
+      sessionId: sessionIdOf(record),
       workspacePath: record.workspace.workspacePath,
     });
   } finally {
-    if (params.foregroundPromotionLeaseId) {
-      record.app.runtime.releaseForegroundPromotionLease(params.foregroundPromotionLeaseId);
+    if (params.foregroundPromotionLeaseId && !record.hosted) {
+      legacyApp(record).runtime.releaseForegroundPromotionLease(params.foregroundPromotionLeaseId);
     }
     manualCompactControllers.delete(params.abortController);
     if (record.activeAbortController === params.abortController) {
@@ -194,7 +217,7 @@ async function runCompactTurnInBackground(
     // compact 没有 user message，不能依赖 SessionInputPromoted 解 pin；无论 lifecycle
     // 成功/失败/取消，都用 timeline command fact 阻止重启后把已执行命令再次提示重放。
     await host.recordPersistentCommandFact?.(
-      record.app.sessionId,
+      sessionIdOf(record),
       "timeline",
       {
         commandId: params.inputId,
@@ -208,7 +231,7 @@ async function runCompactTurnInBackground(
     host.logger?.warn?.("v4 compact persistent command fact failed", {
       commandId: params.inputId,
       error: error instanceof Error ? error.message : String(error),
-      sessionId: record.app.sessionId,
+      sessionId: sessionIdOf(record),
     });
   }
   // 旧协议路径在此调 afterStateMutation → 用钩子等价替代（随旧广播删除）。
@@ -244,7 +267,7 @@ async function sendGoalCommand(
   }
   const submissionIntent = (options: Parameters<typeof inputIntentMetadata>[1]) =>
     inputIntentMetadata(envelope, { ...options, ...submittedExecutionState });
-  const routingMode = host.getInputRoutingMode?.(record.app.sessionId) ?? null;
+  const routingMode = host.getInputRoutingMode?.(sessionIdOf(record)) ?? null;
   if (record.activeAbortController || routingMode === "enqueue" || routingMode === "guide") {
     // /goal 是目标控制命令，active turn 中不能直接写 target；
     // 但产品语义要求 running/compacting/goal verifier 可入队。busy projection 可能
@@ -261,7 +284,7 @@ async function sendGoalCommand(
     ) {
       return undefined;
     }
-    const queued = await record.app.steerTurn(queuedText, {
+    const queued = await legacyApp(record).steerTurn(queuedText, {
       commandKind: "sendGoalCommand",
       inputId: envelope.commandId,
       queryId: envelope.commandId as SteerTurnOptions["queryId"],
@@ -310,7 +333,7 @@ export async function applyGoalCommand(
     params.heldQueueDisposition,
     params.expectedHeldQueueItemIds,
   );
-  const replacesExistingGoal = Boolean(await record.app.readTarget());
+  const replacesExistingGoal = Boolean(await legacyApp(record).readTarget());
   // Goal 的提交也已冻结执行状态；先关闭本次明确取消的 Plan，不能按旧 Runtime 状态拦住续跑。
   if (params.intent?.planEnabled !== undefined) {
     if (params.intent.planEnabled)
@@ -318,12 +341,12 @@ export async function applyGoalCommand(
         "guard.planGoalMutuallyExclusive",
         "Plan and Goal cannot be active at the same time.",
       );
-    await record.app.runtime.setExecutionState(
+    await legacyApp(record).runtime.setExecutionState(
       { mode: params.intent.mode, planEnabled: false },
       record.traceContext,
     );
   }
-  await record.app.setTarget({
+  await legacyApp(record).setTarget({
     ...(params.displayText ? { displayText: params.displayText } : {}),
     objective: params.objective,
     status: "active",
@@ -360,13 +383,13 @@ async function pauseGoal(
   envelope: CommandEnvelope,
 ): Promise<CommandResult | undefined> {
   const record = requireRecord(host, envelope.sessionId);
-  const target = await record.app.readTarget();
+  const target = await legacyApp(record).readTarget();
   if (!target || target.status !== "active") {
     return undefined;
   }
 
   const activeController = record.activeAbortController;
-  const paused = await record.app.updateTargetStatus("paused");
+  const paused = await legacyApp(record).updateTargetStatus("paused");
   if (!paused) return undefined;
 
   activeController?.abort(new Error("v4 goal paused"));
@@ -391,18 +414,19 @@ async function resumeGoal(
     );
   }
   // 只跳过续跑仍会留下 active Goal + Plan；恢复目标前就检查，不能先写入再拒绝。
-  const planEnabled = record.app.runtime?.getPlanEnabled?.() ?? record.app.getMode?.() === "plan";
-  if (planEnabled && (await record.app.readTarget())) {
+  const planEnabled =
+    legacyApp(record).runtime?.getPlanEnabled?.() ?? legacyApp(record).getMode?.() === "plan";
+  if (planEnabled && (await legacyApp(record).readTarget())) {
     throw new V4GoalCompactRejectedError(
       "guard.planGoalMutuallyExclusive",
       "Plan and Goal cannot be active at the same time.",
     );
   }
-  const target = await record.app.updateTargetStatus("active");
+  const target = await legacyApp(record).updateTargetStatus("active");
   if (!target) {
     host.logger?.info?.("v4 resumeGoal without target, noop", {
       commandId: envelope.commandId,
-      sessionId: record.app.sessionId,
+      sessionId: sessionIdOf(record),
     });
     return undefined;
   }
@@ -428,7 +452,8 @@ async function continueGoalAfterChange(
     reason: string;
   },
 ): Promise<void> {
-  const isPlanMode = record.app.runtime?.getPlanEnabled?.() ?? record.app.getMode?.() === "plan";
+  const isPlanMode =
+    legacyApp(record).runtime?.getPlanEnabled?.() ?? legacyApp(record).getMode?.() === "plan";
   // continueActiveTarget 是 App 的必选能力；能否继续只取决于当前模式和是否已有活跃 turn。
   const canContinue = !isPlanMode && !record.activeAbortController;
   if (canContinue) {
@@ -463,7 +488,7 @@ async function runGoalContinuationInBackground(
 ): Promise<void> {
   let mutationReason = "goal_continuation_completed";
   try {
-    await record.app.continueActiveTarget?.({
+    await legacyApp(record).continueActiveTarget?.({
       abortSignal: params.abortController.signal,
       inputId: params.inputId,
       intent: params.intent,
@@ -472,8 +497,8 @@ async function runGoalContinuationInBackground(
   } catch {
     mutationReason = "goal_continuation_failed";
   } finally {
-    if (params.foregroundPromotionLeaseId) {
-      record.app.runtime.releaseForegroundPromotionLease(params.foregroundPromotionLeaseId);
+    if (params.foregroundPromotionLeaseId && !record.hosted) {
+      legacyApp(record).runtime.releaseForegroundPromotionLease(params.foregroundPromotionLeaseId);
     }
     if (record.activeAbortController === params.abortController) {
       // 续跑结束后应立刻释放活跃锁；广播只是后续动作，
