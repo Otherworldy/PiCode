@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ZCodeAgentToolCatalogEntry } from "@zcode/shared";
+import type { ZCodeAgentToolCatalogEntry } from "@picode/shared";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { logger } from "@/logger.js";
 

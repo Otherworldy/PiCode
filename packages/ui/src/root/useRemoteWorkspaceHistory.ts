@@ -6,9 +6,9 @@ import type {
   IPlatformService,
   RemoteSessionClosedEvent,
   RemoteWorkspaceSessionEntry,
-} from "@zcode/shared";
-import { buildSshRemoteHostKey, createUuid, stripRemoteTargetSecrets } from "@zcode/shared";
-import type { IServiceAccessor } from "@zcode/services";
+} from "@picode/shared";
+import { buildSshRemoteHostKey, createUuid, stripRemoteTargetSecrets } from "@picode/shared";
+import type { IServiceAccessor } from "@picode/services";
 import {
   bindRemoteWorkspaceIdentity,
   bindRemoteWorkspacePath,
@@ -16,7 +16,7 @@ import {
   type RemoteWorkspaceSession,
   unregisterRemoteWorkspaceSession,
 } from "@/store/remoteWorkspaceSessionStore.js";
-import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { useZCodeSessionStore } from "@/store/picodeSessionStore.js";
 import { refreshRemotePinnedTasksForSession } from "@/store/remotePinnedTaskStore.js";
 import { refreshRemoteTimelineTasksForSession } from "@/store/remoteTimelineTaskStore.js";
 import { toast } from "@/components/ui/toast.js";

@@ -1,6 +1,6 @@
 import { accessSync, constants as fsConstants } from "node:fs";
 import { win32 } from "node:path";
-import type { IntegratedTerminalShellOption } from "@zcode/shared";
+import type { IntegratedTerminalShellOption } from "@picode/shared";
 
 type ExecutableCheck = (path: string) => boolean;
 

@@ -1,4 +1,4 @@
-import type { WorkspaceMemoryModelRef } from "@zcode/services";
+import type { WorkspaceMemoryModelRef } from "@picode/services";
 import {
   Select,
   SelectContent,

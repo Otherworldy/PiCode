@@ -4,8 +4,8 @@ import type {
   TodoItem,
   TodoStatus,
   TodoUpdateParams,
-} from "@zcode/shared";
-import { ServiceChannels } from "@zcode/shared";
+} from "@picode/shared";
+import { ServiceChannels } from "@picode/shared";
 import { createServiceDescriptor } from "../descriptors.js";
 
 export interface ITodoService {

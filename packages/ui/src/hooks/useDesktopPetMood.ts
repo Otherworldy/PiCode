@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { deriveDesktopPetMood, type DesktopPetMood, type IPlatformService } from "@zcode/shared";
+import { deriveDesktopPetMood, type DesktopPetMood, type IPlatformService } from "@picode/shared";
 import { useServices } from "@/hooks/useServices.js";
 import { logger } from "@/logger.js";
 import {

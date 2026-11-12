@@ -2,9 +2,9 @@ import { PluginUiWorkspaceProvider } from "@/plugin-ui/index.js";
 /* eslint-disable max-lines -- App 当前集中编排 workspace 级状态、导航、Git 派生数据和 shell wiring；已将新增 side pane memory 桥接抽出，剩余拆分需要按 shell 边界单独重构。 */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useShallow } from "zustand/react/shallow";
-import type { GitChangeSourceId, WorkspacePurpose } from "@zcode/shared";
+import type { GitChangeSourceId, WorkspacePurpose } from "@picode/shared";
 import { useZCodeStore } from "@/store/StoreProvider.js";
-import { getVisibleTaskMetas, useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { getVisibleTaskMetas, useZCodeSessionStore } from "@/store/picodeSessionStore.js";
 import { useTaskQueryCacheStore } from "@/store/taskQueryCacheStore.js";
 import { useAppPanels } from "@/hooks/useAppPanels.js";
 import { useGitAutoRefresh } from "@/hooks/useGitAutoRefresh.js";
@@ -59,7 +59,7 @@ import { WorkspaceShellLayout } from "@/app-shell/WorkspaceShellLayout.js";
 import { useAppChromeState } from "@/app-shell/useAppChromeState.js";
 import { useWorkspaceSessionReload } from "@/app-shell/useWorkspaceSessionReload.js";
 import { useWorkspaceShellLifecycle } from "@/app-shell/useWorkspaceShellLifecycle.js";
-import { useWorkspaceShellZCodeState } from "@/app-shell/useWorkspaceShellZCodeState.js";
+import { useWorkspaceShellZCodeState } from "@/app-shell/useWorkspaceShellPiCodeState.js";
 import { useWorkspaceMainViewSettingsExit } from "@/app-shell/useWorkspaceMainViewSettingsExit.js";
 import {
   useWorkspaceTaskNavigation,
@@ -720,7 +720,7 @@ export function App({
       targetWorkspacePath: string,
       targetWorkspaceIdentity?: string,
       targetWorkspacePurpose?: WorkspacePurpose,
-      createSource?: import("@zcode/shared").SessionCreateSource,
+      createSource?: import("@picode/shared").SessionCreateSource,
     ) => {
       const store = useZCodeSessionStore.getState();
       const resolvedTargetWorkspaceIdentity =

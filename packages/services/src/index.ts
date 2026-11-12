@@ -46,7 +46,7 @@ export type {
   ConversationShareTurnPreflightResult,
   PublishTextConversationInput,
 } from "./conversation-share/conversationShare.js";
-// Conversation share 的具体实现依赖 Node 文件系统，只能从 @zcode/services/node 引入；
+// Conversation share 的具体实现依赖 Node 文件系统，只能从 @picode/services/node 引入；
 // 根入口必须保持 browser-safe，避免 renderer 解析到 node:* 模块。
 
 // File service — IFileService is both a type (interface) and value (descriptor)
@@ -80,7 +80,7 @@ export type {
 } from "./broadcast/broadcast.js";
 
 // PiCode task wrapper service — task 列表/置顶/归档等 app 侧包装状态入口。
-export { IZCodeTaskService } from "./session/zcodeTaskService.js";
+export { IZCodeTaskService } from "./session/picodeTaskService.js";
 export type {
   ZCodeArchivedTaskDeletionResult,
   ZCodeTaskListKind,
@@ -100,8 +100,8 @@ export type {
   ZCodeGroupedTaskViewTopLevelNodeRef,
   ZCodeTaskGroup,
   ZCodeTaskGroupColor,
-} from "./session/zcodeTaskService.js";
-export type { ZCodeTaskListItem } from "./session/zcodeTaskListTypes.js";
+} from "./session/picodeTaskService.js";
+export type { ZCodeTaskListItem } from "./session/picodeTaskListTypes.js";
 
 export { IWindowControllerService } from "./window-controller/windowController.js";
 export type {
@@ -116,21 +116,21 @@ export {
   IZCodeAgentService,
   type ZCodeAgentLocalRuntimeChildProcesses,
   ZCODE_AGENT_RUNTIME_UNAVAILABLE_CODE,
-} from "./zcode-agent/zcodeAgent.js";
+} from "./picode-agent/picodeAgent.js";
 export {
   isZCodeAgentMcpStatusModeUnsupportedError,
   ZCODE_AGENT_MCP_STATUS_MODE_UNSUPPORTED_ERROR_CODE,
   ZCodeAgentMcpStatusModeUnsupportedError,
-} from "./zcode-agent/zcodeAgentErrors.js";
+} from "./picode-agent/picodeAgentErrors.js";
 export {
   createZCodeAgentConnectionScope,
   readTrustedZCodeAgentV4Connection,
-} from "./zcode-agent/zcodeAgentConnectionScope.js";
+} from "./picode-agent/picodeAgentConnectionScope.js";
 export type {
   ZCodeAgentConnectionScope,
   ZCodeAgentV4ClientMode,
   ZCodeAgentV4ConnectionContext,
-} from "./zcode-agent/zcodeAgentConnectionScope.js";
+} from "./picode-agent/picodeAgentConnectionScope.js";
 export type {
   ZCodeAgentAttachmentBeginParams,
   ZCodeAgentAttachmentChunkParams,
@@ -152,10 +152,10 @@ export type {
   ZCodeAgentSetModelParams,
   ZCodeAgentSetThoughtLevelParams,
   ZCodeAgentWorkspaceTarget,
-} from "./zcode-agent/zcodeAgent.js";
+} from "./picode-agent/picodeAgent.js";
 
 // PiCode session service — app-facing session facade without PiCode Agent naming.
-export { IZCodeSessionService } from "./zcode-session/zcodeSession.js";
+export { IZCodeSessionService } from "./picode-session/picodeSession.js";
 export type {
   ZCodeSessionCreateParams,
   ZCodeSessionEventsParams,
@@ -171,7 +171,7 @@ export type {
   ZCodeSessionSubscribeParams,
   ZCodeTaskTarget,
   ZCodeSessionWorkspaceTarget,
-} from "./zcode-session/zcodeSession.js";
+} from "./picode-session/picodeSession.js";
 
 // Hooks service — IHooksService is both a type (interface) and value (descriptor).
 export { IHooksService } from "./hooks/hooks.js";
@@ -200,7 +200,7 @@ export { IOAuthService } from "./oauth/oauth.js";
 // UsageStats service — IUsageStatsService is both a type (interface) and value (descriptor)
 export { IUsageStatsService } from "./usage-stats/usageStats.js";
 
-// Storage（资源管理器「存储」tab）：数据类型在 @zcode/shared；这里只导出服务接口与卷分组纯函数
+// Storage（资源管理器「存储」tab）：数据类型在 @picode/shared；这里只导出服务接口与卷分组纯函数
 export type { IStorageService } from "./storage/contract.js";
 
 // CodingPlanSubscription service — ICodingPlanSubscriptionService is both a type (interface) and value (descriptor)
@@ -280,7 +280,7 @@ export type {
   FeedbackTicketStatus,
   FeedbackTicketSummary,
   FeedbackTicketType,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 // 插件 UI 桥：描述符、参数类型与工厂；App-Provided Tools 另有独立描述符。
 export {

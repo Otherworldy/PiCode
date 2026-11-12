@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { normalize } from "node:path";
-import type { ZCodeAgentMcpServer } from "@zcode/shared";
+import type { ZCodeAgentMcpServer } from "@picode/shared";
 
 function normalizePathForCompare(value: string): string {
   const normalized = normalize(value.trim()).replace(/[\\/]+$/, "");

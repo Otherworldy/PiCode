@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
-import type { ZCodePiPluginsResult } from "@zcode/shared";
+import type { ZCodePiPluginsResult } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { toast } from "@/components/ui/toast.js";
-import { useZCodeSessionService } from "@/hooks/useZCodeSessionService.js";
+import { useZCodeSessionService } from "@/hooks/usePiCodeSessionService.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { piPluginUpdateWorkspaceKey } from "@/lib/piPluginUpdateCheck.js";
 import { logger } from "@/logger.js";

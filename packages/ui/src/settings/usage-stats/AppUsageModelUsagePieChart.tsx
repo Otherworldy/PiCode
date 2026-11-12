@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { Cell, Pie, PieChart } from "recharts";
-import type { AppUsageSnapshot } from "@zcode/shared";
+import type { AppUsageSnapshot } from "@picode/shared";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import {

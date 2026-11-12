@@ -1,6 +1,6 @@
 import { chmod, copyFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import type { AppUpdateInstallKind } from "@zcode/shared";
+import type { AppUpdateInstallKind } from "@picode/shared";
 
 interface InstallCommand {
   unref(): void;

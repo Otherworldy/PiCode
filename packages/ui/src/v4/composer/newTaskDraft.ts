@@ -1,4 +1,4 @@
-import type { ModelSelectionView } from "@zcode/services";
+import type { ModelSelectionView } from "@picode/services";
 import { readComposerRecent, resolveDraftInitialModelSelection } from "@/lib/composerRecent.js";
 import {
   persistV4ComposerDraft,

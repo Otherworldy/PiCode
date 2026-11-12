@@ -18,9 +18,9 @@ import {
   playTaskNotificationSound,
   setStreamClientId,
   type Theme,
-} from "@zcode/ui";
-import "@zcode/ui/styles.css";
-import { connectViaWebSocket } from "@zcode/client";
+} from "@picode/ui";
+import "@picode/ui/styles.css";
+import { connectViaWebSocket } from "@picode/client";
 import { WebCallbackPage } from "./auth/WebCallbackPage.js";
 import { createWebAuthService } from "./auth/webAuthService.js";
 import { WEB_ZAI_OAUTH_CONFIG, resolveWebAuthDevReturnTo } from "./auth/webZaiOAuthConfig.js";
@@ -38,7 +38,7 @@ import {
   isConversationSharePath,
   resolveConversationShareCodeFromPath,
 } from "./share/conversationShareRoute.js";
-import type { IPlatformService, RemoteTarget, ServerRemoteInfo } from "@zcode/shared";
+import type { IPlatformService, RemoteTarget, ServerRemoteInfo } from "@picode/shared";
 import { WEB_DEFAULT_THEME, resolveWebInitialTheme } from "./webThemeSeed.js";
 
 function resolveWebThemePreference(defaultTheme: Theme = WEB_DEFAULT_THEME): Theme {

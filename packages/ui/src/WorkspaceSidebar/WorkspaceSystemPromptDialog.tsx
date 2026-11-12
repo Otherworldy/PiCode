@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { IFileService } from "@zcode/services";
+import type { IFileService } from "@picode/services";
 import { Button } from "@/components/ui/button.js";
 import {
   Dialog,

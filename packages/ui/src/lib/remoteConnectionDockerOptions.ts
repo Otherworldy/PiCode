@@ -1,4 +1,4 @@
-import type { DockerContainerInfo, IPlatformService } from "@zcode/shared";
+import type { DockerContainerInfo, IPlatformService } from "@picode/shared";
 
 type DockerOptionsPlatform = Pick<IPlatformService, "isDockerAvailable" | "listDockerContainers">;
 

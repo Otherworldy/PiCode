@@ -1,12 +1,12 @@
 /* eslint-disable max-lines -- Controller source 聚合、路由、订阅与生命周期属于同一个 Host 边界。 */
-import { Emitter } from "@zcode/rpc";
-import type { ZCodeTaskMeta } from "@zcode/shared";
+import { Emitter } from "@picode/rpc";
+import type { ZCodeTaskMeta } from "@picode/shared";
 import type {
   ControllerSubscribeParams,
   WindowHostControllerTaskRow,
   WindowHostTaskAddress,
-} from "@zcode/shared/zcode-protocol-v4";
-import { matchesTaskListMembershipKind } from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared/picode-protocol-v4";
+import { matchesTaskListMembershipKind } from "@picode/shared/picode-protocol-v4";
 import type {
   IWindowControllerService,
   IZCodeAgentService,
@@ -16,7 +16,7 @@ import type {
   WindowHostControllerTaskListResult,
   ZCodeTaskListQuery,
   ZCodeTaskListWorkspaceScope,
-} from "@zcode/services";
+} from "@picode/services";
 import {
   createWindowHostControllerProjection,
   type WindowHostControllerMutation,
@@ -76,7 +76,7 @@ function mutationParams(address: WindowHostTaskAddress) {
 }
 
 function sessionOverlay(
-  summary: import("@zcode/shared/zcode-protocol-v4").SessionSummary,
+  summary: import("@picode/shared/picode-protocol-v4").SessionSummary,
 ): WindowHostControllerSessionOverlay {
   const liveStatus: WindowHostControllerSessionOverlay["liveStatus"] =
     summary.pendingInteraction ||
@@ -679,7 +679,7 @@ export function createWindowHostControllerRuntime(options: {
       taskId: string;
       workspacePath: string;
       workspaceIdentity?: string;
-      attachmentScope?: import("@zcode/shared").WindowHostAttachmentScope;
+      attachmentScope?: import("@picode/shared").WindowHostAttachmentScope;
       allowMissingTask?: boolean;
     }): Promise<WindowHostTaskAddress> {
       const remoteAttachmentScope =

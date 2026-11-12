@@ -1,16 +1,16 @@
 import { join } from "node:path";
 import { app } from "electron";
-import { HELPER_APP_NAME } from "@zcode/zcode-cua/broker/helperConstants";
+import { HELPER_APP_NAME } from "@picode/picode-cua/broker/helperConstants";
 import {
   canonicalizeCuaHelperInstallerOptions,
   createCuaHelperInstaller,
   type CuaHelperInstaller,
   type CuaHelperInstallerOptions,
-} from "@zcode/services/node";
+} from "@picode/services/node";
 
 type InstallerFactory = (options: CuaHelperInstallerOptions) => CuaHelperInstaller;
 
-export { normalizeCuaHelperArch, normalizeCuaHelperArchs } from "@zcode/services/node";
+export { normalizeCuaHelperArch, normalizeCuaHelperArchs } from "@picode/services/node";
 
 interface DesktopCuaHelperInstallerOptions extends Pick<
   CuaHelperInstallerOptions,

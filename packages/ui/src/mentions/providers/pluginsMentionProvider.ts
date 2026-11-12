@@ -6,7 +6,7 @@ import {
   resolvePluginDisplayName,
   resolveLocalizedText,
   type ZCodePluginReferenceCatalogEntry,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { MentionCategoryResult, MentionItem } from "@/mentions/mentionTypes.js";
 import { filterMentionItemsWithOptions } from "@/mentions/mentionSearch.js";
 import { buildPluginMentionMarkdown } from "@/mentions/mentionMarkdown.js";

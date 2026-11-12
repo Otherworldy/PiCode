@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { IMcpSyncService } from "@zcode/services";
-import type { NativeMcpServerRecord, ZCodeMcpServer } from "@zcode/shared";
+import type { IMcpSyncService } from "@picode/services";
+import type { NativeMcpServerRecord, ZCodeMcpServer } from "@picode/shared";
 import { Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import {

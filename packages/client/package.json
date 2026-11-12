@@ -1,5 +1,5 @@
 {
-  "name": "@zcode/client",
+  "name": "@picode/client",
   "private": true,
   "type": "module",
   "exports": {
@@ -11,9 +11,9 @@
     "lint:fix": "oxlint --fix"
   },
   "dependencies": {
-    "@zcode/rpc": "workspace:*",
-    "@zcode/services": "workspace:*",
-    "@zcode/shared": "workspace:*"
+    "@picode/rpc": "workspace:*",
+    "@picode/services": "workspace:*",
+    "@picode/shared": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^6.0.2"

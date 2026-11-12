@@ -1,4 +1,4 @@
-import type { UsageEntitlementSnapshot } from "@zcode/shared";
+import type { UsageEntitlementSnapshot } from "@picode/shared";
 
 // 旧缓存可能由 quota level 合成订阅；切换命名空间避免升级后恢复伪权益。
 const USAGE_ENTITLEMENT_CACHE_PREFIX = "zcode:usage-entitlement:subscription-v2:";

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { DesktopCommandIds } from "@zcode/shared";
+import { DesktopCommandIds } from "@picode/shared";
 import { MinusIcon, XIcon } from "lucide-react";
 import { WindowMaximizeIcon, WindowRestoreIcon } from "@/components/icons/windowIcons.js";
 import { Button } from "@/components/ui/button.js";

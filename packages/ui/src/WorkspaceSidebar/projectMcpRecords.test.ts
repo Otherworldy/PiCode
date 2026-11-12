@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { NativeMcpServerRecord } from "@zcode/shared";
+import type { NativeMcpServerRecord } from "@picode/shared";
 import {
   mcpProjectionMatchesWorkspace,
   mcpServersForProjectStatusProbe,

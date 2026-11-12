@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ZCodePiSdkStatus } from "@zcode/shared";
+import type { ZCodePiSdkStatus } from "@picode/shared";
 import { resolvePiSdkVersionPresentation } from "../src/settings/PiSdkSourceSetting.js";
 import zhCN from "../src/i18n/locales/zh-CN.js";
 import enUS from "../src/i18n/locales/en-US.js";

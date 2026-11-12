@@ -6,7 +6,7 @@ import {
   type OAuthCachedSessionRestoreResult,
   type UserInfo,
   resolveJwtExpiration,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { toUserInfo } from "./zaiWebOAuthProvider.js";
 
 const ACTIVE_PROVIDER_KEY = "oauth:active_provider";

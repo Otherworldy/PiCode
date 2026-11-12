@@ -55,7 +55,7 @@ import { resolveWorkspaceDisplayLabel } from "@/lib/workspaceDisplayName.js";
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { TaskRenameDialog } from "@/TaskRenameDialog.js";
 import { TaskList } from "@/TaskList.js";
-import { selectWorkspaceZCodeState, useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { selectWorkspaceZCodeState, useZCodeSessionStore } from "@/store/picodeSessionStore.js";
 import type { WorkspaceTabState } from "@/store/tabStore.js";
 import type { RemoteConnectionLogEntry } from "@/hooks/useRemoteConnectionLogs.js";
 import { ReconnectingRemoteWorkspaceLogTooltip } from "@/WorkspaceSidebar/ReconnectingRemoteWorkspaceLogTooltip.js";
@@ -69,8 +69,8 @@ import {
   TID_WORKSPACE_PROJECT_MCP_BUTTON,
   TID_WORKSPACE_SYSTEM_PROMPT_BUTTON,
   testId,
-} from "@zcode/shared";
-import type { ZCodeTaskMeta } from "@zcode/shared";
+} from "@picode/shared";
+import type { ZCodeTaskMeta } from "@picode/shared";
 import { useBaseWorkspaceServices, useWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import {
   applyTaskQueryCacheMutation,
@@ -84,7 +84,7 @@ import {
   RemoteSyncMenuItems,
   shouldShowRemoteSyncActions,
 } from "@/settings/RemoteSyncActions.js";
-import { invalidateDeferredDraftSessionForSkillChange } from "@/lib/zcodeDraftSkillInvalidation.js";
+import { invalidateDeferredDraftSessionForSkillChange } from "@/lib/picodeDraftSkillInvalidation.js";
 import { refreshSharedSkillStoreForWorkspace } from "@/lib/skillStoreRefresh.js";
 import { refreshWorkspacePluginCapabilitiesAfterRemoteSync } from "@/lib/remotePluginSyncRefresh.js";
 import { useMcpStore } from "@/store/mcpStore.js";

@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select.js";
 import { Switch } from "@/components/ui/switch.js";
-import type { Hook, HookConfig, HookEvent, HookType } from "@zcode/shared";
+import type { Hook, HookConfig, HookEvent, HookType } from "@picode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { SettingsFormTextarea } from "@/settings/SettingsFormTextarea.js";
 import { SettingsFormActions } from "@/settings/SettingsFormActions.js";

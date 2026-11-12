@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Ban, CircleAlert, Loader2, Play, RotateCcw, Trash2 } from "lucide-react";
-import type { TodoItem, TodoStatus } from "@zcode/shared";
+import type { TodoItem, TodoStatus } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { cn } from "@/components/lib/utils.js";
 

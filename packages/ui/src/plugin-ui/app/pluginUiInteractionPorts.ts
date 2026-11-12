@@ -5,8 +5,8 @@ import type {
   McpAppsDownloadFileItem,
   PluginSandboxHandle,
   PluginSandboxPlatformPort,
-} from "@zcode/shared/mcp-apps";
-import { MCP_APPS_SET_WIDGET_STATE_METHOD, concatMcpAppsTextContent } from "@zcode/shared/mcp-apps";
+} from "@picode/shared/mcp-apps";
+import { MCP_APPS_SET_WIDGET_STATE_METHOD, concatMcpAppsTextContent } from "@picode/shared/mcp-apps";
 import { z } from "zod";
 import type { PluginUiHostBridge } from "./pluginUiHostBridge.js";
 

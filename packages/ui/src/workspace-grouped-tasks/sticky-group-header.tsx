@@ -1,4 +1,4 @@
-import type { ZCodeGroupedTaskViewNode, ZCodeTaskGroupColor } from "@zcode/services";
+import type { ZCodeGroupedTaskViewNode, ZCodeTaskGroupColor } from "@picode/services";
 import { ChevronDownIcon, ChevronRightIcon, MessageCirclePlus } from "lucide-react";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
@@ -21,7 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
-import { CRON_DEFAULT_GROUP_ID, OFF_PEAK_DEFAULT_GROUP_ID } from "@zcode/shared";
+import { CRON_DEFAULT_GROUP_ID, OFF_PEAK_DEFAULT_GROUP_ID } from "@picode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { getTaskGroupDisplayTitle } from "@/workspace-grouped-tasks/group-title.js";
 import {

@@ -1,6 +1,6 @@
-import type { ZCodeConfigOption } from "@zcode/shared";
-import type { SessionConfigState } from "@zcode/shared/zcode-protocol-v4";
-import { parseModelPickerValue } from "@/lib/zcodeSessionProjection.js";
+import type { ZCodeConfigOption } from "@picode/shared";
+import type { SessionConfigState } from "@picode/shared/picode-protocol-v4";
+import { parseModelPickerValue } from "@/lib/picodeSessionProjection.js";
 
 function resolveModelDisplayValue(
   options: readonly ZCodeConfigOption[],

@@ -1,4 +1,4 @@
-import { ensureAppDataDir } from "@zcode/shared/node";
+import { ensureAppDataDir } from "@picode/shared/node";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -8,7 +8,7 @@ import type {
   HookEvent,
   SettingsDirectoryLocation,
   SettingsDirectorySource,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   buildWorkspaceHookBundleSnapshot,
   createWorkspaceHookSourceInput,
@@ -18,8 +18,8 @@ import {
   type WorkspaceHookBundleSnapshotData,
   type WorkspaceHookSourceInput,
   type WorkspaceHooksConfig,
-} from "@zcode/shared/workspace-hook-discovery";
-import { parseWorkspaceHookTrustStoreContent } from "@zcode/shared/workspace-hook-trust-store-file";
+} from "@picode/shared/workspace-hook-discovery";
+import { parseWorkspaceHookTrustStoreContent } from "@picode/shared/workspace-hook-trust-store-file";
 import { createServiceLogger, type ServiceLogger } from "#src/logger/serviceLogger.js";
 import type { IHooksService } from "./hooks.js";
 import { atomicWriteWorkspaceHookConfig } from "./workspaceHookConfigMutation.js";

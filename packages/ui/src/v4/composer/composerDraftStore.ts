@@ -9,9 +9,9 @@
 // 附件不入草稿（objectUrl/File 不可序列化，localPath 附件重启后归属难校验——
 // 与「v4 composer 不做附件草稿持久化」的裁决一致）。
 import { logger } from "@/logger.js";
-import { modelSelectionSchema, type ModelSelection } from "@zcode/shared";
-import { submissionModeSchema, type SubmissionMode } from "@zcode/shared/zcode-protocol-v4";
-import type { ComposerMentionPrefill } from "@/store/zcodeSessionStoreTypes.js";
+import { modelSelectionSchema, type ModelSelection } from "@picode/shared";
+import { submissionModeSchema, type SubmissionMode } from "@picode/shared/picode-protocol-v4";
+import type { ComposerMentionPrefill } from "@/store/picodeSessionStoreTypes.js";
 
 export interface V4ComposerDraft {
   text: string;

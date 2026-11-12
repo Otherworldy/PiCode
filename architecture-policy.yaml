@@ -37,8 +37,8 @@ modules:
   - id: server
     roots: [packages/server/src]
     managed: false
-  - id: zcode-server-cli
-    roots: [packages/zcode-server-cli/src]
+  - id: picode-server-cli
+    roots: [packages/picode-server-cli/src]
     managed: false
   - id: ui
     roots: [packages/ui/src]
@@ -52,8 +52,8 @@ modules:
   - id: formal-proof
     roots: [packages/formal-proof/src]
     managed: false
-  - id: zcode-cli
-    roots: [apps/zcode-cli]
+  - id: picode-cli
+    roots: [apps/picode-cli]
     managed: false
 
   - id: gen-ui-protocol
@@ -106,13 +106,13 @@ modules:
       domain: "."
     owner: plugin
   - id: mcp-ui
-    roots: [apps/zcode-cli/packages/bootstrap/src/zcode-protocol/mcp-ui]
+    roots: [apps/picode-cli/packages/bootstrap/src/picode-protocol/mcp-ui]
     managed: true
-    requires: [zcode-cli, shared, mcp-apps-protocol]
+    requires: [picode-cli, shared, mcp-apps-protocol]
     publicEntrypoints:
       [
-        apps/zcode-cli/packages/bootstrap/src/zcode-protocol/mcp-ui/index.ts,
-        apps/zcode-cli/packages/bootstrap/src/zcode-protocol/mcp-ui/contract.ts,
+        apps/picode-cli/packages/bootstrap/src/picode-protocol/mcp-ui/index.ts,
+        apps/picode-cli/packages/bootstrap/src/picode-protocol/mcp-ui/contract.ts,
       ]
     layers:
       app: "."

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { FileMediaPreview } from "@zcode/shared";
+import type { FileMediaPreview } from "@picode/shared";
 import { CodeBlock } from "@/components/ai-elements/code-block.js";
 import { MessageResponse, type MessageFileLinkTarget } from "@/components/ai-elements/message.js";
 import { ToolInput, ToolOutput } from "@/components/ai-elements/tool.js";

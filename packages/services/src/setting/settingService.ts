@@ -1,4 +1,4 @@
-import { ensureAppDataDir } from "@zcode/shared/node";
+import { ensureAppDataDir } from "@picode/shared/node";
 import { access, readFile, mkdir, rename } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -6,13 +6,13 @@ import type {
   AppSettings,
   ProviderFamilyDomain,
   ProviderFamilyConnectionSelectionSettings,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   appSettingsPatchSchema,
   appSettingsSchema,
   formatLogPrefix,
   formatZodError,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { ISettingService } from "./setting.js";
 import { normalizeSettingsPatch } from "#src/setting/normalizeSettingsPatch.js";
 import { copyDataDirectory, getDataBaseDir, validateDataBaseDirTarget } from "../paths.js";

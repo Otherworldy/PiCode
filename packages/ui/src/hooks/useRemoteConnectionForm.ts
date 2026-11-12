@@ -6,8 +6,8 @@ import type {
   SSHConfigAliasOption,
   SshProxyKind,
   WSLDistro,
-} from "@zcode/shared";
-import { DEFAULT_REMOTE_ASSET_INSTALL_MODE } from "@zcode/shared";
+} from "@picode/shared";
+import { DEFAULT_REMOTE_ASSET_INSTALL_MODE } from "@picode/shared";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import {
   loadRemoteConnectionDockerOptions,

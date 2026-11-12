@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { createGenUiService } from "./service.js";
-import type { PluginSandboxRegisterInput } from "@zcode/shared/mcp-apps";
+import type { PluginSandboxRegisterInput } from "@picode/shared/mcp-apps";
 it("registers restricted Gen UI provenance with synchronous, escaped initial state", async () => {
   const stateRoot = await mkdtemp(join(tmpdir(), "gen-ui-service-"));
   let input: PluginSandboxRegisterInput | undefined;

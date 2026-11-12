@@ -10,7 +10,7 @@ import {
   normalizeDesktopPetReaderFontSize,
   normalizeDesktopPetReaderLetterSpacing,
   normalizeDesktopPetReaderLineHeight,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { Input } from "@/components/ui/input.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { SettingsRow } from "./SettingsPageParts.js";

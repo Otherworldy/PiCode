@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ModelSelection, TodoItem } from "@zcode/shared";
+import type { ModelSelection, TodoItem } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import {
   Dialog,

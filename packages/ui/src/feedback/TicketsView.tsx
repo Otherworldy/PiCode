@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, CopyIcon, Inbox, Loader2, PlusCircle, RefreshCcw } from "lucide-react";
-import type { FeedbackTicketSummary } from "@zcode/shared";
-import type { IFeedbackService } from "@zcode/services";
+import type { FeedbackTicketSummary } from "@picode/shared";
+import type { IFeedbackService } from "@picode/services";
 import { Button } from "@/components/ui/button.js";
 import { cn } from "@/components/lib/utils.js";
 import { FeedbackErrorTip, StatusIndicator } from "@/feedback/feedbackBadges.js";

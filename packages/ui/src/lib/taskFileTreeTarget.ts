@@ -1,4 +1,4 @@
-import type { ZCodeTaskMeta } from "@zcode/shared";
+import type { ZCodeTaskMeta } from "@picode/shared";
 import { getPathLeaf } from "@/lib/path.js";
 import { resolveWorkspaceDisplayLabel } from "@/lib/workspaceDisplayName.js";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";

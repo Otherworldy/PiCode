@@ -1,6 +1,6 @@
 import { accessSync, constants, existsSync } from "node:fs";
 import { delimiter, dirname, join, resolve as resolvePath } from "node:path";
-import { getRuntimeToolRuntime, type RuntimeToolId } from "@zcode/shared";
+import { getRuntimeToolRuntime, type RuntimeToolId } from "@picode/shared";
 
 function isExecutableFile(path: string): boolean {
   try {

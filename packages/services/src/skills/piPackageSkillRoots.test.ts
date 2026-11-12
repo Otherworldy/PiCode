@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { piPackageSkillSettingsScope } from "@zcode/shared";
+import { piPackageSkillSettingsScope } from "@picode/shared";
 import { listEnabledPiPackageSkillRoots } from "./piPackageSkillRoots.js";
 
 const skill = (name: string) => `---\nname: ${name}\ndescription: ${name}\n---\n`;

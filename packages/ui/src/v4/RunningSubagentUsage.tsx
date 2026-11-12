@@ -5,7 +5,7 @@ import {
   turnTokensPerSecond,
   turnTotalTokens,
   type TurnUsage,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared/picode-protocol-v4";
 import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 

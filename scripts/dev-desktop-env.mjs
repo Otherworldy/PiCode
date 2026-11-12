@@ -57,7 +57,7 @@ try {
   // `dev` lifecycle directly, so pnpm will not run `pre-dev` automatically.
   // Preserve its runtime-asset preparation and stale `out` cleanup explicitly
   // before rebuilding bundles or starting Electron.
-  await run(pnpmCommand, ["--filter", "@zcode/desktop", "pre-dev"]);
+  await run(pnpmCommand, ["--filter", "@picode/desktop", "pre-dev"]);
   // On Windows, use "node" (resolved via PATHEXT) to avoid "C:\Program Files\..." space issues
   await run(process.platform === "win32" ? "node" : process.execPath, [
     resolve(repoRoot, "scripts/build-desktop-agent-cli.mjs"),
@@ -67,7 +67,7 @@ try {
       resolve(repoRoot, "scripts/build-desktop-agent-bytecode.mjs"),
     ]);
   }
-  await run(pnpmCommand, ["--filter", "@zcode/desktop", "dev:runtime"]);
+  await run(pnpmCommand, ["--filter", "@picode/desktop", "dev:runtime"]);
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
   process.exit(1);

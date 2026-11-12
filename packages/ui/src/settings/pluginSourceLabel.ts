@@ -1,4 +1,4 @@
-import type { ZCodePluginMarketplaceSummary } from "@zcode/shared";
+import type { ZCodePluginMarketplaceSummary } from "@picode/shared";
 
 /**
  * 把 marketplace id 解析为对用户友好的展示名：

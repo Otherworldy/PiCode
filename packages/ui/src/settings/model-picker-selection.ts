@@ -1,4 +1,4 @@
-import type { ZCodePiModelsMutateResult } from "@zcode/shared";
+import type { ZCodePiModelsMutateResult } from "@picode/shared";
 // 仅类型导入：该模块会被 node --test 直接加载，运行时不能有跨文件依赖。
 import type { CatalogModel } from "./provider-draft.js";
 

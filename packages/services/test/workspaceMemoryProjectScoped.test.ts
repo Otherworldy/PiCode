@@ -11,7 +11,7 @@ import {
   resolveWorkspaceMemoryRoot,
   setWorkspaceMemoryEnabled,
   setWorkspaceMemoryModel,
-} from "@zcode/shared/node";
+} from "@picode/shared/node";
 import { createMemoryService } from "../src/memory/memoryService.js";
 
 async function writeWorkspaceConfig(workspacePath: string, text: string): Promise<void> {

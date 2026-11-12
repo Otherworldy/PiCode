@@ -14,7 +14,7 @@ import {
   genUiTweakMessageSchema,
   genUiTweakResultSchema,
   genUiTweakAnnotationSchema,
-} from "@zcode/shared/gen-ui";
+} from "@picode/shared/gen-ui";
 import { installGenUiTweakRuntime } from "./genUiTweakRuntime.js";
 
 const initial = JSON.parse(

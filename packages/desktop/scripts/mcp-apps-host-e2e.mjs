@@ -48,9 +48,9 @@ if (
         "pnpm",
         [
           "--dir",
-          join(root, "apps/zcode-cli"),
+          join(root, "apps/picode-cli"),
           "--filter",
-          `@zcode/${name}`,
+          `@picode/${name}`,
           name === "cli" ? "build:desktop-agent" : "build",
         ],
         { stdio: "inherit" },
@@ -68,7 +68,7 @@ const alias = {
   "@": join(root, "packages/ui/src"),
   ...Object.fromEntries(
     Object.entries(sharedExports).map(([key, value]) => [
-      key === "." ? "@zcode/shared" : `@zcode/shared/${key.slice(2)}`,
+      key === "." ? "@picode/shared" : `@picode/shared/${key.slice(2)}`,
       resolve(shared, "..", value),
     ]),
   ),
@@ -208,7 +208,7 @@ for (const mode of modes) {
             output,
             join(output, `${mode}-profile`),
             process.execPath,
-            join(root, "apps/zcode-cli/packages/cli/dist/zcode.cjs"),
+            join(root, "apps/picode-cli/packages/cli/dist/zcode.cjs"),
             showcaseServer ?? "",
           ]
         : mode === "managed-empty"

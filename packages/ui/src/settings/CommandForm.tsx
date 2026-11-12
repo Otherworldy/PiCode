@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Trash2 } from "lucide-react";
-import { type CommandAgentSource, type CommandConfig, type UserCommand } from "@zcode/shared";
+import { type CommandAgentSource, type CommandConfig, type UserCommand } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";

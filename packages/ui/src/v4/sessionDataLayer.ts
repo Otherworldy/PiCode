@@ -7,7 +7,7 @@ import { ConversationProjectionStore } from "@/v4/conversationProjectionStore.js
 import { shouldExposeE2EStoreBridge } from "@/lib/e2eStoreBridge.js";
 import { conversationTopic, type ConversationTransport } from "@/v4/transport.js";
 import { logger } from "@/logger.js";
-import type { CommandsQueryParams, CommandsQueryResult } from "@zcode/shared/zcode-protocol-v4";
+import type { CommandsQueryParams, CommandsQueryResult } from "@picode/shared/picode-protocol-v4";
 
 /** 会话租约命中状态：cold = 新订阅，warm = 引用未断，keep_warm = 空闲池保活命中。 */
 type SessionLeaseOpenKind = "cold" | "warm" | "keep_warm";

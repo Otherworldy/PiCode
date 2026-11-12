@@ -5,7 +5,7 @@
 启动：
 
 ```sh
-pnpm --filter @zcode/formal-proof dev
+pnpm --filter @picode/formal-proof dev
 ```
 
 打开：

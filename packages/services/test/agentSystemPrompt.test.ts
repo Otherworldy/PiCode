@@ -8,7 +8,7 @@ import {
   prepareAgentSystemPromptWrite,
   remoteAgentSystemPromptPath,
   resolvePiAgentDir,
-} from "@zcode/shared/node";
+} from "@picode/shared/node";
 import {
   readAgentSystemPromptFile,
   writeAgentSystemPromptFile,

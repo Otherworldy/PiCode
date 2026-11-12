@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ToolCallRow } from "@zcode/shared/zcode-protocol-v4";
+import type { ToolCallRow } from "@picode/shared/picode-protocol-v4";
 import { deriveLogicalUiInstances } from "./pluginUiInstancePolicy.js";
 import { isPluginUiPinnedToolRow } from "./pluginUiRowPolicy.js";
 

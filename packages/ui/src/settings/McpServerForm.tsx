@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { McpSource, ZCodeMcpServer } from "@zcode/shared";
+import type { McpSource, ZCodeMcpServer } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
 import {

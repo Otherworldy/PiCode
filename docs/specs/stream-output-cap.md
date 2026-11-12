@@ -2,7 +2,7 @@
 
 ## 背景
 
-`packages/shared/src/zcode-protocol-v4/core.ts` 在 `DELIVERY_PROFILES` 里声明了
+`packages/shared/src/picode-protocol-v4/core.ts` 在 `DELIVERY_PROFILES` 里声明了
 `streamOutputCapBytes`：
 
 ```ts
@@ -11,7 +11,7 @@ replayable: { streamOutputCapBytes: 0 }        // :56
 ```
 
 `grep -rn "streamOutputCapBytes"` 全仓（含 `dist`）只命中这三行定义，**`packages/ui` 与
-`apps/zcode-cli` 零引用**。也就是说「单行流式输出最多下发 256 KB」这条护栏从来没接线。
+`apps/picode-cli` 零引用**。也就是说「单行流式输出最多下发 256 KB」这条护栏从来没接线。
 
 `projector.appendStream`（`pi-host/src/projector.ts`）只看 `streamPaths` 这个布尔开关，
 不看字节数。后果是单行（一次 `assistant` 文本行、一次工具 `output.text`）可以无上限增长，

@@ -2,7 +2,7 @@
 
 ## 背景
 
-主会话请求由 `@zcode/pi-host` 内的 Pi `AgentSession` 发出，`User-Agent` 由 pi-ai 拼装
+主会话请求由 `@picode/pi-host` 内的 Pi `AgentSession` 发出，`User-Agent` 由 pi-ai 拼装
 （`pi-ai/dist/utils/identity.js`）：
 
 ```
@@ -23,7 +23,7 @@ pi/<version> (<platform>; node/v<node>; <arch>)
 | SEA               | 可执行文件旁                                  | 同上                                                   | `pi/0.0.0` |
 
 `bootstrap/src/model-config.ts` 里的 `User-Agent: PiCode/<appVersion>` 属于
-`@zcode/adapters` 的 runner 链路（辅助生成类调用），不经过 Pi `AgentSession`，无法覆盖它。
+`@picode/adapters` 的 runner 链路（辅助生成类调用），不经过 Pi `AgentSession`，无法覆盖它。
 
 ## 规则
 
@@ -58,5 +58,5 @@ pi/<version> (<platform>; node/v<node>; <arch>)
   `Sl=globalThis.__zcodeBundledPiVersion||hwe.version||"0.0.0"`。
 - 抓一条上游请求：`User-Agent` 从 `pi/0.0.0 (win32; node/v24.x; x64)` 变成
   `pi/<内置 Pi 版本> (...)`，平台与 Node 段不变。
-- 源码直跑（`pnpm --filter @zcode/cli dev`，tsx 加载真实 Pi 包）时 `VERSION` 仍来自
+- 源码直跑（`pnpm --filter @picode/cli dev`，tsx 加载真实 Pi 包）时 `VERSION` 仍来自
   真实 `package.json`，两条路径的 UA 版本一致。

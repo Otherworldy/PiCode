@@ -1,5 +1,5 @@
-import type { IZCodeTaskService } from "@zcode/services";
-import type { ZCodeTaskMeta, ZCodeWorkspaceTaskListChanged } from "@zcode/shared";
+import type { IZCodeTaskService } from "@picode/services";
+import type { ZCodeTaskMeta, ZCodeWorkspaceTaskListChanged } from "@picode/shared";
 import { buildTaskEntityKey, buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
 import {
   markTaskQueryCacheScopesStale,
@@ -8,7 +8,7 @@ import {
   setTaskQueryCacheUnreadOverlay,
   useTaskQueryCacheStore,
 } from "@/store/taskQueryCacheStore.js";
-import { getTaskUnreadIndicator, useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { getTaskUnreadIndicator, useZCodeSessionStore } from "@/store/picodeSessionStore.js";
 import { bumpTaskListMembershipVersion } from "@/v4/taskListMembershipVersion.js";
 import { logger } from "@/logger.js";
 

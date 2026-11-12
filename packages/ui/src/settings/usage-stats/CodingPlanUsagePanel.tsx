@@ -10,14 +10,14 @@ import type {
   CodingPlanUsageSnapshot,
   UsageQuotaLimit,
   UsageQuotaSnapshot,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { LocalizedCodingPlanQuotaResetAction } from "@/components/coding-plan-quota-reset/CodingPlanQuotaResetAction.js";
 import { CodingPlanQuotaResetOpportunity } from "@/components/coding-plan-quota-reset/CodingPlanQuotaResetOpportunity.js";
 import { buildCodingPlanQuotaResetDialogConfig } from "@/components/coding-plan-quota-reset/buildCodingPlanQuotaResetDialogConfig.js";
 import { Button } from "@/components/ui/button.js";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
-import { BUILTIN_MODEL_PROVIDER_IDS } from "@zcode/shared";
+import { BUILTIN_MODEL_PROVIDER_IDS } from "@picode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useUsageEntitlement } from "@/hooks/useUsageEntitlement.js";
 import { useCodingPlanQuotaResetUi } from "@/hooks/useCodingPlanQuotaResetUi.js";
@@ -311,8 +311,8 @@ function CodingPlanQuotaCards({
   sourceKey: string | undefined;
   preferredProviderId: string | undefined;
   accountAccess:
-    | import("@zcode/shared").ZCodeProviderAccountAccess
-    | import("@zcode/shared").ZCodeAccountAccess
+    | import("@picode/shared").ZCodeProviderAccountAccess
+    | import("@picode/shared").ZCodeAccountAccess
     | undefined;
   onEntitlementRefresh: () => void | Promise<void>;
   onUsageStatsRefresh: () => void | Promise<void>;

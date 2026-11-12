@@ -1,6 +1,6 @@
-import type { Event } from "@zcode/rpc";
-import { ServiceChannels } from "@zcode/shared";
-import type { ZCodeTaskMeta } from "@zcode/shared";
+import type { Event } from "@picode/rpc";
+import { ServiceChannels } from "@picode/shared";
+import type { ZCodeTaskMeta } from "@picode/shared";
 import type {
   ControllerResyncParams,
   ControllerResyncResult,
@@ -11,14 +11,14 @@ import type {
   WindowHostControllerTaskRow,
   WindowHostControllerWorkspaceFrame,
   WindowHostTaskAddress,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared/picode-protocol-v4";
 import { createServiceDescriptor } from "../descriptors.js";
-import type { ZCodeArchivedTaskDeletionResult } from "#src/session/zcodeTaskService.js";
+import type { ZCodeArchivedTaskDeletionResult } from "#src/session/picodeTaskService.js";
 import type {
   ZCodeTaskListItem,
   ZCodeTaskListQuery,
   ZCodeTaskListResult,
-} from "../session/zcodeTaskListTypes.js";
+} from "../session/picodeTaskListTypes.js";
 
 export type WindowHostControllerMutation =
   | { kind: "pin"; pinned: boolean }

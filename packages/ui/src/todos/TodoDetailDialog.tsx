@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
 import { CircleAlert, ImagePlus, Loader2, Play } from "lucide-react";
-import type { ITodoService } from "@zcode/services";
-import type { TodoItem } from "@zcode/shared";
+import type { ITodoService } from "@picode/services";
+import type { TodoItem } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import {

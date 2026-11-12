@@ -19,8 +19,8 @@ import type {
   ZCodePluginMarketplaceSummary,
   ZCodePluginUserConfigOption,
   ZCodePluginsOverviewResult,
-} from "@zcode/shared";
-import type { IPluginSyncService, IZCodeAgentService } from "@zcode/services";
+} from "@picode/shared";
+import type { IPluginSyncService, IZCodeAgentService } from "@picode/services";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";

@@ -1,4 +1,4 @@
-import type { ZCodePiPluginsResult } from "@zcode/shared";
+import type { ZCodePiPluginsResult } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import {
   Dialog,

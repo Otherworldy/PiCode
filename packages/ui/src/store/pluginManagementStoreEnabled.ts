@@ -1,5 +1,5 @@
-import type { IPluginManagementService } from "@zcode/services";
-import type { ZCodePluginScope } from "@zcode/shared";
+import type { IPluginManagementService } from "@picode/services";
+import type { ZCodePluginScope } from "@picode/shared";
 import { logger } from "@/logger.js";
 import { loadInto } from "@/store/pluginManagementStoreLoading.js";
 import type { PluginManagementState } from "@/store/pluginManagementStore.js";

@@ -1,6 +1,6 @@
 /* oxlint-disable eslint(max-lines) -- 状态面板同时维护收起态摘要、展开态分区、菜单策略和宽度自适应，同文件能保证两种形态共享同一内容优先级。 */
-import type { ModelSelectionView } from "@zcode/services";
-import type { ZCodeProvider } from "@zcode/shared";
+import type { ModelSelectionView } from "@picode/services";
+import type { ZCodeProvider } from "@picode/shared";
 import { RunningSubagentModelControl } from "@/v4/RunningSubagentModelControl.js";
 import {
   RunningSubagentUsageBreakdown,
@@ -45,19 +45,19 @@ import {
   TID_V4_BACKGROUND_WORK_CANCEL,
   TID_V4_BACKGROUND_WORK_ITEM,
   testId,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type {
   GitChangeSourceId,
   GitRepositorySummary,
   ZCodeTaskChangeSummary,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type {
   BackgroundWorkSummary,
   GoalState,
   PlanState,
   RunningSubagentSummary,
   ToolCallRow,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared/picode-protocol-v4";
 import { cn } from "@/components/lib/utils.js";
 import {
   stripTodoStepEmphasis,

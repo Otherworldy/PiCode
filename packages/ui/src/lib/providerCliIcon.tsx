@@ -1,4 +1,4 @@
-import type { ZCodeProvider } from "@zcode/shared";
+import type { ZCodeProvider } from "@picode/shared";
 import { GlmMonochromeIcon } from "@/components/ui/GlmMonochromeIcon.js";
 
 export function renderProviderCliIcon(_provider: ZCodeProvider = "glm", className?: string) {

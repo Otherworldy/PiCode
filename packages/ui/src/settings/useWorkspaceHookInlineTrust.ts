@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Hook } from "@zcode/shared";
-import type { IHooksService } from "@zcode/services";
+import type { Hook } from "@picode/shared";
+import type { IHooksService } from "@picode/services";
 import { toast } from "@/components/ui/toast.js";
 import { useServices } from "@/hooks/useServices.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";

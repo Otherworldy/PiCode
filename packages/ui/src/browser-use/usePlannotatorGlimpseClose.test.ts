@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import vm from "node:vm";
-import { EmbeddedBrowserWebviewChannels } from "@zcode/shared";
+import { EmbeddedBrowserWebviewChannels } from "@picode/shared";
 import {
   attachPlannotatorGuestCloseListeners,
   isLoopbackHttpUrl,

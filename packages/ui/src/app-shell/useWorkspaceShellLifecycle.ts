@@ -1,5 +1,5 @@
 import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
-import type { IServiceAccessor } from "@zcode/services";
+import type { IServiceAccessor } from "@picode/services";
 import type { TaskChatMessage as TestChatMessage } from "@/lib/taskChatMessageTypes.js";
 import type { BrowserNavigationRequest } from "@/hooks/useAppPanels.js";
 import { logger } from "@/logger.js";
@@ -8,7 +8,7 @@ import {
   getWorkspaceDisplayedTaskState,
   getWorkspaceInitState,
   useZCodeSessionStore,
-} from "@/store/zcodeSessionStore.js";
+} from "@/store/picodeSessionStore.js";
 import { sessionsIndexHasActiveWork } from "@/v4/sessionsIndexRegistry.js";
 
 export function useWorkspaceShellLifecycle({

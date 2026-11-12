@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { normalizeDesktopPetAutoPageMs } from "@zcode/shared";
+import { normalizeDesktopPetAutoPageMs } from "@picode/shared";
 import { Input } from "@/components/ui/input.js";
 import { Switch } from "@/components/ui/switch.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";

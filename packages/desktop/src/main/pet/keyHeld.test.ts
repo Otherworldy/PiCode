@@ -1,4 +1,4 @@
-import { normalizeDesktopPetReaderHotkeyMode } from "@zcode/shared";
+import { normalizeDesktopPetReaderHotkeyMode } from "@picode/shared";
 import { describe, expect, it } from "vitest";
 import { noteHoldPress, pollHoldLatch, readerHoldChord, startReaderHoldProbe } from "./keyHeld.js";
 

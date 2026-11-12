@@ -1,4 +1,4 @@
-import type { ZCodeTaskMeta } from "@zcode/shared";
+import type { ZCodeTaskMeta } from "@picode/shared";
 import type { TaskNavEntry } from "@/lib/taskNavigationHistory.js";
 import type { TaskEntityKey } from "@/lib/taskQueryCache.js";
 import { buildTaskEntityKey } from "@/lib/taskQueryCache.js";

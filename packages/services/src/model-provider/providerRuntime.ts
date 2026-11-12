@@ -1,7 +1,7 @@
 import {
   NodeModelSelectionConfigRepository,
   createNodeModelSelectionFacade,
-} from "@zcode/provider-node";
+} from "@picode/provider-node";
 import {
   ProviderRegistryService,
   ProviderSettingsFacade,
@@ -10,7 +10,7 @@ import {
   type ProviderConfigSnapshot,
   type ProviderSettingsMutationTarget,
   type ProviderSource,
-} from "@zcode/provider";
+} from "@picode/provider";
 import {
   createProviderConfigRuntime,
   type ProviderConfigRuntime,

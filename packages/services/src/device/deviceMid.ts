@@ -1,5 +1,5 @@
-import { ensureAppDataDir } from "@zcode/shared/node";
-import { createUuid } from "@zcode/shared";
+import { ensureAppDataDir } from "@picode/shared/node";
+import { createUuid } from "@picode/shared";
 import { mkdir, open, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { getAppConfigDir } from "../paths.js";

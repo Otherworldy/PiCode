@@ -7,8 +7,8 @@ import { FeatureRequestDialog } from "@/feedback/FeatureRequestDialog.js";
 import { TicketsView } from "@/feedback/TicketsView.js";
 import { FeedbackBackgroundUploadIndicator } from "@/feedback/FeedbackBackgroundUploadIndicator.js";
 import { ArrowLeftIcon, XIcon } from "lucide-react";
-import type { IFeedbackService } from "@zcode/services";
-import type { IPlatformService } from "@zcode/shared";
+import type { IFeedbackService } from "@picode/services";
+import type { IPlatformService } from "@picode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { memo } from "react";
 

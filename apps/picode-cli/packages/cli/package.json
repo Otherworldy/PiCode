@@ -1,0 +1,39 @@
+{
+  "name": "@picode/cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Main CLI application for PiCode",
+  "bin": {
+    "picode": "./dist/zcode.cjs",
+    "zcode": "./dist/zcode.cjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/zcode.cjs",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:desktop-agent": "node scripts/build.mjs --desktop-agent",
+    "build:sea": "pnpm --dir ../../../.. exec turbo --skip-infer --cwd apps/picode-cli run build --filter=!@picode/cli --force && pnpm build && node scripts/build-sea.mjs --all",
+    "sea": "node scripts/build-sea.mjs",
+    "upload:sea": "node scripts/upload-sea-smb.mjs",
+    "clean": "node ../../scripts/clean-dist.mjs",
+    "dev": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint src",
+    "lint:fix": "oxlint --write src"
+  },
+  "dependencies": {
+    "@picode/adapters": "workspace:*",
+    "@picode/bootstrap": "workspace:*",
+    "@picode/contracts": "workspace:*",
+    "@picode/core": "workspace:*",
+    "@picode/i18n": "workspace:*",
+    "@picode/provider-node": "workspace:*",
+    "@picode/shared": "workspace:*",
+    "@picode/shared-types": "workspace:*",
+    "dotenv": "^17.4.2",
+    "playwright-core": "1.59.1"
+  }
+}

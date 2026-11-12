@@ -1,5 +1,5 @@
 /* eslint-disable max-lines, @typescript-eslint/no-explicit-any -- 该函数会序列化后在隔离的浏览器页面上下文执行，不能引用 host 闭包。 */
-import type { BrowserCommandResult, BrowserPlaywrightAction } from "@zcode/shared";
+import type { BrowserCommandResult, BrowserPlaywrightAction } from "@picode/shared";
 import { buildViewportScreenshotParams } from "./browserCommandPageHandlers.js";
 import type { ControlledView } from "./browserCommandTypes.js";
 import { captureScreenshotWithCssPixelCorrection } from "./browserScreenshotCapture.js";

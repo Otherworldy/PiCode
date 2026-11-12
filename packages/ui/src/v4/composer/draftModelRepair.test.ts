@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ModelSelectionView } from "@zcode/services";
+import type { ModelSelectionView } from "@picode/services";
 import {
   deriveDraftModelFallback,
   isModelInView,

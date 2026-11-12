@@ -3,7 +3,7 @@ import {
   databaseStartupControlSchema,
   databaseStartupStateSchema,
   databaseStartupPortPayloadSchema,
-} from "@zcode/shared";
+} from "@picode/shared";
 /* eslint-disable max-lines -- preload bridge 集中暴露桌面平台 IPC，拆散会让 contextBridge 权限边界更难审计。 */
 import { contextBridge, ipcRenderer, webFrame, webUtils } from "electron";
 /** 从 command-line 参数中解析 --device-id= */
@@ -60,12 +60,12 @@ import type {
   WindowControlsOverlayReadyPayload,
   CreateTempTextAttachmentRequest,
   OpenCuaPermissionOnboardingOptions,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   InternalChannels,
   PlatformChannels,
   formatZCodeRendererProcessName,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { createOAuthCallbackHandler } from "./oauthCallbackBridge.js";
 
 const openWorkspacePathCallbacks = new Set<(path: string) => void>();
@@ -232,7 +232,7 @@ contextBridge.exposeInMainWorld("zcode", {
   selectFile: (): Promise<string | null> => ipcRenderer.invoke(PlatformChannels.SelectFile),
   getDesktopPetSettings: () =>
     ipcRenderer.invoke(PlatformChannels.DesktopPetState, { action: "get" }) as Promise<
-      import("@zcode/shared").DesktopPetPersistedSettings | null
+      import("@picode/shared").DesktopPetPersistedSettings | null
     >,
   findDesktopPetReaderText: async (query: string): Promise<boolean> => {
     const result = (await ipcRenderer.invoke(PlatformChannels.DesktopPetState, {
@@ -241,18 +241,18 @@ contextBridge.exposeInMainWorld("zcode", {
     })) as { found?: boolean } | null;
     return result?.found === true;
   },
-  setDesktopPetMood: (mood: import("@zcode/shared").DesktopPetMood) => {
+  setDesktopPetMood: (mood: import("@picode/shared").DesktopPetMood) => {
     ipcRenderer.send(PlatformChannels.DesktopPetMood, { mood });
   },
   getDesktopPetDownloadStatus: () =>
     ipcRenderer.invoke(PlatformChannels.DesktopPetState, { action: "download" }) as Promise<
-      import("@zcode/shared").DesktopPetDownloadStatus | null
+      import("@picode/shared").DesktopPetDownloadStatus | null
     >,
   onDesktopPetDownload: (
-    callback: (status: import("@zcode/shared").DesktopPetDownloadStatus) => void,
+    callback: (status: import("@picode/shared").DesktopPetDownloadStatus) => void,
   ) => {
     const handler = (_event: unknown, payload: unknown) =>
-      callback(payload as import("@zcode/shared").DesktopPetDownloadStatus);
+      callback(payload as import("@picode/shared").DesktopPetDownloadStatus);
     ipcRenderer.on(PlatformChannels.DesktopPetDownload, handler);
     return () => ipcRenderer.removeListener(PlatformChannels.DesktopPetDownload, handler);
   },
@@ -260,17 +260,17 @@ contextBridge.exposeInMainWorld("zcode", {
     ipcRenderer.invoke(PlatformChannels.DesktopPetState, { action: "stop" }) as Promise<void>,
   listDesktopPetInstalledPacks: () =>
     ipcRenderer.invoke(PlatformChannels.DesktopPetState, { action: "packs" }) as Promise<
-      import("@zcode/shared").DesktopPetInstalledPack[]
+      import("@picode/shared").DesktopPetInstalledPack[]
     >,
   importDesktopPetPack: (dir: string) =>
     ipcRenderer.invoke(PlatformChannels.DesktopPetState, { action: "import", dir }) as Promise<{
       success: boolean;
       error?: string;
-      pack?: import("@zcode/shared").DesktopPetInstalledPack;
+      pack?: import("@picode/shared").DesktopPetInstalledPack;
     }>,
   editDesktopPetBubble: () =>
     ipcRenderer.invoke(PlatformChannels.DesktopPetState, { action: "bubble-edit" }) as Promise<
-      import("@zcode/shared").DesktopPetBubbleLayout | null
+      import("@picode/shared").DesktopPetBubbleLayout | null
     >,
   resetDesktopPetBubble: () =>
     ipcRenderer.invoke(PlatformChannels.DesktopPetState, {
@@ -319,11 +319,11 @@ contextBridge.exposeInMainWorld("zcode", {
     ipcRenderer.invoke(PlatformChannels.ActivateOrSetWorkspace, path),
   /** 同步当前窗口所有 tab 的 workspace 路径到 main 进程 */
   syncWindowTabs: (paths: string[]) => ipcRenderer.send(PlatformChannels.SyncWindowTabs, paths),
-  syncWindowWorkspaceCatalog: (entries: import("@zcode/shared").WindowWorkspaceCatalogEntry[]) =>
+  syncWindowWorkspaceCatalog: (entries: import("@picode/shared").WindowWorkspaceCatalogEntry[]) =>
     ipcRenderer.send(PlatformChannels.SyncWindowWorkspaceCatalog, entries),
   startMobileRemotePairing: (port?: number) =>
     ipcRenderer.invoke(PlatformChannels.StartMobileRemotePairing, port) as Promise<
-      import("@zcode/shared").MobileRemotePairingStatus
+      import("@picode/shared").MobileRemotePairingStatus
     >,
   stopMobileRemotePairing: () =>
     ipcRenderer.invoke(PlatformChannels.StopMobileRemotePairing) as Promise<void>,
@@ -657,7 +657,7 @@ contextBridge.exposeInMainWorld("zcode", {
   browserViewUpdateViewport: (payload: { tabId: string; viewport: BrowserViewportSize | null }) =>
     ipcRenderer.invoke(PlatformChannels.BrowserViewUpdateViewport, payload),
   /** 从自动发现的 Chrome Profile 一次性导入内置浏览器数据。 */
-  importChromeBrowserData: (options?: import("@zcode/shared").ChromeBrowserDataImportOptions) =>
+  importChromeBrowserData: (options?: import("@picode/shared").ChromeBrowserDataImportOptions) =>
     ipcRenderer.invoke(PlatformChannels.ImportChromeBrowserData, options),
   /** 清理内置浏览器缓存或全部站点数据。 */
   clearEmbeddedBrowserData: (mode: "cache" | "all") =>

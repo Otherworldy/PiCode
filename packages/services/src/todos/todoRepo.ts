@@ -6,7 +6,7 @@ import {
   type TodoCreateParams,
   type TodoItem,
   type TodoUpdateParams,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { getTasksIndexDatabasePath } from "#src/paths.js";
 import { runTasksDatabaseMigrations } from "#src/session/tasksDatabase/migrations.js";
 import { ensureTodoSchemaColumns } from "#src/todos/todoSchemaCompat.js";

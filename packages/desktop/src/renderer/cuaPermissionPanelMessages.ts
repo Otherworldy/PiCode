@@ -1,4 +1,4 @@
-import type { CuaPermissionKind, Locale } from "@zcode/shared";
+import type { CuaPermissionKind, Locale } from "@picode/shared";
 
 interface CuaPermissionPanelMessages {
   documentTitle: string;

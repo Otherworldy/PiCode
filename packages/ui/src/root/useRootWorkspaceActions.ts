@@ -7,8 +7,8 @@ import {
   type RemoteTarget,
   type UserInfo,
   type ZCodeTaskClientMode,
-} from "@zcode/shared";
-import type { IServiceAccessor } from "@zcode/services";
+} from "@picode/shared";
+import type { IServiceAccessor } from "@picode/services";
 import type { CreateTaskRequest } from "@/app-shell/types.js";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { resolveLogoutProviderFamilyDomain } from "@/lib/providerFamilyDomainSettings.js";
@@ -17,7 +17,7 @@ import { parseWslUncWorkspacePath } from "@/lib/wslUncWorkspace.js";
 import { logger } from "@/logger.js";
 import { openFolderFromWorkspaceEntry } from "@/root/openWorkspaceFolderEntry.js";
 import { useConversationWorkspaceActions } from "@/root/useConversationWorkspaceActions.js";
-import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { useZCodeSessionStore } from "@/store/picodeSessionStore.js";
 import { isWorkspaceReadOnly, type TabStore, type TabStoreState } from "@/store/tabStore.js";
 import type { RootProps } from "@/root/types.js";
 import {

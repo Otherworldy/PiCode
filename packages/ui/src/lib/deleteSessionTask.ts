@@ -1,12 +1,12 @@
-import type { ZCodeTaskMeta } from "@zcode/shared";
-import type { IServiceAccessor } from "@zcode/services";
+import type { ZCodeTaskMeta } from "@picode/shared";
+import type { IServiceAccessor } from "@picode/services";
 import { toast } from "@/components/ui/toast.js";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { useWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
 import { removeTaskFromTaskCaches } from "@/lib/taskListMetaSync.js";
-import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { useZCodeSessionStore } from "@/store/picodeSessionStore.js";
 import { useRemotePinnedTaskStore } from "@/store/remotePinnedTaskStore.js";
 import { useRemoteTimelineTaskStore } from "@/store/remoteTimelineTaskStore.js";
 

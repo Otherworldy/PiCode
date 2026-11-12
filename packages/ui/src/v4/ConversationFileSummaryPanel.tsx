@@ -6,7 +6,7 @@ import type {
   TurnHeaderRow,
   V4ConversationFileChangesResult,
   V4ConversationFileRewindPreviewResult,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared/picode-protocol-v4";
 import { Button } from "@/components/ui/button.js";
 import { cn } from "@/components/lib/utils.js";
 import {

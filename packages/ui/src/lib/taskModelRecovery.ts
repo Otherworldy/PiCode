@@ -1,6 +1,6 @@
-import type { ZCodeConfigOption, ZCodeTaskMeta } from "@zcode/shared";
-import { getZCodeAgentModeSelectOptions } from "@zcode/shared";
-import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
+import type { ZCodeConfigOption, ZCodeTaskMeta } from "@picode/shared";
+import { getZCodeAgentModeSelectOptions } from "@picode/shared";
+import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/picodeCustomModelValue.js";
 
 function parseProviderQualifiedModel(
   model: string,

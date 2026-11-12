@@ -1,4 +1,4 @@
-import { Emitter, type Event } from "@zcode/rpc";
+import { Emitter, type Event } from "@picode/rpc";
 
 interface CloseEventController {
   event: Event<number>;

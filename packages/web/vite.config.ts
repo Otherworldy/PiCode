@@ -6,14 +6,14 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { pdfJsCMapsPlugin } from "../ui/vite/pdfJsCMapsPlugin.js";
 import { thirdPartyNoticesVitePlugin } from "../../scripts/third-party-notices.mjs";
-// Vite 配置在 Node 加载期执行，不能导入 @zcode/shared 根入口。
+// Vite 配置在 Node 加载期执行，不能导入 @picode/shared 根入口。
 // 根入口包含 NodeNext 风格的源码 re-export，Node 会按真实文件查找 .js 并在 bootstrap 阶段失败。
 import {
   resolveRuntimeZCodeEndpointOrigin,
   pickProductEndpointEnv,
   resolveZaiOAuthClientId,
   resolveZaiOAuthOrigin,
-} from "@zcode/shared/zcodeEndpoint";
+} from "@picode/shared/picodeEndpoint";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const REPO_ROOT = resolve(HERE, "../..");

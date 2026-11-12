@@ -1,6 +1,6 @@
 import { basename, join } from "node:path";
 import { app, BrowserWindow, ipcMain } from "electron";
-import { PlatformChannels, ZCODE_VERSION, type AppUpdateSnapshot } from "@zcode/shared";
+import { PlatformChannels, ZCODE_VERSION, type AppUpdateSnapshot } from "@picode/shared";
 import { readBuildMetadata } from "../about.js";
 import { createAppUpdateController } from "./appUpdateController.js";
 import { startAppUpdateScheduler } from "./appUpdateScheduler.js";

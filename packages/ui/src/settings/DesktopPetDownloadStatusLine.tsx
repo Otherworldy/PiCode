@@ -1,4 +1,4 @@
-import type { DesktopPetDownloadStatus } from "@zcode/shared";
+import type { DesktopPetDownloadStatus } from "@picode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 
 export function DesktopPetDownloadStatusLine({ status }: { status: DesktopPetDownloadStatus }) {

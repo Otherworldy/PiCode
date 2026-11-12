@@ -2,17 +2,17 @@ import {
   ProviderConfigService,
   type ProviderConfigLayerSnapshot,
   type ProviderConfigLayerUpdate,
-} from "@zcode/provider";
-import { NodeZCodeBuiltinProviderConfigSource } from "./zcode-builtin-provider-config-source.js";
+} from "@picode/provider";
+import { NodeZCodeBuiltinProviderConfigSource } from "./picode-builtin-provider-config-source.js";
 import {
   EndpointScopedZCodeBuiltinSource,
   type EndpointScopedZCodeBuiltinSourceOptions,
-} from "./endpoint-scoped-zcode-builtin-source.js";
+} from "./endpoint-scoped-picode-builtin-source.js";
 import {
   ZCodeBuiltinRemoteSynchronizer,
   type ZCodeBuiltinRemoteSynchronizerOptions,
   type ZCodeBuiltinRefreshResult,
-} from "./zcode-builtin-remote-synchronizer.js";
+} from "./picode-builtin-remote-synchronizer.js";
 import {
   NodePersonalProviderConfigRepository,
   type PersonalProviderConfigRecoveryEvent,
@@ -95,7 +95,7 @@ export class NodeProviderConfigRuntime {
       : this.#zcodeBuiltinSource.resolveActiveFilePath();
   }
 
-  get personalRepository(): import("@zcode/provider").PersonalProviderConfigRepository {
+  get personalRepository(): import("@picode/provider").PersonalProviderConfigRepository {
     return this.#personalRepository;
   }
 

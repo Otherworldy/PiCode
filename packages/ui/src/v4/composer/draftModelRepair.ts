@@ -1,8 +1,8 @@
 // 记住的模型可能在目录里改名或下线；Host 解析不到时派生一个回退值供展示与提交，
 // 不回写草稿——草稿仍持有用户记住的原意，目录恢复后它自动重新生效。
 // 只判定模型身份：档位是模型的附属配置，仍由用户显式选择（见 docs/specs/composer-model-selection-restore.md）。
-import type { ModelSelection } from "@zcode/shared";
-import type { ModelSelectionView } from "@zcode/services";
+import type { ModelSelection } from "@picode/shared";
+import type { ModelSelectionView } from "@picode/services";
 
 export function modelSelectionIdentity(selection: ModelSelection): string {
   return `${selection.providerId}/${selection.modelId}`;

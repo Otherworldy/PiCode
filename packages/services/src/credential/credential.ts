@@ -1,4 +1,4 @@
-import { ServiceChannels } from "@zcode/shared";
+import { ServiceChannels } from "@picode/shared";
 import { createServiceDescriptor } from "../descriptors.js";
 
 /**

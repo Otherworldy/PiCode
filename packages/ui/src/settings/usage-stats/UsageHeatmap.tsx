@@ -1,6 +1,6 @@
 /* oxlint-disable max-lines -- 热力图在同一文件内维护每日、每周、累计三种展示计算，拆分会割裂共享列模型。 */
 import { useState } from "react";
-import type { AppUsageHeatmapCell, AppUsageHeatmapWeek } from "@zcode/shared";
+import type { AppUsageHeatmapCell, AppUsageHeatmapWeek } from "@picode/shared";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import {

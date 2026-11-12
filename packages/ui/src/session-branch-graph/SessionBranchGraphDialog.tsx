@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { GitFork, LoaderIcon, RefreshCwIcon, TriangleAlertIcon, XIcon } from "lucide-react";
-import type { ZCodeTaskMeta } from "@zcode/shared";
-import { TID_SESSION_BRANCH_GRAPH_DIALOG } from "@zcode/shared";
+import type { ZCodeTaskMeta } from "@picode/shared";
+import { TID_SESSION_BRANCH_GRAPH_DIALOG } from "@picode/shared";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -15,7 +15,7 @@ import {
 import { Switch } from "@/components/ui/switch.js";
 import { toast } from "@/components/ui/toast.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import { useZCodeTaskService } from "@/hooks/useZCodeTaskService.js";
+import { useZCodeTaskService } from "@/hooks/usePiCodeTaskService.js";
 import { logger } from "@/logger.js";
 import { SessionBranchGraphCanvas } from "./SessionBranchGraphCanvas.js";
 import {

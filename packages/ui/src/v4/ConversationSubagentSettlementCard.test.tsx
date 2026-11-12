@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { AssistantTextRow } from "@zcode/shared/zcode-protocol-v4";
+import type { AssistantTextRow } from "@picode/shared/picode-protocol-v4";
 import { TooltipProvider } from "@/components/ui/tooltip.js";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import type { ConversationRowRenderContext } from "@/v4/conversationRowContext.js";

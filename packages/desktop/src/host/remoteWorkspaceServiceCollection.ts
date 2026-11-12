@@ -35,7 +35,7 @@ import {
   ISettingsSyncService,
   IPromptAttachmentTransferService,
   type IServiceAccessor,
-} from "@zcode/services";
+} from "@picode/services";
 import {
   ConversationShareHttpClient,
   ConversationShareService,
@@ -63,7 +63,7 @@ import {
   createMemoryService,
   createRemoteConversationShareArtifactSource,
   OAuthCredentialRepo,
-} from "@zcode/services/node";
+} from "@picode/services/node";
 import {
   BIGMODEL_PROVIDER_ID,
   buildRuntimeZCodeApiUrl,
@@ -71,7 +71,7 @@ import {
   type ProviderFamilyDomain,
   type ZCodeSessionRuntimePreferencesResult,
   ZAI_PROVIDER_ID,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { assertLegacyRemoteWorkspaceRpcContract } from "./legacyRemoteWorkspaceRpcContract.js";
 import {
   createRemoteProviderProvisioningExecutorFromWorkspace,

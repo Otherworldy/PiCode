@@ -18,8 +18,8 @@ import {
   Pin,
   Smartphone,
 } from "lucide-react";
-import { isCronTask, isOffPeakTask, type ZCodeTaskMeta } from "@zcode/shared";
-import { TID_TASK_ARCHIVE, TID_TASK_ITEM, testId } from "@zcode/shared";
+import { isCronTask, isOffPeakTask, type ZCodeTaskMeta } from "@picode/shared";
+import { TID_TASK_ARCHIVE, TID_TASK_ITEM, testId } from "@picode/shared";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { cn } from "@/components/lib/utils.js";
@@ -47,7 +47,7 @@ import { useTaskListItemContextActions } from "@/useTaskListItemContextActions.j
 import { useFeedbackStore } from "@/feedback/feedbackStore.js";
 import { buildTaskFeedbackDescription } from "@/lib/taskFeedbackDraft.js";
 import { toast } from "@/components/ui/toast.js";
-import { useZCodeTaskService } from "@/hooks/useZCodeTaskService.js";
+import { useZCodeTaskService } from "@/hooks/usePiCodeTaskService.js";
 import {
   requestSessionTitleSummary,
   SessionTitleSummaryMark,

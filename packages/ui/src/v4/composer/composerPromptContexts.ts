@@ -3,7 +3,7 @@ import {
   parsePromptCodeComments,
   type CodeCommentComposerAttachment,
 } from "@/lib/codeCommentContext.js";
-import { stripGenUiModelContext } from "@zcode/shared/gen-ui";
+import { stripGenUiModelContext } from "@picode/shared/gen-ui";
 import {
   buildPromptWithConversationSelections,
   parsePromptConversationSelections,

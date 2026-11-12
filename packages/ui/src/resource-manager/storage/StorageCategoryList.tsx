@@ -5,7 +5,7 @@ import {
   TID_RESOURCE_MANAGER_STORAGE_CATEGORY_ROW,
   TID_RESOURCE_MANAGER_STORAGE_CATEGORY_SIZE,
   testId,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { formatBytes } from "@/resource-manager/resourceUsageView.js";

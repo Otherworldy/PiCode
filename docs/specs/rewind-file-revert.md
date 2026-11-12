@@ -44,7 +44,7 @@ preview 与 apply 共用同一套 `{ canApply, safeFiles, unsafeFiles, ignoredFi
 
 - suffix 有两条实现，锚点各取所需：
   - core（`file-rewind.ts`）：`expandSuffix` + `targetMessageId`，用 active chain（`activeSessionMessages`）展开，不用 projection 窗口。
-  - Pi host（`bootstrap/zcode-protocol/hosted-file-rewind.ts` / `pi-host/file-rewind.ts`）：`expandSuffix` + `targetTurnId`，按投影窗口的 turnHeader 顺序取锚点及之后的 turn。Pi 是桌面与 CLI 的主路径，preview/apply 由宿主实现覆盖，只认 turnId。
+  - Pi host（`bootstrap/picode-protocol/hosted-file-rewind.ts` / `pi-host/file-rewind.ts`）：`expandSuffix` + `targetTurnId`，按投影窗口的 turnHeader 顺序取锚点及之后的 turn。Pi 是桌面与 CLI 的主路径，preview/apply 由宿主实现覆盖，只认 turnId。
 - 两条实现都在展开落空时 fail closed（返回空 preview），绝不退化成「最后一条 checkpoint」。
 - 多 turn 的写操作按事件顺序合并后从新到旧撤销，同一文件以最早状态为准；逐 turn 各算一遍会拿当前磁盘去校验更早的 checkpoint，得到错误的 unsafe。
 - Pi host 没有 checkpoint：`Write` 只能从 diff 判断自己是否覆盖了已有内容。覆盖过的 Write 判 `checkpoint_missing`（撤不回去，退回成删除会把锚点前的文件一起删掉），只有新建文件的 Write 才退回成删除。

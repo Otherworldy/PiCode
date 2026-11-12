@@ -1,4 +1,4 @@
-import type { ZCodeTaskMeta } from "@zcode/shared";
+import type { ZCodeTaskMeta } from "@picode/shared";
 
 // 分支图谱是纯布局计算：输入 task 行，输出节点/连线坐标。组件只负责画和交互，
 // 这样「可见性折叠、聚焦范围、占位父节点」这些规则可以单测覆盖。

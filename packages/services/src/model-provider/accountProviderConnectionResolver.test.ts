@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseZCodeBuiltinProviderConfigMap } from "@zcode/provider";
+import { parseZCodeBuiltinProviderConfigMap } from "@picode/provider";
 import {
   createAccountProviderConnectionResolver,
   type AccountProviderFamilyAvailabilityInput,

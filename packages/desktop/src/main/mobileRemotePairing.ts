@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { extname, join, normalize, sep } from "node:path";
 import { readFile } from "node:fs/promises";
 import { WebSocketServer, type WebSocket } from "ws";
-import { type MessagePortLike } from "@zcode/rpc";
+import { type MessagePortLike } from "@picode/rpc";
 import {
   HostMessageTypes,
   resolveMobileRemoteListenPort,
@@ -12,7 +12,7 @@ import {
   type MobileRemotePairingStatus,
   type MobileRemoteWorkspaceListItem,
   type WindowWorkspaceCatalogEntry,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   bridgeMobileRemoteRpc,
   listMobileRemoteWorkspaces,

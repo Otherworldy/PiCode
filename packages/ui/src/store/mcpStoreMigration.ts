@@ -1,4 +1,4 @@
-import type { McpServerConfig, NativeMcpServerRecord } from "@zcode/shared";
+import type { McpServerConfig, NativeMcpServerRecord } from "@picode/shared";
 import { logger } from "@/logger.js";
 import {
   fetchNativeMcpServers,

@@ -12,7 +12,7 @@
  * 默认键位保持既有行为，零变化。
  */
 import { useEffect, useRef } from "react";
-import type { ShortcutCommandId, ZCodeConfigOption } from "@zcode/shared";
+import type { ShortcutCommandId, ZCodeConfigOption } from "@picode/shared";
 import {
   isShortcutRecordingActive,
   matchesShortcutBinding,

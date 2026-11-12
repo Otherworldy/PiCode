@@ -1,4 +1,4 @@
-import type { GenUiStateTarget, GenUiTweak, GenUiTweakValues } from "@zcode/shared/gen-ui";
+import type { GenUiStateTarget, GenUiTweak, GenUiTweakValues } from "@picode/shared/gen-ui";
 export interface GenUiCardTarget extends GenUiStateTarget {
   remoteSessionId?: string;
   instanceKey: string;

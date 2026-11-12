@@ -1,4 +1,4 @@
-import type { ZCodePlanStep } from "./zcode-task-types-core.js";
+import type { ZCodePlanStep } from "./picode-task-types-core.js";
 
 const TODO_TOOL_NAME_PATTERN =
   /(?:^|[_\s-])(?:todo[_\s-]*(?:read|write)|update[_\s-]*plan)(?:$|[_\s-])/i;

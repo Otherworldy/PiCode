@@ -1,7 +1,7 @@
-import type { ZCodeTaskMeta } from "@zcode/shared";
-import { mergeTaskMetaCandidates } from "@/lib/zcodeTaskMetaMerge.js";
+import type { ZCodeTaskMeta } from "@picode/shared";
+import { mergeTaskMetaCandidates } from "@/lib/picodeTaskMetaMerge.js";
 import { buildTaskEntityKey } from "@/lib/taskQueryCache.js";
-import { getTaskMeta, useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { getTaskMeta, useZCodeSessionStore } from "@/store/picodeSessionStore.js";
 import {
   applyTaskQueryCacheMutation,
   removeTaskFromTaskQueryCaches,

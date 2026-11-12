@@ -10,8 +10,8 @@ import type {
   RemoteTarget,
   RemoteWorkspaceSessionEntry,
   UserInfo,
-} from "@zcode/shared";
-import type { IFeedbackService, IServiceAccessor } from "@zcode/services";
+} from "@picode/shared";
+import type { IFeedbackService, IServiceAccessor } from "@picode/services";
 import type { BrowserNavigationRequest, RecentClosedSidePaneTab } from "@/hooks/useAppPanels.js";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import type { AssistantPreviewCardsAutoOpenRequest } from "@/lib/assistantPreviewCards.js";
@@ -24,7 +24,7 @@ import type {
   WorkspaceSidePaneState,
 } from "@/lib/workspaceSidePane.js";
 import type { TreemappingSidePaneTab } from "@/lib/workspaceSidePane.js";
-import type { WorkspaceZCodeUIState } from "@/store/zcodeSessionStore.js";
+import type { WorkspaceZCodeUIState } from "@/store/picodeSessionStore.js";
 import type { RemoteConnectionLogEntry } from "@/hooks/useRemoteConnectionLogs.js";
 import type { Theme } from "@/useTheme.js";
 import type {
@@ -35,7 +35,7 @@ import type {
 import type {
   ComposerMentionPrefill,
   GroupedDraftTaskPlacement,
-} from "@/store/zcodeSessionStoreTypes.js";
+} from "@/store/picodeSessionStoreTypes.js";
 import type { TaskFindDialogProps } from "@/quickpick/TaskFindDialog.js";
 import type { AutomationsNavigationTab, OpenAutomationsMain } from "@/lib/taskNavigationHistory.js";
 
@@ -159,9 +159,9 @@ export interface WorkspaceShellLayoutProps extends Omit<AppProps, "baseFeedbackS
     /** 用户自定义的项目显示名；空值走主机名/目录名派生。 */
     displayName?: string;
     remoteSessionId?: string;
-    remoteTarget?: import("@zcode/shared").RemoteTarget;
+    remoteTarget?: import("@picode/shared").RemoteTarget;
     workspaceIdentity?: string;
-    workspacePurpose?: import("@zcode/shared").WorkspacePurpose;
+    workspacePurpose?: import("@picode/shared").WorkspacePurpose;
     localWorkspacePath?: string;
     availability?: import("@/store/tabStore.js").WorkspaceAvailability;
   }>;
@@ -218,7 +218,7 @@ export interface WorkspaceShellLayoutProps extends Omit<AppProps, "baseFeedbackS
   handleStartDraftInWorkspace: (
     targetWorkspacePath: string,
     targetWorkspaceIdentity?: string,
-    targetWorkspacePurpose?: import("@zcode/shared").WorkspacePurpose,
+    targetWorkspacePurpose?: import("@picode/shared").WorkspacePurpose,
     createSource?: SessionCreateSource,
   ) => void;
   handleOpenCommandCenter: () => void;

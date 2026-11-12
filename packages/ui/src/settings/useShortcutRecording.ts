@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { ShortcutCommandId } from "@zcode/shared";
+import type { ShortcutCommandId } from "@picode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { checkShortcutBindingConflict, isSamePhysicalBinding } from "@/shortcuts/conflicts.js";
 import { formatShortcutBindingLabel } from "@/shortcuts/label.js";

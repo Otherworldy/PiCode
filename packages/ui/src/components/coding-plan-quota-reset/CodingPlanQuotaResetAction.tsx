@@ -1,6 +1,6 @@
 import { CheckIcon, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { CodingPlanResetType } from "@zcode/shared";
+import type { CodingPlanResetType } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";

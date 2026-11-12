@@ -8,7 +8,7 @@ import {
   setPluginUiWidgetState,
   clearPluginUiWidgetState,
 } from "../../../ui/src/plugin-ui/app/pluginUiWidgetStateStore.js";
-import type { PluginSandboxHandle, PluginSandboxPortsEvent } from "@zcode/shared/mcp-apps";
+import type { PluginSandboxHandle, PluginSandboxPortsEvent } from "@picode/shared/mcp-apps";
 import { createPluginUiMessagePortTransport } from "../../../ui/src/plugin-ui/adapters/messagePortTransport.js";
 import { createPluginUiPagePlane } from "../../../ui/src/plugin-ui/adapters/pluginUiPagePlane.js";
 const harness = (window as any).harness;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { GitFileChange } from "@zcode/shared";
+import type { GitFileChange } from "@picode/shared";
 import {
   GitCommitMessageGenerator,
   pickGeneratedCommitMessage,

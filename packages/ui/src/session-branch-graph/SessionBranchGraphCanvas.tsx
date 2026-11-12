@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { MinusIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import { TID_SESSION_BRANCH_GRAPH_NODE } from "@zcode/shared";
+import { TID_SESSION_BRANCH_GRAPH_NODE } from "@picode/shared";
 import { cn } from "@/components/lib/utils.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";

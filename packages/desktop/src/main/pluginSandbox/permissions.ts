@@ -1,5 +1,5 @@
-import type { Locale } from "@zcode/shared";
-import type { McpAppsResourcePermission } from "@zcode/shared/mcp-apps";
+import type { Locale } from "@picode/shared";
+import type { McpAppsResourcePermission } from "@picode/shared/mcp-apps";
 import { PLUGIN_SANDBOX_SCHEME } from "./contract.js";
 
 /**

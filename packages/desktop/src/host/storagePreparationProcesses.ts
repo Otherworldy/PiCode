@@ -12,8 +12,8 @@ import {
   databaseStartupErrorDetailsSchema,
   zcodeStoragePreparationFrameSchema,
   type DatabaseStartupState,
-} from "@zcode/shared";
-import { resolveDefaultZCodeAgentCommand } from "@zcode/services/storage-startup";
+} from "@picode/shared";
+import { resolveDefaultZCodeAgentCommand } from "@picode/services/storage-startup";
 
 type Phase = NonNullable<DatabaseStartupState["databasePhase"]>;
 const workerMessageSchema = z.discriminatedUnion("type", [

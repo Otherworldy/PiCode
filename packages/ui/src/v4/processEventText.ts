@@ -1,4 +1,4 @@
-import type { AssistantTextRow, ConversationRow } from "@zcode/shared/zcode-protocol-v4";
+import type { AssistantTextRow, ConversationRow } from "@picode/shared/picode-protocol-v4";
 
 /**
  * Pi process 插件的状态通知（`pi.sendMessage` 发出的 custom message）。

@@ -4,7 +4,7 @@ import {
   ZCODE_NO_PROXY_ENV_KEY,
   ZCODE_PI_SDK_ENV_KEY,
   ZCODE_WORKSPACE_IDENTITY_ENV,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 // 把设置页的 HTTP 代理、No Proxy 和自定义 CA 翻译成 agent 子进程的环境变量补丁。
 // agent 是子进程，继承宿主 process.env；这里在 spawn 时把代理与证书注入进去，所以「下次启动 agent」生效。
@@ -85,7 +85,7 @@ export function buildAgentRuntimeEnv(input: {
 /**
  * 把 host 已解析出的**权威 PiCode API origin** 下发给 agent 子进程。
  *
- * 两侧的官方 MCP 信任判定共用 `@zcode/shared` 的同一份实现，但**输入**
+ * 两侧的官方 MCP 信任判定共用 `@picode/shared` 的同一份实现，但**输入**
  * 曾经分叉——host 用 `resolveRuntimeZCodeEndpointOrigin(env, { overrideOrigin: settings
  * .zcodeEndpointOrigin })`，agent 只有 `resolveRuntimeZCodeEndpointOrigin(env)`，而 settings
  * 覆盖值从不下发给子进程。在 `ZCODE_ENV=test` 且用户在设置页配了自定义端点时，两侧算出的

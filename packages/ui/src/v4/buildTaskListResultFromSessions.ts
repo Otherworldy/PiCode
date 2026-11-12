@@ -1,7 +1,7 @@
 // 左侧列表投影：tasks-index 决定持久行集合与 membership，sessions-index 只补实时 activity/detail。
 // 这里保持纯函数，供 Project/Timeline/Pinned/Archived/Grouped 共用同一字段权威。
-import { isBareSlashCommandTitle, type ZCodeTaskMeta } from "@zcode/shared";
-import { matchesTaskListMembershipKind } from "@zcode/shared/zcode-protocol-v4";
+import { isBareSlashCommandTitle, type ZCodeTaskMeta } from "@picode/shared";
+import { matchesTaskListMembershipKind } from "@picode/shared/picode-protocol-v4";
 import { buildTaskEntityKey } from "@/lib/taskQueryCache.js";
 import { compareZCodeTaskListItems } from "@/lib/taskListOrdering.js";
 import { attachTaskListRowActivity, getTaskListRowActivity } from "@/v4/taskListRowActivity.js";

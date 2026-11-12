@@ -3,8 +3,8 @@
 // 旧店面在 v4 shell 下不再被会话列表填充，继续读会得到空面板；序列化与排序语义不变
 // （collectSessionMentionItems 保留，供单测与聚合复用）。
 import { useMemo } from "react";
-import type { IServiceAccessor } from "@zcode/services";
-import type { ZCodeProvider, ZCodeTaskMeta } from "@zcode/shared";
+import type { IServiceAccessor } from "@picode/services";
+import type { ZCodeProvider, ZCodeTaskMeta } from "@picode/shared";
 import { buildSessionMentionMarkdown } from "@/mentions/mentionMarkdown.js";
 import { filterMentionItemsWithOptions } from "@/mentions/mentionSearch.js";
 import type { MentionCategoryResult, MentionItem } from "@/mentions/mentionTypes.js";

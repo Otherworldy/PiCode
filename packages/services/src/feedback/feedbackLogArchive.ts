@@ -4,7 +4,7 @@ import { arch, platform, release } from "node:os";
 import { join, posix } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { ZipFile } from "yazl";
-import { redactFeedbackText, ZCODE_VERSION, ZCODE_COMMIT } from "@zcode/shared";
+import { redactFeedbackText, ZCODE_VERSION, ZCODE_COMMIT } from "@picode/shared";
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 32 * 1024 * 1024;

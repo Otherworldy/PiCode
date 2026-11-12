@@ -4,7 +4,7 @@ import {
   ModelOptionSpecsConfig,
   type ModelSelection,
   type ProviderRegistryServiceSnapshot,
-} from "@zcode/provider";
+} from "@picode/provider";
 import { legacyReasoningLevelRenames as renames } from "./legacy-reasoning-level-renames.js";
 
 const oldRulesCache = new WeakMap<ModelConfigRules, ModelConfigRules>();

@@ -17,7 +17,7 @@ import {
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDownIcon } from "lucide-react";
-import { TID_V4_TIMELINE, TID_V4_TIMELINE_BOTTOM } from "@zcode/shared";
+import { TID_V4_TIMELINE, TID_V4_TIMELINE_BOTTOM } from "@picode/shared";
 import type {
   ApiRetryState,
   AttachmentRef,
@@ -26,7 +26,7 @@ import type {
   ConversationRowTarget,
   QueueItem,
   SessionPhase,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared/picode-protocol-v4";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
 import { ChatLoading } from "@/components/ai-elements/chat-loading.js";

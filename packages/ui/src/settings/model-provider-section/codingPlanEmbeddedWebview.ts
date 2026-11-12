@@ -6,8 +6,8 @@ import {
   isZaiCodingPlanProviderId,
   normalizeZCodeEndpointOrigin,
   ZAI_PROVIDER_ID,
-} from "@zcode/shared";
-import type { CodingPlanWebviewLocale } from "@zcode/shared";
+} from "@picode/shared";
+import type { CodingPlanWebviewLocale } from "@picode/shared";
 import type { CodingPlanProviderId } from "@/settings/model-provider-section/constants.js";
 
 type CodingPlanWebsiteProvider = "zai" | "bigmodel";

@@ -2,13 +2,13 @@ import {
   resolveMarkdownFileLink,
   type MarkdownFileLinkResolveOptions,
 } from "@/lib/markdownFileLink.js";
-import { extractConversationPreviewFileReferences } from "@zcode/shared";
+import { extractConversationPreviewFileReferences } from "@picode/shared";
 import { decodeFilePathUriEscapes, joinFilePath } from "@/lib/path.js";
-import { MEDIA_PREVIEW_FORMATS } from "@zcode/shared";
+import { MEDIA_PREVIEW_FORMATS } from "@picode/shared";
 import {
   extractZCodeFileCitationDirectives,
   resolveZCodeFileCitationPreviewKind,
-} from "@/lib/zcodeFileCitation.js";
+} from "@/lib/picodeFileCitation.js";
 import {
   isBalancedAssistantPathQuotePair,
   isAssistantPathQuoteCharacter,

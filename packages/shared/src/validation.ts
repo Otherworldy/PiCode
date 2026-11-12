@@ -24,9 +24,9 @@ import {
   taskStreamMirrorTargetSchema,
 } from "./task-realtime-core.js";
 import { wslUserSchema } from "./wslUserValidation.js";
-import { zcodeAgentProviderSchema } from "./zcode-agent-policy.js";
-import { errorAttributionSchema } from "./zcode-protocol-v4/snapshot.js";
-import { zcodeTaskModeSchema } from "./zcode-task-mode-schema.js";
+import { zcodeAgentProviderSchema } from "./picode-agent-policy.js";
+import { errorAttributionSchema } from "./picode-protocol-v4/snapshot.js";
+import { zcodeTaskModeSchema } from "./picode-task-mode-schema.js";
 
 export {
   appSettingsPatchSchema,
@@ -34,7 +34,7 @@ export {
   localeSchema,
 } from "./validationAppSettings.js";
 export { isValidWslUser, WSL_USER_MAX_LENGTH, wslUserSchema } from "./wslUserValidation.js";
-export { zcodeTaskModeSchema } from "./zcode-task-mode-schema.js";
+export { zcodeTaskModeSchema } from "./picode-task-mode-schema.js";
 
 export function formatZodError(error: z.ZodError): string {
   return error.issues

@@ -1,7 +1,7 @@
 import { mkdir, writeFile, rename, rm, readdir, stat } from "node:fs/promises";
 import { dirname, basename, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { acquireFileLock } from "@zcode/shared/node";
+import { acquireFileLock } from "@picode/shared/node";
 import { isInjectedFsFaultError, maybeThrowInjectedFsFault } from "./fsFaultInjection.js";
 
 const DEFAULT_RENAME_RETRY_DELAYS_MS = [50, 100, 200, 400, 800, 1600, 3200] as const;

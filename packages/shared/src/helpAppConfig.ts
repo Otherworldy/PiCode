@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { buildZCodeEndpointUrls } from "./zcodeEndpoint.js";
+import { buildZCodeEndpointUrls } from "./picodeEndpoint.js";
 import { getCommunityUrlFromConfigs, getFeedbackUrlFromConfig } from "./remoteAppConfig.js";
 
 const helpConfigSchema = z.object({

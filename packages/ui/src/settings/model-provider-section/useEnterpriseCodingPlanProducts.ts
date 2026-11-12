@@ -4,7 +4,7 @@ import {
   type CodingPlanStaticTeamProduct,
   type EnterpriseCodingPlanPricingResponse,
   type ProviderFamilyDomain,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { useOptionalServices } from "@/hooks/useServices.js";
 import { isRemoteWorkspaceDisconnectedError } from "@/lib/remoteWorkspaceServiceError.js";
 import { logger } from "@/logger.js";

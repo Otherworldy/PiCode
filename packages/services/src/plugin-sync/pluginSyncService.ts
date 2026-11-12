@@ -3,7 +3,7 @@ import {
   ensureAppDataDir,
   updateJsonConfigFile,
   userCliConfigFilePath,
-} from "@zcode/shared/node";
+} from "@picode/shared/node";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import {
@@ -23,7 +23,7 @@ import type {
   PluginSyncComponentType,
   PluginSyncImportResult,
   PluginSyncRemoteStatus,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { IPluginSyncService } from "./pluginSync.js";
 import {
   createPluginSyncArchive,

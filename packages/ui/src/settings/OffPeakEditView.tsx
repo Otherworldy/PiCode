@@ -3,8 +3,8 @@
    返回行 + 内联保持电脑运行开关 + Settings/History tab + 标题输入 + 大 composer 盒
    （textarea + 工具条：项目/权限｜模型/推理档位）。权限四档默认 build，模型走白名单。 */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ModelSelectionView } from "@zcode/services";
-import { completeNewModelSelection } from "@zcode/provider";
+import type { ModelSelectionView } from "@picode/services";
+import { completeNewModelSelection } from "@picode/provider";
 import { FolderOpen } from "lucide-react";
 import {
   TID_OFFPEAK_EDIT_SUBMIT,
@@ -15,7 +15,7 @@ import {
   type ZCodeConfigOption,
   type ZCodeOffPeakTask,
   type ModelSelection,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { Input } from "@/components/ui/input.js";

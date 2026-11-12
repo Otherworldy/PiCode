@@ -5,8 +5,8 @@ import {
   type ZCodeProvider,
   type SkillSummary,
   type SkillsCapability,
-} from "@zcode/shared";
-import type { ISkillsService } from "@zcode/services";
+} from "@picode/shared";
+import type { ISkillsService } from "@picode/services";
 import { shouldExposeE2EStoreBridge } from "@/lib/e2eStoreBridge.js";
 import { logger } from "@/logger.js";
 

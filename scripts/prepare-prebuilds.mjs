@@ -72,9 +72,9 @@ export function nodeDistBase(env = process.env) {
   const mirror = env.ZCODE_NODE_DIST_MIRROR?.trim();
   return (mirror || DEFAULT_NODE_DIST_BASE).replace(/\/+$/u, "");
 }
-const BROWSER_USE_PLUGIN_PACKAGE_NAME = "@zcode/browser-use-plugin";
-// node_repl 宿主抽成独立包 @zcode/node-repl-host 之后，browser-use
-// 不再产出 dist/mcp/server.js，CUA 资产也已归 @zcode/zcode-cua-plugin。这是**第三份**平行清单
+const BROWSER_USE_PLUGIN_PACKAGE_NAME = "@picode/browser-use-plugin";
+// node_repl 宿主抽成独立包 @picode/node-repl-host 之后，browser-use
+// 不再产出 dist/mcp/server.js，CUA 资产也已归 @picode/picode-cua-plugin。这是**第三份**平行清单
 // （另两份：packages/desktop/scripts/prepare-agent-node-bundle.mjs 的生产打包、
 // scripts/build-desktop-agent-cli.mjs 的 dev 构建），当时只改了 dev 那份，于是先后在
 // build:macos:arm64 与 build:remote:assets 上以 "missing runtime" 挂掉两次。
@@ -92,8 +92,8 @@ const browserUseRequiredRuntimePaths = [
 ];
 const remoteOfficialPluginPackages = [
   {
-    packageName: "@zcode/visualize-plugin",
-    relativePath: "apps/zcode-cli/packages/visualize-plugin",
+    packageName: "@picode/visualize-plugin",
+    relativePath: "apps/picode-cli/packages/visualize-plugin",
     requiresRuntime: false,
     requiredSeedPaths: [
       "skills/visualize/SKILL.md",
@@ -127,13 +127,13 @@ const remoteOfficialPluginPackages = [
   // 44b25ed46c「remove bundled plugins except browser use and cua」删掉了其余
   // 内置插件源码，但漏改这份清单，bootstrap:with-remote 在 staging 第一个 manifest 就抛
   // missing。此处与 packages/desktop/scripts/prepare-agent-node-bundle.mjs 的桌面 seed
-  // 清单、packages/server/src/remote/zcodeAgentOfficialPluginAssets.ts 的远端合同保持一致。
+  // 清单、packages/server/src/remote/picodeAgentOfficialPluginAssets.ts 的远端合同保持一致。
   {
     // 远端 shared-host 必须部署 node_repl runtime，否则只剩 skill 而没有 mcp__node_repl__js ——
-    // 该 runtime 现由 @zcode/node-repl-host 提供（见下一个条目），browser-use 只带自己的
+    // 该 runtime 现由 @picode/node-repl-host 提供（见下一个条目），browser-use 只带自己的
     // client script 与 skill/docs。
-    packageName: "@zcode/browser-use-plugin",
-    relativePath: "apps/zcode-cli/packages/browser-use-plugin",
+    packageName: "@picode/browser-use-plugin",
+    relativePath: "apps/picode-cli/packages/browser-use-plugin",
     requiresRuntime: true,
     requiredRuntimePaths: browserUseRequiredRuntimePaths,
     runtimeBuildScript: "scripts/build.mjs",
@@ -142,8 +142,8 @@ const remoteOfficialPluginPackages = [
   {
     // node_repl 宿主：Browser Use 与 Computer Use 共用的 MCP runtime。远端 shared-host 缺它
     // 就没有 mcp__node_repl__js，bua/cua 两边都会连不上。
-    packageName: "@zcode/node-repl-host",
-    relativePath: "apps/zcode-cli/packages/node-repl-host",
+    packageName: "@picode/node-repl-host",
+    relativePath: "apps/picode-cli/packages/node-repl-host",
     requiresRuntime: true,
     requiredRuntimePaths: ["dist/mcp/server.js"],
     runtimeBuildScript: "scripts/build.mjs",
@@ -185,7 +185,7 @@ const remoteOfficialPluginRequiredPaths = [
 ];
 
 function readZCodeAgentRuntimeVersion() {
-  const runtimeSourcePath = join(rootDir, "packages/shared/src/zcode-agent-runtime.ts");
+  const runtimeSourcePath = join(rootDir, "packages/shared/src/picode-agent-runtime.ts");
   const runtimeSource = readFileSync(runtimeSourcePath, "utf8");
   const match = runtimeSource.match(/version:\s*["']([^"']+)["']/);
   if (!match?.[1]) {
@@ -443,7 +443,7 @@ function buildRemoteOfficialPluginRuntimes() {
 
     runCommand(
       pnpmCommand,
-      ["--dir", join(rootDir, "apps/zcode-cli"), "--filter", plugin.packageName, "build"],
+      ["--dir", join(rootDir, "apps/picode-cli"), "--filter", plugin.packageName, "build"],
       {
         cwd: rootDir,
         env: process.env,
@@ -526,15 +526,15 @@ function stageRemoteOfficialPlugins(glmDir) {
 // glm/<platform> 组件目录，保持现有 manifest 组件结构不变。
 async function stageRemoteAgentBundles() {
   console.log("==> Building zcode-cli bundle for remote agents");
-  // 复用桌面同款构建脚本（turbo build:desktop-agent --filter=@zcode/cli），命中缓存时几乎瞬时。
+  // 复用桌面同款构建脚本（turbo build:desktop-agent --filter=@picode/cli），命中缓存时几乎瞬时。
   runCommand(process.execPath, [join(rootDir, "scripts/build-desktop-agent-cli.mjs")], {
     cwd: rootDir,
     env: process.env,
   });
-  // browser-use runtime 的 tsc 依赖 @zcode/core/dist。远端资产也必须先构建
+  // browser-use runtime 的 tsc 依赖 @picode/core/dist。远端资产也必须先构建
   // agent CLI 依赖，避免 CI 干净检出时被开发机缓存掩盖的 TS2307。
   buildRemoteOfficialPluginRuntimes();
-  const cliBundlePath = join(rootDir, "apps/zcode-cli/packages/cli/dist/zcode.cjs");
+  const cliBundlePath = join(rootDir, "apps/picode-cli/packages/cli/dist/zcode.cjs");
   if (!existsSync(cliBundlePath)) {
     throw new Error(`[prepare-prebuilds] expected cli bundle missing: ${cliBundlePath}`);
   }

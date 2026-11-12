@@ -1,4 +1,4 @@
-import { ensureDeviceMid as ensureSharedDeviceMid } from "@zcode/services/node";
+import { ensureDeviceMid as ensureSharedDeviceMid } from "@picode/services/node";
 
 interface EnsureRemoteServerDeviceMidOptions {
   /** 仅测试注入；生产固定使用 services 的 ensureDeviceMid。 */

@@ -1,10 +1,10 @@
-import { redactFeedbackText } from "@zcode/shared";
+import { redactFeedbackText } from "@picode/shared";
 import type { FeedbackAgentModelContext } from "@/feedback/feedbackSubmitModelContext.js";
 import type {
   FeedbackTicketModule,
   FeedbackTicketSeverity,
   FeedbackTicketType,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 const TITLE_MAX = 80;
 const FEEDBACK_ZCODE_AGENT_LABEL = "PiCode Agent";

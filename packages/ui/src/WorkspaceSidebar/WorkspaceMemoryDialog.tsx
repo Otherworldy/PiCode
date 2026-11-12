@@ -3,7 +3,7 @@ import type {
   IMemoryService,
   ProjectMemoryFileSummary,
   ProjectMemoryWorkspaceSummary,
-} from "@zcode/services";
+} from "@picode/services";
 import { Alert, AlertDescription } from "@/components/ui/alert.js";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -14,9 +14,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.js";
-import { TID_WORKSPACE_MEMORY_DELETE_CONFIRM } from "@zcode/shared";
+import { TID_WORKSPACE_MEMORY_DELETE_CONFIRM } from "@picode/shared";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
-import { useZCodeSessionService } from "@/hooks/useZCodeSessionService.js";
+import { useZCodeSessionService } from "@/hooks/usePiCodeSessionService.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import {
   MemorySettingsViewer,

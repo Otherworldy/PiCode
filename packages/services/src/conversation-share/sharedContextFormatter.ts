@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationRow } from "@picode/shared/picode-protocol-v4";
 
 import { ConversationShareServiceError } from "#src/conversation-share/conversationShare.js";
 

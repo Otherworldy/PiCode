@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ConversationDelta } from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationDelta } from "@picode/shared/picode-protocol-v4";
 import {
   embeddedBrowserOpenRequests,
   publishEmbeddedBrowserOpens,

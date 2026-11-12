@@ -1,13 +1,13 @@
 import { constants } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
 import { isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
-import { getGenUiOutputDirectory } from "@zcode/shared/node";
+import { getGenUiOutputDirectory } from "@picode/shared/node";
 import {
   GEN_UI_HTML_MAX_BYTES,
   genUiStateTargetSchema,
   type GenUiDocument,
   type GenUiStateTarget,
-} from "@zcode/shared/gen-ui";
+} from "@picode/shared/gen-ui";
 
 export function assertGenUiFragment(html: string): void {
   if (Buffer.byteLength(html, "utf8") > GEN_UI_HTML_MAX_BYTES)

@@ -1,4 +1,4 @@
-import type { TodoAttachment } from "@zcode/shared";
+import type { TodoAttachment } from "@picode/shared";
 
 /**
  * 剪贴板文件的路径是临时的，关掉编辑就会被清掉。

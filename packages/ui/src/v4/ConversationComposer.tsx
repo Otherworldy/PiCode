@@ -41,12 +41,12 @@ import {
   TID_V4_STOP,
   testId,
   type ZCodeProvider,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type {
   AttachmentRef,
   ConversationSnapshot,
   SessionConfigState,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared/picode-protocol-v4";
 import {
   ArrowUpIcon,
   ClipboardPenLineIcon,
@@ -87,8 +87,8 @@ import { advanceComposerDraftRevision } from "@/v4/composer/composerDraftRevisio
 import type { AppSlashCommand } from "@/slashCommandHelpers.js";
 import { useOptionalServices } from "@/hooks/useServices.js";
 import { logger } from "@/logger.js";
-import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
-import type { ComposerMentionPrefill } from "@/store/zcodeSessionStoreTypes.js";
+import { useZCodeSessionStore } from "@/store/picodeSessionStore.js";
+import type { ComposerMentionPrefill } from "@/store/picodeSessionStoreTypes.js";
 import { FileDisplayIcon, resolveFileDisplayDescriptor } from "@/lib/fileDisplay.js";
 import {
   isImageChatComposerAttachment,
@@ -110,9 +110,9 @@ import {
   isWorkspaceFileAddToChatEvent,
 } from "@/lib/workspaceFileDrag.js";
 import { appendWorkspaceFileMentionToComposer } from "@/lib/workspaceFileComposer.js";
-import type { ModelSelectionView } from "@zcode/services";
+import type { ModelSelectionView } from "@picode/services";
 import type { ModelSelectionState } from "@/hooks/useModelSelectionView.js";
-import type { ZCodeUiError } from "@/lib/zcodeUiError.js";
+import type { ZCodeUiError } from "@/lib/picodeUiError.js";
 import {
   resolveComposerAutoFocus,
   type ComposerAutoFocusOptions,
@@ -187,7 +187,7 @@ export interface ConversationComposerSendOptions {
   requestedDelivery?: "startNow" | "queue" | "guide";
   sharedContextRefs?: Array<{ kind: "shared_context_import"; context_id: string }>;
   /** 插件 UI 代发：随 sendText 持久化，用户消息卡片显示"来自插件 X"。 */
-  source?: import("@zcode/shared/zcode-protocol-v4").ConversationInputSource;
+  source?: import("@picode/shared/picode-protocol-v4").ConversationInputSource;
 }
 
 export type ConversationComposerSendResult = "sent" | "blocked" | "confirmationRequired";

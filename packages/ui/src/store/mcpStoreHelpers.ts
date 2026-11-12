@@ -4,7 +4,7 @@ import type {
   McpSource,
   NativeMcpServerRecord,
   ZCodeMcpServer,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 const MCP_CONFIG_KEY = "zcode-mcp-config";
 export const MCP_DELETED_PRELOAD_KEY = "zcode-mcp-deleted-preload";

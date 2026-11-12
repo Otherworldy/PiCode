@@ -1,6 +1,6 @@
-import type { ZCodePluginUiSurface } from "@zcode/shared";
-import { ServiceChannels } from "@zcode/shared";
-import type { McpToolUiCsp, PluginSandboxHandle } from "@zcode/shared/mcp-apps";
+import type { ZCodePluginUiSurface } from "@picode/shared";
+import { ServiceChannels } from "@picode/shared";
+import type { McpToolUiCsp, PluginSandboxHandle } from "@picode/shared/mcp-apps";
 import { createServiceDescriptor } from "../descriptors.js";
 
 /** 与 zcodeAgentService 其余方法一致的 workspace 定位；身份用 workspaceIdentity，路径用 workspacePath。 */
@@ -11,7 +11,7 @@ export interface PluginUiWorkspaceTarget {
 
 /** UI 发起的插件 MCP 请求共用的归属范围：同一 session、同一插件、同一 namespaced server。 */
 export interface PluginUiPluginScope extends PluginUiWorkspaceTarget {
-  instance: import("@zcode/shared/mcp-apps").McpAppInstance;
+  instance: import("@picode/shared/mcp-apps").McpAppInstance;
   sessionId: string;
   pluginId: string;
   /** display.ui / 清单 surface 所属的 namespaced server（`plugin:<name>:<server>`）；归属由 agent 侧 catalog 校验。 */

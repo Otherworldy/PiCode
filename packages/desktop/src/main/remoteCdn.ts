@@ -1,4 +1,4 @@
-import { ZCODE_VERSION, type ZCodeEnv } from "@zcode/shared";
+import { ZCODE_VERSION, type ZCodeEnv } from "@picode/shared";
 
 declare const __ZCODE_CDN_BASE_URL__: string | undefined;
 const DEFAULT_CDN_BASE_URL = "https://cdn-zcode.z.ai";

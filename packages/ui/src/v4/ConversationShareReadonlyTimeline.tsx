@@ -27,7 +27,7 @@ import {
   SquareTerminalIcon,
   WrenchIcon,
 } from "lucide-react";
-import { getCompactToolCallStatusMessageId, type Locale } from "@zcode/shared";
+import { getCompactToolCallStatusMessageId, type Locale } from "@picode/shared";
 import type {
   ArtifactRow,
   AssistantTextRow,
@@ -36,7 +36,7 @@ import type {
   TimelineMarkerRow,
   ToolCallRow,
   UserInputRow,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared/picode-protocol-v4";
 import { MessageResponse, type MessageFileLinkTarget } from "@/components/ai-elements/message.js";
 import {
   Reasoning,

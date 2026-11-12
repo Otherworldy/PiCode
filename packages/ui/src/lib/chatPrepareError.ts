@@ -3,8 +3,8 @@ import {
   ZCODE_AGENT_PROVIDER_NOT_READY_CODE,
   type ZCodeProvider,
   type ZCodeError,
-} from "@zcode/shared";
-import { normalizeZCodeUiError } from "@/lib/zcodeUiError.js";
+} from "@picode/shared";
+import { normalizeZCodeUiError } from "@/lib/picodeUiError.js";
 
 export const MODEL_CONFIG_MISSING_UI_ERROR_CODE = "model_config_missing";
 

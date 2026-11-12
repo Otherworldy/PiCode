@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { SessionUsageState } from "@zcode/shared/zcode-protocol-v4";
+import type { SessionUsageState } from "@picode/shared/picode-protocol-v4";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import { ComposerSessionStats, deriveSessionStats } from "@/v4/ComposerSessionStats.js";
 

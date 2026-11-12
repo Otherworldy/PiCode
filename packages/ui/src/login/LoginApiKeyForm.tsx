@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { isApiKeyAccess } from "@zcode/provider";
+import { isApiKeyAccess } from "@picode/provider";
 import { Loader2Icon, TriangleAlertIcon } from "lucide-react";
 import {
   BIGMODEL_PROVIDER_ID,
@@ -12,7 +12,7 @@ import {
   TID_LOGIN_API_KEY_SKIP_BUTTON,
   ZAI_PROVIDER_ID,
   testId,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { Alert, AlertDescription } from "@/components/ui/alert.js";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";

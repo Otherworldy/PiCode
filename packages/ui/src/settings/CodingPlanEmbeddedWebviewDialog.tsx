@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLinkIcon, RefreshCwIcon } from "lucide-react";
 import { usePlatform } from "@/hooks/usePlatform.js";
-import { RENDERER_ZCODE_ENDPOINT_URLS } from "@/lib/rendererZCodeEndpoint.js";
+import { RENDERER_ZCODE_ENDPOINT_URLS } from "@/lib/rendererPiCodeEndpoint.js";
 import { logger } from "@/logger.js";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
@@ -31,7 +31,7 @@ import {
   CodingPlanWebviewChannels,
   type CodingPlanPurchaseCompletePayload,
   ZCODE_VERSION,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 interface CodingPlanEmbeddedWebviewDialogProps {
   credentialService: {

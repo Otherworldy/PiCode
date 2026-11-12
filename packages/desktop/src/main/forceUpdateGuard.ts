@@ -6,7 +6,7 @@ import {
   resolveForceUpdateRequirement,
   type ForceUpdateRequirement,
   type Locale,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 const ZCODE_CLIENT_CONFIG_API_PATH = "/api/v1/client/configs";
 /**

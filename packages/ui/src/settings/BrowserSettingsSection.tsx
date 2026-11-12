@@ -1,7 +1,7 @@
 /* oxlint-disable eslint(max-lines) -- Browser Plugin、Chrome 数据导入与清理共享同一平台状态机，拆分会扩大 pending/失败回收边界。 */
 import { useCallback, useState, type ReactNode } from "react";
 import { LoaderCircle } from "lucide-react";
-import type { ChromeBrowserDataImportResult } from "@zcode/shared";
+import type { ChromeBrowserDataImportResult } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import {
   AlertDialog,

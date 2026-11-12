@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { AppUpdateSnapshot, IPlatformService } from "@zcode/shared";
+import type { AppUpdateSnapshot, IPlatformService } from "@picode/shared";
 import { AppUpdateReadyButton } from "./AppUpdateReadyButton.js";
 import { PlatformProvider } from "./hooks/usePlatform.js";
 import { ZCodeIntlProvider } from "./i18n/IntlProvider.js";

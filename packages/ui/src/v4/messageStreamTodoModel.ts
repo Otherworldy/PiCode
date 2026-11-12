@@ -1,4 +1,4 @@
-import type { ZCodePlanStep } from "@zcode/shared";
+import type { ZCodePlanStep } from "@picode/shared";
 import { planFromPlannotatorProgress } from "./conversationStatusPanelModel.js";
 
 export interface ComposerTodoModel {

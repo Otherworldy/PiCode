@@ -1,4 +1,4 @@
-import { redactFeedbackText } from "@zcode/shared";
+import { redactFeedbackText } from "@picode/shared";
 /* eslint-disable max-lines -- 反馈 HTTP 客户端集中维护新后端协议、鉴权头合并、OSS 表单直传和响应归一化。 */
 import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
@@ -25,7 +25,7 @@ import type {
   FeedbackTicketStatus,
   FeedbackTicketSummary,
   FeedbackTicketType,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { createServiceLogger, type ServiceLogger } from "#src/logger/serviceLogger.js";
 import { withRequestIdHeaderRecord } from "#src/providers/api/requestIdHeaders.js";
 import {

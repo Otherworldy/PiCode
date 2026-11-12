@@ -18,8 +18,8 @@ import type {
   DragStartEvent,
   DropAnimation,
 } from "@dnd-kit/core";
-import type { ZCodeGroupedTaskView, ZCodeTaskGroupColor } from "@zcode/services";
-import { OFF_PEAK_DEFAULT_GROUP_ID, type ZCodeTaskMeta } from "@zcode/shared";
+import type { ZCodeGroupedTaskView, ZCodeTaskGroupColor } from "@picode/services";
+import { OFF_PEAK_DEFAULT_GROUP_ID, type ZCodeTaskMeta } from "@picode/shared";
 import { createPortal } from "react-dom";
 import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -32,7 +32,7 @@ import { resolveWorkspaceDisplayLabel } from "@/lib/workspaceDisplayName.js";
 import { resolveTaskFileTreeTargetFromTabs } from "@/lib/taskFileTreeTarget.js";
 import { toast } from "@/components/ui/toast.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
-import { selectWorkspaceZCodeState, useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { selectWorkspaceZCodeState, useZCodeSessionStore } from "@/store/picodeSessionStore.js";
 import { useRemoteWorkspaceSessionStore } from "@/store/remoteWorkspaceSessionStore.js";
 import { buildWorkspaceServiceLookup } from "@/lib/workspaceServiceResolver.js";
 import { applyTaskQueryCacheMutation } from "@/store/taskQueryCacheStore.js";

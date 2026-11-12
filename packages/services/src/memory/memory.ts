@@ -1,5 +1,5 @@
-import { ServiceChannels } from "@zcode/shared";
-import type { WorkspaceMemoryCategory } from "@zcode/shared/node";
+import { ServiceChannels } from "@picode/shared";
+import type { WorkspaceMemoryCategory } from "@picode/shared/node";
 import { createServiceDescriptor } from "../descriptors.js";
 
 export const PROJECT_MEMORY_PREVIEW_LIMIT_EXCEEDED_ERROR_CODE =

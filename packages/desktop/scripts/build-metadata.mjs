@@ -35,7 +35,7 @@ function findPackageDir(packageName, startDirs) {
   throw new Error(`Unable to find package directory for ${packageName}`);
 }
 
-const desktopDir = findPackageDir("@zcode/desktop", [
+const desktopDir = findPackageDir("@picode/desktop", [
   moduleDir,
   resolve(moduleDir, ".."),
   process.cwd(),

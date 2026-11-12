@@ -3,7 +3,7 @@ import {
   isRecommendedPiPluginInstalled,
   piPluginInstallSourceInstalled,
   type RecommendedPiPluginSource,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { Check, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { cn } from "@/components/lib/utils.js";

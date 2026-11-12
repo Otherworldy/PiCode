@@ -1,4 +1,4 @@
-import { resolveZCodeRuntimeEnv } from "@zcode/shared";
+import { resolveZCodeRuntimeEnv } from "@picode/shared";
 
 type EffectiveNodeEnv = "development" | "production";
 

@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { GitChangeSourceId } from "@zcode/shared";
+import type { GitChangeSourceId } from "@picode/shared";
 import { toast } from "@/components/ui/toast.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";

@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { XIcon } from "lucide-react";
-import type { IFeedbackService } from "@zcode/services";
+import type { IFeedbackService } from "@picode/services";
 import { Button } from "@/components/ui/button.js";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
 import { Input } from "@/components/ui/input.js";

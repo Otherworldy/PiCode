@@ -8,7 +8,7 @@ import {
   resolvePiAgentDir,
   type AgentSystemPromptKind,
   type AgentSystemPromptScope,
-} from "@zcode/shared/node";
+} from "@picode/shared/node";
 
 export interface AgentSystemPromptFile {
   content: string;

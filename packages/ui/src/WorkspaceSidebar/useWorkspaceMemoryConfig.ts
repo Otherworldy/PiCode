@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { IMemoryService, WorkspaceMemoryModelRef } from "@zcode/services";
+import type { IMemoryService, WorkspaceMemoryModelRef } from "@picode/services";
 
 type MemoryConfigService = Pick<
   IMemoryService,

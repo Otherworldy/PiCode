@@ -1,12 +1,12 @@
 /* eslint-disable max-lines -- 远程连接向导的状态编排暂集中在同一组件，后续有独立拆分计划。 */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { createUuid, type RemoteTarget, type RemoteWorkspaceSessionEntry } from "@zcode/shared";
+import { createUuid, type RemoteTarget, type RemoteWorkspaceSessionEntry } from "@picode/shared";
 import {
   TID_SSH_CONNECT_TRIGGER,
   TID_SSH_DIALOG,
   TID_SSH_ERROR,
   TID_SSH_SUCCESS,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { AlertTriangleIcon } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button.js";
 import { Dialog, DialogContent, DialogHeader } from "@/components/ui/dialog.js";

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { GitCommitGraphCommit } from "@zcode/shared";
+import type { GitCommitGraphCommit } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import {
   Dialog,

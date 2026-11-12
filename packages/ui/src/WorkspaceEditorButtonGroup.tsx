@@ -1,4 +1,4 @@
-import { createOpenInEditorRemoteTarget, type EditorInfo, type RemoteTarget } from "@zcode/shared";
+import { createOpenInEditorRemoteTarget, type EditorInfo, type RemoteTarget } from "@picode/shared";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button.js";
 import { ChevronDown } from "lucide-react";

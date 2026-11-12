@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { BackgroundBashOutput, BackgroundBashOutputResult } from "@zcode/shared";
-import { useZCodeAgentService } from "@/hooks/useZCodeAgentService.js";
+import type { BackgroundBashOutput, BackgroundBashOutputResult } from "@picode/shared";
+import { useZCodeAgentService } from "@/hooks/usePiCodeAgentService.js";
 import { ensureAgentV4ConnectionHandshake } from "@/v4/agentV4ConnectionHandshake.js";
 import { logger } from "@/logger.js";
 

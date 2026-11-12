@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { IFileService } from "@zcode/services";
+import type { IFileService } from "@picode/services";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { AgentSystemPromptField } from "@/settings/AgentSystemPromptField.js";
 import { SettingsGroupCard } from "@/settings/SettingsPageParts.js";

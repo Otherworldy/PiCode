@@ -3,7 +3,7 @@
  * 纯函数、单一事实源。
  * 匹配顺序：根级特例 → 文件规则（精确）→ 前缀规则（最长前缀优先）→ 其他。
  */
-import type { StorageCategoryId, StorageCleanability, StorageRootId } from "@zcode/shared";
+import type { StorageCategoryId, StorageCleanability, StorageRootId } from "@picode/shared";
 
 export interface StorageCatalogContext {
   rootId: StorageRootId;

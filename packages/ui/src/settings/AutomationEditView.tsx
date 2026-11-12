@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- 定时任务编辑整页集中维护 Settings/History 两个 tab、cron builder、项目/模型选择器与运行历史，集中更利于交互一致。 */
 import { useStartPlanRecommendation } from "@/hooks/useStartPlanRecommendation.js";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { completeNewModelSelection } from "@zcode/provider";
+import { completeNewModelSelection } from "@picode/provider";
 import {
   ArrowLeft,
   ArrowRight,
@@ -41,7 +41,7 @@ import {
   type ZCodeAutomation,
   type ZCodeAutomationRun,
   type ZCodeAutomationScheduleRule,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   AutomationAddScheduleIcon,
   AutomationChevronDownIcon,
@@ -129,8 +129,8 @@ import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { useAutomationProjectOptions } from "@/hooks/useAutomationProjectOptions.js";
 import { useModelSelectionView } from "@/hooks/useModelSelectionView.js";
 import { resolveModelThoughtOption } from "@/lib/modelThoughtOption.js";
-import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
-import { parseModelPickerValue } from "@/lib/zcodeSessionProjection.js";
+import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/picodeCustomModelValue.js";
+import { parseModelPickerValue } from "@/lib/picodeSessionProjection.js";
 import { logger } from "@/logger.js";
 import {
   findAutomationWorkspaceOptionByKey,

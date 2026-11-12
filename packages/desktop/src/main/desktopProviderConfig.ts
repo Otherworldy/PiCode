@@ -12,7 +12,7 @@ export function resolveZCodeBuiltinProviderConfigFilePath(options?: {
   if (options?.isPackaged ?? app.isPackaged) {
     return join(
       options?.resourcesPath ?? process.resourcesPath,
-      "config/provider/zcode-builtin.json",
+      "config/provider/picode-builtin.json",
     );
   }
   // 开发态与打包共用唯一线上配置源。

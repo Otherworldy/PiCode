@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AppUpdateSnapshot } from "@zcode/shared";
+import type { AppUpdateSnapshot } from "@picode/shared";
 import { createAppUpdateController } from "./appUpdateController.js";
 
 function releaseResponse(body: unknown, status = 200): Response {

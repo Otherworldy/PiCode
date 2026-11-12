@@ -1,4 +1,4 @@
-import { createUuid } from "@zcode/shared";
+import { createUuid } from "@picode/shared";
 
 export const CONVERSATION_SELECTION_MAX_TEXT_LENGTH = 8_000;
 const CONVERSATION_SELECTION_MAX_COUNT = 8;

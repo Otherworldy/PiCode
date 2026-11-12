@@ -1,6 +1,6 @@
 import { rm } from "node:fs/promises";
 import { isAbsolute, resolve, sep } from "node:path";
-import type { GitCheckpointDiff, GitCheckpointFileDiff } from "@zcode/shared";
+import type { GitCheckpointDiff, GitCheckpointFileDiff } from "@picode/shared";
 import {
   DEFAULT_GIT_COMMAND_TIMEOUT_MS,
   DEFAULT_GIT_OUTPUT_BYTES,

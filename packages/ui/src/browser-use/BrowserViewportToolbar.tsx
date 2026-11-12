@@ -7,7 +7,7 @@ import {
   TID_BROWSER_RESPONSIVE_ZOOM_OPTION,
   TID_BROWSER_RESPONSIVE_ZOOM_SELECT,
   type BrowserViewportSize,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   BROWSER_VIEWPORT_ZOOM_OPTIONS,
   type BrowserViewportZoom,

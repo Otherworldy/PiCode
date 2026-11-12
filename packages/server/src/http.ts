@@ -14,7 +14,7 @@ import {
   ChannelServer,
   LoggingChannelServer,
   type ISocket,
-} from "@zcode/rpc";
+} from "@picode/rpc";
 import {
   ServiceCollection,
   IZCodeAgentService,
@@ -24,7 +24,7 @@ import {
   ISystemService,
   ITerminalService,
   IProviderProvisioningTargetService,
-} from "@zcode/services";
+} from "@picode/services";
 import {
   formatLogPrefix,
   formatZodError,
@@ -34,7 +34,7 @@ import {
   ZCODE_VERSION,
   type ServerRemoteInfo,
   type ServerRemoteWorkspaceInfo,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { connectRemote, createRemoteBackend, type RemoteConnection } from "./remote/index.js";
 import { createHostCapabilityStore } from "./hostCapability.js";
 

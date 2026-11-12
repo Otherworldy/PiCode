@@ -5,7 +5,7 @@
  * 放在组件或 hook 里就只能靠搭 store mock 来测，覆盖不全。这里不 import React、不读 store，
  * 全部输入由调用方（useCuaComposerEntry）注入。
  */
-import { isCuaPermissionStatusAvailable, type CuaPermissionStatusResult } from "@zcode/services";
+import { isCuaPermissionStatusAvailable, type CuaPermissionStatusResult } from "@picode/services";
 import { isCuaPermissionTccGranted } from "@/lib/cuaPermissionStatusStore.js";
 import type { StatusDotTone } from "@/settings/StatusDot.js";
 

@@ -12,7 +12,7 @@ import {
   resolveModelProviderFamilySpecByProviderId,
   type ModelConnectivityResult,
   type OAuthProviderId,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   getProviderFormApiKeyManagementUrl,
   type ProviderSettingsFormProvider,
@@ -56,8 +56,8 @@ import { useEnterpriseCodingPlanProducts } from "./useEnterpriseCodingPlanProduc
 import { useUsageEntitlement } from "@/hooks/useUsageEntitlement.js";
 import { useCodingPlanUpgradeDialog } from "@/settings/CodingPlanUpgradeDialogProvider.js";
 import { useProviderSettingsView } from "@/hooks/useProviderSettingsView.js";
-import type { ProviderSettingsView } from "@zcode/services";
-import type { SavePersonalModelDraftInput } from "@zcode/provider";
+import type { ProviderSettingsView } from "@picode/services";
+import type { SavePersonalModelDraftInput } from "@picode/provider";
 import { resolveAccountProviderInspectionAccess } from "@/lib/accountProviderAccess.js";
 import { projectProviderSettingsViewToFormProviders } from "@/lib/providerSettingsFormProjection.js";
 

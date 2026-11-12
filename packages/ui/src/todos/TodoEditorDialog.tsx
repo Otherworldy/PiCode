@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
 import { ImagePlus } from "lucide-react";
-import type { TodoAttachment } from "@zcode/shared";
+import type { TodoAttachment } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import {
   Dialog,

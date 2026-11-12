@@ -1,4 +1,4 @@
-import type { ZCodeConfigOption, ZCodeProvider, ZCodeTaskMode } from "@zcode/shared";
+import type { ZCodeConfigOption, ZCodeProvider, ZCodeTaskMode } from "@picode/shared";
 
 const CANONICAL_SESSION_MODES = new Set<ZCodeTaskMode>([
   "yolo",

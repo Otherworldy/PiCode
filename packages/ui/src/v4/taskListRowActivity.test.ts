@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ZCodeTaskMeta } from "@zcode/shared";
+import type { ZCodeTaskMeta } from "@picode/shared";
 import { attachTaskListRowActivity, mergeTaskListMembershipFields } from "./taskListRowActivity.js";
 
 const base = {

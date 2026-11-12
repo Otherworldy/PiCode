@@ -14,18 +14,18 @@ import type {
   UsageEntitlementSnapshot,
   UsageStatsRequest,
   UsageStatsSnapshot,
-} from "@zcode/shared";
-import { isCodingPlanModelProviderId } from "@zcode/shared";
+} from "@picode/shared";
+import { isCodingPlanModelProviderId } from "@picode/shared";
 import type { ICredentialService } from "../credential/credential.js";
 import type { IAccountRequestAuthService } from "../model-provider/accountRequestAuthService.js";
-import type { IZCodeAgentService } from "../zcode-agent/zcodeAgent.js";
+import type { IZCodeAgentService } from "../picode-agent/picodeAgent.js";
 import type { IUsageStatsService } from "./usageStats.js";
 import {
   BigModelUsageQuotaProvider,
   type UsageApiAuthorizationRequest,
   type UsageApiAuthorization,
 } from "./providers/bigmodelUsageQuotaProvider.js";
-import type { OfficialMcpCredentialSource } from "./providers/zcodeMcpQuotaProvider.js";
+import type { OfficialMcpCredentialSource } from "./providers/picodeMcpQuotaProvider.js";
 
 interface UsageStatsServiceDependencies {
   apiClient: ApiClient;

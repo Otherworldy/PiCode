@@ -1,5 +1,5 @@
-import { ServiceChannels, hostPluginSandboxRegisterResultMessageSchema } from "@zcode/shared";
-import type { PluginSandboxHandle } from "@zcode/shared/mcp-apps";
+import { ServiceChannels, hostPluginSandboxRegisterResultMessageSchema } from "@picode/shared";
+import type { PluginSandboxHandle } from "@picode/shared/mcp-apps";
 import { describe, expect, it } from "vitest";
 import { examplePrepareAndMount, exampleReadBlob } from "./contract.example.js";
 import { IPluginUiBridgeService } from "./contract.js";

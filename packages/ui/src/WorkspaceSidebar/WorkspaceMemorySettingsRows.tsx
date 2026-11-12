@@ -1,5 +1,5 @@
-import type { WorkspaceMemoryModelRef } from "@zcode/services";
-import { TID_WORKSPACE_MEMORY_SWITCH } from "@zcode/shared";
+import type { WorkspaceMemoryModelRef } from "@picode/services";
+import { TID_WORKSPACE_MEMORY_SWITCH } from "@picode/shared";
 import { Switch } from "@/components/ui/switch.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { SettingsGroupCard, SettingsRow } from "@/settings/SettingsPageParts.js";

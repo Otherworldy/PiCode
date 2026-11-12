@@ -4,7 +4,7 @@ import type {
   GitFileChange,
   Locale,
   ZCodeWorkspaceGenerateTextParams,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { ServiceLogger } from "#src/logger/serviceLogger.js";
 
 const MAX_PROMPT_FILES = 20;

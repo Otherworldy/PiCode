@@ -3,13 +3,13 @@ import type {
   UsageEntitlementSnapshot,
   ZCodeAccountAccess,
   ZCodeProviderAccountAccess,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   BIGMODEL_PROVIDER_ID,
   BUILTIN_MODEL_PROVIDER_IDS,
   type OAuthProviderId,
   ZAI_PROVIDER_ID,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { ChevronRightIcon, Loader2 } from "lucide-react";
 import { useMemo } from "react";
 import { Button } from "@/components/ui/button.js";

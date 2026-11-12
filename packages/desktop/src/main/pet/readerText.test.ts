@@ -1,4 +1,4 @@
-import { normalizeDesktopPetReaderHotkey } from "@zcode/shared";
+import { normalizeDesktopPetReaderHotkey } from "@picode/shared";
 import { describe, expect, it } from "vitest";
 import {
   detectPetReaderEncoding,

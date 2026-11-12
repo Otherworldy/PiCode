@@ -1,5 +1,5 @@
 import { stat } from "node:fs/promises";
-import { Emitter } from "@zcode/rpc";
+import { Emitter } from "@picode/rpc";
 import type {
   IPromptAttachmentTransferService,
   PromptAttachmentTransferProgress,

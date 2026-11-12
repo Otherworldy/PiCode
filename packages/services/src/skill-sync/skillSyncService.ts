@@ -11,7 +11,7 @@ import type {
   SkillSyncCandidateListResult,
   SkillSyncImportResult,
   SkillSyncRemoteStatusResult,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { ISkillSyncService } from "./skillSync.js";
 import { createSkillSyncArchive, extractSkillSyncArchive } from "./skillSyncArchive.js";
 import { normalizeSkillSyncRelativePath, resolveSkillSyncPathWithin } from "./skillSyncPath.js";

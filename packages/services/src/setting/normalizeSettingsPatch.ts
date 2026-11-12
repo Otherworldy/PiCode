@@ -1,4 +1,4 @@
-import type { AppSettings } from "@zcode/shared";
+import type { AppSettings } from "@picode/shared";
 
 export function normalizeSettingsPatch(patch: Partial<AppSettings>): Partial<AppSettings> {
   const normalizedPatch = { ...patch };

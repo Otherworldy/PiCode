@@ -17,10 +17,10 @@ import type {
   SaveCliMcpToUserDirectoryRequest,
   SettingsDirectoryLocation,
   SettingsDirectorySource,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { IMcpSyncService } from "./mcpSync.js";
-import { withFileLock } from "@zcode/shared/node";
-import { ensurePiMcpFiles, piProjectMcpFile, piUserMcpFile, toPiStoredMcpServer } from "@zcode/shared/node";
+import { withFileLock } from "@picode/shared/node";
+import { ensurePiMcpFiles, piProjectMcpFile, piUserMcpFile, toPiStoredMcpServer } from "@picode/shared/node";
 import { checkRemoteSyncDirectoryWriteAccess } from "../remote-sync/remoteSyncWriteAccess.js";
 
 type McpConfigKeyName = "mcp.servers" | "mcpServers";

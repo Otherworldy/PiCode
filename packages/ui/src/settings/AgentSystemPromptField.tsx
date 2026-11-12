@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Save } from "lucide-react";
-import type { IFileService } from "@zcode/services";
+import type { IFileService } from "@picode/services";
 import { Button } from "@/components/ui/button.js";
 import { Textarea } from "@/components/ui/textarea.js";
 import { toast } from "@/components/ui/toast.js";

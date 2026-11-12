@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { win32 } from "node:path";
-import type { ApplicationIconInfo } from "@zcode/shared";
+import type { ApplicationIconInfo } from "@picode/shared";
 import { createEncodedPowerShellArgs } from "../../scripts/powershell-command.mjs";
 
 const SAFE_AUMID = /^[^\\/\s!]+![^\\/\s!]+$/u;

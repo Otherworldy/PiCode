@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ZCodePiModelsMutateResult } from "@zcode/shared";
+import type { ZCodePiModelsMutateResult } from "@picode/shared";
 
 function flattenCatalogModels(view: ZCodePiModelsMutateResult | null) {
   return (

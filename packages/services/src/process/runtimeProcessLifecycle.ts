@@ -1,4 +1,4 @@
-import type { ZCodeProcessDiagnostic } from "@zcode/shared/process-diagnostic";
+import type { ZCodeProcessDiagnostic } from "@picode/shared/process-diagnostic";
 
 export interface RuntimeProcessSpawnEvent {
   /** 进程泳道（如 mcp-status）；缺省为 chat 主泳道。同 cwd、同 command 的多 lane 进程靠它归因。 */

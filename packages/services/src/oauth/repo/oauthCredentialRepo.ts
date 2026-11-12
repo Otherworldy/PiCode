@@ -5,8 +5,8 @@ import type {
   OAuthProviderId,
   OAuthTokenSet,
   OAuthUserProfile,
-} from "@zcode/shared";
-import { BIGMODEL_PROVIDER_ID, isCredentialDecryptError, ZAI_PROVIDER_ID } from "@zcode/shared";
+} from "@picode/shared";
+import { BIGMODEL_PROVIDER_ID, isCredentialDecryptError, ZAI_PROVIDER_ID } from "@picode/shared";
 import type { ICredentialService } from "../../credential/credential.js";
 import { createServiceLogger } from "../../logger/serviceLogger.js";
 

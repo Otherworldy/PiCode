@@ -6,7 +6,7 @@ import type {
   TimelineMarkerRow,
   TurnHeaderRow,
   UserInputRow,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared/picode-protocol-v4";
 import type { AssistantWorkRow, ConversationTurnFlowItem } from "@/v4/conversationTurnFlowItems.js";
 import { isAssistantBodyTextRow } from "@/v4/processEventText.js";
 import type { PluginUiRowPinResolver } from "@/plugin-ui/index.js";

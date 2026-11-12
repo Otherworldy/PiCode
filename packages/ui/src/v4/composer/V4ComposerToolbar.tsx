@@ -33,12 +33,12 @@ import {
   type ZCodeProviderAccountAccess,
   type ZCodeConfigOption,
   type ZCodeProvider,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type {
   SessionConfigState,
   SessionPhase,
   SessionUsageState,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared/picode-protocol-v4";
 import { ModelConfigSelect, type ModelSelectGroup } from "@/ModelConfigSelect.js";
 import { Button } from "@/components/ui/button.js";
 import { ChatContextUsage } from "@/chat-input-toolbar/display.js";
@@ -65,7 +65,7 @@ import {
   setPendingSettingsUsageCodingPlanIntent,
 } from "@/lib/settingsNavigation.js";
 import { useTabStore } from "@/store/TabStoreProvider.js";
-import type { ModelSelectionView } from "@zcode/services";
+import type { ModelSelectionView } from "@picode/services";
 import type { ModelSelectionState } from "@/hooks/useModelSelectionView.js";
 import { useProviderSettingsView } from "@/hooks/useProviderSettingsView.js";
 import { useSettings } from "@/hooks/useSettingService.js";
@@ -73,13 +73,13 @@ import {
   useUsageEntitlement,
   type UsageEntitlementRefreshOptions,
 } from "@/hooks/useUsageEntitlement.js";
-import { useToolbarConfigOptions } from "@/hooks/useZCodeConfig.js";
+import { useToolbarConfigOptions } from "@/hooks/usePiCodeConfig.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useShortcutCommandLabel } from "@/shortcuts/useShortcutBindings.js";
 import { logger } from "@/logger.js";
 import { useCodingPlanUpgradeDialog } from "@/settings/CodingPlanUpgradeDialogProvider.js";
 import { useCodingPlanEntitlements } from "@/settings/model-provider-section/useCodingPlanEntitlements.js";
-import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
+import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/picodeCustomModelValue.js";
 import { buildRegistryModelSelectGroups } from "@/lib/modelSelectionGroups.js";
 import {
   buildCodingPlanUsageSources,
@@ -1101,4 +1101,4 @@ function V4ComposerModelControlsImpl({
 }
 
 export const V4ComposerModelControls = memo(V4ComposerModelControlsImpl);
-import { isApiKeyAccess } from "@zcode/provider";
+import { isApiKeyAccess } from "@picode/provider";

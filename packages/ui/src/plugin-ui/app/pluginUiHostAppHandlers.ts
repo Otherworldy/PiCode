@@ -1,7 +1,7 @@
 import type { CallToolResult } from "@modelcontextprotocol/client";
 import { INVALID_PARAMS, ProtocolError } from "@modelcontextprotocol/client";
 import type { McpUiDisplayMode, McpUiHostContext } from "@modelcontextprotocol/ext-apps/app-bridge";
-import type { IPluginUiBridgeService, PluginUiPluginScope } from "@zcode/services";
+import type { IPluginUiBridgeService, PluginUiPluginScope } from "@picode/services";
 import { resolveRequestedDisplayMode } from "../domain/buildPluginUiHostContext.js";
 import type { PluginUiHostBridge } from "./pluginUiHostBridge.js";
 

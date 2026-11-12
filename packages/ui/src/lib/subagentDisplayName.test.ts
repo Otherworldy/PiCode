@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BUILT_IN_SUBAGENTS, BUILT_IN_SUBAGENT_NAMES } from "@zcode/shared";
+import { BUILT_IN_SUBAGENTS, BUILT_IN_SUBAGENT_NAMES } from "@picode/shared";
 import enUS from "../i18n/locales/en-US.js";
 import zhCN from "../i18n/locales/zh-CN.js";
 import {

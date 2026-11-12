@@ -1,4 +1,4 @@
-import type { ZCodePluginComponentKind } from "@zcode/shared";
+import type { ZCodePluginComponentKind } from "@picode/shared";
 import { cn } from "@/components/lib/utils.js";
 import { Badge } from "@/components/ui/badge.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";

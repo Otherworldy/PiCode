@@ -1,4 +1,4 @@
-import { deriveDesktopPetMood, desktopPetMoodSlot, mergeDesktopPetMoods } from "@zcode/shared";
+import { deriveDesktopPetMood, desktopPetMoodSlot, mergeDesktopPetMoods } from "@picode/shared";
 import { describe, expect, it } from "vitest";
 
 const quiet = { phase: "completedSuccess" as const, hasBackgroundWork: false };

@@ -1,8 +1,8 @@
 import { memo } from "react";
 import { SquareArrowRightEnter } from "lucide-react";
 
-import type { Locale } from "@zcode/shared";
-import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
+import type { Locale } from "@picode/shared";
+import type { ConversationRow } from "@picode/shared/picode-protocol-v4";
 
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";

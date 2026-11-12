@@ -5,7 +5,7 @@ import {
   type ResourceUsageCategory,
   type ResourceUsageSnapshot,
   type StorageManagementBridge,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs.js";
 import { useZCodeIntl } from "@/i18n/index.js";
 import { StorageSection } from "./storage/StorageSection.js";

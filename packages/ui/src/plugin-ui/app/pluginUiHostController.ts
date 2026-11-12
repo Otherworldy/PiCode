@@ -2,13 +2,13 @@ import { createPluginUiSampling } from "./pluginUiSampling.js";
 import type { CallToolResult, Transport } from "@modelcontextprotocol/client";
 import type { McpUiHostContext } from "@modelcontextprotocol/ext-apps/app-bridge";
 import { AppBridge } from "@modelcontextprotocol/ext-apps/app-bridge";
-import type { PluginSandboxHandle, PluginSandboxTransportPort } from "@zcode/shared/mcp-apps";
+import type { PluginSandboxHandle, PluginSandboxTransportPort } from "@picode/shared/mcp-apps";
 import {
   MCP_APPS_HANDSHAKE_TIMEOUT_MS,
   MCP_APPS_HOST_NAME,
   MCP_APPS_WIDGET_STATE_CONTEXT_KEY,
   buildPluginSandboxScopeId,
-} from "@zcode/shared/mcp-apps";
+} from "@picode/shared/mcp-apps";
 import { createPluginUiAppTools } from "./pluginUiAppTools.js";
 import {
   installPluginUiHostAppHandlers,

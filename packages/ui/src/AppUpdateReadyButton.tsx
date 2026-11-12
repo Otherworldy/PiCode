@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AppUpdateSnapshot } from "@zcode/shared";
+import type { AppUpdateSnapshot } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { usePlatform } from "@/hooks/usePlatform.js";

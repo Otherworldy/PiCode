@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import type { ProviderSettingsFormModel } from "@/lib/providerSettingsFormTypes.js";
-import type { ModelConnectivityResult } from "@zcode/shared";
+import type { ModelConnectivityResult } from "@picode/shared";
 import { Loader2Icon, Trash2, Unplug } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { ModelInputCapabilityBadge } from "@/components/ModelInputCapabilityBadge.js";
@@ -9,7 +9,7 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useProviderModelDraft } from "@/settings/model-provider-section/useProviderModelDraft.js";
 import { ProviderModelMetadataDialog } from "@/settings/model-provider-section/ProviderModelMetadataDialog.js";
 import { formatModelContextWindowLabel } from "@/lib/tokenNumberFormat.js";
-import type { ModelConfigResolution, ProviderConfigObject } from "@zcode/provider";
+import type { ModelConfigResolution, ProviderConfigObject } from "@picode/provider";
 import { shouldShowModelVisionBadge } from "@/lib/modelVisionBadge.js";
 import { useProviderDetailFeedback } from "@/settings/model-provider-section/ProviderDetailFeedback.js";
 

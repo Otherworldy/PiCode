@@ -1,5 +1,5 @@
-import type { IServiceAccessor, ProviderSettingsView } from "@zcode/services";
-import type { ProviderFamilyConnectionSelection } from "@zcode/shared";
+import type { IServiceAccessor, ProviderSettingsView } from "@picode/services";
+import type { ProviderFamilyConnectionSelection } from "@picode/shared";
 import type { AccountConnectionLoss } from "@/root/accountConnectionRefreshObserver.js";
 import {
   resolveFirstSubscribedTeamPlanConnectionWithContext,

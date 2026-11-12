@@ -1,4 +1,4 @@
-import { MCP_APPS_HTML_MAX_BYTES, type PluginSandboxHandle } from "@zcode/shared/mcp-apps";
+import { MCP_APPS_HTML_MAX_BYTES, type PluginSandboxHandle } from "@picode/shared/mcp-apps";
 import { randomUUID } from "node:crypto";
 import type {
   PluginSandboxRecord,

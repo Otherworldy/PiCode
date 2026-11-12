@@ -4,7 +4,7 @@ import {
   createFailClosedAccountProviderConfigSnapshot,
   type AccountProviderConfigSnapshot,
   type ProviderSource,
-} from "@zcode/provider";
+} from "@picode/provider";
 import {
   NodeProviderConfigRuntime,
   type NodeProviderConfigRuntimeOptions,

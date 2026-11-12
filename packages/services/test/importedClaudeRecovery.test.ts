@@ -8,11 +8,11 @@ import {
   ZCODE_PROTOCOL_VERSION,
   zcodeSessionStateSnapshotSchema,
   type ZCodeSessionStateSnapshot,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { getLegacyTaskSessionSnapshotPath, setDataBaseDir } from "../src/paths.js";
 import { parseLegacyTaskSessionFile } from "../src/session/legacyTaskSessionFile.js";
 import { TaskIndexRepo } from "../src/session/taskIndexRepo.js";
-import { createZCodeTaskServiceAdapter } from "../src/zcode-agent/zcodeTaskServiceAdapter.js";
+import { createZCodeTaskServiceAdapter } from "../src/picode-agent/picodeTaskServiceAdapter.js";
 
 for (const clientMode of ["desktop-continuous", "web-remote-replayable"] as const) {
   test(`previously imported Claude history becomes a real session for ${clientMode}`, async () => {

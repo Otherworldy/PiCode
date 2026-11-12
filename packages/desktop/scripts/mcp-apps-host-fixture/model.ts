@@ -92,7 +92,7 @@ export async function startModel(root: string, cli: string) {
   const port = (server.address() as { port: number }).port;
   const builtin = join(root, "fixture-builtin.json"),
     personal = join(root, "fixture-personal.json");
-  await copyFile(resolve(cli, "../../../../../../config/provider/zcode-builtin.json"), builtin);
+  await copyFile(resolve(cli, "../../../../../../config/provider/picode-builtin.json"), builtin);
   await writeFile(
     personal,
     JSON.stringify({

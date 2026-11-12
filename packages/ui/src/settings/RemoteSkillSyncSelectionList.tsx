@@ -1,6 +1,6 @@
 import { useState, type MouseEvent } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import type { SkillSyncCandidate } from "@zcode/shared";
+import type { SkillSyncCandidate } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 

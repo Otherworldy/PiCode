@@ -5,7 +5,7 @@ import {
 import { PluginUiPageManager } from "../../../ui/src/plugin-ui/app/pluginUiPageManager.js";
 import { createPluginUiMessagePortTransport } from "../../../ui/src/plugin-ui/adapters/messagePortTransport.js";
 import { createPluginUiPagePlane } from "../../../ui/src/plugin-ui/adapters/pluginUiPagePlane.js";
-import type { PluginSandboxHandle, PluginSandboxPortsEvent } from "@zcode/shared/mcp-apps";
+import type { PluginSandboxHandle, PluginSandboxPortsEvent } from "@picode/shared/mcp-apps";
 const harness = (window as any).harness;
 const ports = new Set<(event: PluginSandboxPortsEvent) => void>();
 window.addEventListener("message", (event) => {

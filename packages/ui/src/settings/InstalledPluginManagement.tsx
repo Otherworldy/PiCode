@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- 已安装插件列表与详情弹窗共享组件分组/Hook 明细渲染，集中维护更利于与参考图保持一致。 */
 import { AlertTriangle } from "lucide-react";
-import type { ZCodePluginDiagnostic, ZCodePluginInfo } from "@zcode/shared";
+import type { ZCodePluginDiagnostic, ZCodePluginInfo } from "@picode/shared";
 import { Badge } from "@/components/ui/badge.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 

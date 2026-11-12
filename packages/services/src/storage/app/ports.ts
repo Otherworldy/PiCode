@@ -8,7 +8,7 @@ import type {
   StorageRootSpec,
   StorageRootUsage,
   StorageVolume,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 export interface RootsResolverPort {
   resolveRoots(): Promise<StorageRootSpec[]>;

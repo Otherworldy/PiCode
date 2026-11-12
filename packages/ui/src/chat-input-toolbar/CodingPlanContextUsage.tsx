@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- Composer 用量入口集中维护多来源状态、弹层和重置交互；本阶段只迁移 Account Access，不拆分既有 UI 结构。 */
-import { type CodingPlanResetType } from "@zcode/shared";
+import { type CodingPlanResetType } from "@picode/shared";
 import { Loader2 } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {

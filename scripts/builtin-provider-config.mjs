@@ -45,7 +45,7 @@ export async function loadBuiltinProviderConfig({ root = repositoryRoot, env = p
   const environment = await resolveBuiltinProviderBuildEnvironment({ root, env });
   const sourcePath = resolve(
     root,
-    env.ZCODE_BUILTIN_PROVIDER_CONFIG_FILE?.trim() || "config/provider/zcode-builtin.json",
+    env.ZCODE_BUILTIN_PROVIDER_CONFIG_FILE?.trim() || "config/provider/picode-builtin.json",
   );
   try {
     const content = await readFile(sourcePath, "utf8");
@@ -53,7 +53,7 @@ export async function loadBuiltinProviderConfig({ root = repositoryRoot, env = p
     // tsx 仅供构建工具加载仓库 TS，不进入产品 bundle，也不复制一份校验规则。
     // Windows 绝对路径的盘符会被 ESM 当作协议，转为 file URL 后各平台共用同一加载入口。
     const { decodeZCodeBuiltinRelease } = await tsImport(
-      pathToFileURL(resolve(repositoryRoot, "packages/provider-node/src/zcode-builtin-release.ts"))
+      pathToFileURL(resolve(repositoryRoot, "packages/provider-node/src/picode-builtin-release.ts"))
         .href,
       import.meta.url,
     );

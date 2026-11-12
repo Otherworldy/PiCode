@@ -6,18 +6,18 @@ import type {
   ZCodeMcpUiListResourcesResult,
   ZCodeMcpUiReadResourceResult,
   ZCodePluginsListUiSurfacesResult,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type {
   McpAppResourceMeta,
   PluginSandboxHandle,
   PluginSandboxRegisterInput,
-} from "@zcode/shared/mcp-apps";
+} from "@picode/shared/mcp-apps";
 import {
   MCP_APPS_HTML_MAX_BYTES,
   MCP_APPS_HTML_MIME_TYPES,
   MCP_APPS_UI_READ_RESOURCE_MAX_BYTES,
   normalizeMcpAppResourceMeta,
-} from "@zcode/shared/mcp-apps";
+} from "@picode/shared/mcp-apps";
 import { createServiceLogger } from "../logger/serviceLogger.js";
 import type {
   IPluginUiBridgeService,
@@ -35,7 +35,7 @@ export interface PluginUiBridgeServiceDependencies {
   validateInstance?: (params: import("./contract.js").PluginUiPluginScope) => Promise<void>;
   openInstance?: (
     params: PluginUiPrepareSandboxParams,
-  ) => Promise<import("@zcode/shared/mcp-apps").McpAppInstance>;
+  ) => Promise<import("@picode/shared/mcp-apps").McpAppInstance>;
   closeInstance?: (params: import("./contract.js").PluginUiPluginScope) => Promise<void>;
 
   readMcpResource?: (params: {
@@ -45,7 +45,7 @@ export interface PluginUiBridgeServiceDependencies {
     pluginId: string;
     serverName: string;
     uri: string;
-    instance: import("@zcode/shared/mcp-apps").McpAppInstance;
+    instance: import("@picode/shared/mcp-apps").McpAppInstance;
   }) => Promise<ZCodeMcpReadResourceResult>;
   callMcpToolForUi?: (
     params: PluginUiCallToolParams,
@@ -100,13 +100,13 @@ export function createPluginUiBridgeService(
   dependencies: PluginUiBridgeServiceDependencies = {},
 ): IPluginUiBridgeService {
   // prepare 每个沙箱只有一两次，info 级留生命周期轨迹（读资源 / 登记 / 失败），排 e2e 与用户现场用。
-  // 修复：logger 必须在工厂里创建而不是模块顶层——本文件经 @zcode/services 入口也被打进 renderer bundle，
+  // 修复：logger 必须在工厂里创建而不是模块顶层——本文件经 @picode/services 入口也被打进 renderer bundle，
   // 顶层 createServiceLogger 会在 import 时读 process.pid，renderer 里直接 ReferenceError，整个主界面起不来。
   const log = createServiceLogger("plugin-ui-bridge");
   const preparing = new Map<string, Promise<PluginSandboxHandle>>();
   const prepareSandboxOnce = async (
     params: PluginUiPrepareSandboxParams,
-    instance: import("@zcode/shared/mcp-apps").McpAppInstance,
+    instance: import("@picode/shared/mcp-apps").McpAppInstance,
   ) => {
     if (
       !dependencies.readMcpResource ||
@@ -315,7 +315,7 @@ const LIST_LEVEL_META_MAX_PAGES = 8;
 async function readListLevelResourceMeta(
   list: PluginUiBridgeServiceDependencies["listMcpResourcesForUi"],
   params: PluginUiPrepareSandboxParams & {
-    instance: import("@zcode/shared/mcp-apps").McpAppInstance;
+    instance: import("@picode/shared/mcp-apps").McpAppInstance;
   },
 ): Promise<McpAppResourceMeta | null> {
   if (!list) return null;

@@ -6,8 +6,8 @@ import { ClipboardPaste, Copy, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SearchAddon } from "@xterm/addon-search";
 import type { ILink, ILinkHandler, ITheme, IWindowsPty } from "@xterm/xterm";
-import type { IServiceAccessor } from "@zcode/services";
-import type { IDisposable } from "@zcode/rpc";
+import type { IServiceAccessor } from "@picode/services";
+import type { IDisposable } from "@picode/rpc";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
 import {

@@ -1,4 +1,4 @@
-import type { ZCodeTaskGroupColor } from "@zcode/services";
+import type { ZCodeTaskGroupColor } from "@picode/services";
 import { Hash } from "lucide-react";
 import { cn } from "@/components/lib/utils.js";
 import { TASK_GROUP_COLOR_CLASS } from "@/workspace-grouped-tasks/types.js";

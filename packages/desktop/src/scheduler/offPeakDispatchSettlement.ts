@@ -1,4 +1,4 @@
-import type { OffPeakTaskRepo } from "@zcode/services/node";
+import type { OffPeakTaskRepo } from "@picode/services/node";
 import type { MainToSchedulerMessage } from "./schedulerProtocol.js";
 
 const OFF_PEAK_DISPATCH_RETRY_BASE_MS = 30_000;

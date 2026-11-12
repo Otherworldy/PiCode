@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { MobileRemoteFirewallState } from "@zcode/shared";
+import type { MobileRemoteFirewallState } from "@picode/shared";
 import { selectLanIPv4 } from "./mobileRemoteTransport.js";
 
 const execFileAsync = promisify(execFile);

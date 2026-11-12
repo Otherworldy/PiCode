@@ -9,8 +9,8 @@ const PRODUCTION_IDENTITY = Object.freeze({
   flavor: "production",
   appId: "dev.zcode.app",
   productName: "PiCode",
-  linuxExecutableName: "zcode",
-  linuxPackageName: "zcode",
+  linuxExecutableName: "picode-desktop",
+  linuxPackageName: "picode-desktop",
   cuaHelperInstallVariant: null,
 });
 
@@ -18,8 +18,8 @@ const PREVIEW_IDENTITY = Object.freeze({
   flavor: "preview",
   appId: "dev.zcode.app.preview",
   productName: "PiCode Preview",
-  linuxExecutableName: "zcode-preview",
-  linuxPackageName: "zcode-preview",
+  linuxExecutableName: "picode-desktop-preview",
+  linuxPackageName: "picode-desktop-preview",
   cuaHelperInstallVariant: "preview",
 });
 

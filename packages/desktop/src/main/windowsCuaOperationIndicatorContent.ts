@@ -1,4 +1,4 @@
-import type { Locale } from "@zcode/shared";
+import type { Locale } from "@picode/shared";
 
 /**
  * Windows CUA 操作提示条的呈现层：文案、尺寸与 HTML。

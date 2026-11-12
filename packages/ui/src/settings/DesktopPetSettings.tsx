@@ -11,7 +11,7 @@ import {
   type DesktopPetDownloadStatus,
   type DesktopPetInstalledPack,
   type DesktopPetPersistedSettings,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { Input } from "@/components/ui/input.js";
 import {
   Select,

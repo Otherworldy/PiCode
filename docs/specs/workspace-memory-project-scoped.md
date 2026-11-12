@@ -3,7 +3,7 @@
 ## 背景
 
 改造前 Project Memory 有两套事实：写入/注入/抽取在旧 `AgentRuntime`
-（`apps/zcode-cli/packages/core`），存储根为 `<dataRoot>/cli/memories/projects/<slug>-<hash>/memory`；
+（`apps/picode-cli/packages/core`），存储根为 `<dataRoot>/cli/memories/projects/<slug>-<hash>/memory`；
 V4 Desktop 主路径已切到 Pi Host，既不读 `MEMORY.md` 也不在 turn 结束后抽取。
 旧栈的抽取链（`memory/extraction.ts`、`memory-agent-loop.ts`、`memory/recall/`、
 `runtime/helpers/project-memory*`）、旧注入段（`context/sections/memory.ts`）、旧索引格式化器

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { AlertCircle } from "lucide-react";
-import type { FeedbackTicketStatus } from "@zcode/shared";
+import type { FeedbackTicketStatus } from "@picode/shared";
 import { formatFeedbackStatusLabel, STATUS_META } from "@/feedback/feedbackMeta.js";
 import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";

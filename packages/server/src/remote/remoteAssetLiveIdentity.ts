@@ -1,27 +1,27 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { ZCODE_VERSION } from "@zcode/shared";
-import type { IRemoteBackend } from "@zcode/server/remote/backend.js";
-import type { RemoteEnvironment } from "@zcode/server/remote/backend.js";
+import { ZCODE_VERSION } from "@picode/shared";
+import type { IRemoteBackend } from "@picode/server/remote/backend.js";
+import type { RemoteEnvironment } from "@picode/server/remote/backend.js";
 import {
   REMOTE_BASE,
   type DeployLoggers,
   waitForClose,
-} from "@zcode/server/remote/deployShared.js";
+} from "@picode/server/remote/deployShared.js";
 import {
   buildWriteLiteralFileCommand,
   quotePosixPathArg,
-} from "@zcode/server/remote/posixShell.js";
+} from "@picode/server/remote/posixShell.js";
 import {
   fetchRemoteAssetManifestRefFromCdn,
   type RemoteAssetManifest,
   type RemoteAssetManifestRef,
-} from "@zcode/server/remote/remoteAssetCache.js";
+} from "@picode/server/remote/remoteAssetCache.js";
 import {
   buildReleaseBaseCandidates,
   resolveRemoteCdnBaseUrls,
-} from "@zcode/server/remote/remoteAssetCdn.js";
-import type { RemoteAssetNetworkPort } from "@zcode/server/remote/remoteAssetNetwork.js";
+} from "@picode/server/remote/remoteAssetCdn.js";
+import type { RemoteAssetNetworkPort } from "@picode/server/remote/remoteAssetNetwork.js";
 
 const REMOTE_ASSET_COMPONENT_META_DIR = `${REMOTE_BASE}/.asset-components`;
 

@@ -1,4 +1,4 @@
-import type { ZCodeTaskMeta } from "@zcode/shared";
+import type { ZCodeTaskMeta } from "@picode/shared";
 import type { TaskListRowActivity } from "@/v4/taskListRowActivity.js";
 
 export function deriveTaskLeadingIndicator(

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { canRetryDatabaseStartup, type DatabaseStartupState } from "@zcode/shared";
+import { canRetryDatabaseStartup, type DatabaseStartupState } from "@picode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { Button } from "@/components/ui/button.js";
 import { RootStartupLoading } from "@/root/RootStartupLoading.js";

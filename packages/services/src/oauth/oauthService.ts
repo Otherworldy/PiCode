@@ -15,7 +15,7 @@ import {
   type OAuthUserProfile,
   type UserInfo,
   resolveJwtExpiration,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { ICredentialService } from "../credential/credential.js";
 import { createServiceLogger } from "../logger/serviceLogger.js";
 import { readApiJson } from "../providers/api/apiJson.js";

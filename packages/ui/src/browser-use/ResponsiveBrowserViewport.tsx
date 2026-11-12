@@ -12,7 +12,7 @@ import {
   TID_BROWSER_RESPONSIVE_SCALED_FRAME,
   TID_BROWSER_RESPONSIVE_VIEWPORT,
   type BrowserViewportSize,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   resolveBrowserViewportRendererScale,
   resolveBrowserViewportScale,

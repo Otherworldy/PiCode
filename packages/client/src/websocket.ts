@@ -5,8 +5,8 @@ import {
   ChannelClient,
   type IMessagePassingProtocol,
   type ISocket,
-} from "@zcode/rpc";
-import type { IServiceAccessor } from "@zcode/services";
+} from "@picode/rpc";
+import type { IServiceAccessor } from "@picode/services";
 import { RemoteServiceAccess } from "./remoteServiceAccess.js";
 
 /** drain 的低水位：低于它就认为写队列已经排空。 */

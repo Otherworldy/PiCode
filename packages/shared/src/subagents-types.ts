@@ -1,4 +1,4 @@
-import type { ZCodeProvider } from "./zcode-task-types-core.js";
+import type { ZCodeProvider } from "./picode-task-types-core.js";
 import { modelSelectionSchema, type ModelSelection } from "./model-selection.js";
 
 export type AgentScope = "built-in" | "workspace" | "user";

@@ -7,15 +7,15 @@ import {
   type RemoteAssetInstallMode,
   type RemoteResourcePackageId,
   type RemoteResourcePackageSelection,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { IRemoteBackend, RemoteEnvironment } from "./backend.js";
-import { deployZCodeAgentRuntime } from "./zcodeAgentDeploy.js";
+import { deployZCodeAgentRuntime } from "./picodeAgentDeploy.js";
 import {
   deployNodePtyPrebuilds,
   deployNodeRuntime,
   createRemoteComponentVersionResolver,
   logDeployRequired,
-} from "@zcode/server/remote/remoteAssetDeployDecision.js";
+} from "@picode/server/remote/remoteAssetDeployDecision.js";
 import {
   REMOTE_BASE,
   fileExists,
@@ -23,34 +23,34 @@ import {
   formatOptionalValues,
   type DeployLoggers,
   type RemoteAssetDeployOptions,
-} from "@zcode/server/remote/deployShared.js";
-import { quotePosixPathArg } from "@zcode/server/remote/posixShell.js";
-import { checkServerBundleRequiredMarkers } from "@zcode/server/remote/serverBundleDeployCheck.js";
-import { deployRuntimeTools } from "@zcode/server/remote/runtimeToolDeploy.js";
-import { REMOTE_AGENT_OFFICIAL_PLUGIN_REQUIRED_RELATIVE_PATHS } from "@zcode/server/remote/zcodeAgentOfficialPluginAssets.js";
+} from "@picode/server/remote/deployShared.js";
+import { quotePosixPathArg } from "@picode/server/remote/posixShell.js";
+import { checkServerBundleRequiredMarkers } from "@picode/server/remote/serverBundleDeployCheck.js";
+import { deployRuntimeTools } from "@picode/server/remote/runtimeToolDeploy.js";
+import { REMOTE_AGENT_OFFICIAL_PLUGIN_REQUIRED_RELATIVE_PATHS } from "@picode/server/remote/picodeAgentOfficialPluginAssets.js";
 import {
   ensureRemoteReleaseDirFromCdn,
   selectRemoteAssetManifestComponents,
   type RemoteAssetManifestRef,
-} from "@zcode/server/remote/remoteAssetCache.js";
+} from "@picode/server/remote/remoteAssetCache.js";
 import {
   fetchRemoteDownloadManifest,
   LocalUploadAssetInstaller,
   RemoteDownloadAssetInstaller,
   type RemoteAssetInstaller,
   type RemoteManifestRef,
-} from "@zcode/server/remote/remoteAssetInstaller.js";
+} from "@picode/server/remote/remoteAssetInstaller.js";
 import {
   checkRemoteAssetComponentIdentity,
   createFreshRemoteAssetManifestRefResolver,
   hasRemoteAssetComponentRefreshPending,
   markRemoteAssetComponentRefreshPending,
   writeRemoteAssetComponentMeta,
-} from "@zcode/server/remote/remoteAssetLiveIdentity.js";
-import { detectRemoteAssetTools } from "@zcode/server/remote/remoteAssetPreflight.js";
-import { assertSupportedRemoteEnvironment } from "@zcode/server/remote/remotePlatformSupport.js";
-import { acquireRemoteDeployLock } from "@zcode/server/remote/remoteDeployLock.js";
-import type { RemoteAssetNetworkPort } from "@zcode/server/remote/remoteAssetNetwork.js";
+} from "@picode/server/remote/remoteAssetLiveIdentity.js";
+import { detectRemoteAssetTools } from "@picode/server/remote/remoteAssetPreflight.js";
+import { assertSupportedRemoteEnvironment } from "@picode/server/remote/remotePlatformSupport.js";
+import { acquireRemoteDeployLock } from "@picode/server/remote/remoteDeployLock.js";
+import type { RemoteAssetNetworkPort } from "@picode/server/remote/remoteAssetNetwork.js";
 
 const log = (...args: unknown[]) => console.log(formatLogPrefix("deploy", process.pid), ...args);
 const logWarn = (...args: unknown[]) =>

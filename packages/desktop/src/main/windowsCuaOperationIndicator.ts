@@ -1,6 +1,6 @@
 import { BrowserWindow, screen } from "electron";
 import type { BrowserWindowConstructorOptions, Display, Point, Rectangle } from "electron";
-import type { HostCuaOperationStateResponse, Locale } from "@zcode/shared";
+import type { HostCuaOperationStateResponse, Locale } from "@picode/shared";
 import {
   INDICATOR_CARD_TOP_OFFSET,
   INDICATOR_SHADOW_INSET,

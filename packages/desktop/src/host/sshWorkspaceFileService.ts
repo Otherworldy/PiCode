@@ -1,4 +1,4 @@
-import type { FileBinaryPreview, FileMediaPreview, FileTextSlice } from "@zcode/shared";
+import type { FileBinaryPreview, FileMediaPreview, FileTextSlice } from "@picode/shared";
 import {
   AGENT_PROMPT_MAX_BYTES,
   AGENT_SYSTEM_PROMPT_MAX_BYTES,
@@ -29,8 +29,8 @@ import {
   sshRemotePlatform,
   type SshRemotePlatform,
   type SshRemoteSpec,
-} from "@zcode/shared/node";
-import type { IFileService } from "@zcode/services";
+} from "@picode/shared/node";
+import type { IFileService } from "@picode/services";
 
 const TEXT_READ_BYTES = 256 * 1024;
 /**

@@ -1,0 +1,43 @@
+{
+  "name": "@picode/bootstrap",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./v4-replay": {
+      "types": "./dist/picode-protocol-v4/replay.d.ts",
+      "import": "./dist/picode-protocol-v4/replay.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "node ../../scripts/clean-dist.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint src",
+    "lint:fix": "oxlint --write src"
+  },
+  "dependencies": {
+    "@picode/adapters": "workspace:*",
+    "@picode/contracts": "workspace:*",
+    "@picode/core": "workspace:*",
+    "@picode/i18n": "workspace:*",
+    "@picode/pi-host": "workspace:*",
+    "@picode/provider": "workspace:*",
+    "@picode/provider-node": "workspace:*",
+    "@picode/shared": "workspace:*",
+    "diff": "^9.0.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/yazl": "^3.3.1",
+    "@picode/formal-proof": "workspace:*",
+    "yazl": "^3.3.1"
+  }
+}

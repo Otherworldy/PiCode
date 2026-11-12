@@ -17,7 +17,7 @@ import type {
   GitWorktreeInfo,
   GitWorktreeMutationResult,
   GitPushResult,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
 import {
   DEFAULT_GIT_COMMAND_TIMEOUT_MS,

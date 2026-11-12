@@ -1,6 +1,6 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { ZCodeSessionFile, ZCodeTaskMeta } from "@zcode/shared";
+import type { ZCodeSessionFile, ZCodeTaskMeta } from "@picode/shared";
 import { getLegacyTaskSessionSnapshotPath } from "#src/paths.js";
 import {
   parseLegacyTaskSessionFile,

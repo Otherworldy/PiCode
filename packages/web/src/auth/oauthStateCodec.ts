@@ -1,4 +1,4 @@
-import { DEFAULT_ZCODE_ENDPOINT_ORIGIN } from "@zcode/shared";
+import { DEFAULT_ZCODE_ENDPOINT_ORIGIN } from "@picode/shared";
 
 const PRODUCTION_WEB_ORIGIN = DEFAULT_ZCODE_ENDPOINT_ORIGIN;
 const WEB_CALLBACK_PATHS = new Set(["/cn/share/callback", "/share/callback"]);

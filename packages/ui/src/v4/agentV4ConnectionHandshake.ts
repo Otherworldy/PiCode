@@ -1,12 +1,12 @@
 // 每个 RPC service proxy 对应一个 attachment；hello/clientHello 只做一次，所有
 // conversation/sessions-index transport 共享该 Promise，避免并发首订阅重复握手。
-import type { IZCodeAgentService } from "@zcode/services";
+import type { IZCodeAgentService } from "@picode/services";
 import {
   V4_WIRE_PROTOCOL_VERSION,
   helloMessageSchema,
   type ClientHello,
   type HelloMessage,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared/picode-protocol-v4";
 import { getV4ClientId } from "@/v4/commandFactory.js";
 
 type AgentV4HandshakeService = Pick<

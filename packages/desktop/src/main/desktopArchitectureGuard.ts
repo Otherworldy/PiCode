@@ -1,5 +1,5 @@
 import type { BrowserWindow, NativeImage } from "electron";
-import { DEFAULT_ZCODE_ENDPOINT_ORIGIN, buildZCodeEndpointUrls, type Locale } from "@zcode/shared";
+import { DEFAULT_ZCODE_ENDPOINT_ORIGIN, buildZCodeEndpointUrls, type Locale } from "@picode/shared";
 
 interface ArchitectureMismatch {
   /** 当前运行的二进制架构，例如 x64。 */

@@ -1,7 +1,7 @@
 import { BotIcon } from "lucide-react";
 import { useCallback, useMemo } from "react";
-import type { AssistantTextRow } from "@zcode/shared/zcode-protocol-v4";
-import { TID_V4_SUBAGENT_OPEN_SIDE_PANE, testId } from "@zcode/shared";
+import type { AssistantTextRow } from "@picode/shared/picode-protocol-v4";
+import { TID_V4_SUBAGENT_OPEN_SIDE_PANE, testId } from "@picode/shared";
 import { MessageResponse } from "@/components/ai-elements/message.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { resolveSubagentColorFromName } from "@/lib/subagentColors.js";

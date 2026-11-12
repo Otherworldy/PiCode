@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button.js";
 import { cn } from "@/components/lib/utils.js";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import type { ConversationShareAccessMode } from "@zcode/shared";
+import type { ConversationShareAccessMode } from "@picode/shared";
 import { ConversationSharePermissionPicker } from "@/ConversationSharePermissionPicker.js";
 import {
   DEFAULT_CONVERSATION_SHARE_ACCESS_MODE,

@@ -11,7 +11,7 @@ import {
   normalizeDesktopPetStageCrop,
   type AppSettings,
   type DesktopPetPersistedSettings,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 /** 设置页表单只认自己这几个字段；旧进程可能把它们整份写没，所以都给缺省值。 */
 export function petFormFromSettings(

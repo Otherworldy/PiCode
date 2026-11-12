@@ -1,7 +1,7 @@
 import { ListTodoIcon } from "lucide-react";
 import { useCallback, useMemo } from "react";
-import { extractPlanStepsFromToolInput, extractPlanStepsFromToolOutput } from "@zcode/shared";
-import type { ZCodePlanStep } from "@zcode/shared";
+import { extractPlanStepsFromToolInput, extractPlanStepsFromToolOutput } from "@picode/shared";
+import type { ZCodePlanStep } from "@picode/shared";
 import { ToolCallBody } from "@/ToolCallBlocks/ToolCallBody.js";
 import { ToolSnapshotFieldNotice } from "@/ToolCallBlocks/ToolSnapshotFieldNotice.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";

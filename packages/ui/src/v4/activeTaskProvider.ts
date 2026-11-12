@@ -1,6 +1,6 @@
-import type { ZCodeProvider } from "@zcode/shared";
-import { selectWorkspaceZCodeState, useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
-import type { WorkspaceZCodeUIState } from "@/store/zcodeSessionStoreTypes.js";
+import type { ZCodeProvider } from "@picode/shared";
+import { selectWorkspaceZCodeState, useZCodeSessionStore } from "@/store/picodeSessionStore.js";
+import type { WorkspaceZCodeUIState } from "@/store/picodeSessionStoreTypes.js";
 import { useOptionalTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceTab } from "@/store/tabStore.js";
 

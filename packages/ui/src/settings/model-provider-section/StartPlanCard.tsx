@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { StartPlanPreviewConfig, StartPlanPreviewEntitlement } from "@zcode/shared";
+import type { StartPlanPreviewConfig, StartPlanPreviewEntitlement } from "@picode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { formatCompactTokenNumber } from "@/lib/tokenNumberFormat.js";
 

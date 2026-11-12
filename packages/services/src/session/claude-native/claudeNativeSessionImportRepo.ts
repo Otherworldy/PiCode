@@ -1,7 +1,7 @@
 import { copyFile, mkdir, readdir, rename, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, normalize, resolve, sep } from "node:path";
-import type { ZCodeImportableSessionCandidate } from "@zcode/shared";
+import type { ZCodeImportableSessionCandidate } from "@picode/shared";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
 import { getAppConfigDir, getDataBaseDir, getWorkspaceHash } from "#src/paths.js";
 import {

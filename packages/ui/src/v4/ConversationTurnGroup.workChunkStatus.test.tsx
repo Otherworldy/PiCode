@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { ConversationRow, TurnHeaderRow } from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationRow, TurnHeaderRow } from "@picode/shared/picode-protocol-v4";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import zhCN from "@/i18n/locales/zh-CN.js";
 import { DEFAULT_CODE_PREVIEW_SETTINGS } from "@/lib/codePreviewSettings.js";

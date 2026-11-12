@@ -4,7 +4,7 @@ import {
   type BrowserViewScreenshotSurfacePreparePayload,
   type BrowserViewScreenshotSurfaceReadyPayload,
   type BrowserViewScreenshotSurfaceReleasePayload,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   releaseBrowserScreenshotResourceOnce,
   sameBrowserScreenshotViewport,

@@ -1,5 +1,5 @@
 {
-  "name": "@zcode/provider-node",
+  "name": "@picode/provider-node",
   "private": true,
   "type": "module",
   "exports": {
@@ -11,13 +11,13 @@
     "lint": "oxlint"
   },
   "dependencies": {
-    "@zcode/provider": "workspace:*",
-    "@zcode/shared": "workspace:*",
+    "@picode/provider": "workspace:*",
+    "@picode/shared": "workspace:*",
     "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
-    "@zcode/model-option-map": "workspace:*",
+    "@picode/model-option-map": "workspace:*",
     "typescript": "^6.0.2"
   }
 }

@@ -8,7 +8,7 @@ import type {
   UsageStatsSnapshot,
   ZCodeAccountAccess,
   ZCodeProviderAccountAccess,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { logger } from "@/logger.js";
 import { useServices } from "@/hooks/useServices.js";
 import { useStableAccountAccess } from "@/hooks/useStableAccountAccess.js";

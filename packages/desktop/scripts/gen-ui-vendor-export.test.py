@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-SOURCE = Path(__file__).resolve().parents[3] / "apps/zcode-cli/packages/visualize-plugin/skills/visualize/scripts/vendor.py"
+SOURCE = Path(__file__).resolve().parents[3] / "apps/picode-cli/packages/visualize-plugin/skills/visualize/scripts/vendor.py"
 spec = importlib.util.spec_from_file_location("gen_ui_vendor", SOURCE)
 vendor = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(vendor)

@@ -1,12 +1,12 @@
 /* oxlint-disable eslint(max-lines) -- settings helper 聚合多个设置分组；终端、网络与自动归档多侧能力暂时超过行数限制。 */
-import type { LocalePreference, ZCodeInteractionBehavior } from "@zcode/shared";
+import type { LocalePreference, ZCodeInteractionBehavior } from "@picode/shared";
 import { useState, useCallback, useEffect } from "react";
-import type { IPlatformService } from "@zcode/shared";
+import type { IPlatformService } from "@picode/shared";
 import {
   TID_SETTINGS_LOCALE_SELECT_ITEM,
   TID_SETTINGS_LOCALE_SELECT_TRIGGER,
   testId,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   Select,
   SelectContent,
@@ -26,7 +26,7 @@ import {
   type SettingsSectionId,
 } from "@/settings/settingsPageConfig.js";
 
-export type { Locale, LocalePreference } from "@zcode/shared";
+export type { Locale, LocalePreference } from "@picode/shared";
 export { type SettingsSectionId };
 export { createSettingsPageConfig, resolveSettingsSectionForPlatform };
 

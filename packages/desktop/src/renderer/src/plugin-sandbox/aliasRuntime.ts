@@ -16,11 +16,11 @@ import type {
   McpUiToolInputNotification,
   McpUiToolResultNotification,
 } from "@modelcontextprotocol/ext-apps";
-import type { McpAppsDownloadFileItem } from "@zcode/shared/mcp-apps";
+import type { McpAppsDownloadFileItem } from "@picode/shared/mcp-apps";
 import {
   MCP_APPS_SET_WIDGET_STATE_METHOD,
   MCP_APPS_WIDGET_STATE_CONTEXT_KEY,
-} from "@zcode/shared/mcp-apps";
+} from "@picode/shared/mcp-apps";
 import type { OpenAiCompatApi, ZcodeAliasApi } from "./aliasApi.js";
 import { createOpenAiCompatApi, readOpenAiGlobals } from "./openaiAlias.js";
 

@@ -19,14 +19,14 @@ import {
   TID_V4_SESSION_PANE,
   testId,
   ZCODE_AGENT_PROVIDER,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type {
   ConversationShareAccessMode,
   GitChangeSourceId,
   GitRepositorySummary,
   ZCodeProvider,
   ZCodeTaskChangeSummary,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   deriveSessionRunPhase,
   type AttachmentRef,
@@ -38,7 +38,7 @@ import {
   type SessionErrorInfo,
   type SessionModelTransition,
   type V4ConversationFileChangesResult,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared/picode-protocol-v4";
 import { logger } from "@/logger.js";
 import { PluginUiSessionProvider } from "@/plugin-ui/index.js";
 import {
@@ -47,12 +47,12 @@ import {
   resolveConversationSharePublishErrorMessageId,
   sanitizeConversationShareWarnings,
 } from "@/lib/conversationShareError.js";
-import { localizeConversationShareUrl } from "@zcode/shared";
+import { localizeConversationShareUrl } from "@picode/shared";
 import type {
   ConversationShareAllowedArtifact,
   ConversationShareTurnPreflightResult,
   ImportedConversationShare,
-} from "@zcode/services";
+} from "@picode/services";
 import { toast } from "@/components/ui/toast.js";
 import { ChatLoading } from "@/components/ai-elements/chat-loading.js";
 import { compactFailureText } from "@/v4/compactFailureText.js";
@@ -66,11 +66,11 @@ import { buildChatSessionScrollMemoryKey } from "@/lib/chatSessionScrollMemory.j
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
 import { useServices } from "@/hooks/useServices.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
-import { buildGenUiModelContext } from "@zcode/shared/gen-ui";
+import { buildGenUiModelContext } from "@picode/shared/gen-ui";
 import { useWorkspaceHomePath } from "@/hooks/useWorkspaceHomePath.js";
 import { prepareWorkspaceWithZCodeSessionService } from "@/hooks/useWorkspacePrepare.js";
-import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
-import { parseModelPickerValue } from "@/lib/zcodeSessionProjection.js";
+import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/picodeCustomModelValue.js";
+import { parseModelPickerValue } from "@/lib/picodeSessionProjection.js";
 import { captureComposerRecentSubmission } from "@/lib/composerRecent.js";
 import { resolveProviderLabel } from "@/lib/registryProviderView.js";
 import {
@@ -102,7 +102,7 @@ import { useDraftRuntimeRebuildGate } from "@/v4/composer/useDraftRuntimeRebuild
 import { useDraftModelReadinessGate } from "@/v4/composer/useDraftModelReadinessGate.js";
 import { useSettings } from "@/hooks/useSettingService.js";
 import { useZCodeStoreWithDefault } from "@/store/StoreProvider.js";
-import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { useZCodeSessionStore } from "@/store/picodeSessionStore.js";
 import {
   DEFAULT_CONVERSATION_SHARE_ACCESS_MODE,
   DEFAULT_CONVERSATION_SHARE_DOCK_STATE,
@@ -112,7 +112,7 @@ import {
   useConversationShareSelectionStore,
   type ConversationShareDisplayWarnings,
 } from "@/store/conversationShareSelectionStore.js";
-import type { GroupedDraftTaskState } from "@/store/zcodeSessionStoreTypes.js";
+import type { GroupedDraftTaskState } from "@/store/picodeSessionStoreTypes.js";
 import {
   ConversationComposer,
   type ComposerRestoreRequest,
@@ -220,7 +220,7 @@ import {
   hasChatLoadingBlockingActiveWork,
   hasChatLoadingBlockingInteraction,
 } from "@/v4/chatLoadingVisibility.js";
-import type { ZCodeUiError } from "@/lib/zcodeUiError.js";
+import type { ZCodeUiError } from "@/lib/picodeUiError.js";
 import { isProviderNotReadyError } from "@/lib/chatPrepareError.js";
 import { useOptionalCodingPlanUpgradeDialog } from "@/settings/CodingPlanUpgradeDialogProvider.js";
 import { setPendingSettingsSectionIntent } from "@/lib/settingsNavigation.js";

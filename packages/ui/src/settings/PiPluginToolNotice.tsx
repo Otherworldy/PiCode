@@ -1,4 +1,4 @@
-import type { ZCodePiPluginsResult } from "@zcode/shared";
+import type { ZCodePiPluginsResult } from "@picode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 
 type InstallTools = NonNullable<ZCodePiPluginsResult["tools"]>;

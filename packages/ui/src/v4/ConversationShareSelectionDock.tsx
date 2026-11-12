@@ -3,7 +3,7 @@ import { AlertCircle, AlertTriangle, Info, LoaderCircle } from "lucide-react";
 import type {
   ConversationShareFailureIssue,
   ConversationSharePreflightResult,
-} from "@zcode/services";
+} from "@picode/services";
 import { Button } from "@/components/ui/button.js";
 import { Checkbox } from "@/components/ui/checkbox.js";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover.js";

@@ -15,8 +15,8 @@ import type {
   V4ConversationFileChangesResult,
   V4ConversationFileRewindPreviewParams,
   V4ConversationFileRewindPreviewResult,
-} from "@zcode/shared/zcode-protocol-v4";
-import type { IServiceAccessor } from "@zcode/services";
+} from "@picode/shared/picode-protocol-v4";
+import type { IServiceAccessor } from "@picode/services";
 import { ServiceProvider } from "@/hooks/useServices.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useWorkspaceServicesResolution } from "@/hooks/useWorkspaceServices.js";

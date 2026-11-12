@@ -9,7 +9,7 @@
  * 恰恰把那一行裁掉了。所以媒体缩略图只能由调用方在裁切前读出来，随 restore 请求按同下标带过来。
  */
 import { nanoid } from "nanoid";
-import type { AttachmentRef } from "@zcode/shared/zcode-protocol-v4";
+import type { AttachmentRef } from "@picode/shared/picode-protocol-v4";
 import type { ComposerAttachmentUploadItem } from "@/store/composerAttachmentUploadStore.js";
 
 /** composer 用 object URL 渲染缩略图的三种媒体；其余附件本来就是文件图标。 */

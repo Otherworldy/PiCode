@@ -1,4 +1,4 @@
-import { BUILT_IN_SUBAGENT_NAMES, type BuiltInSubagentName } from "@zcode/shared";
+import { BUILT_IN_SUBAGENT_NAMES, type BuiltInSubagentName } from "@picode/shared";
 
 /**
  * 内置子智能体的展示名。

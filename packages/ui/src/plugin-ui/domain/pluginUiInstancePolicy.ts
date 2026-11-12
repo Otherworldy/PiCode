@@ -1,4 +1,4 @@
-import type { ConversationRow, ToolCallRow } from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationRow, ToolCallRow } from "@picode/shared/picode-protocol-v4";
 import { resolvePluginUiLogicalScope } from "./pluginUiLogicalScope.js";
 
 /** ：最近几个回合的插件卡片默认展开，更早的按默认收进折叠区。 */

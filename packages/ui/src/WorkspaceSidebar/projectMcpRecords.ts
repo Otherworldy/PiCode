@@ -6,7 +6,7 @@ import {
   type SettingsDirectoryLocation,
   type ZCodeAgentMcpServer,
   type ZCodeMcpServer,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 function projectMcpServerId(record: NativeMcpServerRecord): string {
   return `project-mcp:${record.projectPath ?? ""}:${record.name}`;

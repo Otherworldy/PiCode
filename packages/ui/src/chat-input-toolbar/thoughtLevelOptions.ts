@@ -1,4 +1,4 @@
-import type { ZCodeConfigOption, ZCodeProvider } from "@zcode/shared";
+import type { ZCodeConfigOption, ZCodeProvider } from "@picode/shared";
 import type { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { getConfigOptionEntryLabel } from "@/chat-input-toolbar/display.js";
 

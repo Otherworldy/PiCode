@@ -1,6 +1,6 @@
 /* Automations 列表状态筛选：定时 / 闲时两类任务共用同一组筛选项。
    分组口径以卡片实际展示的状态徽章为准，用户在列表上看到什么颜色的徽章，就落在哪一组。 */
-import type { ZCodeOffPeakTask } from "@zcode/shared";
+import type { ZCodeOffPeakTask } from "@picode/shared";
 import {
   hasAutomationFailureState,
   resolveAutomationStatusKind,

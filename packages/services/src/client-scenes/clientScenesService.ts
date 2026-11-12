@@ -1,4 +1,4 @@
-import type { ApiClient } from "@zcode/shared";
+import type { ApiClient } from "@picode/shared";
 import { readApiJson } from "../providers/api/apiJson.js";
 import { ZCODE_CLIENT_SCENES_URL } from "../providers/api/apiEndpoints.js";
 import type { ClientScenesResponse, IClientScenesService } from "./clientScenes.js";

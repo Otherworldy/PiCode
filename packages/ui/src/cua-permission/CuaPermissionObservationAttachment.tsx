@@ -1,12 +1,12 @@
 import { useEffect } from "react";
-import type { CuaAccessibilitySettingsResult, CuaPermissionKind } from "@zcode/shared";
-import { requiredCuaPermissionsForRequestAccessStatus } from "@zcode/shared/zcode-protocol-v4";
+import type { CuaAccessibilitySettingsResult, CuaPermissionKind } from "@picode/shared";
+import { requiredCuaPermissionsForRequestAccessStatus } from "@picode/shared/picode-protocol-v4";
 import {
   isCuaPermissionStatusAvailable,
   type CuaPermissionRestartOptions,
   type CuaPermissionStatusResult,
   type ZCodeAgentCuaPermissionObservation,
-} from "@zcode/services";
+} from "@picode/services";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useServices } from "@/hooks/useServices.js";

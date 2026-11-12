@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { DESKTOP_PET_RECOMMENDED_PACK_URL, type DesktopPetDownloadStatus } from "@zcode/shared";
+import { DESKTOP_PET_RECOMMENDED_PACK_URL, type DesktopPetDownloadStatus } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import {
   Dialog,

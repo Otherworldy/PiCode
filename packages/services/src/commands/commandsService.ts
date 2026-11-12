@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- commandsService 需要集中处理目录来源优先级、读写和命令解析，拆分会削弱读取顺序的一致性 */
-import { updateJsonConfigFile, userCliConfigFilePath } from "@zcode/shared/node";
+import { updateJsonConfigFile, userCliConfigFilePath } from "@picode/shared/node";
 import { access, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
@@ -19,8 +19,8 @@ import {
   type SettingsDirectorySource,
   type UserCommand,
   type ZCodeCommand,
-} from "@zcode/shared";
-import { DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS } from "@zcode/shared";
+} from "@picode/shared";
+import { DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS } from "@picode/shared";
 import type { ICommandsService } from "./commands.js";
 import { CommandFileParser, type CommandFileFormat } from "./commandFileParser.js";
 import { readInstalledPluginRoots } from "#src/plugins/installedPluginRoots.js";

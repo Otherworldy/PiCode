@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import { EmbeddedBrowserWebviewChannels, PlatformChannels } from "@zcode/shared";
+import { EmbeddedBrowserWebviewChannels, PlatformChannels } from "@picode/shared";
 import { installEmbeddedBrowserWheelForwarding } from "./embeddedBrowserWheel.js";
 import { installPlannotatorGuestClose } from "./plannotatorGlimpseClose.js";
 

@@ -5,7 +5,7 @@ import {
   conversationArtifactTypeSchema,
   conversationRowSchema,
   type ConversationRow,
-} from "./zcode-protocol-v4/rows.js";
+} from "./picode-protocol-v4/rows.js";
 
 /**
  * 分享站按语言分路径：中文站带 /cn 前缀，英文站是裸 /share。

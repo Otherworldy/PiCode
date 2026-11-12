@@ -2,7 +2,7 @@ import {
   ZCODE_VERSION,
   buildRuntimeZCodeApiUrl,
   buildRuntimeZCodeEndpointUrls,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 const DESKTOP_OAUTH_CALLBACK_URI = "zcode://oauth/callback";
 

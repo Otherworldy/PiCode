@@ -1,11 +1,11 @@
-import type { ZCodeConfigOption, ZCodeProvider } from "@zcode/shared";
-import type { ModelSelectionView } from "@zcode/services";
+import type { ZCodeConfigOption, ZCodeProvider } from "@picode/shared";
+import type { ModelSelectionView } from "@picode/services";
 import type { ModelSelectGroup, ModelSelectGroupItem } from "@/ModelConfigSelect.js";
 import {
   buildRegistryModelSelectGroups,
   type ModelProviderGroupLabelOptions,
 } from "@/lib/modelSelectionGroups.js";
-import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
+import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/picodeCustomModelValue.js";
 import { resolveV4ModelTriggerLabel } from "@/v4/composer/modelTriggerDisplay.js";
 
 // 定时任务表单必须是纯本地草稿，不能借用 workspace 默认配置写接口来获取选项；

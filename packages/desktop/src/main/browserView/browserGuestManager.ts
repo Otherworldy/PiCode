@@ -23,7 +23,7 @@ import {
   type BrowserViewResidencyTransitionPayload,
   type BrowserViewRestoredTabShell,
   type BrowserViewportSize,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { executeBrowserCommandOnView, type ControlledView } from "./browserCommandExecutor.js";
 import { executeIabPlaywrightLocator } from "./browserPlaywrightLocatorExecutor.js";
 import { recordBrowserVideo, type BrowserWebmRecorderFactory } from "./browserVideoRecorder.js";

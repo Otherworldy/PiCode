@@ -1,4 +1,4 @@
-import type { ZCodePiModelsMutateResult } from "@zcode/shared";
+import type { ZCodePiModelsMutateResult } from "@picode/shared";
 
 export const API_OPTIONS = [
   "openai-completions",

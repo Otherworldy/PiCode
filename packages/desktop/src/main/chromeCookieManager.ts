@@ -6,7 +6,7 @@ import { copyFile, mkdtemp, rm, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
-import type { ChromeBrowserDataImportError } from "@zcode/shared";
+import type { ChromeBrowserDataImportError } from "@picode/shared";
 import { readChromeCookiesWithHelper } from "./chromeLocalStorageManager.js";
 import {
   toCookieDetails,

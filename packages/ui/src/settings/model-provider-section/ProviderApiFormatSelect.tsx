@@ -1,4 +1,4 @@
-import type { ProviderApiType } from "@zcode/provider";
+import type { ProviderApiType } from "@picode/provider";
 import {
   Select,
   SelectContent,
@@ -11,7 +11,7 @@ import {
   TID_MODEL_PROVIDER_API_FORMAT_ITEM,
   TID_MODEL_PROVIDER_API_FORMAT_TRIGGER,
   testId,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 const PROVIDER_CONNECTION_API_FORMATS: readonly ProviderApiType[] = [
   "anthropic-messages",

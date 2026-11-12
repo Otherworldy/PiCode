@@ -173,7 +173,7 @@ The desktop host supplies the Agent with a dedicated output directory for the cu
 
 The Excalidraw screenshots above show a **UI Plugin**. Use **Gen UI** for a page with adjustable parameters generated around the current question. Develop a UI Plugin to distribute a reusable tool with server operations and document management. Both may expose `window.zcode`, but their methods and state structures differ and are not interchangeable. See [Development and Debugging](#development-and-debugging) and the [Page API Reference](#page-api-reference) for UI Plugin details.
 
-Implementation and page examples: [Gen UI contract](packages/ui/src/gen-ui/CONTRACT.md), [page API examples](apps/zcode-cli/packages/visualize-plugin/skills/visualize/references/api.md), and [Tweak guide](apps/zcode-cli/packages/visualize-plugin/skills/visualize/tweak.md). The desktop integration entry is `node packages/desktop/scripts/gen-ui-e2e.mjs`.
+Implementation and page examples: [Gen UI contract](packages/ui/src/gen-ui/CONTRACT.md), [page API examples](apps/picode-cli/packages/visualize-plugin/skills/visualize/references/api.md), and [Tweak guide](apps/picode-cli/packages/visualize-plugin/skills/visualize/tweak.md). The desktop integration entry is `node packages/desktop/scripts/gen-ui-e2e.mjs`.
 
 ## Other Example Plugins
 
@@ -218,10 +218,10 @@ pnpm build
 
 # Use the freshly built CLI to install into the same development profile.
 cd "$ZCODE_REPO"
-node apps/zcode-cli/packages/cli/dist/zcode.cjs plugins marketplace add "$PLUGINS_REPO/dist/local-marketplace" --scope user
-node apps/zcode-cli/packages/cli/dist/zcode.cjs plugins install excalidraw@zcode-plugins-local --scope user
-node apps/zcode-cli/packages/cli/dist/zcode.cjs plugins enable excalidraw@zcode-plugins-local --scope user
-node apps/zcode-cli/packages/cli/dist/zcode.cjs plugins list --json
+node apps/picode-cli/packages/cli/dist/zcode.cjs plugins marketplace add "$PLUGINS_REPO/dist/local-marketplace" --scope user
+node apps/picode-cli/packages/cli/dist/zcode.cjs plugins install excalidraw@zcode-plugins-local --scope user
+node apps/picode-cli/packages/cli/dist/zcode.cjs plugins enable excalidraw@zcode-plugins-local --scope user
+node apps/picode-cli/packages/cli/dist/zcode.cjs plugins list --json
 pnpm dev:desktop
 ```
 
@@ -235,8 +235,8 @@ If you are using an existing desktop client, build the plugin repository and ins
 cd "$PLUGINS_REPO"
 pnpm build
 cd "$ZCODE_REPO"
-node apps/zcode-cli/packages/cli/dist/zcode.cjs plugins marketplace update zcode-plugins-local
-node apps/zcode-cli/packages/cli/dist/zcode.cjs plugins install excalidraw@zcode-plugins-local --scope user
+node apps/picode-cli/packages/cli/dist/zcode.cjs plugins marketplace update zcode-plugins-local
+node apps/picode-cli/packages/cli/dist/zcode.cjs plugins install excalidraw@zcode-plugins-local --scope user
 ```
 
 Restart the corresponding desktop instance and verify in a new session. Source watching does not automatically copy plugin repository changes into installed plugins. Refreshing a source updates the catalogue; reinstalling updates the installed code. During development, reinstalling the same version copies the files again. Changes to distributed content still require version bumps in the plugin manifest, marketplace entry, and source package.
@@ -251,8 +251,8 @@ If you already use another local source name, preserve that identity with `pnpm 
 | Communication and application unit tests  | Plugin repository | `pnpm test`                                                  | Automated regressions for connection order, revision conflicts, cancellation, and related behavior                        |
 | Standalone installable artifacts          | Plugin repository | `pnpm test:artifacts`                                        | Starting built artifacts outside the repository, reading pages/resources, and checking runtime dependencies               |
 | Official App/AppBridge page communication | Plugin repository | `pnpm test:pages`                                            | Real SDK handshakes, initial results, themes, and cancellation for Blender, Excalidraw, and OpenPencil                    |
-| Excalidraw smoke test                     | Plugin repository | `pnpm --filter @zcode/plugin-excalidraw smoke`               | The actual stdio server and resource interfaces                                                                           |
-| Excalidraw browser interactions           | Plugin repository | `pnpm --filter @zcode/plugin-excalidraw test:e2e`            | Real canvas interactions, saving, undo/redo, and cold starts; the test host bridge does not exercise the Electron sandbox |
+| Excalidraw smoke test                     | Plugin repository | `pnpm --filter @picode/plugin-excalidraw smoke`               | The actual stdio server and resource interfaces                                                                           |
+| Excalidraw browser interactions           | Plugin repository | `pnpm --filter @picode/plugin-excalidraw test:e2e`            | Real canvas interactions, saving, undo/redo, and cold starts; the test host bridge does not exercise the Electron sandbox |
 | Showcase desktop integration              | Main repository   | The `--showcase-only` command below                          | The Agent, sandbox, real page, and session communication in the current source                                            |
 
 Run `pnpm build` before testing pages. Browser tests require Chrome, or Chromium selected through `CHROME_PATH`. Excalidraw browser screenshots default to `excalidraw-e2e` under the system temporary directory; set `EXCALIDRAW_E2E_ARTIFACTS` to choose an output path.

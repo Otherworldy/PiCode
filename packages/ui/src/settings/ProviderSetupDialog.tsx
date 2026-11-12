@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { Check, Eye, EyeOff, Loader2, PlugZap, X } from "lucide-react";
-import type { ZCodePiModelsMutateParams } from "@zcode/shared";
+import type { ZCodePiModelsMutateParams } from "@picode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";

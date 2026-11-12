@@ -35,14 +35,14 @@
 - `packages/shared` — To-Dos 类型、`ServiceChannels.Todo`。
 - `packages/services/src/todos/` — repo（`tasks-index.sqlite` 新表 `todos`）+ `ITodoService`。注册照 `OffPeakTask`。
 - `packages/services/src/git/` — `mergeBranch`（工作区干净、在基线分支、合并指定分支）。补 `SPEC.md` 一条。
-- `packages/services/src/zcode-agent/zcodeTaskIndexSyncer.ts` — 终态处调用 `settle`，无行则空操作。
+- `packages/services/src/picode-agent/picodeTaskIndexSyncer.ts` — 终态处调用 `settle`，无行则空操作。
 - `packages/ui` — 侧栏入口、列表、`offPeakTaskStore` 同款的 RPC store。打开会话走现有选中 task。
 - 协议面只复用已有 `createSession.workingDirectory`，不改 V4 命令形状。
 
 ## Reuse
 
 - `IGitService.createWorktree` / `removeWorktree` / `getDiff` — `packages/services/src/git/git.ts`。副本必须落在 `<repo>/.worktrees/`，见 `packages/services/src/git/SPEC.md`。
-- `createSession.workingDirectory` — `packages/shared/src/zcode-protocol-v4/command.ts`。会话留在父仓库。
+- `createSession.workingDirectory` — `packages/shared/src/picode-protocol-v4/command.ts`。会话留在父仓库。
 - 草稿绑定同一语义 — `packages/ui/src/v4/sessionWorktree.ts` 的 `isWorkspaceWorktree`。
 - 表和通道写法 — `packages/services/src/session/offPeakTaskRepo.ts`、`ServiceChannels.OffPeakTask`。只抄结构，不复用闲时状态机。
 - 终态收口 — `zcodeTaskIndexSyncer.ts` 里 `turn.completed` / `turn.failed`。

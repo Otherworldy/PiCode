@@ -1,6 +1,6 @@
 import { CodingPlanEntryButton } from "@/settings/CodingPlanEntryButton.js";
 import { Loader2Icon, RocketIcon } from "lucide-react";
-import type { UsageEntitlementSnapshot, UsageQuotaLimit } from "@zcode/shared";
+import type { UsageEntitlementSnapshot, UsageQuotaLimit } from "@picode/shared";
 import { cn } from "@/components/lib/utils.js";
 import type { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { getContextQuotaMeterGridClass } from "@/chat-input-toolbar/contextQuotaMeterGrid.js";

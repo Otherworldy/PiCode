@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { ZCodeTaskMeta } from "@zcode/shared";
+import type { ZCodeTaskMeta } from "@picode/shared";
 import { GroupedTaskItem } from "@/workspace-grouped-tasks/task-item.js";
 import { taskKey } from "@/workspace-grouped-tasks/ids.js";
 import {

@@ -1,4 +1,4 @@
-import { isPiProcessSlashCommand, TUI_ONLY_PI_SLASH_COMMANDS } from "@zcode/shared";
+import { isPiProcessSlashCommand, TUI_ONLY_PI_SLASH_COMMANDS } from "@picode/shared";
 
 export type V4VisibleSlashCommand =
   | {

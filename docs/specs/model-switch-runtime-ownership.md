@@ -14,7 +14,7 @@ Composer 点击
       ├─ handleDraftSelectModel    → 草稿（UI 立即显示新模型）
       └─ applyRunningModelSelection
           └─ configCommandBarrier → dispatchConfigCas("switchModelConfig")
-              └─ host: switchModelConfig handler   (bootstrap/zcode-protocol-v4/commands/handlers/model-config.ts)
+              └─ host: switchModelConfig handler   (bootstrap/picode-protocol-v4/commands/handlers/model-config.ts)
                   └─ record.hosted.setModel
                       └─ pi-host applyModel        (pi-host/src/session-registry.ts)
                           └─ session.setModel       (Pi SDK：只改 agent.state.model)

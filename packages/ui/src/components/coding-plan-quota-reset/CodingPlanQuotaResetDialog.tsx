@@ -1,6 +1,6 @@
 import type { MouseEvent, UIEvent } from "react";
 import { useEffect, useRef, useState } from "react";
-import type { CodingPlanResetType } from "@zcode/shared";
+import type { CodingPlanResetType } from "@picode/shared";
 import { CheckIcon, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog.js";

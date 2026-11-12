@@ -1,11 +1,11 @@
 /* eslint-disable max-lines -- desktop runtime/env 解析需要集中维护 main/host/remote assets 的启动边界，拆分会扩大远程连接回归面。 */
-import { ensureAppDataDir } from "@zcode/shared/node";
+import { ensureAppDataDir } from "@picode/shared/node";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, win32 } from "node:path";
-import type { ConnectOptions } from "@zcode/server/remote";
-import { listSSHConfigAliasesFromLocalConfig } from "@zcode/services/node";
-import { DEV_HELPER_APP_NAME, HELPER_APP_NAME } from "@zcode/zcode-cua/broker/helperConstants";
+import type { ConnectOptions } from "@picode/server/remote";
+import { listSSHConfigAliasesFromLocalConfig } from "@picode/services/node";
+import { DEV_HELPER_APP_NAME, HELPER_APP_NAME } from "@picode/picode-cua/broker/helperConstants";
 import {
   ZCODE_APP_VERSION_ENV,
   ZCODE_AGENT_RUNTIME,
@@ -22,14 +22,14 @@ import {
   resolveZaiOAuthOrigin,
   sanitizeZCodeRuntimeEnv,
   type ZCodeRuntimeEnv,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { resolvePlatformKeyForPackagedApp } from "../../scripts/target-platform.mjs";
 import {
   getAppConfigDir,
   getDataBaseDir,
   ZCODE_CUA_BUNDLED_HELPER_APP_PATH_ENV,
   ZCODE_WINDOWS_APP_INSTALL_DIR_ENV,
-} from "@zcode/services/node";
+} from "@picode/services/node";
 import {
   resolveRemoteCdnBaseUrls as resolveOrderedRemoteCdnBaseUrls,
   type ResolveRemoteCdnOptions,
@@ -94,17 +94,17 @@ export type RemoteAssetDirs = Pick<
 type LocalRuntimeEnv = Record<string, string | undefined>;
 
 export async function isDockerDaemonAvailable(): Promise<boolean> {
-  const { isDockerAvailable } = await import("@zcode/server/remote");
+  const { isDockerAvailable } = await import("@picode/server/remote");
   return isDockerAvailable();
 }
 
 export async function listAvailableWSLDistros() {
-  const { listWSLDistros } = await import("@zcode/server/remote");
+  const { listWSLDistros } = await import("@picode/server/remote");
   return listWSLDistros();
 }
 
 export async function listAvailableDockerContainers() {
-  const { listDockerContainers } = await import("@zcode/server/remote");
+  const { listDockerContainers } = await import("@picode/server/remote");
   return listDockerContainers();
 }
 

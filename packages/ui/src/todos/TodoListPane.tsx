@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LayoutGrid, List, ListTodo, Plus } from "lucide-react";
-import type { ModelSelection, TodoItem } from "@zcode/shared";
+import type { ModelSelection, TodoItem } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import {
   Select,

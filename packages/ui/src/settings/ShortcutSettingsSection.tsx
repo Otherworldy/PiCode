@@ -4,7 +4,7 @@ import {
   SHORTCUT_COMMANDS,
   getDefaultShortcutBindings,
   type ShortcutCommandId,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { toast } from "@/components/ui/toast.js";
 import { useConfirmDialogStore } from "@/store/confirmDialogStore.js";

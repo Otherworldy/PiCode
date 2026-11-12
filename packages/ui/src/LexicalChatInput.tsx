@@ -57,7 +57,7 @@ import {
 import { logger } from "./logger.js";
 import { navigatePromptHistory } from "./lib/promptHistory.js";
 import type { MentionItemData } from "@/mentions/mentionTypes.js";
-import type { ComposerMentionPrefill } from "@/store/zcodeSessionStoreTypes.js";
+import type { ComposerMentionPrefill } from "@/store/picodeSessionStoreTypes.js";
 
 /** 旧 useChatComposer 已删；粘贴事件收口为最小结构类型（ClipboardEvent 结构兼容）。 */
 export interface ChatComposerPasteEvent {

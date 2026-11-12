@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AttachmentRef } from "@zcode/shared/zcode-protocol-v4";
+import type { AttachmentRef } from "@picode/shared/picode-protocol-v4";
 import { shouldExposeE2EStoreBridge } from "@/lib/e2eStoreBridge.js";
 import type { ChatComposerAttachment } from "@/lib/chatAttachments.js";
 

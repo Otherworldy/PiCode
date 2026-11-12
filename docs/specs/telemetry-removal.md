@@ -3,7 +3,7 @@
 ## 背景
 
 产品开源化后移除全部遥测出网链路。原遥测为旁路架构：UI 埋点、host*Telemetry 采集、
-V4 会话遥测事实、`@zcode/telemetry` OTLP 导出，最终汇入 ARMS RUM / 数仓端点 / OTEL 端点。
+V4 会话遥测事实、`@picode/telemetry` OTLP 导出，最终汇入 ARMS RUM / 数仓端点 / OTEL 端点。
 所有端点均由运行时环境变量提供，未配置即不出网。
 
 ## 决策
@@ -33,10 +33,10 @@ V4 会话遥测事实、`@zcode/telemetry` OTLP 导出，最终汇入 ARMS RUM /
 ## 后续可做的清理
 
 - `packages/shared/src/runtimeEnv.ts` 的 `OTEL_*` / `ZCODE_TELEMETRY_*` 剔除名单是兼容性防护，可在确认旧部署环境不再存在这些变量后移除。
-- `apps/zcode-cli` 的 workspace lockfile 因 `@zcode/model-option-map` 缺失（与本改动无关的既有问题）无法重新生成，`@sentry/*` 孤儿条目已手工移除。
+- `apps/picode-cli` 的 workspace lockfile 因 `@picode/model-option-map` 缺失（与本改动无关的既有问题）无法重新生成，`@sentry/*` 孤儿条目已手工移除。
 
 ## 验收
 
 - `pnpm typecheck` / `pnpm lint` / `pnpm architecture:check --changed` 通过。
-- 全仓库无 `@zcode/telemetry`、`@arms/*`、`@opentelemetry/*` 源码引用与依赖条目。
+- 全仓库无 `@picode/telemetry`、`@arms/*`、`@opentelemetry/*` 源码引用与依赖条目。
 - `ZCODE_TELEMETRY_*`、`ZCODE_ARMS_RUM_ENDPOINT`、`OTEL_EXPORTER_OTLP_*` 无源码残留。

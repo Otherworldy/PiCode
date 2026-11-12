@@ -9,7 +9,7 @@ import {
   type ApiClient,
   type ProviderFamilyDomain,
   type ProviderFamilyConnectionSelectionSettings,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { type BigModelTeamPlanBizContext } from "#src/bigmodel/teamPlanApiKey.js";
 import {
   fetchPersonalCodingPlanEntitlement,

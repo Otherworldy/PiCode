@@ -37,7 +37,7 @@ import type {
   EmbeddedBrowserDataClearResult,
   WSLDistro,
   OpenInEditorOptions,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 /**
  * window.zcode 类型定义 —— 仅包含需要 main 进程参与的平台操作
@@ -50,7 +50,7 @@ declare global {
     zcodePluginSandbox?: {
       supportsRetainedMove?: boolean;
       copyImage?(
-        input: import("@zcode/shared/mcp-apps").PluginSandboxCaptureRequest,
+        input: import("@picode/shared/mcp-apps").PluginSandboxCaptureRequest,
       ): Promise<void>;
       getOwnerWebContentsId(): Promise<number>;
       disposeSandbox(sandboxId: string, initId?: number): Promise<void>;
@@ -63,7 +63,7 @@ declare global {
         context?: {
           workspacePath: string;
           workspaceIdentity?: string;
-          connectTrigger?: import("@zcode/shared").RemoteWorkspaceConnectTrigger;
+          connectTrigger?: import("@picode/shared").RemoteWorkspaceConnectTrigger;
         },
       ): Promise<{ success: boolean; error?: string; sessionId?: string }>;
       /** 取消当前窗口尚未建立完成的远程连接 */
@@ -91,28 +91,28 @@ declare global {
       /** 打开系统文件选择框，返回选中文件路径或 null */
       selectFile(): Promise<string | null>;
       /** 读取桌面宠物已经记住的设置 */
-      getDesktopPetSettings?(): Promise<import("@zcode/shared").DesktopPetPersistedSettings | null>;
+      getDesktopPetSettings?(): Promise<import("@picode/shared").DesktopPetPersistedSettings | null>;
       /** 在摸鱼文本里查找并跳转 */
       findDesktopPetReaderText?(query: string): Promise<boolean>;
       /** 上报本窗口工作区的宠物心情 */
-      setDesktopPetMood?(mood: import("@zcode/shared").DesktopPetMood): void;
+      setDesktopPetMood?(mood: import("@picode/shared").DesktopPetMood): void;
       /** 读取当前宠物包下载状态 */
       getDesktopPetDownloadStatus?(): Promise<
-        import("@zcode/shared").DesktopPetDownloadStatus | null
+        import("@picode/shared").DesktopPetDownloadStatus | null
       >;
       /** 订阅宠物包下载进度 */
       onDesktopPetDownload?(
-        handler: (status: import("@zcode/shared").DesktopPetDownloadStatus) => void,
+        handler: (status: import("@picode/shared").DesktopPetDownloadStatus) => void,
       ): () => void;
       /** 停止当前宠物包下载 */
       stopDesktopPetDownload?(): Promise<void>;
       /** 已经下载并能打开的宠物包 */
-      listDesktopPetInstalledPacks?(): Promise<import("@zcode/shared").DesktopPetInstalledPack[]>;
+      listDesktopPetInstalledPacks?(): Promise<import("@picode/shared").DesktopPetInstalledPack[]>;
       /** 导入本地宠物文件夹 */
       importDesktopPetPack?(dir: string): Promise<{
         success: boolean;
         error?: string;
-        pack?: import("@zcode/shared").DesktopPetInstalledPack;
+        pack?: import("@picode/shared").DesktopPetInstalledPack;
       }>;
       /** 删除已下载包或移除导入的本地宠物 */
       deleteDesktopPetPack?(id: string, sourceType: "download" | "local"): Promise<boolean>;
@@ -120,10 +120,10 @@ declare global {
       selectFiles?(): Promise<string[]>;
       /** 通过系统原生另存为对话框保存文件 */
       saveFile?(
-        payload: import("@zcode/shared").SaveFileRequest,
-      ): Promise<import("@zcode/shared").SaveFileResult>;
+        payload: import("@picode/shared").SaveFileRequest,
+      ): Promise<import("@picode/shared").SaveFileResult>;
       /** 将当前页面的 print 媒体版面导出为 PDF（Chromium 打印引擎，矢量文本） */
-      printPageToPdf?(): Promise<import("@zcode/shared").PrintPageToPdfResult>;
+      printPageToPdf?(): Promise<import("@picode/shared").PrintPageToPdfResult>;
       /** 从系统拖拽/文件输入得到的 Web File 解析真实本地路径 */
       getPathForFile?(file: File): string | null;
       /** 订阅当前窗口内远程连接过程日志，返回 disposer */
@@ -135,11 +135,11 @@ declare global {
       /** 同步当前窗口所有 tab 的 workspace 路径到 main 进程 */
       syncWindowTabs(paths: string[]): void;
       syncWindowWorkspaceCatalog?(
-        entries: import("@zcode/shared").WindowWorkspaceCatalogEntry[],
+        entries: import("@picode/shared").WindowWorkspaceCatalogEntry[],
       ): void;
       startMobileRemotePairing?(
         port?: number,
-      ): Promise<import("@zcode/shared").MobileRemotePairingStatus>;
+      ): Promise<import("@picode/shared").MobileRemotePairingStatus>;
       stopMobileRemotePairing?(): Promise<void>;
       /** 同步当前窗口的未读 task 数到 main 进程 */
       syncWindowUnreadCount(count: number): void;
@@ -274,7 +274,7 @@ declare global {
       }): Promise<void>;
       /** 从自动发现的 Chrome Profile 一次性导入内置浏览器数据。 */
       importChromeBrowserData?(
-        options?: import("@zcode/shared").ChromeBrowserDataImportOptions,
+        options?: import("@picode/shared").ChromeBrowserDataImportOptions,
       ): Promise<ChromeBrowserDataImportResult>;
       /** 清理内置浏览器缓存或全部站点数据。 */
       clearEmbeddedBrowserData?(mode: "cache" | "all"): Promise<EmbeddedBrowserDataClearResult>;
@@ -301,14 +301,14 @@ declare global {
       /** 执行桌面窗口级命令 */
       executeDesktopCommand(command: DesktopCommandId): Promise<void>;
       /** 读取桌面更新快照 */
-      getAppUpdateState?(): Promise<import("@zcode/shared").AppUpdateSnapshot>;
+      getAppUpdateState?(): Promise<import("@picode/shared").AppUpdateSnapshot>;
       /** 检查公开 GitHub Release */
-      checkAppUpdate?(): Promise<import("@zcode/shared").AppUpdateSnapshot>;
+      checkAppUpdate?(): Promise<import("@picode/shared").AppUpdateSnapshot>;
       /** 下载并安装已发现的桌面更新 */
-      downloadAppUpdate?(): Promise<import("@zcode/shared").AppUpdateSnapshot>;
+      downloadAppUpdate?(): Promise<import("@picode/shared").AppUpdateSnapshot>;
       /** 订阅桌面更新快照 */
       onAppUpdateStateChanged?(
-        handler: (snapshot: import("@zcode/shared").AppUpdateSnapshot) => void,
+        handler: (snapshot: import("@picode/shared").AppUpdateSnapshot) => void,
       ): () => void;
       /** 同步应用菜单语言 */
       setApplicationLocale(locale: Locale): Promise<void>;

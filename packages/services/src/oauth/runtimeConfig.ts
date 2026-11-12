@@ -1,4 +1,4 @@
-import type { OAuthProviderId } from "@zcode/shared";
+import type { OAuthProviderId } from "@picode/shared";
 import { createBigModelProviderRuntimeConfig } from "./providers/bigmodelProviderConfig.js";
 import { createZaiProviderRuntimeConfig } from "./providers/zaiProviderConfig.js";
 

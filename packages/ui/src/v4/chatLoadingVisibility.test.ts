@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ConversationRow, TurnHeaderRow } from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationRow, TurnHeaderRow } from "@picode/shared/picode-protocol-v4";
 import { buildConversationTurnRenderUnits } from "@/v4/conversationTurnRenderUnits.js";
 import { shouldShowTurnChatLoading } from "@/v4/chatLoadingVisibility.js";
 

@@ -1,4 +1,4 @@
-import type { ChromeBrowserDataImportResult } from "@zcode/shared";
+import type { ChromeBrowserDataImportResult } from "@picode/shared";
 import type { useZCodeIntl } from "@/i18n/IntlProvider.js";
 
 export function formatImportSummary(

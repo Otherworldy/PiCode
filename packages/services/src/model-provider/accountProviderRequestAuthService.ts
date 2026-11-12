@@ -5,7 +5,7 @@ import {
   type ZCodeAccountAccess,
   type ZCodeProviderAccountAccess,
   ZAI_PROVIDER_ID,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 export interface AccountRequestAuthMaterial {
   apiKey?: string;

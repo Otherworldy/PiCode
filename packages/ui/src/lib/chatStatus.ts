@@ -1,4 +1,4 @@
-import type { ZCodeTaskRuntimeStatus } from "@zcode/shared";
+import type { ZCodeTaskRuntimeStatus } from "@picode/shared";
 
 export function isChatTaskRunning(taskStatus: ZCodeTaskRuntimeStatus) {
   // ChatView 之前用 displayedStatus 和最后一条消息角色去猜“是否正在思考”，

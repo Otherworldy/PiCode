@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- 投影状态、V4 帧与离线替换属于同一个一致性边界。 */
 import { isDeepStrictEqual } from "node:util";
-import type { ZCodeTaskMeta } from "@zcode/shared";
-import type { ZCodeArchivedTaskDeletionResult } from "@zcode/services";
+import type { ZCodeTaskMeta } from "@picode/shared";
+import type { ZCodeArchivedTaskDeletionResult } from "@picode/services";
 import {
   CONTROLLER_TASKS_INDEX_TOPIC,
   CONTROLLER_WORKSPACES_TOPIC,
@@ -14,7 +14,7 @@ import {
   type WindowHostControllerWorkspaceFact,
   type WindowHostControllerWorkspaceFrame,
   type WindowHostTaskAddress,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared/picode-protocol-v4";
 
 export type WindowHostControllerSourceScope =
   | {

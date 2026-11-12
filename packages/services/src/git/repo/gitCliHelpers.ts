@@ -8,7 +8,7 @@ import type {
   GitHeadRefType,
   GitLocalBranch,
   GitWorktreeInfo,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   GIT_UNTRACKED_STAT_CHUNK_BYTES,
   GIT_UNTRACKED_STAT_CONCURRENCY,

@@ -9,7 +9,7 @@ import {
   type Locale,
   type SkillSummary,
   type ZCodeSlashCommand,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { MentionItem } from "@/mentions/mentionTypes.js";
 import { mapSubagentsToMentionItems } from "@/mentions/providers/subagentsMentionProvider.js";
 import type { SubagentMessageFormatter } from "@/lib/subagentDisplayName.js";

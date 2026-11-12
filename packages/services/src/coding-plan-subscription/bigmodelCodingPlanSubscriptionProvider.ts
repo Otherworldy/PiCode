@@ -49,8 +49,8 @@ import type {
   EnterpriseCodingPlanProjectContext,
   StartPlanPreviewConfig,
   ZCodeModelContextBudgetStrategy,
-} from "@zcode/shared";
-import type { ModelSelectionView } from "@zcode/provider";
+} from "@picode/shared";
+import type { ModelSelectionView } from "@picode/provider";
 import type { OffPeakClientConfig } from "./codingPlanSubscription.js";
 import {
   BIGMODEL_PROVIDER_ID,
@@ -63,7 +63,7 @@ import {
   ZAI_PROVIDER_ID,
   ZCODE_VERSION,
   DEFAULT_ZCODE_MODEL_CONTEXT_BUDGET_STRATEGY,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { ICredentialService } from "../credential/credential.js";
 import { readApiJson } from "../providers/api/apiJson.js";
 import { createServiceLogger } from "../logger/serviceLogger.js";

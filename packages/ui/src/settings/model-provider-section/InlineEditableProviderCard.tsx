@@ -6,12 +6,12 @@ import {
   type ProviderSettingsFormProvider,
   type ProviderSettingsFormModel,
 } from "@/lib/providerSettingsFormTypes.js";
-import type { ModelConnectivityResult } from "@zcode/shared";
+import type { ModelConnectivityResult } from "@picode/shared";
 import {
   isApiKeyAccess,
   type ProviderApiType,
   type SavePersonalModelDraftInput,
-} from "@zcode/provider";
+} from "@picode/provider";
 import { logger } from "@/logger.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { Switch } from "@/components/ui/switch.js";

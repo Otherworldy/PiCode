@@ -1,5 +1,5 @@
 import { InfoIcon } from "lucide-react";
-import type { McpServerFailureKind } from "@zcode/shared";
+import type { McpServerFailureKind } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";

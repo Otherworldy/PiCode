@@ -6,7 +6,7 @@ import {
   localAgentPromptsDir,
   prepareAgentPromptWrite,
   type AgentSystemPromptScope,
-} from "@zcode/shared/node";
+} from "@picode/shared/node";
 import { currentPiAgentDir } from "./agentSystemPrompt.js";
 
 export interface AgentPromptList {

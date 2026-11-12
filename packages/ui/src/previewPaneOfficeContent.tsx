@@ -1,5 +1,5 @@
 import { Component, lazy, Suspense, useMemo, type ErrorInfo, type ReactNode } from "react";
-import type { FileBinaryPreview } from "@zcode/shared";
+import type { FileBinaryPreview } from "@picode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { decodeBase64ToArrayBuffer, type OfficeFilePreviewKind } from "@/lib/officeFilePreview.js";
 import { logger } from "@/logger.js";

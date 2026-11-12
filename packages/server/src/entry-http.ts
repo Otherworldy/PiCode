@@ -1,8 +1,8 @@
-import { createLocalServices, getAppConfigDir } from "@zcode/services/node";
+import { createLocalServices, getAppConfigDir } from "@picode/services/node";
 import {
   materializeBundledZCodeBuiltinProviderConfig,
   readBundledZCodeBuiltinProviderConfig,
-} from "./bundledZCodeBuiltinProviderConfig.js";
+} from "./bundledPiCodeBuiltinProviderConfig.js";
 import { createHttpServer } from "./http.js";
 
 async function main(): Promise<void> {

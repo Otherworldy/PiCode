@@ -1,4 +1,4 @@
-import { PlatformChannels } from "@zcode/shared";
+import { PlatformChannels } from "@picode/shared";
 import { EventEmitter } from "node:events";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => {

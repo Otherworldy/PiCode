@@ -1,4 +1,4 @@
-import { BUILTIN_MODEL_PROVIDER_IDS } from "@zcode/shared";
+import { BUILTIN_MODEL_PROVIDER_IDS } from "@picode/shared";
 import { logger } from "@/logger.js";
 
 export type SidebarUsageCodingPlanProviderId =

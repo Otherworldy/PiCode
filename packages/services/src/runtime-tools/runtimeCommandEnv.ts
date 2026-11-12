@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { delimiter } from "node:path";
-import { buildZCodeToolEnvPassthroughEnv, sanitizeZCodeRuntimeEnvInPlace } from "@zcode/shared";
+import { buildZCodeToolEnvPassthroughEnv, sanitizeZCodeRuntimeEnvInPlace } from "@picode/shared";
 import { appendPathEntries, buildRuntimeToolEnvPatch } from "./runtimeToolResolver.js";
 import {
   buildShellBootstrapPath,

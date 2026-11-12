@@ -166,7 +166,7 @@
   },
   {
     "id": "Fig autocomplete registry",
-    "roots": ["apps/zcode-cli/packages/core/src/tool/handlers/generated/bash-command-registry.ts"],
+    "roots": ["apps/picode-cli/packages/core/src/tool/handlers/generated/bash-command-registry.ts"],
     "license": "MIT",
     "source": "https://raw.githubusercontent.com/withfig/autocomplete/aef52acff84c45edde61ae610cc2c964802b9a38/LICENSE",
     "file": "third-party/upstream/5129f8779dca579cfcb235570688a2f15822b270575e04f27ef906aabbcc0355.txt",
@@ -221,7 +221,7 @@
     "roots": [
       "packages/rpc/src",
       "packages/rpc/examples",
-      "packages/shared/src/zcode-protocol-v4/wire-codec.ts"
+      "packages/shared/src/picode-protocol-v4/wire-codec.ts"
     ],
     "scope": "Upstream-derived IPC, serialization, buffer, lifecycle and event portions only. Local RPC extensions, transports and envelope measurement are ZCode adaptations; inclusion does not attribute all local code to Microsoft.",
     "license": "MIT"
@@ -236,7 +236,7 @@
     "provenance": "Original import revision is not recorded. This pinned upstream license/source reference is not asserted to be the original import version.",
     "roots": [
       "packages/ui/src/lib/builtinSkillI18n.ts",
-      "apps/zcode-cli/packages/superpowers-plugin/LICENSE"
+      "apps/picode-cli/packages/superpowers-plugin/LICENSE"
     ],
     "scope": "Superpowers-derived skill descriptions and their translations only; unrelated descriptions from other projects in this file are not covered. The former bundled plugin implementation has been removed; only its retained license remains.",
     "license": "MIT"

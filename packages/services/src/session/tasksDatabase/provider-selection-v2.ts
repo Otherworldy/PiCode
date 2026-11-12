@@ -1,5 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { ModelSelection } from "@zcode/shared";
+import type { ModelSelection } from "@picode/shared";
 
 // 冻结 0002 的发布前已裁决编码；不能调用将来可能修改的运行时 parser/身份表。
 // 保持与旧 decodeCustomModelValue / parseModelPickerValue 的转义和分隔优先级一致。

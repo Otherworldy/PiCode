@@ -16,9 +16,9 @@ import type {
   TaskStreamMirrorUserMessageOp,
   TaskStreamMirrorStreamEventOp,
   TaskStreamMirrorOp,
-} from "./zcode-task-types-core.js";
-import type { ZCodePermissionResponse } from "./zcode-protocol-legacy-types.js";
-import type { WorkspaceHookReviewDecision } from "./zcode-protocol-v4/workspace-hook-review.js";
+} from "./picode-task-types-core.js";
+import type { ZCodePermissionResponse } from "./picode-protocol-legacy-types.js";
+import type { WorkspaceHookReviewDecision } from "./picode-protocol-v4/workspace-hook-review.js";
 
 export interface TaskRealtimeEnvelope {
   eventId: string;

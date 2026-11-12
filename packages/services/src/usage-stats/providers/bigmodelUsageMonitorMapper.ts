@@ -17,8 +17,8 @@ import type {
   AppUsageHeatmap,
   AppUsageHeatmapCell,
   AppUsageHeatmapWeek,
-} from "@zcode/shared";
-import { ESTIMATED_TOKEN_CHAR_DIVISOR } from "@zcode/shared";
+} from "@picode/shared";
+import { ESTIMATED_TOKEN_CHAR_DIVISOR } from "@picode/shared";
 
 // ============================================================================
 // 把 BigModel monitor 接口数据(model-usage / tool-usage)转成 PiCode 内部统一

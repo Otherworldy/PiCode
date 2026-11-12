@@ -1,4 +1,4 @@
-import { BIGMODEL_PROVIDER_ID, resolveBigModelApiOrigin, ZAI_PROVIDER_ID } from "@zcode/shared";
+import { BIGMODEL_PROVIDER_ID, resolveBigModelApiOrigin, ZAI_PROVIDER_ID } from "@picode/shared";
 import { ZAI_API_HOST } from "../providers/api/apiEndpoints.js";
 import {
   DEFAULT_ORG_NAME,

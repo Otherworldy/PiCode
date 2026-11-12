@@ -46,7 +46,7 @@ import {
   type RemoteTarget,
   type RemoteWorkspaceSessionEntry,
   type WorkspacePurpose,
-} from "@zcode/shared";
+} from "@picode/shared";
 export {
   getScratchWorkspaceLocationHint,
   getScratchWorkspaceNameErrorKind,

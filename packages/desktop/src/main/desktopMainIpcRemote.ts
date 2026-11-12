@@ -9,7 +9,7 @@ import {
   PlatformChannels,
   remoteTargetSchema,
   type RemoteTarget,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { dispatchTaskNotification } from "./desktopNotifications.js";
 import {
   clearOAuthRoutesForWindow,

@@ -1,4 +1,4 @@
-import type { EditorInfo } from "@zcode/shared";
+import type { EditorInfo } from "@picode/shared";
 import { ChevronDownIcon, CopyIcon, ExternalLinkIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button.js";

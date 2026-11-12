@@ -1,9 +1,9 @@
 import { createGenUiPage } from "../../../ui/src/gen-ui/adapters/page.js";
 import { registerPluginUiSessionActions } from "../../../ui/src/plugin-ui/hostPrimitives.js";
 import type { GenUiPage } from "../../../ui/src/gen-ui/contract.js";
-import type { IGenUiService } from "@zcode/services";
-import type { GenUiStateChange } from "@zcode/shared/gen-ui";
-import type { PluginSandboxPortsEvent } from "@zcode/shared/mcp-apps";
+import type { IGenUiService } from "@picode/services";
+import type { GenUiStateChange } from "@picode/shared/gen-ui";
+import type { PluginSandboxPortsEvent } from "@picode/shared/mcp-apps";
 const harness = (window as any).harness;
 let portListener: ((event: PluginSandboxPortsEvent) => void) | undefined;
 let stateListener: ((event: GenUiStateChange) => void) | undefined;

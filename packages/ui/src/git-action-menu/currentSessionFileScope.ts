@@ -1,4 +1,4 @@
-import type { GitRepositorySummary, ZCodeTaskChangeSummary } from "@zcode/shared";
+import type { GitRepositorySummary, ZCodeTaskChangeSummary } from "@picode/shared";
 import type { GitBranchCommitPreviewFile } from "@/git-branch-switcher/display.js";
 
 function normalizeCommitScopePath(path: string): string {

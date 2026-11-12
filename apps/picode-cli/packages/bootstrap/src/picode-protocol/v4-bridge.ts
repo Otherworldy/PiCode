@@ -1,0 +1,1810 @@
+import { withSessionCreation } from "./runtime-resources.js";
+import {
+  previewSessionFileRewind,
+  readSessionAttachment,
+  writeSessionAttachment,
+} from "./session-files.js";
+import {
+  closeSessionOwner,
+  sessionMode,
+  sessionPlanEnabled,
+  sessionSelection,
+  setSessionAutoDrain,
+} from "./session-config.js";
+import { isHostedExtensionCommand } from "./hosted-input.js";
+import { describeHostedTurnFileChanges } from "./hosted-file-rewind.js";
+import { sessionForegroundBusy, sessionThoughtLevels } from "./session-config.js";
+import { legacyApp, sessionIdOf } from "./session-owner.js";
+import { readBackgroundBashOutputFromOwner } from "./background-work-owner.js";
+// v4 网关 binder。
+// 定位：ConversationV4Gateway 是域无关的通道运行时，本文件把它绑到协议服务器上下文：
+// - 帧出口 = context.notify（stdio NDJSON notification，与旧 session/event 同一条管道并存）；
+// - 命令执行 = V4CommandExecutor（picode-protocol-v4/commands/，原生直驱 core）；
+//   20 命令全部原生，supports() 未命中（未知命令）→ notImplemented。
+// - 过渡钩子（ensureModelReady / afterLegacyStateMutation / closeSession /
+//   createSessionRecord / child record registration / resumePersistedSession）在此注入旧协议实现，随旧协议一同删除。
+//
+// 不做桥接：依赖方向只允许 旧目录 → v4 目录。
+// 本文件在旧目录，import v4 executor 合法；v4 目录禁止反向 import 本目录任何模块。
+import {
+  parseRemoteWorkspaceIdentity,
+  type ZCodeSessionContextUsage,
+  type ZCodeWorkspaceRef,
+} from "@picode/shared";
+import { createExternalTurnFaultError } from "@picode/core";
+import {
+  V4_NOTIFICATIONS,
+  conversationInputIntentSchema,
+  type AttachmentRef,
+  type CommandEnvelope,
+  type ConversationInputIntent,
+  type V4ConversationFileChangesResult,
+  type V4ConversationFileRewindPreviewResult,
+  type SessionSummary,
+} from "@picode/shared/picode-protocol-v4";
+import { V4CommandExecutor } from "../picode-protocol-v4/commands/executor.js";
+import { V4QueuePromotionLeaseUnavailableError } from "../picode-protocol-v4/commands/handlers/queue.js";
+import {
+  buildColdFileChangeSummaries,
+  readConversationFileChangesFromEvents,
+} from "../picode-protocol-v4/cold-file-change-summaries.js";
+import {
+  loadPersistedConversationMaterialization,
+  mergeColdConversationEvents,
+} from "../picode-protocol-v4/cold-event-merge.js";
+import { lookupGlobalCreateSessionCommand } from "../picode-protocol-v4/create-session-command-fact.js";
+import {
+  bindHostedSession,
+  createPiSessionRecord,
+  listPiStoredSummaries,
+  restoreHostedProjection,
+} from "./pi-session-record.js";
+import type { V4CommandCoreHost } from "../picode-protocol-v4/commands/types.js";
+import type {
+  ConversationRowTargetResolution,
+  SessionUsageSeed,
+} from "../picode-protocol-v4/product-projection.js";
+import { PersistentCommandIndex } from "../picode-protocol-v4/persistent-command-index.js";
+import { queueItemIdForCommand } from "../picode-protocol-v4/command-inbox.js";
+import { shouldAutoDrainV4QueueHead } from "../picode-protocol-v4/queue-auto-drain.js";
+import { isTaskListSessionType } from "../picode-protocol-v4/task-list-session-membership.js";
+import {
+  loadPersistentCommandFacts,
+  savePersistentCommandFact,
+} from "../picode-protocol-v4/persistent-command-facts.js";
+import {
+  ConversationV4Gateway,
+  V4CommandNotImplementedError,
+} from "../picode-protocol-v4/v4-gateway.js";
+import {
+  SESSION_ENTRY_TARGET_COMPLETION_VERIFICATION,
+  SessionEventType,
+  createEventId,
+  createSessionId,
+} from "@picode/contracts";
+import type {
+  CollaborationMode,
+  ForkCommitBundle,
+  GoalStatus,
+  MessageId,
+  ModelSelection,
+  SessionEvent,
+  SessionId,
+  StableForkGoalBoundaryMetadata,
+  TurnId,
+} from "@picode/contracts";
+import { resolveWorkspaceRefFromId } from "./mapper.js";
+import { buildLiveWorkspaceConfigStateV4 } from "./v4-workspace-config.js";
+import {
+  hasSessionModelProvider,
+  resolveSessionModelContextWindow,
+} from "./workspace-model-runtime.js";
+import {
+  afterStateMutation,
+  activateSessionForResume,
+  ensureSessionModelAvailableForNextTurn,
+  listSessionSubagents,
+  registerForkedSession,
+  readSessionContextUsage,
+} from "./server-operations.js";
+import type {
+  ZCodeProtocolAgentServerContext,
+  ZCodeProtocolSessionRecord,
+} from "./server-types.js";
+import { createProtocolLogger } from "./server-types.js";
+
+function normalizeStoredTitleSource(
+  source: string | undefined,
+): NonNullable<SessionSummary["titleSource"]> {
+  if (source === "custom") return "custom";
+  if (source === "default") return "default";
+  return "generated";
+}
+
+function sessionUsageSeedFromRuntimeContextUsage(
+  contextUsage: ZCodeSessionContextUsage | undefined,
+  contextWindowOverride?: number,
+): SessionUsageSeed | null {
+  if (!contextUsage || contextUsage.used <= 0) {
+    return null;
+  }
+  return {
+    contextWindow: {
+      usedTokens: contextUsage.used,
+      maxTokens: contextWindowOverride ?? null,
+      autoCompactThresholdTokens: null,
+      ...(contextUsage.cache ? { cache: contextUsage.cache } : {}),
+      ...(contextUsage.breakdown ? { breakdown: contextUsage.breakdown } : {}),
+    },
+  };
+}
+
+const STABLE_FORK_MODES = new Set<CollaborationMode>(["plan", "build", "edit", "yolo", "auto"]);
+
+function stableForkMode(value: string, fallback: CollaborationMode): CollaborationMode {
+  return STABLE_FORK_MODES.has(value as CollaborationMode)
+    ? (value as CollaborationMode)
+    : fallback;
+}
+
+function modelSelectionWithOptionFallback(
+  selection: ModelSelection | undefined,
+  fallback: ModelSelection | undefined,
+): ModelSelection | undefined {
+  if (!selection) return fallback && cloneModelSelection(fallback);
+  // 兼容旧 fork 消息可能缺少 reasoning；输出预算属于单次请求，不属于 Selection。
+  const reasoningLevel = selection.options?.reasoningLevel ?? fallback?.options?.reasoningLevel;
+  return {
+    providerId: selection.providerId,
+    modelId: selection.modelId,
+    ...(reasoningLevel !== undefined
+      ? {
+          options: {
+            ...(reasoningLevel !== undefined ? { reasoningLevel } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+function cloneModelSelection(
+  selection: ReturnType<
+    NonNullable<ZCodeProtocolSessionRecord["app"]>["runtime"]["getSessionModelSelection"]
+  >,
+): ModelSelection | undefined {
+  if (!selection) return undefined;
+  return {
+    providerId: selection.providerId,
+    modelId: selection.modelId,
+    ...(selection.options ? { options: { ...selection.options } } : {}),
+  };
+}
+
+async function readConversationFileChanges(
+  record: ZCodeProtocolSessionRecord,
+  sessionId: string,
+  messageIds: readonly string[],
+  targetTurnId?: TurnId | null,
+): Promise<V4ConversationFileChangesResult> {
+  const events = await record.eventStore.getEvents(sessionId as SessionId);
+  return readConversationFileChangesFromEvents({
+    events,
+    messageIds,
+    readArtifact: async (snapshotRef) =>
+      (await legacyApp(record).readToolResultArtifact(snapshotRef)).content,
+    ...(targetTurnId ? { targetTurnId } : {}),
+  });
+}
+
+async function resolveConversationBackingRecord(
+  context: ZCodeProtocolAgentServerContext,
+  sessionId: string,
+): Promise<ZCodeProtocolSessionRecord | undefined> {
+  const direct = context.sessions.get(sessionId);
+  if (direct) return direct;
+
+  // 运行中 subagent 有独立 child event log，但没有独立 bootstrap record。
+  // 文件摘要只需要共享 event/artifact store，因此通过持久化 parentID 找到父 record 作为
+  // artifact reader，读取事件时仍显式使用 childSessionId；不能为了只读查询 cold resume
+  // 第二个 child runtime。
+  const stored = await context.deps.sessionStore?.getSession(sessionId as SessionId);
+  const parentSessionId = stored?.parentID ? String(stored.parentID) : null;
+  return parentSessionId ? context.sessions.get(parentSessionId) : undefined;
+}
+
+async function previewConversationFileRewind(
+  record: ZCodeProtocolSessionRecord,
+  input: {
+    messageId?: string;
+    messageIds: readonly string[];
+    scope: "turn" | "suffix";
+    targetTurnId?: TurnId | null;
+  },
+): Promise<V4ConversationFileRewindPreviewResult> {
+  // suffix：core 按 active chain 用 messageId 展开，Pi host 按投影窗口用 turnId 展开，
+  // 两条实现都要拿到自己的锚点；展开落空时 core 直接 fail closed，不会退化成单 turn。
+  if (input.scope === "suffix") {
+    return previewSessionFileRewind(record, {
+      expandSuffix: true,
+      ...(input.messageId ? { targetMessageId: input.messageId as MessageId } : {}),
+      ...(input.targetTurnId ? { targetTurnId: input.targetTurnId } : {}),
+    });
+  }
+  return previewSessionFileRewind(record, {
+    targetMessageIds: input.messageIds as MessageId[],
+    ...(input.targetTurnId ? { targetTurnId: input.targetTurnId } : {}),
+  });
+}
+
+interface InputCommandForAdmission {
+  kind: ConversationInputIntent["kind"];
+  text: string;
+  attachments: readonly AttachmentRef[];
+  sharedContextRefs?: ConversationInputIntent["sharedContextRefs"];
+  requestedDelivery?: ConversationInputIntent["delivery"]["requested"];
+  admittedDelivery?: ConversationInputIntent["delivery"]["admitted"];
+  fallbackReasonCode?: string;
+  provenance?: ConversationInputIntent["provenance"];
+}
+
+type ResolveAdmissionRowTarget = (
+  sessionId: string,
+  target: { rowId: number; entityId: string },
+  action: "editUserQuery" | "retryTurn",
+) => ConversationRowTargetResolution | null;
+
+function admissionAttachmentRefs(
+  attachments: NonNullable<
+    Extract<ConversationRowTargetResolution, { ok: true }>["editTarget"]
+  >["intent"]["attachments"],
+): AttachmentRef[] {
+  return (
+    attachments?.flatMap((attachment) =>
+      attachment.ref
+        ? [
+            {
+              ref: attachment.ref,
+              fileName: attachment.fileName,
+              mime: attachment.mime,
+              bytes: attachment.bytes,
+              ...(attachment.previewRef ? { previewRef: attachment.previewRef } : {}),
+            },
+          ]
+        : [],
+    ) ?? []
+  );
+}
+
+/**
+ * admission 只持久化真正会产生输入的命令。edit/retry 不能从 payload 猜 intent；
+ * 必须复用 projection 的 canonical target，并把旧来源折叠进 provenance。
+ */
+function resolveInputCommandForAdmission(
+  envelope: CommandEnvelope,
+  admissionSessionId: string,
+  resolveRowTarget: ResolveAdmissionRowTarget,
+): InputCommandForAdmission | null {
+  if (envelope.type === "createSession") {
+    const firstInput = (
+      envelope.payload as {
+        firstInput?: { text: string; attachments?: AttachmentRef[] };
+      }
+    ).firstInput;
+    return firstInput
+      ? {
+          kind: "sendText",
+          text: firstInput.text,
+          attachments: firstInput.attachments ?? [],
+        }
+      : null;
+  }
+  if (envelope.type === "createSelectionSideSession") {
+    const firstInput = (
+      envelope.payload as {
+        firstInput?: { text: string };
+      }
+    ).firstInput;
+    return firstInput
+      ? {
+          kind: "sendText",
+          text: firstInput.text,
+          attachments: [],
+        }
+      : null;
+  }
+  if (envelope.type === "sendText" || envelope.type === "sendGoalCommand") {
+    const payload = envelope.payload as {
+      text: string;
+      attachments?: AttachmentRef[];
+      context_refs?: ConversationInputIntent["sharedContextRefs"];
+    };
+    return {
+      kind: envelope.type,
+      text: payload.text,
+      attachments: payload.attachments ?? [],
+      ...(payload.context_refs ? { sharedContextRefs: payload.context_refs } : {}),
+    };
+  }
+  if (envelope.type === "compact") {
+    return { kind: "compact", text: "/compact", attachments: [] };
+  }
+  if (envelope.type !== "editUserQuery" && envelope.type !== "retryTurn") return null;
+  if (!envelope.sessionId) return null;
+  const payload = envelope.payload as {
+    target: { rowId: number; entityId: string };
+    newText?: string;
+    attachments?: AttachmentRef[];
+  };
+  const resolution = resolveRowTarget(envelope.sessionId, payload.target, envelope.type);
+  if (!resolution?.ok || !resolution.editTarget) return null;
+  const canonical = resolution.editTarget;
+
+  // 会先提交 append-only branch cut，不再为 edit 创建 hidden child。
+  const originalSourceCommandId =
+    canonical.intent.provenance?.sourceCommandId ?? canonical.intent.sourceCommandId;
+  return {
+    kind: canonical.intent.kind,
+    text:
+      envelope.type === "editUserQuery"
+        ? (payload.newText ?? canonical.intent.text)
+        : canonical.intent.text,
+    attachments:
+      envelope.type === "editUserQuery" && payload.attachments
+        ? payload.attachments
+        : admissionAttachmentRefs(canonical.intent.attachments),
+    ...(canonical.intent.requestedDelivery
+      ? { requestedDelivery: canonical.intent.requestedDelivery }
+      : {}),
+    ...(canonical.intent.admittedDelivery
+      ? { admittedDelivery: canonical.intent.admittedDelivery }
+      : {}),
+    ...(canonical.intent.fallbackReasonCode
+      ? { fallbackReasonCode: canonical.intent.fallbackReasonCode }
+      : {}),
+    ...(originalSourceCommandId
+      ? {
+          provenance: canonical.intent.provenance ?? {
+            sourceCommandId: originalSourceCommandId,
+            ...(canonical.intent.queueItemId ? { queueItemId: canonical.intent.queueItemId } : {}),
+            ...(canonical.intent.clientId ? { clientId: canonical.intent.clientId } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+function isConversationInputAdmissionCommand(type: CommandEnvelope["type"]): boolean {
+  return (
+    type === "sendText" ||
+    type === "sendGoalCommand" ||
+    type === "compact" ||
+    type === "editUserQuery" ||
+    type === "retryTurn"
+  );
+}
+
+function buildForkInitialInput(
+  envelope: CommandEnvelope,
+  childSessionId: string,
+  admission: { admissionSeq: number; admittedAt: number; queueItemId: string },
+  input: InputCommandForAdmission,
+): ForkCommitBundle["initialInput"] {
+  const requested = input.requestedDelivery ?? "startNow";
+  const fallbackReasonCode = input.fallbackReasonCode;
+  const admitted =
+    input.admittedDelivery ??
+    (fallbackReasonCode ? "queue" : requested === "auto" ? "startNow" : requested);
+  const intent = conversationInputIntentSchema.parse({
+    sourceCommandId: envelope.commandId,
+    queueItemId: admission.queueItemId,
+    clientId: envelope.clientId || "cli",
+    kind: input.kind,
+    text: input.text,
+    attachments: input.attachments,
+    delivery: {
+      requested,
+      admitted,
+      ...(fallbackReasonCode ? { fallbackReasonCode } : {}),
+    },
+    order: { admissionSeq: admission.admissionSeq },
+    steer: fallbackReasonCode
+      ? { state: "fellBack", reasonCode: fallbackReasonCode }
+      : { state: "notRequested" },
+    dispatch: { state: "admitted" },
+    admittedAt: admission.admittedAt,
+    ...(input.provenance ? { provenance: input.provenance } : {}),
+  });
+  return {
+    id: admission.queueItemId,
+    sessionID: childSessionId as SessionId,
+    kind: intent.kind,
+    delivery: intent.delivery.admitted,
+    payload: {
+      text: intent.text,
+      conversationInputIntent: intent,
+      attachments: intent.attachments,
+      sourceCommandType: envelope.type,
+    },
+  };
+}
+
+async function recordForkStartFailureBestEffort(
+  context: ZCodeProtocolAgentServerContext,
+  sessionId: string,
+  command: Pick<CommandEnvelope, "commandId">,
+  error: unknown,
+  details: { parentSessionId?: string; registrationRequired?: boolean } = {},
+): Promise<void> {
+  const store = context.deps.sessionStore;
+  const record = context.sessions.get(sessionId);
+  const now = Date.now();
+  const message = error instanceof Error ? error.message : String(error);
+  const warn = (stage: string, failure: unknown) => {
+    try {
+      context.logger?.warn("fork child post-commit failure recording degraded", {
+        commandId: command.commandId,
+        error: failure instanceof Error ? failure.message : String(failure),
+        forkedSessionId: sessionId,
+        parentSessionId: details.parentSessionId,
+        stage,
+      });
+    } catch {
+      // 日志 sink 失败也属于 post-commit；durable child/fact 不得因此反转。
+    }
+  };
+
+  try {
+    await store?.settleSessionInput?.({
+      id: queueItemIdForCommand(command.commandId),
+      sessionID: sessionId as SessionId,
+      status: "failed",
+      reason: "fault.command.childStartFailed",
+    });
+  } catch (failure) {
+    warn("ledger", failure);
+  }
+  try {
+    await store?.saveSessionEntry?.({
+      id: `v4_fork_start_failure:${command.commandId}`,
+      sessionID: sessionId as SessionId,
+      type: "v4/fork_start_failure",
+      time: { created: now, updated: now },
+      data: {
+        commandId: command.commandId,
+        forkedSessionId: sessionId,
+        parentSessionId: details.parentSessionId,
+        ...(details.registrationRequired ? { registrationRequired: true } : {}),
+        retryable: true,
+        status: "failed",
+        reasonCode: "fault.command.childStartFailed",
+        message,
+      },
+    });
+  } catch (failure) {
+    warn("entry", failure);
+  }
+  if (!record) return;
+  try {
+    const event: SessionEvent = {
+      id: createEventId(),
+      sessionId: sessionId as SessionId,
+      type: SessionEventType.TurnError,
+      timestamp: new Date(now),
+      traceId: record.traceContext.traceId,
+      sequenceNumber: (await record.eventStore.getLatestSequenceNumber(sessionId as SessionId)) + 1,
+      payload: {
+        inputId: command.commandId,
+        turnPhase: "fork_child_start",
+        error: {
+          type: "fault.command.childStartFailed",
+          message,
+          retryable: true,
+        },
+      },
+    };
+    const persisted = await record.eventStore.append(event);
+    context.v4Gateway?.ingest(sessionId, persisted);
+  } catch (failure) {
+    warn("event", failure);
+  }
+}
+
+/**
+ * Fork bundle commit 是命令 PONR；后续 catalog/model/resume/snapshot 仅恢复 runtime 可达性。
+ * 该阶段失败必须留下可重试事实与 warning，但不能把 durable accepted child 反转成 failed。
+ */
+async function registerCommittedForkBestEffort(
+  context: ZCodeProtocolAgentServerContext,
+  record: ZCodeProtocolSessionRecord,
+  fork: Parameters<typeof registerForkedSession>[2],
+  options: Parameters<typeof registerForkedSession>[3] & { commandId: string },
+  register: typeof registerForkedSession = registerForkedSession,
+): Promise<void> {
+  const { commandId, ...registrationOptions } = options;
+  try {
+    await register(context, record, fork, registrationOptions);
+  } catch (error) {
+    const forkedSessionId = String(fork.forkedSessionId);
+    const parentSessionId = String(fork.parentSessionId ?? sessionIdOf(record));
+    await recordForkStartFailureBestEffort(context, forkedSessionId, { commandId }, error, {
+      parentSessionId,
+      registrationRequired: true,
+    });
+    try {
+      context.logger?.warn("fork child registration failed after durable commit", {
+        commandId,
+        error: error instanceof Error ? error.message : String(error),
+        forkedSessionId,
+        parentSessionId,
+        retryable: true,
+      });
+    } catch {
+      // logger 自身异常过去会越过 PONR 冒泡，让 gateway 错误 settle 为 failed。
+    }
+  }
+}
+
+type SessionTreeHost = {
+  readSessionTree(): Array<{
+    id: string;
+    parentId: string | null;
+    role: "user" | "assistant" | "tool" | "summary" | "compaction" | "other";
+    preview: string;
+    label?: string;
+    depth: number;
+    active: boolean;
+    leaf: boolean;
+  }>;
+  resumeAt(input: {
+    entryId: string;
+    text?: string;
+    role?: "user" | "assistant" | "tool";
+    summarize: boolean;
+    customInstructions?: string;
+  }): Promise<{
+    cancelled: boolean;
+    editorText?: string;
+    tree: SessionTreeHost["readSessionTree"] extends () => infer T ? T : never;
+  }>;
+  labelSessionEntry(
+    entryId: string,
+    label?: string,
+  ): ReturnType<SessionTreeHost["readSessionTree"]>;
+  deleteSessionBranch(entryId: string): ReturnType<SessionTreeHost["readSessionTree"]>;
+};
+
+function sessionTreeHost(
+  context: ZCodeProtocolAgentServerContext,
+  sessionId: string,
+): SessionTreeHost {
+  const record = context.sessions.get(sessionId);
+  const hosted = record?.hosted;
+  if (!hosted) throw new Error("proto.sessionNotFound");
+  return hosted;
+}
+
+export function createConversationV4Gateway(
+  context: ZCodeProtocolAgentServerContext,
+): ConversationV4Gateway {
+  const log = createProtocolLogger(context.deps)?.child({
+    module: "bootstrap.zcode_protocol_v4_gateway",
+  });
+  const persistentCommands = new PersistentCommandIndex({
+    loadSession: async (sessionId) => {
+      const live = context.sessions.get(sessionId);
+      const stored = await context.deps.sessionStore?.getSession(sessionId as SessionId);
+      if (!live && !stored) return null;
+      const workspacePath = live?.workspace.workspacePath ?? stored?.directory;
+      if (!workspacePath) return null;
+      const workspaceIdentity = live?.workspace.workspaceIdentity ?? stored?.workspaceID;
+      const facts = context.deps.sessionStore
+        ? await loadPersistentCommandFacts(context.deps.sessionStore, sessionId as SessionId, {
+            discardAdmittedOnLoad: !live,
+          })
+        : undefined;
+      return {
+        workspacePath,
+        ...(workspaceIdentity ? { workspaceIdentity: String(workspaceIdentity) } : {}),
+        ...(facts ? { facts } : {}),
+      };
+    },
+  });
+  let nativeExecutor: V4CommandExecutor;
+  const autoDrainRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const autoDrainV4QueueIfReady = async (record: ZCodeProtocolSessionRecord): Promise<void> => {
+    if (record.hosted && !record.hosted.queue.canAutoDrain) {
+      const released = record.hosted.queue.autoDrain
+        ? record.hosted.queue.consumerReleased
+        : undefined;
+      if (released) {
+        // 消费占用不是暂停授权：在真实释放边界重评，不能用定时器猜空闲。
+        void released
+          .then(() => {
+            if (context.sessions.get(sessionIdOf(record)) !== record) return;
+            // Registry 在释放后才发布 shift 结果，先同步 owner 队列，避免按旧队首误判提升失败。
+            record.hosted?.projector.replaceQueue(record.hosted.queue.snapshot());
+            return autoDrainV4QueueIfReady(record);
+          })
+          .catch((error: unknown) =>
+            context.logger?.warn("v4 auto-drain reevaluation after consumer release failed", {
+              sessionId: sessionIdOf(record),
+              error: error instanceof Error ? error.message : String(error),
+            }),
+          );
+      }
+      return;
+    }
+    const head = context.v4Gateway?.getQueueHead(sessionIdOf(record));
+    if (!head) {
+      // 外层恢复 FIFO 已消费到空；guide 仍只由 core tool-batch 边界行内消费。
+      record.app?.completeExternalQueueDrain();
+      return;
+    }
+    const coreForegroundBusy = sessionForegroundBusy(record);
+    if (
+      head.autoDrain &&
+      head.dispatchState === "queued" &&
+      (record.activeAbortController !== undefined || coreForegroundBusy)
+    ) {
+      // Bootstrap controller 不覆盖 model-only notification；旧 auto-drain
+      // 只看外层锁，因而把“空闲后消费”错误执行成抢占。busy 时不碰 reservation。
+      scheduleAutoDrainRetry(record);
+      return;
+    }
+    let targetStatus: GoalStatus | null = null;
+    if (
+      !record.hosted &&
+      head.autoDrain &&
+      head.dispatchState === "queued" &&
+      !record.activeAbortController
+    ) {
+      try {
+        targetStatus = (await legacyApp(record).readTarget())?.status ?? null;
+      } catch (error) {
+        // target 读取失败时按“未知且未完成”处理；直接提升会让
+        // goal verification 的持久终态尚未可证时普通 queue 偷跑。
+        context.logger?.warn("v4 auto-drain held because target state could not be read", {
+          error: error instanceof Error ? error.message : String(error),
+          queueItemId: head.queueItemId,
+          sessionId: sessionIdOf(record),
+        });
+        return;
+      }
+    }
+    if (
+      !shouldAutoDrainV4QueueHead({
+        autoDrain: head.autoDrain,
+        dispatchState: head.dispatchState,
+        sessionBusy: Boolean(record.activeAbortController) || coreForegroundBusy,
+        targetStatus,
+      })
+    ) {
+      return;
+    }
+    // 暂停队列恢复后，旧项只存在于投影而不在新 activeTurn 内存中；普通文本也必须
+    // 和 typed /goal、/compact 一样走完整投影的队首，避免新输入越过旧暂停项。
+    try {
+      await nativeExecutor.execute(
+        {
+          baseRevision: 0,
+          clientId: "v4-auto-drain",
+          commandId: `auto-${head.kind}-${Date.now()}-${head.queueItemId}`,
+          issuedAt: Date.now(),
+          payload: { queueItemId: head.queueItemId },
+          sessionId: sessionIdOf(record),
+          type: "sendQueuedNow",
+        },
+        undefined,
+        { autoDrainPromotion: true },
+      );
+    } catch (error) {
+      if (error instanceof V4QueuePromotionLeaseUnavailableError) {
+        // precheck 与 handler 之间可能新入队 notification；idle-only 是最终原子判据。
+        scheduleAutoDrainRetry(record);
+        return;
+      }
+      // 自动提升失败不能继续越过该 FIFO barrier；重新暂停并保留原项，交用户重试。
+      await setSessionAutoDrain(record, false);
+      context.logger?.warn("v4 auto-drain failed and queue was paused", {
+        error: error instanceof Error ? error.message : String(error),
+        queueItemId: head.queueItemId,
+        sessionId: sessionIdOf(record),
+      });
+    }
+  };
+  const scheduleAutoDrainRetry = (record: ZCodeProtocolSessionRecord): void => {
+    const sessionId = sessionIdOf(record);
+    if (autoDrainRetryTimers.has(sessionId)) return;
+    const timer = setTimeout(() => {
+      autoDrainRetryTimers.delete(sessionId);
+      if (context.sessions.get(sessionId) !== record) return;
+      void autoDrainV4QueueIfReady(record).catch((error: unknown) => {
+        context.logger?.warn("v4 auto-drain idle reevaluation failed", {
+          error: error instanceof Error ? error.message : String(error),
+          sessionId,
+        });
+      });
+    }, 100);
+    timer.unref?.();
+    autoDrainRetryTimers.set(sessionId, timer);
+  };
+  const coreHost: V4CommandCoreHost = {
+    // 同一注册表对象引用：view 是旧 record 的结构化窄视图，字段变更双向可见。
+    getRecord: (sessionId) => context.sessions.get(sessionId),
+    // 同一登记表实例：broker（旧目录）注册反向请求 deferred，
+    // v4 resolveInteraction handler 经此投递应答（v4 原生基础设施，非过渡钩子）。
+    interactions: context.v4Interactions,
+    logger: {
+      info: (message, fields) => context.logger?.info(message, fields),
+      warn: (message, fields) => context.logger?.warn(message, fields),
+    },
+    // v4 原生能力（非过渡钩子）：sendQueuedNow 必须读取 v4 投影里的完整 intent。
+    // 命令执行时 context.v4Gateway 已由 server 注入（createConversationV4Gateway
+    // 返回值回填），这里惰性取用避免构造期自引用。
+    getQueueItem: (sessionId, queueItemId) =>
+      context.v4Gateway?.getQueueItem(sessionId, queueItemId) ?? null,
+    hasQueueItemKind: (sessionId, kind) =>
+      context.v4Gateway?.hasQueueItemKind(sessionId, kind) ?? false,
+    hasQueuedDelivery: (sessionId, delivery) =>
+      context.v4Gateway?.hasQueuedDelivery(sessionId, delivery) ?? false,
+    getQueueLength: (sessionId) => context.v4Gateway?.getQueueLength(sessionId) ?? 0,
+    waitForProjectionEventCommit: (sessionId, eventId, options) => {
+      const gateway = context.v4Gateway;
+      if (!gateway) {
+        return Promise.reject(new Error("v4 gateway unavailable for projection commit wait"));
+      }
+      return gateway.waitForProjectionEventCommit(sessionId, eventId, options);
+    },
+    admitInputCommand: async (envelope, sessionId, admission) => {
+      if (!context.deps.sessionStore?.saveSessionInput) return null;
+      const input = resolveInputCommandForAdmission(
+        envelope,
+        sessionId,
+        (sourceSessionId, target, action) =>
+          context.v4Gateway?.resolveRowActionTarget(sourceSessionId, target, action) ?? null,
+      );
+      if (!input) return null;
+      const kind = input.kind;
+      const record = context.sessions.get(sessionId);
+      // 扩展命令只开对话，不产生首条用户输入；必须在 durable admission 之前识别。
+      if (record?.hosted && isHostedExtensionCommand(record.hosted, input.text ?? "")) return null;
+      if (record?.persistence === "deferred") {
+        // session_input 有 session 外键；draft 要到 startPromptTurn 后台阶段才持久化，
+        // 如果先写 ledger 会直接 FK 失败，accepted 前仍没有权威记录。因此 admission
+        // 先走 runtime 的统一首发持久化边界，再落 ledger，随后 handler 只负责执行。
+        if (record.hosted) await record.persistSession?.(input.text ?? "");
+        else
+          await legacyApp(record).runtime.ensureSessionPersistedForExternalActivity(
+            input.text ?? "",
+            {
+              traceContext: record.traceContext,
+            },
+          );
+        record.persistence = "immediate";
+      }
+      const routingMode = context.v4Gateway?.getInputRoutingMode(sessionId) ?? null;
+      // 这是执行前账本的“预计投递边界”；TurnSteerQueued 会用实际 delivery/回退原因
+      // 幂等更新同一记录。startNow 不能伪装成 queue，否则重启 discarded 的诊断事实失真。
+      const requestedDelivery =
+        kind === "compact"
+          ? "startNow"
+          : (input.requestedDelivery ??
+            (routingMode === "enqueue"
+              ? "queue"
+              : routingMode === "guide" && kind === "sendText"
+                ? "guide"
+                : "startNow"));
+      const attachmentRefs = input.attachments;
+      const fallbackReasonCode =
+        input.fallbackReasonCode ??
+        (requestedDelivery === "guide" && attachmentRefs.length > 0
+          ? "guide.attachmentsUnsupported"
+          : undefined);
+      const admittedDelivery =
+        input.admittedDelivery ??
+        (fallbackReasonCode
+          ? "queue"
+          : requestedDelivery === "auto"
+            ? "startNow"
+            : requestedDelivery);
+      const conversationInputIntent = conversationInputIntentSchema.parse({
+        sourceCommandId: envelope.commandId,
+        queueItemId: admission.queueItemId,
+        clientId: envelope.clientId || "cli",
+        kind,
+        text: input.text ?? "",
+        attachments: attachmentRefs,
+        ...(input.sharedContextRefs ? { sharedContextRefs: input.sharedContextRefs } : {}),
+        delivery: {
+          requested: requestedDelivery,
+          admitted: admittedDelivery,
+          ...(fallbackReasonCode ? { fallbackReasonCode } : {}),
+        },
+        order: { admissionSeq: admission.admissionSeq },
+        steer: fallbackReasonCode
+          ? { state: "fellBack", reasonCode: fallbackReasonCode }
+          : requestedDelivery === "guide"
+            ? { state: "submitting" }
+            : { state: "notRequested" },
+        dispatch: { state: "admitted" },
+        admittedAt: admission.admittedAt,
+        ...(input.provenance ? { provenance: input.provenance } : {}),
+      });
+      await context.deps.sessionStore.saveSessionInput({
+        id: admission.queueItemId,
+        sessionID: sessionId as SessionId,
+        kind,
+        delivery: conversationInputIntent.delivery.admitted,
+        payload: {
+          text: conversationInputIntent.text,
+          intent: {
+            sourceCommandId: conversationInputIntent.sourceCommandId,
+            queueItemId: conversationInputIntent.queueItemId,
+            clientId: conversationInputIntent.clientId,
+            kind: conversationInputIntent.kind,
+            admissionSeq: admission.admissionSeq,
+            admittedAt: admission.admittedAt,
+            requestedDelivery: conversationInputIntent.delivery.requested,
+            admittedDelivery: conversationInputIntent.delivery.admitted,
+            ...(fallbackReasonCode ? { fallbackReasonCode } : {}),
+            attachmentRefs,
+            ...(conversationInputIntent.sharedContextRefs
+              ? { sharedContextRefs: conversationInputIntent.sharedContextRefs }
+              : {}),
+          },
+          conversationInputIntent,
+          attachments: attachmentRefs,
+          ...(conversationInputIntent.sharedContextRefs
+            ? { sharedContextRefs: conversationInputIntent.sharedContextRefs }
+            : {}),
+          sourceCommandType: envelope.type,
+        },
+      });
+      if (
+        conversationInputIntent.sharedContextRefs?.length &&
+        conversationInputIntent.delivery.admitted !== "startNow"
+      ) {
+        const reference = conversationInputIntent.sharedContextRefs[0]!;
+        const reserved = await context.deps.sessionStore.transitionSharedContextImport?.({
+          sessionID: sessionId as SessionId,
+          contextId: reference.context_id,
+          expectedStatus: "pending",
+          status: "reserved",
+          sourceId: admission.queueItemId,
+        });
+        if (!reserved) {
+          await context.deps.sessionStore.settleSessionInput?.({
+            id: admission.queueItemId,
+            sessionID: sessionId as SessionId,
+            status: "failed",
+            reason: "shared_context_not_attachable",
+          });
+          throw new Error("fault.command.sharedContextNotAttachable");
+        }
+        const entry = (
+          await context.deps.sessionStore.sessionEntries?.({
+            sessionID: sessionId as SessionId,
+            type: "v4/shared_context_import",
+          })
+        )?.find((candidate) => {
+          const data = candidate.data;
+          return Boolean(
+            data &&
+            typeof data === "object" &&
+            !Array.isArray(data) &&
+            (data as Record<string, unknown>).contextId === reference.context_id,
+          );
+        });
+        const data = entry?.data;
+        const session = await context.deps.sessionStore.getSession(sessionId as SessionId);
+        if (
+          data &&
+          typeof data === "object" &&
+          !Array.isArray(data) &&
+          typeof (data as Record<string, unknown>).shareUrl === "string" &&
+          session?.title
+        ) {
+          context.v4Gateway?.updateSharedContextImport(sessionId, {
+            contextId: reference.context_id,
+            title: session.title,
+            shareUrl: String((data as Record<string, unknown>).shareUrl),
+            status: "reserved",
+          });
+        }
+      }
+      return conversationInputIntent;
+    },
+    cancelInputCommand: async (sessionId, queueItemId, reason) => {
+      await context.deps.sessionStore?.settleSessionInput?.({
+        id: queueItemId,
+        sessionID: sessionId as SessionId,
+        status: "cancelled",
+        reason,
+      });
+      const store = context.deps.sessionStore;
+      const entries = await store?.sessionEntries?.({
+        sessionID: sessionId as SessionId,
+        type: "v4/shared_context_import",
+      });
+      const reserved = entries?.find((entry) => {
+        const data = entry.data;
+        return Boolean(
+          data &&
+          typeof data === "object" &&
+          !Array.isArray(data) &&
+          (data as Record<string, unknown>).status === "reserved" &&
+          (data as Record<string, unknown>).sourceId === queueItemId,
+        );
+      });
+      const contextId =
+        reserved?.data && typeof reserved.data === "object"
+          ? (reserved.data as Record<string, unknown>).contextId
+          : undefined;
+      if (typeof contextId === "string") {
+        await store?.transitionSharedContextImport?.({
+          sessionID: sessionId as SessionId,
+          contextId,
+          expectedStatus: "reserved",
+          status: "pending",
+          sourceId: queueItemId,
+        });
+      }
+    },
+    discardSharedContext: async (sessionId, contextId) => {
+      const store = context.deps.sessionStore;
+      if (!store?.transitionSharedContextImport) return false;
+      const updated = await store.transitionSharedContextImport({
+        sessionID: sessionId as SessionId,
+        contextId,
+        expectedStatus: "pending",
+        status: "discarded",
+      });
+      if (updated) {
+        const entry = (
+          await store.sessionEntries?.({
+            sessionID: sessionId as SessionId,
+            type: "v4/shared_context_import",
+          })
+        )?.find((candidate) => {
+          const data = candidate.data;
+          return Boolean(
+            data &&
+            typeof data === "object" &&
+            !Array.isArray(data) &&
+            (data as Record<string, unknown>).contextId === contextId,
+          );
+        });
+        const data = entry?.data;
+        const session = await store.getSession(sessionId as SessionId);
+        if (
+          data &&
+          typeof data === "object" &&
+          !Array.isArray(data) &&
+          typeof (data as Record<string, unknown>).shareUrl === "string" &&
+          typeof (data as Record<string, unknown>).contextId === "string" &&
+          session?.title
+        ) {
+          context.v4Gateway?.updateSharedContextImport(sessionId, {
+            contextId: String((data as Record<string, unknown>).contextId),
+            title: session.title,
+            shareUrl: String((data as Record<string, unknown>).shareUrl),
+            status: "discarded",
+          });
+        }
+      }
+      return updated;
+    },
+    recordPersistentCommandFact: async (sessionId, source, ack, metadata) => {
+      const store = context.deps.sessionStore;
+      const live = context.sessions.get(sessionId);
+      const stored = await store?.getSession(sessionId as SessionId);
+      if (!store || (!live && !stored)) {
+        throw new Error("fault.command.persistentFactSessionNotFound");
+      }
+      await savePersistentCommandFact(store, sessionId as SessionId, source, ack, metadata);
+      const workspacePath = live?.workspace.workspacePath ?? stored?.directory;
+      if (!workspacePath) throw new Error("fault.command.persistentFactWorkspaceMissing");
+      const workspaceIdentity = live?.workspace.workspaceIdentity ?? stored?.workspaceID;
+      await persistentCommands.record(
+        {
+          workspacePath,
+          ...(workspaceIdentity ? { workspaceIdentity: String(workspaceIdentity) } : {}),
+        },
+        sessionId,
+        source,
+        ack,
+      );
+    },
+    // held choice 裁决（heldQueueInputRequiresChoice）：读投影 inputRouting.mode。
+    getInputRoutingMode: (sessionId) => context.v4Gateway?.getInputRoutingMode(sessionId) ?? null,
+    // rowId→messageId 翻译面（fork/edit/retry 的定位决策，数据源 = v4 投影）：
+    // 惰性走 gateway 的投影查表。
+    getMessageIdForRow: (sessionId, rowId) =>
+      context.v4Gateway?.getMessageIdForRow(sessionId, rowId) ?? null,
+    resolveRowActionTarget: (sessionId, target, action) =>
+      context.v4Gateway?.resolveRowActionTarget(sessionId, target, action) ?? null,
+    getMessageIdsForTurnRow: (sessionId, rowId) =>
+      context.v4Gateway?.getMessageIdsForTurnRow(sessionId, rowId) ?? [],
+    isLatestAssistantSegmentRow: (sessionId, rowId) =>
+      context.v4Gateway?.isLatestAssistantSegmentRow(sessionId, rowId) ?? null,
+    resolveStableForkTarget: async (sessionId, rowId) => {
+      const candidate = context.v4Gateway?.resolveStableForkCandidate(sessionId, rowId) ?? null;
+      if (!candidate) return { ok: false, reasonCode: "guard.forkTargetAmbiguous" };
+      if (!candidate.ok) return candidate;
+      return {
+        ok: true as const,
+        target: {
+          productTurnId: candidate.candidate.productTurnId,
+          transcriptTurnId: candidate.candidate.transcriptTurnId,
+          orderedMessageIds: [candidate.candidate.boundaryMessageId],
+          boundaryMessageId: candidate.candidate.boundaryMessageId,
+        },
+        goalBoundary: { kind: "none" as const },
+      };
+    },
+    isLatestRetryAssistantRow: (sessionId, rowId) =>
+      context.v4Gateway?.isLatestRetryAssistantRow(sessionId, rowId) ?? null,
+    isLatestEditableUserRow: (sessionId, rowId) =>
+      context.v4Gateway?.isLatestEditableUserRow(sessionId, rowId) ?? null,
+    getTurnIdForRow: (sessionId, rowId) =>
+      context.v4Gateway?.getTurnIdForRow(sessionId, rowId) ?? null,
+    // restoreWarning 时序自愈探针：App 的模型视图直接来自进程 Registry。
+    hasUsableRuntimeModelTarget: (record) =>
+      record.hosted
+        ? record.hosted.listModels().length > 0
+        : legacyApp(record).listModels().length > 0,
+    getTurnRewindAnchor: (sessionId, rowId) =>
+      context.v4Gateway?.getTurnRewindAnchor(sessionId, rowId) ?? null,
+    resolveUserMessageIdForRow: async (sessionId, rowId) =>
+      context.v4Gateway?.getTurnRewindAnchor(sessionId, rowId) ?? null,
+    // retryTurn 原 prompt 解析：assistant messageId → parentID（user 消息）→ 文本。
+    // 数据源 = core sessionStore（transcript 权威）；实现放 binder 只因 deps 注入点
+    // 在宿主（随 host 原生持有）。找不到返回 null → handler 只截断不重发。
+    resolveTurnUserPrompt: async (sessionId, assistantMessageId) => {
+      const sessionStore = context.deps.sessionStore;
+      if (!sessionStore) return null;
+      const messages = await sessionStore.messages({
+        sessionID: sessionId as SessionId,
+      });
+      const assistantInfo = messages.find(
+        (message) => message.info.id === assistantMessageId,
+      )?.info;
+      if (assistantInfo?.role !== "assistant") return null;
+      const user = messages.find((message) => message.info.id === assistantInfo.parentID);
+      if (!user || user.info.role !== "user") return null;
+      const text = user.parts
+        .filter(
+          (part): part is Extract<(typeof user.parts)[number], { type: "text" }> =>
+            part.type === "text" && part.ignored !== true,
+        )
+        .map((part) => part.text)
+        .join("");
+      return text.length > 0 ? text : null;
+    },
+    setAssistantFeedback: async (sessionId, input) => {
+      const record = context.sessions.get(sessionId);
+      const hosted = record?.hosted;
+      if (!record || !hosted) throw new Error("proto.sessionNotFound");
+      hosted.setFeedback(input.entityId, input.feedback);
+    },
+    readSessionTree: async (sessionId) => {
+      const hosted = sessionTreeHost(context, sessionId);
+      return { type: "sessionTree" as const, tree: hosted.readSessionTree() };
+    },
+    navigateSessionTree: async (sessionId, input) =>
+      withSessionCreation(context, async () => {
+        const record = context.sessions.get(sessionId);
+        if (!record?.hosted || !context.piHost) throw new Error("proto.sessionNotFound");
+        const outcome = await context.piHost.resumeIntoNewSession(sessionId, input);
+        if (outcome.cancelled) {
+          return {
+            type: "navigateSessionTree" as const,
+            cancelled: true,
+            tree: sessionTreeHost(context, sessionId).readSessionTree(),
+          };
+        }
+        const childRecord = await bindHostedSession(context, outcome.hosted, record.workspace);
+        context.sessions.set(sessionIdOf(childRecord), childRecord);
+        await childRecord.persistSession?.(outcome.hosted.projector.getSnapshot().meta.title);
+        return {
+          type: "navigateSessionTree" as const,
+          cancelled: false,
+          tree: outcome.tree,
+          sessionId: outcome.sessionId,
+          ...(outcome.editorText ? { editorText: outcome.editorText } : {}),
+        };
+      }),
+    labelSessionEntry: async (sessionId, input) => {
+      const hosted = sessionTreeHost(context, sessionId);
+      return {
+        type: "sessionTree" as const,
+        tree: hosted.labelSessionEntry(input.entryId, input.label),
+      };
+    },
+    deleteSessionBranch: async (sessionId, input) => {
+      const hosted = sessionTreeHost(context, sessionId);
+      return {
+        type: "sessionTree" as const,
+        tree: hosted.deleteSessionBranch(input.entryId),
+      };
+    },
+    // ── 过渡钩子──────────────────────────────
+    ensureModelReady: (record) =>
+      ensureSessionModelAvailableForNextTurn(context, record as ZCodeProtocolSessionRecord),
+    // 切模型前确认目标 Provider 已存在于当前 Environment Registry。普通模型命令只提交
+    // Selection；Provider 事实始终由 Worker 自己的 Registry 解释。
+    ensureProviderAvailable: async (sessionId, providerId) => {
+      const record = context.sessions.get(sessionId);
+      if (!record) return { available: false, reason: "session_not_found" };
+      if (!hasSessionModelProvider(context, record, providerId)) {
+        return { available: false, reason: "provider_not_in_registry" };
+      }
+      return { available: true };
+    },
+    afterLegacyStateMutation: async (record, reason) => {
+      await afterStateMutation(context, record as ZCodeProtocolSessionRecord, reason);
+      await autoDrainV4QueueIfReady(record as ZCodeProtocolSessionRecord);
+    },
+    // deleteSession 的执行面：内联旧 closeSession op 的 4 步（不 import 旧 op——
+    // 语义与 server-operations.ts closeSession 对齐，随会话注册表归 v4 后收编）。
+    closeSession: async (sessionId) => {
+      const record = context.sessions.get(sessionId);
+      if (!record) {
+        // handler 已校验存在性；此处只兜并发竞态（重复删除幂等成功）。
+        return;
+      }
+      record.unsubscribe?.();
+      await closeSessionOwner(record);
+      // v4 通道：会话关闭同时清 publisher / 订阅调度；重开会话走 snapshot 冷启动。
+      // disposeSession 必须在注册表删除之前调用——
+      // gateway 靠 getSessionWorkspaceId（读 context.sessions）定位 workspace 才能把
+      // session.removed 推给 sessions-index 订阅者；先 delete 再 dispose 时 workspaceId
+      // 恒为 null，删除会话后侧栏列表项永不消失（e2e conversation-session-v4-sidebar 抓出）。
+      context.v4Gateway?.disposeSession(sessionId);
+      context.sessions.delete(sessionId);
+    },
+    // createSession 的执行面：record 建立/事件接线/catalog 同步/失败自清理全在旧
+    // createSession op 内（半初始化 record 的回收顺序修过 bug，不重复实现）。
+    // 语义决策（draft persistence / firstInput 走原生 prompt turn）在原生 handler。
+    createSessionRecord: async ({
+      workspaceId,
+      mcpServers,
+      offPeakToolEnabled,
+      workingDirectory,
+    }) => {
+      // workspaceId 双形态（Workspace Identity 约束）：
+      // - 本地工作区 = workspacePath（identity 缺省时的 fallback）；
+      // - 远程 pane（跨 workspace 分屏）= 远程 identity
+      //   （remote:ssh/wsl/docker:...:<path>，UI buildRemoteWorkspaceIdentity 构造）。
+      //   经统一解析工具还原真实 workspacePath 作 workingDirectory——CLI 本就跑在
+      //   远端机器上，path 即本机路径；identity 原样保留进 workspace ref
+      //   （workspaceKey = identity，sessions-index topic / 隔离语义不变）。
+      // shared parser 统一兼容 WSL legacy 与显式 user identity；非远程格式继续按
+      // 本地 workspacePath 处理。
+      void offPeakToolEnabled;
+      const workspace = resolveWorkspaceRefFromId(workspaceId);
+      const record = await createPiSessionRecord(context, {
+        workspace,
+        mcpServers,
+        workingDirectory,
+      });
+      context.sessions.set(sessionIdOf(record), record);
+      return { sessionId: sessionIdOf(record) };
+    },
+    createSelectionSideSession: async (sessionId) =>
+      withSessionCreation(context, async () => {
+        const record = context.sessions.get(sessionId);
+        if (!record?.hosted || !context.piHost) throw new Error("proto.sessionNotFound");
+        const child = await context.piHost.create({
+          workspaceIdentity: record.workspace.workspaceIdentity,
+          workspacePath: record.workspace.workspacePath,
+          // 侧聊是一次性提问，不参与项目记忆抽取。
+          memoryEnabled: false,
+        });
+        const childRecord = await bindHostedSession(context, child, record.workspace);
+        context.sessions.set(sessionIdOf(childRecord), childRecord);
+        return { sessionId: child.sessionId };
+      }),
+    // running stable fork：只走 core transcript copy，再注册 child record。父 runtime、queue、
+    // background/continuation inbox 与 shared workspace 均不读取、不停止、不复制。
+    forkStableConversation: async (sessionId, options) =>
+      withSessionCreation(context, async () => {
+        const record = context.sessions.get(sessionId);
+        if (!record?.hosted || !context.piHost) throw new Error("proto.sessionNotFound");
+        const child = await context.piHost.fork(sessionId, options.target.boundaryMessageId);
+        const childRecord = await bindHostedSession(context, child, record.workspace);
+        context.sessions.set(sessionIdOf(childRecord), childRecord);
+        // 分叉文件已有消息，bind 会标成 immediate。session_input 外键要求 session 行先在，
+        // 否则第一条发送直接 FOREIGN KEY constraint failed。
+        await childRecord.persistSession?.(child.projector.getSnapshot().meta.title);
+        return { forkedSessionId: child.sessionId };
+      }),
+    forkConversationBeforeInput: async (sessionId, { editTarget, envelope, admission }) => {
+      const record = context.sessions.get(sessionId);
+      if (!record) throw new Error("proto.sessionNotFound");
+      const store = context.deps.sessionStore;
+      if (!store) throw new Error("fault.command.stableForkStoreUnavailable");
+      const messages = await store.messages({
+        sessionID: sessionId as SessionId,
+      });
+      const targetMessage = messages.find(
+        (message) => String(message.info.id) === editTarget.transcriptMessageId,
+      );
+      if (targetMessage?.info.role !== "user") {
+        throw new Error("guard.latestQueryEditOnly");
+      }
+      const modelSelection = modelSelectionWithOptionFallback(
+        cloneModelSelection(targetMessage.info.modelSelection),
+        cloneModelSelection(sessionSelection(record)),
+      );
+      const events = await record.eventStore.getEvents(sessionId as SessionId);
+      const targetStarted = events.find(
+        (event) =>
+          event.type === SessionEventType.TurnStarted &&
+          String((event.payload as { messageId?: unknown }).messageId ?? "") ===
+            editTarget.transcriptMessageId,
+      );
+      const priorTargetChange = targetStarted
+        ? events
+            .filter(
+              (event) =>
+                event.sequenceNumber < targetStarted.sequenceNumber &&
+                event.type === SessionEventType.TargetChanged,
+            )
+            .at(-1)
+        : undefined;
+      const forkedSessionId = String(createSessionId());
+      const input = resolveInputCommandForAdmission(
+        envelope,
+        forkedSessionId,
+        (sourceSessionId, target, action) =>
+          context.v4Gateway?.resolveRowActionTarget(sourceSessionId, target, action) ?? null,
+      );
+      if (!input) throw new Error("fault.command.forkInputAdmissionMissing");
+      const initialInput = buildForkInitialInput(envelope, forkedSessionId, admission, input);
+      let goalBoundary: StableForkGoalBoundaryMetadata | null = priorTargetChange
+        ? (() => {
+            const target = (priorTargetChange.payload as { target?: unknown }).target;
+            return target
+              ? {
+                  kind: "snapshot" as const,
+                  target: target as Extract<
+                    StableForkGoalBoundaryMetadata,
+                    { kind: "snapshot" }
+                  >["target"],
+                  verificationEntryIds: [],
+                }
+              : { kind: "none" as const };
+          })()
+        : null;
+      if (goalBoundary?.kind === "snapshot" && store.sessionEntries && targetStarted) {
+        const targetId = goalBoundary.target.targetID;
+        const boundaryTime = targetStarted.timestamp.getTime();
+        const entries = await store.sessionEntries({
+          sessionID: sessionId as SessionId,
+          type: SESSION_ENTRY_TARGET_COMPLETION_VERIFICATION,
+        });
+        goalBoundary = {
+          ...goalBoundary,
+          verificationEntryIds: entries.flatMap((entry) => {
+            const data = entry.data as { payload?: { targetId?: unknown } };
+            return entry.time.updated <= boundaryTime && data.payload?.targetId === targetId
+              ? [entry.id]
+              : [];
+          }),
+        };
+      }
+      if (!goalBoundary) {
+        const targetIndex = messages.indexOf(targetMessage);
+        const previousAssistant = messages
+          .slice(0, targetIndex)
+          .reverse()
+          .find((message) => message.info.role === "assistant");
+        goalBoundary = previousAssistant?.info.anchor?.goalBoundary ?? null;
+        if (!previousAssistant) goalBoundary = { kind: "none" };
+      }
+      if (!goalBoundary) {
+        throw new Error("guard.forkTargetAmbiguous");
+      }
+      const fork = await legacyApp(record).runtime.forkConversationBeforeMessage({
+        modelSelection,
+        forkedSessionId: forkedSessionId as SessionId,
+        targetMessageId: targetMessage.info.id,
+        targetProductTurnId: editTarget.productTurnId,
+        targetTranscriptTurnId: String(
+          targetMessage.info.anchor?.turnId ?? editTarget.productTurnId,
+        ),
+        sourceCommandId: envelope.commandId,
+        initialInput,
+        commandFact: {
+          parentSessionId: sessionId,
+          sourceCommandId: envelope.commandId,
+          ack: {
+            commandId: envelope.commandId,
+            status: "accepted",
+            revisionAtDecision: envelope.baseRevision ?? 0,
+            result: {
+              type: "editUserQuery",
+              disposition: "fork",
+              sessionId: forkedSessionId,
+            },
+          },
+          metadata: {
+            parentSessionId: sessionId,
+            sourceCommandId: envelope.commandId,
+            editTarget,
+          },
+        },
+        // 严格取 TurnStarted 之前的 TargetChanged 或上一稳定 assistant anchor；禁止
+        // 把 parent 当前（可能正由被编辑 goal 写入）的 target 冒充 input 前状态。
+        goalBoundary,
+        traceContext: record.traceContext,
+      });
+      await registerCommittedForkBestEffort(context, record, fork, {
+        commandId: envelope.commandId,
+        runtimeConfig: {
+          mode: sessionMode(record),
+          model: modelSelection ? `${modelSelection.providerId}/${modelSelection.modelId}` : "",
+          ...(modelSelection?.options?.reasoningLevel
+            ? { thoughtLevel: modelSelection.options.reasoningLevel }
+            : {}),
+        },
+        inheritLatestTarget: false,
+      });
+      return { forkedSessionId: String(fork.forkedSessionId) };
+    },
+    recordForkStartFailure: async (sessionId, envelope, error) => {
+      await recordForkStartFailureBestEffort(context, sessionId, envelope, error, {
+        parentSessionId: String(envelope.sessionId ?? ""),
+      });
+    },
+  };
+  nativeExecutor = new V4CommandExecutor(coreHost);
+  const loadStoredSessionSummaries = async (
+    workspaceId: string,
+    _legacyTaskIds?: readonly string[],
+  ) => {
+    if (context.piHost) return listPiStoredSummaries(context.piHost, workspaceId);
+    return [];
+  };
+  return new ConversationV4Gateway({
+    cliVersion: context.deps.version,
+    sessionExists: (sessionId) => context.sessions.has(sessionId),
+    onDebug: (message) => log?.debug(message),
+    onTargetCompleted: (sessionId) => {
+      const record = context.sessions.get(sessionId);
+      if (!record) return;
+      // background task-notification 的 goal verifier 不经过 v4 prompt 的
+      // finally/afterLegacyStateMutation；TargetChanged(complete) 虽已提交，future queue
+      // 因而没有下一次 mutation 来重评。这里只 detached 触发既有 gate，不能阻塞投影。
+      void Promise.resolve()
+        .then(() => autoDrainV4QueueIfReady(record))
+        .catch((error: unknown) => {
+          context.logger?.warn("v4 auto-drain reevaluation after target completion failed", {
+            error: error instanceof Error ? error.message : String(error),
+            sessionId,
+          });
+        });
+    },
+    // Gateway 的单一 READY promise 负责并发与水位；binder 只恢复 runtime。
+    resumePersistedSession: async (
+      sessionId,
+      resumeThoughtLevel,
+      workspace?: ZCodeWorkspaceRef,
+    ) => {
+      if (context.piHost) {
+        if (context.sessions.get(sessionId)) return { status: "resumed" };
+        const findStarted = performance.now();
+        const found = await context.piHost.find(sessionId);
+        const openReadMs = Math.max(0, Math.round(performance.now() - findStarted));
+        if (!found) return { status: "notFound" };
+        const record = await createPiSessionRecord(context, {
+          workspace: workspace ?? resolveWorkspaceRefFromId(found.identity),
+          sessionId,
+          openReadMs,
+          storedSession: found,
+        });
+        context.sessions.set(sessionIdOf(record), record);
+        return { status: "resumed" };
+      }
+      const persisted = await context.deps.sessionStore?.getSession(sessionId as SessionId);
+      if (!persisted) {
+        context.logger?.warn("PiCode Protocol v4 cold resume has no persisted session", {
+          activeSessionCount: context.sessions.size,
+          event: "zcode_protocol.v4.resume_persisted_missing",
+          module: "bootstrap.zcode_protocol",
+          sessionId,
+        });
+        return { status: "notFound" };
+      }
+      const activated = await activateSessionForResume(
+        context,
+        {
+          sessionId,
+          // session.path 可能是规范化后的执行 cwd，不能覆盖当前 attachment
+          // 已知的 workspace 身份。旧 session 没有 attachment 上下文时仍走原有持久化回退。
+          ...(workspace ? { workspace } : {}),
+          ...(resumeThoughtLevel ? { thoughtLevel: resumeThoughtLevel } : {}),
+        },
+        { reusePersistedMessages: true },
+      );
+      return {
+        status: "resumed",
+        persistedMessages: activated.persistedMessages,
+      };
+    },
+    emitWireFrame: (wire) =>
+      context.notify({
+        method: V4_NOTIFICATIONS.conversationFrame,
+        params: wire,
+      }),
+    emitTurnLifecycle: (fact) =>
+      context.notify({
+        method: V4_NOTIFICATIONS.turnLifecycle,
+        params: fact,
+      }),
+    emitCuaPermissionObservation: (observation) =>
+      context.notify({
+        method: V4_NOTIFICATIONS.cuaPermissionObservation,
+        params: observation,
+      }),
+    // ── config 种子：投影初值 = runtime 真值 ─────────────
+    // 覆盖三个种子来源：启动缺省（Workspace 模型偏好 + 项目持久化 mode）、
+    // createSession.config（handler 先应用到 runtime 再种）、历史会话 resume
+    // （App 恢复结果可以只有模型身份，不能为了投影而绑定半成品执行模型）。
+    getSessionMemoryEnabled: (sessionId) => context.sessions.get(sessionId)?.memoryEnabled,
+    getSessionConfigSeed: (sessionId) => {
+      const record = context.sessions.get(sessionId);
+      if (!record) return null;
+      const selection = sessionSelection(record) ?? record.restoredModelSelection;
+      const grant = record.app?.runtime.lastPermissionGrantId;
+      return {
+        modelSelection: cloneModelSelection(selection),
+        provider: selection?.providerId ?? "",
+        model: selection?.modelId ?? "",
+        thought: selection?.options?.reasoningLevel ?? "",
+        thoughtLevels: sessionThoughtLevels(record),
+        mode: sessionMode(record),
+        planEnabled: sessionPlanEnabled(record),
+        ...(grant ? { permissionGrant: { interactionId: grant } } : {}),
+      };
+    },
+    getSessionUsageSeed: async (sessionId, persistedMessages) => {
+      const record = context.sessions.get(sessionId);
+      if (!record) return null;
+      const contextUsage = await readSessionContextUsage(context, sessionId, persistedMessages);
+      // usage seed 会在 hydration 后再次覆盖首帧分母；必须与合成事件
+      // 使用同一份当前模型 registry 真值，不能把旧 runtime projection 的窗口写回来。
+      return sessionUsageSeedFromRuntimeContextUsage(
+        contextUsage,
+        resolveSessionModelContextWindow(context, record),
+      );
+    },
+    // ── sessions-index hooks（workspace 分桶 + 冷启动 store 种子）──────────
+    getSessionWorkspaceId: (sessionId) => {
+      const record = context.sessions.get(sessionId);
+      return !record || !isTaskListSessionType(record.taskType)
+        ? null
+        : record.workspace.workspaceKey;
+    },
+    getSessionIndexMeta: (sessionId) => {
+      const record = context.sessions.get(sessionId);
+      if (!record) return null;
+      const cwd = record.hosted?.cwd;
+      const samePath = (left: string, right: string) => {
+        const norm = (value: string) => value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+        return norm(left) === norm(right);
+      };
+      return {
+        createdAt: record.createdAt,
+        lastActivityAt: record.updatedAt,
+        ...(record.parentSessionId ? { parentSessionId: String(record.parentSessionId) } : {}),
+        // 主工作区不写。写了的话列表会把仓库目录名当成分支。
+        ...(cwd && !samePath(cwd, record.workspace.workspacePath) ? { workingDirectory: cwd } : {}),
+      };
+    },
+    listWorkspaceSessionIds: (workspaceId) =>
+      [...context.sessions.values()]
+        .filter(
+          (record) =>
+            isTaskListSessionType(record.taskType) && record.workspace.workspaceKey === workspaceId,
+        )
+        .map((record) => sessionIdOf(record)),
+    // draft 判定：deferred = 未发首条输入（prompt-turn 首发提升为 immediate）。
+    // 旧 workspace prepare 预建的 deferred 会话不得以「新任务」漏进侧栏列表。
+    isDraftSession: (sessionId) => context.sessions.get(sessionId)?.persistence === "deferred",
+    // ── workspace-config hook（配置目录订阅种子；live session 快路径，避免临时 app）──
+    getWorkspaceConfig: (workspaceId) => buildLiveWorkspaceConfigStateV4(context, workspaceId),
+    getStoredSessionSummaries: loadStoredSessionSummaries,
+    refreshLegacySessionSummaries: (workspaceId, legacyTaskIds) =>
+      parseRemoteWorkspaceIdentity(workspaceId)
+        ? loadStoredSessionSummaries(workspaceId, legacyTaskIds)
+        : null,
+    // 回落面已清零（20 命令全部原生）：supports 未命中（未知命令类型）→
+    // notImplemented → ACK failed fault.command.notImplemented。
+    executeCommand: (envelope, admission) =>
+      nativeExecutor.supports(envelope.type)
+        ? nativeExecutor.execute(envelope, admission)
+        : Promise.reject(new V4CommandNotImplementedError(envelope.type)),
+    admitCommandInput: async (envelope, admission) => {
+      // 仅隐藏 composer 不能阻止旧 child 标签页续聊。类型准入必须早于
+      // ledger/输入历史写入；detached child 没有 record 时只查元数据，不激活第二个 runtime。
+      if (
+        envelope.sessionId &&
+        (isConversationInputAdmissionCommand(envelope.type) ||
+          envelope.type === "resumeGoal" ||
+          envelope.type === "sendQueuedNow" ||
+          envelope.type === "forkAssistant" ||
+          envelope.type === "createSelectionSideSession")
+      ) {
+        const taskType =
+          context.sessions.get(envelope.sessionId)?.taskType ??
+          (await context.deps.sessionStore?.getSession(envelope.sessionId as SessionId))?.taskType;
+        if (taskType === "subagent_child") {
+          throw Object.assign(new Error("Subagent sessions are read-only"), {
+            reasonCode: "guard.subagentReadOnly",
+          });
+        }
+      }
+      if (!isConversationInputAdmissionCommand(envelope.type)) return null;
+      if (!envelope.sessionId) return null;
+      // 回退到输入框只裁切，不能写成一条待发送输入，否则队列会把原文再发出去。
+      if (
+        envelope.type === "editUserQuery" &&
+        (envelope.payload as { restoreToInput?: boolean }).restoreToInput === true
+      ) {
+        return null;
+      }
+      return (await coreHost.admitInputCommand?.(envelope, envelope.sessionId, admission)) ?? null;
+    },
+    cancelCommandInput: async (envelope, queueItemId, reason) => {
+      if (!envelope.sessionId) return;
+      await coreHost.cancelInputCommand?.(envelope.sessionId, queueItemId, reason);
+    },
+    terminateTurnForProjectionFault: (sessionId, reasonCode) => {
+      const record = context.sessions.get(sessionId);
+      const controller = record?.activeAbortController;
+      if (!controller || controller.signal.aborted) return;
+      // 投影越过 16MiB 后继续生成只会让所有后续 snapshot 都无法编码。
+      // gateway 先原子拒绝越界事件并登记 protocol fault，再单次调用这里中止模型 turn；
+      // abort 的正常终态负责释放 active lock，不能在 gateway 里越层伪造 TurnError。
+      controller.abort(createExternalTurnFaultError(reasonCode));
+    },
+    // commands/query 持久化 fallback：同 session 首次查询惰性建索引，后续四个来源
+    // 共用该索引；anchor/marker/child/discarded 写入走 record 增量更新。
+    lookupTranscriptCommand: (key) =>
+      key.sessionId === null
+        ? lookupGlobalCreateSessionCommand(context.deps.sessionStore, key.commandId)
+        : persistentCommands.lookup("transcript", key),
+    lookupTimelineCommand: (key) => persistentCommands.lookup("timeline", key),
+    lookupChildCommand: (key) => persistentCommands.lookup("child", key),
+    lookupDiscardedCommand: (key) => persistentCommands.lookup("discarded", key),
+    invalidatePersistentCommandFacts: (sessionId) => persistentCommands.invalidate(sessionId),
+    // gateway 已完成逐片总量/checksum 校验，只把完整 bytes 原子写 artifact。
+    putSessionAttachment: async (sessionId, input) => {
+      const record = context.sessions.get(sessionId);
+      if (!record) {
+        throw new Error(`fault.attachment.sessionNotFound: ${sessionId}`);
+      }
+      return writeSessionAttachment(record, input);
+    },
+    readBackgroundBashOutput: (sessionId, workId) =>
+      readBackgroundBashOutputFromOwner(context, sessionId, workId),
+    readSessionAttachment: async (sessionId, input) => {
+      const record = context.sessions.get(sessionId);
+      if (!record) {
+        throw new Error(`fault.attachment.sessionNotFound: ${sessionId}`);
+      }
+      return readSessionAttachment(record, input);
+    },
+    statSessionAttachment: async (sessionId, input) => {
+      const record = context.sessions.get(sessionId);
+      if (!record) {
+        throw new Error(`fault.attachment.sessionNotFound: ${sessionId}`);
+      }
+      if (!record.app?.statPromptAttachment) {
+        throw new Error("fault.attachment.statUnsupported");
+      }
+      return record.app.statPromptAttachment(input);
+    },
+    resolveSessionAttachmentPreviewSource: async (sessionId, input) => {
+      const record = context.sessions.get(sessionId);
+      if (!record) {
+        throw new Error(`fault.attachment.sessionNotFound: ${sessionId}`);
+      }
+      if (!record.app) throw new Error("fault.attachment.statUnsupported");
+      return record.app.resolvePromptAttachmentPreviewSource(input);
+    },
+    getConversationFileChanges: async (sessionId, _targetRowId, messageIds, targetTurnId) => {
+      const record = await resolveConversationBackingRecord(context, sessionId);
+      if (!record) {
+        throw new Error(`fault.fileChanges.sessionNotFound: ${sessionId}`);
+      }
+      if (record.hosted && targetTurnId)
+        return (
+          describeHostedTurnFileChanges(record.hosted, String(targetTurnId)) ??
+          readConversationFileChanges(record, sessionId, messageIds, targetTurnId)
+        );
+      const describe = (
+        record.app?.runtime as {
+          describeTurnFileChanges?: (turnId: string) => V4ConversationFileChangesResult | null;
+        }
+      )?.describeTurnFileChanges;
+      if (describe && targetTurnId) {
+        const described = describe(String(targetTurnId));
+        if (described) return described;
+      }
+      return readConversationFileChanges(record, sessionId, messageIds, targetTurnId);
+    },
+    previewConversationFileRewind: async (sessionId, input) => {
+      const record = context.sessions.get(sessionId);
+      if (!record) {
+        throw new Error(`fault.fileRewindPreview.sessionNotFound: ${sessionId}`);
+      }
+      return previewConversationFileRewind(record, input);
+    },
+    // 冷订阅不再在 eventStore / transcript 之间 XOR。message/part
+    // 是已完成正文权威，session_entry 只补 legacy goal，内存事件只补
+    // 未持久 in-flight 和 queue/permission/control 等 ephemeral 状态。
+    restoreEmptyPiProjection: async (sessionId) => {
+      const hosted = context.piHost?.get(sessionId);
+      if (!hosted) return;
+      await restoreHostedProjection(hosted);
+    },
+    loadPersistedEvents: async (sessionId, persistedMessages) => {
+      if (context.piHost?.get(sessionId)) {
+        return { events: [], synthesized: false, sourceEventSeq: 0 };
+      }
+      // subagent 这类 detached live child 没有自己的 bootstrap record
+      // （事件经 ingestDetachedLiveSession 走父 record 的 sink 路由）。
+      // context.sessions.get 取不到 record 时不能直接返回 synthesized:false——
+      // 否则首次订阅的 performHydration 会走"保留健康 live publisher"早退分支，
+      // durable transcript 三源合并从不执行——只由 live 事件喂养的投影会丢掉所有
+      // 不以 live 事件形式出现的持久正文。amend-resume 把前驱 transcript 前缀直接
+      // 复制进 session store 来播种 child 会话，
+      // 这段前缀正属于此类，于是侧栏 child transcript 只剩本次 live 增量；
+      // 普通崩溃恢复后 warm 窗口同样看不到 crash 前的 child 消息。
+      // 改用 resolveConversationBackingRecord：child 自身没有 record 时按持久
+      // parentID 落到父 record，只借它的共享 event/artifact store，事件读取仍显式用
+      // child 自己的 sessionId（child runtime 共享父 event store，
+      // 事件按 child sessionId 归档），因此 sourceEventSeq 仍是 child 的真实水位。
+      // 代价：contextWindow 分母会按父 record 的当前模型解析而不是 actor 模型，纯展示层偏差。
+      const record = await resolveConversationBackingRecord(context, sessionId);
+      if (!record) {
+        // 诊断：hydrate 预期在 runtime 已由 cold-resume 激活后执行；连父 record 兜底
+        // 都落空时，返回空事件会把真实的生命周期竞态伪装成“历史为空”，必须留下明确现场。
+        context.logger?.warn("PiCode Protocol v4 hydrate has no active runtime", {
+          activeSessionCount: context.sessions.size,
+          event: "zcode_protocol.v4.hydrate_runtime_missing",
+          module: "bootstrap.zcode_protocol",
+          phase: "loadPersistedEvents",
+          sessionId,
+        });
+        return { events: [], synthesized: false, sourceEventSeq: 0 };
+      }
+      // message/part 与 session_entry 的异步读取期间 live sink 仍可收到新事件。
+      // gateway 必须知道 memory eventStore 取快照时的 raw cursor，才能只补 await 窗口内
+      // 的尾部，并把 transcript 合成的 1..N 序列稳定映射回后续 runtime raw seq。
+      // 内存 event store 会淘汰已完成 turn 的瞬态事件，max(events.seq) 会小于真实
+      // 游标，让已淘汰的 delta 被当成 await 窗口尾部重放。两次调用之间没有 await，拿到的是
+      // 同一时刻的一致快照。
+      const [liveEvents, sourceEventSeq] = await Promise.all([
+        record.eventStore.getEvents(sessionId as SessionId),
+        record.eventStore.getLatestSequenceNumber(sessionId as SessionId),
+      ]);
+      const events = liveEvents;
+      const store = context.deps.sessionStore;
+      const source = await loadPersistedConversationMaterialization({
+        memoryEvents: events,
+        persistedMessages,
+        sessionId,
+        ...(store
+          ? {
+              store: {
+                getSession: (id) => store.getSession(id),
+                messages: (input) => store.messages(input),
+                readTarget: (input) => store.readTarget(input),
+                ...(store.sessionEntries
+                  ? {
+                      sessionEntries: (input) =>
+                        store.sessionEntries!(input).catch((error) => {
+                          context.logger?.warn("v4 hydrate session entries read failed", {
+                            error: error instanceof Error ? error.message : String(error),
+                            event: "zcode_protocol.v4.hydrate_session_entries_failed",
+                            module: "bootstrap.zcode_protocol",
+                          });
+                          return [];
+                        }),
+                    }
+                  : {}),
+              },
+            }
+          : {}),
+      });
+      // live ModelComplete.fileChanges 只存在于内存事件；cold merge 以持久
+      // transcript 为正文权威时会压掉该事件，而 transcript 本身没有文件摘要字段。
+      // workspace checkpoint + artifact 才是跨进程持久事实，这里按 user messageId
+      // 重建摘要，再交给 transcript hydration 合成同构 ModelComplete。
+      const fileChangeSummariesByMessageId = await buildColdFileChangeSummaries({
+        events: source.memoryEvents,
+        messageIds: source.messages.map((message) => String(message.info.id)),
+        readArtifact: async (snapshotRef) =>
+          (await legacyApp(record).readToolResultArtifact(snapshotRef)).content,
+        onArtifactError: (messageId, error) =>
+          context.logger?.warn("v4 cold file change artifact read failed", {
+            error: error instanceof Error ? error.message : String(error),
+            event: "zcode_protocol.v4.hydrate_file_changes_failed",
+            messageId,
+            module: "bootstrap.zcode_protocol",
+            sessionId,
+          }),
+      });
+      // 冷恢复 transcript 不保存模型能力，旧 hydration 自行填 20 万；
+      // provider registry 已在 resume 前同步完成，应按恢复/退避后的当前模型精确取值。
+      const contextWindow = resolveSessionModelContextWindow(context, record);
+      const usageSeed = sessionUsageSeedFromRuntimeContextUsage(
+        await readSessionContextUsage(context, sessionId, source.messages),
+        contextWindow,
+      );
+      const merged = mergeColdConversationEvents({
+        contextWindow,
+        fileChangeSummariesByMessageId,
+        memoryEvents: source.memoryEvents,
+        messages: source.messages,
+        sessionId,
+        goalVerificationEntries: source.goalVerificationEntries,
+        ...(Object.prototype.hasOwnProperty.call(source, "target")
+          ? { target: source.target }
+          : {}),
+      });
+      for (const diagnostic of merged.diagnostics) {
+        const fields = {
+          ...diagnostic,
+          event: "zcode_protocol.v4.hydrate_three_source_merge",
+          module: "bootstrap.zcode_protocol",
+          sessionId,
+        };
+        if (
+          diagnostic.code === "cold_merge.ambiguous_legacy_turn_preserved" ||
+          diagnostic.code === "cold_merge.memory_boundary_preserved" ||
+          diagnostic.code === "cold_merge.unclassified_event_preserved"
+        ) {
+          context.logger?.warn("v4 hydrate preserved ambiguous cold fact", fields);
+        } else {
+          log?.debug("v4 hydrate merged duplicate cold facts", fields);
+        }
+      }
+      // transcript 可恢复 Agent row，却不能证明 child session 已经落库。
+      // 这里在 gateway 的 raw-event buffer 补回前生成校验种子，既排除旧幽灵引用，
+      // 又避免异步查询覆盖 seed 之后新到达的 live spawn/stop。
+      const subagents = await listSessionSubagents(
+        context,
+        { sessionId, endedLimit: 1 },
+        persistedMessages,
+      );
+      return {
+        events: merged.events,
+        // 与合成事件共用本次查询结果；不在后续回填阶段重新读取另一份容量。
+        usageSeed,
+        // gateway 旧字段名仍叫 synthesized；这里表示投影已由 durable
+        // transcript 重物化，需替换 ingest 抢先建的 cold publisher。
+        synthesized: merged.usedDurableTranscript,
+        subagentsSeed: {
+          revision: subagents.revision,
+          childSessionIds: subagents.childSessionIds,
+          running: subagents.running,
+        },
+        ...(source.sharedContextImport ? { sharedContextImport: source.sharedContextImport } : {}),
+        sourceEventSeq,
+      };
+    },
+    onError: (scope, error, errorContext) =>
+      context.logger?.warn("PiCode Protocol v4 gateway error", {
+        ...errorContext,
+        error: error instanceof Error ? error.message : String(error),
+        event: "zcode_protocol.v4.gateway_error",
+        module: "bootstrap.zcode_protocol",
+        scope,
+      }),
+  });
+}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CircleHelp, Loader2 } from "lucide-react";
-import { ZCODE_AGENT_PROVIDER, type ZCodeConfigOption } from "@zcode/shared";
+import { ZCODE_AGENT_PROVIDER, type ZCodeConfigOption } from "@picode/shared";
 import { ThoughtLevelCycleControl } from "@/chat-input-toolbar/ThoughtLevelCycleControl.js";
 import type { useZCodeIntl } from "@/i18n/IntlProvider.js";
 

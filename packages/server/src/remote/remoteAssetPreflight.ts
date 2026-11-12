@@ -1,5 +1,5 @@
-import type { IRemoteBackend, StdioStream } from "@zcode/server/remote/backend.js";
-import { waitForClose } from "@zcode/server/remote/deployShared.js";
+import type { IRemoteBackend, StdioStream } from "@picode/server/remote/backend.js";
+import { waitForClose } from "@picode/server/remote/deployShared.js";
 
 export type RemoteDownloadTool = "curl" | "wget";
 export type RemoteSha256Tool = "sha256sum" | "shasum" | "openssl";

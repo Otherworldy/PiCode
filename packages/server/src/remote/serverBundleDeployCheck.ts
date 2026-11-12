@@ -1,5 +1,5 @@
-import type { IRemoteBackend, StdioStream } from "@zcode/server/remote/backend.js";
-import { quotePosixPathArg, quotePosixShellArg } from "@zcode/server/remote/posixShell.js";
+import type { IRemoteBackend, StdioStream } from "@picode/server/remote/backend.js";
+import { quotePosixPathArg, quotePosixShellArg } from "@picode/server/remote/posixShell.js";
 
 const REQUIRED_SERVER_BUNDLE_MARKERS = [
   "skill-sync",

@@ -6,7 +6,7 @@ import {
   BUILTIN_MODEL_PROVIDER_IDS,
   resolveBigModelApiOrigin,
   resolveRuntimeZCodeEnv,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   createModelProviderModelConfig,
   getDefaultModelSupportedFormatsFromApiFormat,

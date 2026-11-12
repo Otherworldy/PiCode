@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import type { ZCodeProvider } from "@zcode/shared";
+import type { ZCodeProvider } from "@picode/shared";
 import { logger } from "@/logger.js";
-import { useZCodeTaskService } from "@/hooks/useZCodeTaskService.js";
+import { useZCodeTaskService } from "@/hooks/usePiCodeTaskService.js";
 
 /**
  * useWorkspaceActiveTaskState 的导出返回类型间接引用此接口，声明生成要求它可导出。

@@ -9,13 +9,13 @@ import {
   TID_V4_ROW,
   testId,
   type ZCodeApiRetryStatus,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type {
   ApiRetryState,
   AttachmentRef,
   CommandAck,
   ConversationRowTarget,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared/picode-protocol-v4";
 import { ChatApiRetryStatus } from "@/chat-input-toolbar/display.js";
 import { cn } from "@/components/lib/utils.js";
 import { Checkbox } from "@/components/ui/checkbox.js";

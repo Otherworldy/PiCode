@@ -1,7 +1,7 @@
 import type { NetworkInterfaceInfo } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
-import { HostMessageTypes, MOBILE_REMOTE_DEFAULT_PORT } from "@zcode/shared";
+import { HostMessageTypes, MOBILE_REMOTE_DEFAULT_PORT } from "@picode/shared";
 import { join } from "node:path";
 import {
   createMobileRemotePairingController,

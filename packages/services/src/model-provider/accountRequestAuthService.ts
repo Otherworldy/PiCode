@@ -4,7 +4,7 @@ import type {
   AccountRequestAuthMaterial,
   AccountRequestAuthResolver,
 } from "./accountProviderRequestAuthService.js";
-import type { ZCodeAccountAccess, ZCodeProviderAccountAccess } from "@zcode/shared";
+import type { ZCodeAccountAccess, ZCodeProviderAccountAccess } from "@picode/shared";
 
 /**
  * 请求期 Account 鉴权边界。

@@ -48,7 +48,7 @@ export interface SkillsCapability {
 
 export type SkillDiagnosticSeverity = "warning" | "error";
 
-/** 与 zcode-cli `SkillDiagnosticCode` 同步。变动时一并改 apps/zcode-cli/packages/contracts/src/skills/index.ts。 */
+/** 与 zcode-cli `SkillDiagnosticCode` 同步。变动时一并改 apps/picode-cli/packages/contracts/src/skills/index.ts。 */
 export type SkillDiagnosticCode =
   | "skill_root_not_found"
   | "skill_scan_failed"

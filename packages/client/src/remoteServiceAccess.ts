@@ -1,5 +1,5 @@
-import { IGenUiService } from "@zcode/services";
-import { ProxyChannel, type IChannelClient } from "@zcode/rpc";
+import { IGenUiService } from "@picode/services";
+import { ProxyChannel, type IChannelClient } from "@picode/rpc";
 import {
   IFileService,
   IMediaPreviewService,
@@ -44,7 +44,7 @@ import {
   IPromptAttachmentTransferService,
   IWindowControllerService,
   type IServiceAccessor,
-} from "@zcode/services";
+} from "@picode/services";
 
 /**
  * RemoteServiceAccess — 通过 ChannelClient 自动创建类型安全的服务代理

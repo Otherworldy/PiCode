@@ -5,7 +5,7 @@ import {
   createHelpAppConfigReader,
   resolveHelpAppConfig,
   type Locale,
-} from "@zcode/shared";
+} from "@picode/shared";
 import localDefaultAppConfig from "../../../config/default.json" with { type: "json" };
 
 interface ResolveWebCommunityUrlOptions {

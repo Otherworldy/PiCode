@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- 权限/引导/澄清三类弹窗共享同一套交互态与焦点恢复逻辑，拆分会复制状态机。 */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import type { ZCodeElicitationRequest, ZCodePermissionOption, ZCodeProvider } from "@zcode/shared";
-import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
+import type { ZCodeElicitationRequest, ZCodePermissionOption, ZCodeProvider } from "@picode/shared";
+import type { ConversationSnapshot } from "@picode/shared/picode-protocol-v4";
 import { ElicitationDialog } from "@/ElicitationDialog.js";
 import { Dialog, DialogContent } from "@/components/ui/dialog.js";
 import { PermissionDialog } from "@/PermissionDialog.js";
@@ -15,8 +15,8 @@ import {
   getTaskUiState,
   getWorkspaceState,
   useZCodeSessionStore,
-} from "@/store/zcodeSessionStore.js";
-import type { ElicitationFormDraft } from "@/store/zcodeSessionStoreTypes.js";
+} from "@/store/picodeSessionStore.js";
+import type { ElicitationFormDraft } from "@/store/picodeSessionStoreTypes.js";
 import { createCommandEnvelope } from "@/v4/commandFactory.js";
 import { pendingCommandRegistry } from "@/v4/pendingCommandRegistry.js";
 import { sendInteractionAutoResolutionSnooze } from "@/v4/interactionAutoResolutionCommand.js";

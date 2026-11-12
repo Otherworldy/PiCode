@@ -1,6 +1,6 @@
 import type { ModelSelectionGhostReason } from "./model-selection-types.js";
 import { decodeCustomModelValue } from "./custom-model-value.js";
-import type { ZCodeProvider } from "./zcode-task-types-core.js";
+import type { ZCodeProvider } from "./picode-task-types-core.js";
 
 export const NATIVE_SUPPLIER_KEY_PREFIX = "native:";
 export const CUSTOM_SUPPLIER_KEY_PREFIX = "custom:";

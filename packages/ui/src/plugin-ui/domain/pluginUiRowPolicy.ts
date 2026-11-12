@@ -1,4 +1,4 @@
-import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationRow } from "@picode/shared/picode-protocol-v4";
 import type { PluginUiRowDisposition } from "./pluginUiInstancePolicy.js";
 
 /** 渲染层提供的按 toolCallId 的裁决：推导结果 + 用户手动固定 / 收起。 */

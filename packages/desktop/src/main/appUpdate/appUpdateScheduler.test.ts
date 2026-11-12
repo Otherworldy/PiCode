@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AppUpdateSnapshot } from "@zcode/shared";
+import type { AppUpdateSnapshot } from "@picode/shared";
 import { pollAppUpdate } from "./appUpdateScheduler.js";
 
 function snapshot(phase: AppUpdateSnapshot["phase"]): AppUpdateSnapshot {

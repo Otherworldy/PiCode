@@ -1,8 +1,8 @@
-import { ensureAppDataDir } from "@zcode/shared/node";
+import { ensureAppDataDir } from "@picode/shared/node";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve as resolvePath } from "node:path";
-import { ZCODE_AGENT_RUNTIME } from "@zcode/shared";
+import { ZCODE_AGENT_RUNTIME } from "@picode/shared";
 
 const packagedResourcesPath =
   typeof (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath === "string"
@@ -23,7 +23,7 @@ function resolvePlatformScopedBundledAgentRoots(moduleDir?: string): Array<strin
   return [
     resolvePath(process.cwd(), "bundled-agents", platformKey),
     resolvePath(process.cwd(), "packages", "desktop", "bundled-agents", platformKey),
-    // dev:web 会用 pnpm --filter @zcode/server dev 启动，cwd 落在 packages/server。
+    // dev:web 会用 pnpm --filter @picode/server dev 启动，cwd 落在 packages/server。
     // PiCode Agent 资源可能位于桌面包或仓库根的 bundled-agents/<platform>。
     // 这里统一补齐仓库内所有平台化目录候选，desktop/web/server 共享一套解析链路。
     resolvePath(process.cwd(), "..", "desktop", "bundled-agents", platformKey),

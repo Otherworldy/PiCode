@@ -1,7 +1,7 @@
 import {
   conversationArtifactTypeSchema,
   type ConversationArtifactType,
-} from "./zcode-protocol-v4/rows.js";
+} from "./picode-protocol-v4/rows.js";
 import { MEDIA_PREVIEW_FORMATS } from "./media-preview.js";
 
 export type ConversationPreviewFileKind =

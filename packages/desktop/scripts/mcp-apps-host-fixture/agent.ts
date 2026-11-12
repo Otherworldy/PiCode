@@ -3,8 +3,8 @@ import { createServer, type Socket } from "node:net";
 import { createInterface } from "node:readline";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { ZCodeProtocolClient } from "../../../services/src/zcode-agent/zcodeProtocolClient.js";
-import { ZCodeStdioTransport } from "../../../services/src/zcode-agent/zcodeStdioTransport.js";
+import { ZCodeProtocolClient } from "../../../services/src/picode-agent/picodeProtocolClient.js";
+import { ZCodeStdioTransport } from "../../../services/src/picode-agent/picodeStdioTransport.js";
 
 export class Events<T> {
   readonly history: T[] = [];

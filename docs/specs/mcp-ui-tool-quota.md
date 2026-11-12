@@ -4,7 +4,7 @@
 
 插件页面（MCP App）通过 `mcp/uiCallTool` 调用宿主工具。审计发现这条路径**没有任何额度**：
 
-- `bootstrap/src/zcode-protocol/mcp-ui/handlers.ts:36-37` 的 `activeUiToolCalls` /
+- `bootstrap/src/picode-protocol/mcp-ui/handlers.ts:36-37` 的 `activeUiToolCalls` /
   `finishedUiToolCalls` 是模块级 Map，每个 callId 永久写入（`:148-154`）。
 - `:88-90` 只做 callId 去重，没有并发上限、没有超时、没有单会话次数上限。
 - 清账本只发生在实例 lease abort（`mcp-ui/protocol.ts`）和 session 关闭

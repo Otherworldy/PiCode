@@ -32,8 +32,8 @@ import type {
   GitRemoveWorktreeRequest,
   GitWorktreeInfo,
   GitWorktreeMutationResult,
-} from "@zcode/shared";
-import { ServiceChannels } from "@zcode/shared";
+} from "@picode/shared";
+import { ServiceChannels } from "@picode/shared";
 import { createServiceDescriptor } from "../descriptors.js";
 
 export interface IGitService {

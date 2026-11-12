@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AppUpdateSnapshot } from "@zcode/shared";
+import type { AppUpdateSnapshot } from "@picode/shared";
 import { Spinner } from "@/components/ui/spinner.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";

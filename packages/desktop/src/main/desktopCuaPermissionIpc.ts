@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { app, BrowserWindow, ipcMain, nativeImage, screen } from "electron";
-import { PlatformChannels, type CuaPermissionKind, type Locale } from "@zcode/shared";
+import { PlatformChannels, type CuaPermissionKind, type Locale } from "@picode/shared";
 import {
   cuaHelperBundleFingerprintUnchanged,
   openCuaPermissionOnboarding,

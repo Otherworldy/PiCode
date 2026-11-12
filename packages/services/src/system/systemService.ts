@@ -11,7 +11,7 @@ import type {
   IntranetProbeTcpTarget,
   IntranetProbeTcpTargetResult,
   SystemInfo,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { ISystemService } from "./system.js";
 import { listIntegratedTerminalShellOptions } from "./integratedTerminalShells.js";
 

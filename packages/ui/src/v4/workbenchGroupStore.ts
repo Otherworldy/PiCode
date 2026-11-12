@@ -3,7 +3,7 @@
 // 这里是 renderer-local 壳子状态：只管 session 到 pane/group 的归属与本地持久化，
 // 不下沉到协议、agent、main process 或 web-remote replayable 状态。
 import { create } from "zustand";
-import type { ZCodeTaskClientMode } from "@zcode/shared";
+import type { ZCodeTaskClientMode } from "@picode/shared";
 import {
   INITIAL_PANE_LAYOUT,
   MAX_WORKBENCH_PANES,

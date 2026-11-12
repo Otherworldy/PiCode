@@ -1,4 +1,4 @@
-import { normalizeDesktopPetDisplayScale } from "@zcode/shared";
+import { normalizeDesktopPetDisplayScale } from "@picode/shared";
 import {
   Select,
   SelectContent,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { convertToZCodeAgentMcpServer, type McpServerConfig } from "./mcp.js";
-import { zcodeProtocolMcpServerSchema } from "./zcode-protocol/index.js";
+import { zcodeProtocolMcpServerSchema } from "./picode-protocol/index.js";
 
 function httpConfig(oauth: McpServerConfig["oauth"]): McpServerConfig {
   return { type: "http", url: "https://example.invalid/mcp", oauth } as McpServerConfig;

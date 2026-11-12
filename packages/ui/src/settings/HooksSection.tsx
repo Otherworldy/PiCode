@@ -1,14 +1,14 @@
 /* eslint-disable max-lines -- Hooks 页面聚合 Scope、插件投影、搜索与配置写入流程。 */
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
-import type { Hook, HookConfig, ZCodeInstalledPluginSummary, ZCodePluginInfo } from "@zcode/shared";
+import type { Hook, HookConfig, ZCodeInstalledPluginSummary, ZCodePluginInfo } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { toast } from "@/components/ui/toast.js";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { useWorkspaceServicesResolution } from "@/hooks/useWorkspaceServices.js";
-import { useZCodeSessionService } from "@/hooks/useZCodeSessionService.js";
+import { useZCodeSessionService } from "@/hooks/usePiCodeSessionService.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import { invalidateDeferredDraftSessionForRuntimeChange } from "@/lib/zcodeDraftSkillInvalidation.js";
+import { invalidateDeferredDraftSessionForRuntimeChange } from "@/lib/picodeDraftSkillInvalidation.js";
 import { useHooksStore } from "@/store/hooksStore.js";
 import { usePluginManagementStore } from "@/store/pluginManagementStore.js";
 import { HookForm } from "./HookForm.js";

@@ -1,4 +1,4 @@
-import type { GroupedDraftTaskState } from "@/store/zcodeSessionStoreTypes.js";
+import type { GroupedDraftTaskState } from "@/store/picodeSessionStoreTypes.js";
 
 export interface PendingCommandClientContext {
   workspace?: {

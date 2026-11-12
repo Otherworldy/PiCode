@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Anchor, Download, ShieldCheck } from "lucide-react";
-import type { Hook, PluginHookDetail, PluginScope } from "@zcode/shared";
+import type { Hook, PluginHookDetail, PluginScope } from "@picode/shared";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { Switch } from "@/components/ui/switch.js";

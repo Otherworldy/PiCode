@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ZCodePluginReferenceCatalogEntry,
   ZCodePluginsReferenceCatalogResult,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { useWorkspaceServicesResolution } from "@/hooks/useWorkspaceServices.js";
 import { logger } from "@/logger.js";
 

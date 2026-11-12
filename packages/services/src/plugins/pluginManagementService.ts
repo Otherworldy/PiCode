@@ -2,7 +2,7 @@
 // 插件安装/市场/启停的事实源在 zcode-cli 进程（读写 ~/.PiCode 插件目录并热更新
 // 运行态），host 无副本，故实现保持 agent 协议往返；收敛价值在 UI 层不再直触
 // IZCodeAgentService，词表消费面从 UI 散点收拢到本文件一处。
-import type { IZCodeAgentService } from "../zcode-agent/zcodeAgent.js";
+import type { IZCodeAgentService } from "../picode-agent/picodeAgent.js";
 import type { IPluginManagementService } from "./pluginManagement.js";
 
 interface PluginManagementServiceDependencies {

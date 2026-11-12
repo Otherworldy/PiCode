@@ -1,4 +1,4 @@
-import type { McpAppsStyleVariables } from "@zcode/shared/mcp-apps";
+import type { McpAppsStyleVariables } from "@picode/shared/mcp-apps";
 
 /**
  * ZCode 主题 token（DESIGN.md / docs/design/zcode-tokens.md）→ MCP Apps 标准样式变量

@@ -8,7 +8,7 @@ import type { OpenAutomationsMain } from "@/lib/taskNavigationHistory.js";
 import type { MessageFileLinkTarget } from "@/components/ai-elements/message.js";
 import type { AssistantFeedbackHandler } from "@/v4/ConversationRowView.js";
 import type { Theme } from "@/useTheme.js";
-import type { ModelSelectionView } from "@zcode/services";
+import type { ModelSelectionView } from "@picode/services";
 import type { ConversationAttachmentReadParams, ConversationTransport } from "@/v4/transport.js";
 import type {
   OpenPlanDetailSideTabRequest,
@@ -23,7 +23,7 @@ import type {
   TurnUsage,
   V4ConversationFileChangesResult,
   V4ConversationFileRewindPreviewResult,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared/picode-protocol-v4";
 
 export type ConversationFileChangesState = Exclude<
   NonNullable<TurnHeaderRow["fileChanges"]>["state"],

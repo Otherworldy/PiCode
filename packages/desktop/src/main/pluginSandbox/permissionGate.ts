@@ -1,4 +1,4 @@
-import type { McpAppsResourcePermission } from "@zcode/shared/mcp-apps";
+import type { McpAppsResourcePermission } from "@picode/shared/mcp-apps";
 import type { PluginSandboxRecord, PluginSandboxRegistryPort } from "./contract.js";
 import {
   decidePluginSandboxPermission,

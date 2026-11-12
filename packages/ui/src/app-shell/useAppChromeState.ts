@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { DesktopWindowChromeState, IPlatformService } from "@zcode/shared";
+import type { DesktopWindowChromeState, IPlatformService } from "@picode/shared";
 import { logger } from "@/logger.js";
 
 const MACOS_WINDOW_CONTROLS_DEFAULT_LEFT_PADDING_PX = 96;

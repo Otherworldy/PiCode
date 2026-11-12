@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { Locale, SkillScope, ZCodeProvider } from "@zcode/shared";
+import type { Locale, SkillScope, ZCodeProvider } from "@picode/shared";
 import type { MentionCategoryResult, MentionItem } from "@/mentions/mentionTypes.js";
 import { filterMentionItemsWithOptions } from "@/mentions/mentionSearch.js";
 import { buildSkillMentionMarkdown } from "@/mentions/mentionMarkdown.js";

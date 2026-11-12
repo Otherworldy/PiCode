@@ -6,7 +6,7 @@ import {
   getDesktopMenuMessage,
   type DesktopCommandId,
   type Locale,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 let desktopTray: Tray | null = null;
 let rebuildDesktopTrayContextMenu: (() => void) | null = null;

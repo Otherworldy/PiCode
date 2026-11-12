@@ -1,5 +1,5 @@
-import type { RemoteTarget } from "@zcode/shared";
-import type { RemoteTargetSnapshot } from "@zcode/shared";
+import type { RemoteTarget } from "@picode/shared";
+import type { RemoteTargetSnapshot } from "@picode/shared";
 import { formatRemoteWorkspaceDisplayLabel } from "@/lib/remoteWorkspaceHistory.js";
 
 /** 项目显示名的最大长度；持久化 schema 用同一个上限。 */

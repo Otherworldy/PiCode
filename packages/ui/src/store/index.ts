@@ -5,9 +5,9 @@
  * 广播频道前缀 "state:" 表示状态同步类消息。
  */
 import { create } from "zustand";
-import type { IBroadcastService, BroadcastMessage } from "@zcode/services";
-import type { OAuthProviderId, UserInfo } from "@zcode/shared";
-import type { CodingPlanResetType } from "@zcode/shared";
+import type { IBroadcastService, BroadcastMessage } from "@picode/services";
+import type { OAuthProviderId, UserInfo } from "@picode/shared";
+import type { CodingPlanResetType } from "@picode/shared";
 import type { CodePreviewSettings } from "@/lib/codePreviewSettings.js";
 import type {
   CodingPlanQuotaResetUiEntries,

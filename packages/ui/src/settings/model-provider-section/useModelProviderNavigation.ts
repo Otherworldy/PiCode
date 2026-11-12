@@ -6,14 +6,14 @@ import type {
   ProviderFamilyConnectionSelection,
   ProviderFamilyConnectionSelectionSettings,
   ProviderFamilyDomain,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   BUILTIN_MODEL_PROVIDER_IDS,
   isStartPlanModelProviderId,
   resolveModelProviderFamilySpecByProviderId,
   resolveProviderFamilyDomainFromOAuthProvider,
   type OAuthProviderId,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import {
   CODING_PLAN_PROVIDER_SPECS,

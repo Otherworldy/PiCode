@@ -1,5 +1,5 @@
-import { BIGMODEL_PROVIDER_ID, ZAI_PROVIDER_ID } from "@zcode/shared";
-import type { OAuthTokenSet, UserInfo } from "@zcode/shared";
+import { BIGMODEL_PROVIDER_ID, ZAI_PROVIDER_ID } from "@picode/shared";
+import type { OAuthTokenSet, UserInfo } from "@picode/shared";
 import type { WebOAuthProviderId } from "./browserOAuthCredentialRepo.js";
 
 export interface WebZaiOAuthProviderConfig {

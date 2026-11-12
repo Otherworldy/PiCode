@@ -1,11 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import { getZCodeDataRootDir } from "@zcode/services/node";
+import { getZCodeDataRootDir } from "@picode/services/node";
 import type {
   CreateTempTextAttachmentRequest,
   CreateTempTextAttachmentResult,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 const TEMP_TEXT_ATTACHMENT_DIR = "paste-attachments";
 const MIME_TYPE = "text/plain" as const;

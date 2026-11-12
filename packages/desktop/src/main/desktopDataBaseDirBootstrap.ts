@@ -1,8 +1,8 @@
-import { ensureAppDataDir } from "@zcode/shared/node";
+import { ensureAppDataDir } from "@picode/shared/node";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { setDataBaseDir } from "@zcode/services/node";
+import { setDataBaseDir } from "@picode/services/node";
 
 function resolveBootstrapSettingsFile(homePath: string = homedir()): string {
   return join(ensureAppDataDir(homePath), "v2", "setting.json");

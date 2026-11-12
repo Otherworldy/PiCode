@@ -5,7 +5,7 @@ import {
   testId,
   type ZCodeConfigOption,
   type ZCodeProvider,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { BrainIcon, ChevronDownIcon } from "lucide-react";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { cn } from "@/components/lib/utils.js";

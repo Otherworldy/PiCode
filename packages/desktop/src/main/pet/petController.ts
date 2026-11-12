@@ -43,7 +43,7 @@ import {
   type DesktopPetReaderBubbleRect,
   type DesktopPetStageCrop,
   type TaskNotificationPayload,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { createUpdateFetch, type UpdateNetworkSettings } from "../appUpdate/proxyFetch.js";
 import { downloadPetPack, PetPackDownloadError } from "./downloadPack.js";
 import {

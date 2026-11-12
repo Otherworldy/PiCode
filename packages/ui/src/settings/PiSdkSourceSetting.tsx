@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ZCodePiSdkStatus } from "@zcode/shared";
+import type { ZCodePiSdkStatus } from "@picode/shared";
 import { Badge } from "@/components/ui/badge.js";
 import {
   Select,

@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = resolve(import.meta.dirname, "..");
-const defaultEntryPath = join(repoRoot, "apps/zcode-cli/packages/cli/dist/zcode.cjs");
+const defaultEntryPath = join(repoRoot, "apps/picode-cli/packages/cli/dist/zcode.cjs");
 const runtimeSourcePath = join(import.meta.dirname, "desktop-agent-bytecode-runtime.cjs");
 const compilerPath = join(import.meta.dirname, "compile-desktop-agent-bytecode.cjs");
 

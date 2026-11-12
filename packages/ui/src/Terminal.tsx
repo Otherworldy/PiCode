@@ -1,7 +1,7 @@
 import { Plus, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { IServiceAccessor } from "@zcode/services";
-import { TID_TERMINAL, TID_TERMINAL_CLOSE_BUTTON } from "@zcode/shared";
+import type { IServiceAccessor } from "@picode/services";
+import { TID_TERMINAL, TID_TERMINAL_CLOSE_BUTTON } from "@picode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
 import { Button } from "@/components/ui/button.js";

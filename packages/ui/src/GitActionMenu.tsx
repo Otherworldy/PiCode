@@ -14,7 +14,7 @@ import type {
   GitIdentity,
   GitRepositorySummary,
   ZCodeTaskChangeSummary,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
 import { Command, CommandItem, CommandList, CommandShortcut } from "@/components/ui/command.js";

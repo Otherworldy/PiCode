@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { BrowserWindow, MessageChannelMain, app, ipcMain, type MessagePortMain } from "electron";
-import type { MessagePortLike, MessagePortPayload } from "@zcode/rpc";
-import { PlatformChannels, windowWorkspaceCatalogSchema, formatZodError } from "@zcode/shared";
+import type { MessagePortLike, MessagePortPayload } from "@picode/rpc";
+import { PlatformChannels, windowWorkspaceCatalogSchema, formatZodError } from "@picode/shared";
 import {
   ensureWindowsMobileRemoteFirewall,
   resolveAdvertisedLanIPv4,

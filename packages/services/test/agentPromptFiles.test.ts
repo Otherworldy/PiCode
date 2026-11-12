@@ -6,7 +6,7 @@ import test from "node:test";
 import {
   agentPromptFileNameFromLabel,
   remoteAgentPromptPath,
-} from "@zcode/shared/node";
+} from "@picode/shared/node";
 import {
   deleteAgentPromptFile,
   listAgentPromptFiles,

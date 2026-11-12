@@ -1,7 +1,7 @@
 /* oxlint-disable eslint(max-lines) -- 附件采集、分 scope 上传调度和生命周期必须在同一 hook 中原子收口。 */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/components/ui/toast.js";
-import type { AttachmentRef } from "@zcode/shared/zcode-protocol-v4";
+import type { AttachmentRef } from "@picode/shared/picode-protocol-v4";
 import { WORKSPACE_FILE_DRAG_MIME } from "@/lib/workspaceFileDrag.js";
 import {
   MAX_CHAT_ATTACHMENTS,
@@ -27,8 +27,8 @@ import {
 } from "@/lib/whiteboard.js";
 import { useWhiteboardStore } from "@/store/whiteboardStore.js";
 import type { ChatComposerPasteEvent } from "@/LexicalChatInput.js";
-import type { IPromptAttachmentTransferService } from "@zcode/services";
-import type { IPlatformService } from "@zcode/shared";
+import type { IPromptAttachmentTransferService } from "@picode/services";
+import type { IPlatformService } from "@picode/shared";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useServices } from "@/hooks/useServices.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";

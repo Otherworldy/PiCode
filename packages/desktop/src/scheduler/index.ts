@@ -13,14 +13,14 @@ import {
   computeAutomationNextRunAt,
   isOneShotAutomation,
   OffPeakTaskRepo,
-} from "@zcode/services/node";
+} from "@picode/services/node";
 import {
   resolveWorkspaceKey,
   type ZCodeAutomation,
   type ZCodeAutomationTrigger,
   type ZCodeAutomationRun,
   type ZCodeOffPeakTask,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { MainToSchedulerMessage, SchedulerToMainMessage } from "./schedulerProtocol.js";
 import { settleManualClaimForDispatchResult } from "./manualClaimRelease.js";
 import { settleOffPeakDispatchResult } from "./offPeakDispatchSettlement.js";

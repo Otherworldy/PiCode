@@ -4,10 +4,10 @@ import {
   zcodeProviderAccountAccessSchema,
   type ZCodeProviderAccountAccess,
   type ZCodeProvider,
-} from "@zcode/shared";
-import type { ModelSelectionView } from "@zcode/services";
+} from "@picode/shared";
+import type { ModelSelectionView } from "@picode/services";
 import type { ModelSelectGroup } from "@/ModelConfigSelect.js";
-import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
+import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/picodeCustomModelValue.js";
 import { shouldShowModelVisionBadge } from "@/lib/modelVisionBadge.js";
 
 export interface ModelProviderGroupLabelOptions {

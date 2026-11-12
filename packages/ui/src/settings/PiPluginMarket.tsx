@@ -5,7 +5,7 @@ import {
   normalizePiPluginInstallSource,
   recommendedPiPlugins,
   type ZCodePiPluginsResult,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import {
   Dialog,
@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog.js";
 import { Input } from "@/components/ui/input.js";
 import { toast } from "@/components/ui/toast.js";
-import { useZCodeSessionService } from "@/hooks/useZCodeSessionService.js";
+import { useZCodeSessionService } from "@/hooks/usePiCodeSessionService.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
 import { piPluginFailureDetail } from "@/settings/piPluginMarketFormat.js";

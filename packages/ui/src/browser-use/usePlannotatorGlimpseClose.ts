@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { EmbeddedBrowserWebviewChannels } from "@zcode/shared";
+import { EmbeddedBrowserWebviewChannels } from "@picode/shared";
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 

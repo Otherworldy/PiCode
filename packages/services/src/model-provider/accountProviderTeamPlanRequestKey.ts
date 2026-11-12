@@ -5,7 +5,7 @@ import {
   resolveZaiBusinessBaseUrl,
   type ZCodeAccountAccess,
   ZAI_PROVIDER_ID,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { ICredentialService } from "#src/credential/credential.js";
 import {
   createBigModelBizHeaders,

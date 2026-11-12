@@ -15,8 +15,8 @@ Open a project and work with the agent: read code, edit files, and run commands.
 ## What it does
 
 - **Desktop.** An Electron app for opening a local project and working with the agent in a session.
-- **Browser.** The same workspace in a browser. `zcode --web` opens it on this machine, without Electron.
-- **Shared sessions with Pi.** Conversations are stored in `~/.pi/agent/sessions/`. This repository does not ship a terminal TUI. `zcode` with no arguments only prints help.
+- **Browser.** The same workspace in a browser. `picode --web` opens it on this machine, without Electron.
+- **Shared sessions with Pi.** Conversations are stored in `~/.pi/agent/sessions/`. This repository does not ship a terminal TUI. `picode` with no arguments only prints help.
 - **Pi configuration.** Models, MCP, skills, and plugins come from `~/.pi/agent` and the current project's `.pi`. The settings page can toggle Pi packages and edit an existing plugin config. An open session does not hot-reload; the change applies the next time a session is created.
 - **Cards for built-in tools.** `read`, `bash`, `edit`, `write`, `grep`, `find`, and `ls` use the existing read, execute, edit, and search cards. Unknown tools use the generic card.
 - **Built-in browser.** This is a host capability, not an installable Pi plugin. A desktop session can drive pages directly.
@@ -25,7 +25,7 @@ An extension that only uses Pi's standard UI protocol works without a special ad
 
 ## How it connects
 
-PiCode does not run its own model loop, and it does not emulate Pi's terminal UI. The desktop and the browser share one interface protocol. `@zcode/pi-host` hands protocol commands to Pi's `AgentSession`, then projects Pi events back onto the screen.
+PiCode does not run its own model loop, and it does not emulate Pi's terminal UI. The desktop and the browser share one interface protocol. `@picode/pi-host` hands protocol commands to Pi's `AgentSession`, then projects Pi events back onto the screen.
 
 ```mermaid
 flowchart LR
@@ -108,10 +108,10 @@ Open <http://localhost:5173>. The service behind it listens on <http://localhost
 After the command-line package is installed or built, from a project directory:
 
 ```bash
-zcode --web
+picode --web
 ```
 
-`zcode` with no arguments only prints help.
+`picode` with no arguments only prints help.
 
 ## Where the code is
 
@@ -120,8 +120,8 @@ zcode --web
 | `packages/desktop` | Desktop app |
 | `packages/web`, `packages/server` | Browser UI and local service |
 | `packages/ui` | UI shared by desktop and browser |
-| `apps/zcode-cli` | CLI. `zcode --web` and the `app-server` the desktop starts |
-| `apps/zcode-cli/packages/pi-host` | Pi sessions, tool presentation, plugin UI, and the adapters above |
+| `apps/picode-cli` | CLI. `picode --web` and the `app-server` the desktop starts |
+| `apps/picode-cli/packages/pi-host` | Pi sessions, tool presentation, plugin UI, and the adapters above |
 
 ## License
 

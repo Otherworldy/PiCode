@@ -1,5 +1,5 @@
 import { ArrowRight, Plus } from "lucide-react";
-import type { ZCodePiProviderModelView } from "@zcode/shared";
+import type { ZCodePiProviderModelView } from "@picode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { Button } from "@/components/ui/button.js";
 import {

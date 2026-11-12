@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { ZCodeGroupedTaskViewNode } from "@zcode/services";
+import type { ZCodeGroupedTaskViewNode } from "@picode/services";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { TaskGroupColorMark } from "@/workspace-grouped-tasks/colors.js";
 import { getTaskGroupDisplayTitle } from "@/workspace-grouped-tasks/group-title.js";

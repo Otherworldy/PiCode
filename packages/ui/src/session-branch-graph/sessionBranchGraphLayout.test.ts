@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ZCodeTaskMeta } from "@zcode/shared";
+import type { ZCodeTaskMeta } from "@picode/shared";
 import {
   SESSION_BRANCH_GRAPH_NODE_HEIGHT,
   SESSION_BRANCH_GRAPH_NODE_WIDTH,

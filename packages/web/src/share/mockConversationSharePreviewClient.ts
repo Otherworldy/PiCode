@@ -1,4 +1,4 @@
-import type { ConversationShareAccessMode, ConversationSharePreview } from "@zcode/shared";
+import type { ConversationShareAccessMode, ConversationSharePreview } from "@picode/shared";
 import { ConversationSharePreviewClientError } from "./conversationSharePreviewClient.js";
 
 function previewFor(accessMode: ConversationShareAccessMode): ConversationSharePreview {

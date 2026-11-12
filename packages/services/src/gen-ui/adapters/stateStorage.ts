@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import { watch, type FSWatcher } from "node:fs";
 import { mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
 import { join, sep } from "node:path";
-import { Emitter } from "@zcode/rpc";
-import { acquireFileLock } from "@zcode/shared/node";
+import { Emitter } from "@picode/rpc";
+import { acquireFileLock } from "@picode/shared/node";
 import { z } from "zod";
 import {
   buildGenUiScopeKey,
@@ -14,7 +14,7 @@ import {
   type GenUiScope,
   type GenUiStateChange,
   type GenUiStateTarget,
-} from "@zcode/shared/gen-ui";
+} from "@picode/shared/gen-ui";
 import { atomicWriteText } from "../../fs/atomicFileUtils.js";
 import { createServiceLogger } from "../../logger/serviceLogger.js";
 import type { GenUiStateStorage } from "../app/ports.js";

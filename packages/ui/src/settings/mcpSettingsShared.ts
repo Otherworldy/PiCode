@@ -1,4 +1,4 @@
-import type { McpServerConfig, ZCodeMcpServer } from "@zcode/shared";
+import type { McpServerConfig, ZCodeMcpServer } from "@picode/shared";
 
 export const MCP_SECTIONS = ["zcodeagentmcp"] as const;
 

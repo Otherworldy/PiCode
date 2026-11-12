@@ -1,5 +1,5 @@
 import { memo, useMemo } from "react";
-import type { QueueItem, UserInputRow } from "@zcode/shared/zcode-protocol-v4";
+import type { QueueItem, UserInputRow } from "@picode/shared/picode-protocol-v4";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { ConversationTurnRow } from "@/v4/ConversationTurnRow.js";
 import type { ConversationRowRenderContext } from "@/v4/conversationRowContext.js";

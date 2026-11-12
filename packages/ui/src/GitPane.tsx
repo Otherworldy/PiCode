@@ -1,8 +1,8 @@
 /* eslint-disable max-lines -- GitPane 当前集中承载来源切换、diff 懒加载、展开状态和文件变更查找联动；后续拆分需按 Git 面板功能边界单独推进。 */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { GitChangeSourceId, GitDiffResult } from "@zcode/shared";
-import { TID_GIT_PANE } from "@zcode/shared";
+import type { GitChangeSourceId, GitDiffResult } from "@picode/shared";
+import { TID_GIT_PANE } from "@picode/shared";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
 import { FileTextIcon, RefreshCw } from "lucide-react";

@@ -1,4 +1,4 @@
-import { resolveWorkspaceKey, type RemoteTarget, type WorkspacePurpose } from "@zcode/shared";
+import { resolveWorkspaceKey, type RemoteTarget, type WorkspacePurpose } from "@picode/shared";
 import { resolveWorkspaceDisplayLabel } from "@/lib/workspaceDisplayName.js";
 import { isWorkspaceTab, isWorkspaceTabReadOnly, type WindowTabState } from "@/store/tabStore.js";
 

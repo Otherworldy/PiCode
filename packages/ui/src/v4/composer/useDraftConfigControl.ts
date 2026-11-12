@@ -6,26 +6,26 @@ import { applyComposerPermissionGrant } from "@/v4/composer/composerPermissionGr
 // Workspace presentation 水合只提供 mode 与 slash commands；模型候选、能力和首选值
 // 统一来自目标 Host ModelSelectionView。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ZCODE_AGENT_PROVIDER, resolveExecutionState } from "@zcode/shared";
+import { ZCODE_AGENT_PROVIDER, resolveExecutionState } from "@picode/shared";
 import { applyComposerPlanTransition } from "@/v4/composer/composerPlanTransition.js";
 import type {
   ZCodeConfigOption,
   ModelSelection,
   ZCodeProvider,
   ZCodeSlashCommand,
-} from "@zcode/shared";
-import type { SessionConfigState } from "@zcode/shared/zcode-protocol-v4";
-import type { IModelSelectionService } from "@zcode/services";
-import { completeNewModelSelection } from "@zcode/provider";
+} from "@picode/shared";
+import type { SessionConfigState } from "@picode/shared/picode-protocol-v4";
+import type { IModelSelectionService } from "@picode/services";
+import { completeNewModelSelection } from "@picode/provider";
 import {
   useModelSelectionServiceView,
   type ModelSelectionRead,
 } from "@/hooks/useModelSelectionView.js";
-import { submissionModeSchema } from "@zcode/shared/zcode-protocol-v4";
+import { submissionModeSchema } from "@picode/shared/picode-protocol-v4";
 import { prepareWorkspaceWithZCodeSessionService } from "@/hooks/useWorkspacePrepare.js";
-import { useZCodeSessionService } from "@/hooks/useZCodeSessionService.js";
+import { useZCodeSessionService } from "@/hooks/usePiCodeSessionService.js";
 import { useSettings } from "@/hooks/useSettingService.js";
-import { parseModelPickerValue } from "@/lib/zcodeSessionProjection.js";
+import { parseModelPickerValue } from "@/lib/picodeSessionProjection.js";
 import { deriveDraftModelFallback } from "@/v4/composer/draftModelRepair.js";
 import { initializeNewTaskDraft } from "@/v4/composer/newTaskDraft.js";
 import {
@@ -37,7 +37,7 @@ import {
 } from "@/v4/composer/composerDraftStore.js";
 import { resolveAppFollowupMode } from "@/v4/composer/followupModeSettings.js";
 import { logger } from "@/logger.js";
-import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { useZCodeSessionStore } from "@/store/picodeSessionStore.js";
 
 /** 目录水合单飞（per workspaceKey）：draft、已有 session 和严格模式双挂载共享一次 RPC。 */
 const workspaceCatalogHydrationFlights = new Map<string, Promise<void>>();

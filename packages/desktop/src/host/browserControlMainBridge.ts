@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { HostResponseTypes } from "@zcode/shared";
+import { HostResponseTypes } from "@picode/shared";
 import type {
   BrowserBackendDescriptor,
   BrowserClientMode,
   BrowserCommand,
   BrowserCommandResult,
   BrowserRecordingArtifact,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 /**
  * host↔main browser 执行桥。host 侧把一条命令经 parentPort 发给 main（WebContentsView+CDP 执行），

@@ -1,0 +1,1687 @@
+import type { ZCodeContextUsageBreakdownItem } from "@picode/shared";
+import {
+  addTurnUsage,
+  applyConversationDeltas,
+  applyConversationDeltasMutable,
+  DELIVERY_PROFILES,
+  type ConversationDelta,
+  type ConversationRow,
+  type ConversationSnapshot,
+  type DeliveryProfileName,
+  type PendingInteraction,
+  type QueueState,
+  type StatePatch,
+  type SubagentSettlement,
+  type ToolCallRow,
+  type TurnUsage,
+} from "@picode/shared/picode-protocol-v4";
+import { summarizeTurnFileChanges } from "./file-rewind.js";
+import { PI_PROCESS_WORK_PREFIX } from "./pi-process-bridge.js";
+import {
+  bashDisplay,
+  editDisplay,
+  mapPiToolName,
+  toolInputPath,
+  toolResultText,
+} from "./presentation.js";
+import { createEmptySnapshot, emptyAvailability, emptyCumulativeUsage } from "./snapshot.js";
+import { isControlCommandTitle, visibleUserText } from "./jsonl-history.js";
+import { isOpenPlanReviewResult } from "./plan-review-signal.js";
+import type { PiAssistantDelta, PiHostEvent, PiMessageUsage } from "./types.js";
+
+function messageText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) => {
+      if (typeof part === "string") return part;
+      if (part && typeof part === "object" && "text" in part && typeof part.text === "string") {
+        return part.text;
+      }
+      return "";
+    })
+    .join("");
+}
+
+/** 工具自报的后台派发：`details.backgrounded === true`。 */
+function isBackgroundToolResult(details: unknown): boolean {
+  return (
+    typeof details === "object" &&
+    details !== null &&
+    (details as { backgrounded?: unknown }).backgrounded === true
+  );
+}
+
+/**
+ * 后台子代理结算的结构化事实。字段不全就当普通 custom message：
+ * 一张只剩角色名的卡片比一段完整正文更糟。
+ */
+function parseSubagentSettlement(details: unknown): SubagentSettlement | undefined {
+  if (typeof details !== "object" || details === null) return undefined;
+  const record = details as Record<string, unknown>;
+  const agent = typeof record.agent === "string" ? record.agent.trim() : "";
+  const status = record.status;
+  const text = typeof record.text === "string" ? record.text : "";
+  const childSessionId =
+    typeof record.childSessionId === "string" ? record.childSessionId.trim() : "";
+  if (!agent) return undefined;
+  if (status !== "success" && status !== "failed" && status !== "cancelled") return undefined;
+  return {
+    agent,
+    status,
+    text,
+    ...(childSessionId ? { childSessionId } : {}),
+  };
+}
+
+function clipError(text: string | undefined): string | undefined {
+  const flat = text?.replace(/\s+/g, " ").trim();
+  if (!flat) return undefined;
+  return flat.length > 4000 ? `${flat.slice(0, 3999)}…` : flat;
+}
+
+function errorMessageOf(value: unknown, depth = 0): string | undefined {
+  if (!value || typeof value !== "object" || depth > 4) return undefined;
+  if ("message" in value && typeof value.message === "string" && value.message.trim()) {
+    return value.message.trim();
+  }
+  return "error" in value ? errorMessageOf(value.error, depth + 1) : undefined;
+}
+
+/** 横幅只留一句人话；原始 JSON 进 detail，避免整段网关响应铺在对话里。 */
+function presentModelError(raw: string): { message: string; detail?: string } {
+  const status = /^(\d{3})\b/.exec(raw)?.[1];
+  const jsonAt = raw.indexOf("{");
+  let summary = raw;
+  if (jsonAt >= 0) {
+    try {
+      const parsed = errorMessageOf(JSON.parse(raw.slice(jsonAt)));
+      if (parsed) summary = status ? `${status} ${parsed}` : parsed;
+    } catch {
+      summary = raw;
+    }
+  }
+  const message = summary.length > 240 ? `${summary.slice(0, 239)}…` : summary;
+  return message === raw ? { message } : { message, detail: raw };
+}
+
+export interface ProjectorOptions {
+  profile?: DeliveryProfileName;
+  viaRegistry?: boolean;
+  workId?: string;
+}
+
+function sameBreakdown(
+  left: ZCodeContextUsageBreakdownItem[] | undefined,
+  right: ZCodeContextUsageBreakdownItem[] | undefined,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right || left.length !== right.length) return false;
+  return left.every(
+    (item, index) =>
+      item.source === right[index]?.source &&
+      item.chars === right[index]?.chars &&
+      item.tokens === right[index]?.tokens,
+  );
+}
+
+export class PiToV4Projector {
+  private snapshot: ConversationSnapshot;
+  private nextRowId = 1;
+  private turnId = "";
+  private productTurnId = "";
+  /** 本轮用量累计。开轮清空，每次模型调用结束累加。 */
+  private turnUsage: TurnUsage | undefined;
+  /** 本次模型请求的开始时刻（Pi 的 AssistantMessage.timestamp）。 */
+  private requestStartedAt: number | undefined;
+  /** 本次请求首个文字/思考增量的到达时刻，用来算首 token 等待。Pi 不提供这个数。 */
+  private firstTokenAt: number | undefined;
+  private streamingTextRowId: number | null = null;
+  private streamingReasoningRowId: number | null = null;
+  private streamingToolId: string | null = null;
+  private readonly toolRowId = new Map<string, number>();
+  private readonly toolArgs = new Map<string, string>();
+  /**
+   * `leaf -> canonical id` 索引。
+   *
+   * `canonicalToolId` 原来在匹配不上时对 toolRowId / toolArgs 做全表扫描，而它被每个
+   * tool_execution_start/update/end 调用 —— 一次长会话的成本是 O(工具调用数²)。
+   */
+  private readonly toolLeafIndex = new Map<string, string>();
+  private readonly rowIndexById = new Map<number, number>();
+  private aborted = false;
+  private stopRequested = false;
+  /** jsonl 重放中。历史 tool end 不能清掉当前还在等的问卷。 */
+  private replaying = false;
+  private branchSummaryRowId: number | null = null;
+  /** plannotator_submit_plan 或 UI 设计标注已打开审查。这一轮的 header 保持 running，直到决定或退出。 */
+  private openPlanReviewTurnId: string | null = null;
+  private openReviewKind: "plan" | "design" | null = null;
+  private seq = 0;
+  private assistantMessageId?: string;
+  private pendingError?: string;
+  private pendingUserAttachments?: Extract<ConversationRow, { kind: "userInput" }>["attachments"];
+  private retryFailures: { attempt: number; message: string }[] = [];
+  private publishQueue: ((deltas: ConversationDelta[]) => void) | null = null;
+  readonly profile: DeliveryProfileName;
+  private readonly viaRegistry: boolean;
+  private readonly workId?: string;
+
+  constructor(sessionId: string, logEpoch: string, options: ProjectorOptions = {}) {
+    this.snapshot = createEmptySnapshot(sessionId, logEpoch);
+    this.profile = options.profile ?? "continuous";
+    this.viaRegistry = options.viaRegistry ?? false;
+    this.workId = options.workId;
+  }
+
+  getSnapshot(): ConversationSnapshot {
+    return this.snapshot;
+  }
+
+  markAborted(): void {
+    this.aborted = true;
+    this.stopRequested = true;
+  }
+
+  wantsStop(): boolean {
+    return this.stopRequested;
+  }
+
+  apply(event: PiHostEvent): ConversationDelta[] {
+    const reduced = this.reduce(event);
+    if (reduced.length === 0) return [];
+    const withSeq = this.commit(reduced);
+    const actions = this.syncActions();
+    return actions.length === 0 ? withSeq : [...withSeq, ...this.commit(actions)];
+  }
+
+  /**
+   * 历史重放。每条事件都 syncActions 会扫整窗，3 万行的会话打开时主线程一直不回来。
+   * 行先按事件落完，actions 只在最后算一次。
+   */
+  replay(events: readonly PiHostEvent[]): ConversationDelta[] {
+    const deltas: ConversationDelta[] = [];
+    // 重放历史 tool_execution_end 不能清掉此刻还开着的问卷。
+    this.replaying = true;
+    try {
+      for (const event of events) {
+        const reduced = this.reduce(event);
+        if (reduced.length === 0) continue;
+        for (const delta of this.commit(reduced)) deltas.push(delta);
+      }
+      for (const delta of this.commit(this.syncActions())) deltas.push(delta);
+    } finally {
+      this.replaying = false;
+    }
+    return deltas;
+  }
+
+  /**
+   * 只删尾部行，不碰会话累计量，也不重放事件。
+   * 它只能用在拿不到活跃分支事件流的降级路径上：累计量是从事件流累加出来的，
+   * 被删掉那几轮的 token、步数、工具耗时拆不回来，要重算只能整份 reload。
+   */
+  truncateFrom(entityId: string): ConversationDelta[] {
+    const row = this.snapshot.rows.window.find((item) => item.entityId === entityId);
+    if (!row) return [];
+    const header = this.snapshot.rows.window.find(
+      (item) => item.kind === "turnHeader" && item.turnId === row.turnId,
+    );
+    const fromRowId = Math.min(header?.rowId ?? row.rowId, row.rowId);
+    const removed = this.commit([{ op: "row.removed", fromRowId }]);
+    this.dropPlanReviewIfGone();
+    const actions = this.syncActions();
+    return actions.length === 0 ? removed : [...removed, ...this.commit(actions)];
+  }
+
+  /** 用 jsonl 事件换掉当前行。编辑失败时把画面恢复回来，避免停在空白。 */
+  reload(events: PiHostEvent[]): ConversationDelta[] {
+    this.nextRowId = 1;
+    this.turnId = "";
+    this.productTurnId = "";
+    this.streamingTextRowId = null;
+    this.streamingReasoningRowId = null;
+    this.streamingToolId = null;
+    this.assistantMessageId = undefined;
+    this.turnUsage = undefined;
+    this.requestStartedAt = undefined;
+    this.firstTokenAt = undefined;
+    this.pendingError = undefined;
+    this.toolRowId.clear();
+    this.toolArgs.clear();
+    this.toolLeafIndex.clear();
+    this.aborted = false;
+    this.branchSummaryRowId = null;
+    this.openPlanReviewTurnId = null;
+    this.openReviewKind = null;
+    // 累计量不属于行，replay 不会清它。先归零再重放，否则同一份 jsonl 会被
+    // 再累加一遍：切分支、编辑重发、子代理 historyWatch 重画都会让统计翻倍。
+    const resetUsage = this.applyState({
+      usage: {
+        ...this.snapshot.usage,
+        cumulative: emptyCumulativeUsage(),
+      },
+    });
+    const cleared = this.commit([{ op: "row.removed", fromRowId: 1 }]);
+    return [...resetUsage, ...cleared, ...this.replay(events)];
+  }
+
+  markTurnFilesReverted(turnId: string): ConversationDelta[] {
+    const header = this.snapshot.rows.window.find(
+      (item) => item.kind === "turnHeader" && item.turnId === turnId,
+    );
+    if (!header || header.kind !== "turnHeader" || !header.fileChanges) return [];
+    const actions = { ...header.actions };
+    delete actions.canRewindFiles;
+    const next: Extract<ConversationRow, { kind: "turnHeader" }> = {
+      ...header,
+      fileChanges: { ...header.fileChanges, state: "reverted" },
+      ...(Object.keys(actions).length > 0 ? { actions } : {}),
+    };
+    if (Object.keys(actions).length === 0) delete next.actions;
+    return this.commit([{ op: "row.upserted", row: next }]);
+  }
+
+  /**
+   * Pi 把 message_end 交给监听者之后才 appendMessage。
+   * 这一行刚建出来时 entityId 是 row:N，分叉只认树节点 id，不换过来会 Entry not found。
+   */
+  bindPersistedEntry(entryId: string): ConversationDelta[] {
+    const rowId = this.streamingTextRowId;
+    if (rowId == null || !entryId) return [];
+    const row = this.snapshot.rows.window.find((item) => item.rowId === rowId);
+    if (!row || row.kind !== "assistantText" || row.entityId === entryId) return [];
+    return this.commit([{ op: "row.upserted", row: { ...row, entityId: entryId } }]);
+  }
+
+  setFeedback(entityId: string, feedback: "like" | "dislike" | null): ConversationDelta[] {
+    const row = this.snapshot.rows.window.find(
+      (item) => item.kind === "assistantText" && item.entityId === entityId,
+    );
+    if (!row || row.kind !== "assistantText") return [];
+    const next = { ...row, ...(feedback ? { feedback } : {}) };
+    if (!feedback) delete next.feedback;
+    return this.commit([{ op: "row.upserted", row: next }]);
+  }
+
+  private commit(deltas: ConversationDelta[]): ConversationDelta[] {
+    if (deltas.length === 0) return [];
+    this.seq += 1;
+    const withSeq = this.attachRevision(deltas);
+    // 原地写入。按条复制 window 的话，长历史重放是 O(n²)，会话打不开。
+    applyConversationDeltasMutable(
+      { snapshot: this.snapshot, rowIndexById: this.rowIndexById },
+      withSeq,
+    );
+    this.snapshot.seq = this.seq;
+    return withSeq;
+  }
+
+  bindQueuePublish(publish: (deltas: ConversationDelta[]) => void): void {
+    this.publishQueue = publish;
+  }
+
+  replaceQueue(queue: QueueState): ConversationDelta[] {
+    const deltas = this.applyState({ queue, inputRouting: this.routing(queue) });
+    this.publishQueue?.(deltas);
+    return deltas;
+  }
+
+  replaceInteractions(pendingInteractions: PendingInteraction[]): ConversationDelta[] {
+    return this.applyState({ pendingInteractions });
+  }
+
+  replaceWidgets(
+    widgets: NonNullable<ConversationSnapshot["extensionWidgets"]>,
+  ): ConversationDelta[] {
+    return this.applyState({ extensionWidgets: widgets });
+  }
+
+  setExtensionNotice(
+    notice: NonNullable<ConversationSnapshot["extensionNotice"]> | null,
+  ): ConversationDelta[] {
+    return this.applyState({ extensionNotice: notice });
+  }
+
+  setExtensionCommandActive(active: boolean): ConversationDelta[] {
+    return this.applyState({ extensionCommandActive: active });
+  }
+
+  replaceStatuses(
+    statuses: NonNullable<ConversationSnapshot["extensionStatuses"]>,
+  ): ConversationDelta[] {
+    const deltas = this.applyState({ extensionStatuses: statuses });
+    const planOn = statuses.some((status) => status.key === "plannotator");
+    const designOn = statuses.some((status) => status.key === "ui-design");
+    // 计划审查跟着 plannotator。UI 设计跟着 ui-design，不能因为没有计划状态就把标注轮收口。
+    if (
+      (this.openReviewKind === "plan" && !planOn) ||
+      (this.openReviewKind === "design" && !designOn)
+    ) {
+      return deltas.concat(this.finishOpenPlanReview());
+    }
+    return deltas;
+  }
+
+  /** 批准、拒绝，或对应模式被关掉。审查轮从「工作中」收成完成。 */
+  finishOpenPlanReview(at?: number): ConversationDelta[] {
+    return this.commit(this.finishOpenPlanReviewDeltas(at));
+  }
+
+  /** HTML 标注页已经打开。这一轮像计划审查一样继续显示工作中。 */
+  holdDesignReview(): ConversationDelta[] {
+    if (!this.turnId || this.openPlanReviewTurnId === this.turnId) return [];
+    const finished = this.finishOpenPlanReviewDeltas();
+    this.openPlanReviewTurnId = this.turnId;
+    this.openReviewKind = "design";
+    return this.commit(finished);
+  }
+
+  setConfig(patch: Partial<ConversationSnapshot["config"]>): ConversationDelta[] {
+    return this.applyState({ config: { ...this.snapshot.config, ...patch } });
+  }
+
+  /** 分支总结不是一轮对话。清掉上一轮的停止，避免总结请求被当成重试再 abort。 */
+  releaseStop(): void {
+    this.stopRequested = false;
+    this.aborted = false;
+  }
+
+  /** 进行中的分支总结还没写完。行在快照里，结束时才能对上并撤掉。 */
+  isBranchSummaryRunning(): boolean {
+    return this.branchSummaryRowId !== null;
+  }
+
+  // ponytail: stopTargetKind 复用 compact，只为让停止键出现。进行中的摘要是单独一行。
+  noteBranchSummary(active: boolean): ConversationDelta[] {
+    const control = this.snapshot.control;
+    const controlDeltas = this.applyState({
+      control: active
+        ? {
+            ...control,
+            canStop: true,
+            stopState: "stoppable",
+            stopTargetKind: "compact",
+          }
+        : {
+            ...control,
+            canStop: control.phase === "running",
+            stopState: control.phase === "running" ? control.stopState : "idle",
+            stopTargetKind: control.phase === "running" ? control.stopTargetKind : "unknown",
+          },
+    });
+    if (active) {
+      if (this.branchSummaryRowId !== null) return controlDeltas;
+      const row: ConversationRow = {
+        ...this.base("branch"),
+        kind: "timelineMarker",
+        lane: "turnTailBoundary",
+        marker: { type: "branchSummary", summary: "", status: "running" },
+      };
+      this.branchSummaryRowId = row.rowId;
+      // 不写进快照的话，结束时对不上这一行，界面会一直停在「正在总结」。
+      return [...controlDeltas, ...this.commit([{ op: "row.appended", row }])];
+    }
+    const rowId = this.branchSummaryRowId;
+    this.branchSummaryRowId = null;
+    const row =
+      rowId === null ? undefined : this.snapshot.rows.window.find((item) => item.rowId === rowId);
+    if (
+      rowId === null ||
+      !row ||
+      row.kind !== "timelineMarker" ||
+      row.marker.type !== "branchSummary" ||
+      row.marker.status !== "running"
+    ) {
+      return controlDeltas;
+    }
+    return [...controlDeltas, ...this.commit([{ op: "row.removed", fromRowId: rowId }])];
+  }
+
+  appendBranchSummary(summary: string): ConversationDelta[] {
+    const row: ConversationRow = {
+      ...this.base("branch"),
+      kind: "timelineMarker",
+      lane: "turnTailBoundary",
+      marker: { type: "branchSummary", summary, status: "done" },
+    };
+    return this.commit([{ op: "row.appended", row }]);
+  }
+
+  replaceSubagents(subagents: ConversationSnapshot["subagents"]): ConversationDelta[] {
+    return this.applyState({ subagents });
+  }
+
+  replaceManagedProcesses(works: ConversationSnapshot["backgroundWorks"]): ConversationDelta[] {
+    return this.replaceBackgroundWorks(works, (work) =>
+      work.workId.startsWith(PI_PROCESS_WORK_PREFIX),
+    );
+  }
+
+  replaceSubagentWorks(works: ConversationSnapshot["backgroundWorks"]): ConversationDelta[] {
+    return this.replaceBackgroundWorks(works, (work) => work.kind === "subagent");
+  }
+
+  /** 按位替换一类后台任务。两路刷新若各自重排整表，停止按钮会在终端和子会话之间跳位。 */
+  private replaceBackgroundWorks(
+    works: ConversationSnapshot["backgroundWorks"],
+    replaced: (work: ConversationSnapshot["backgroundWorks"][number]) => boolean,
+  ): ConversationDelta[] {
+    const prev = this.snapshot.backgroundWorks;
+    const incoming = new Map(works.map((work) => [work.workId, work]));
+    const next: ConversationSnapshot["backgroundWorks"] = [];
+    const seen = new Set<string>();
+    for (const work of prev) {
+      if (!replaced(work)) {
+        next.push(work);
+        continue;
+      }
+      const replacement = incoming.get(work.workId);
+      if (!replacement) continue;
+      next.push(replacement);
+      seen.add(work.workId);
+    }
+    for (const work of works) {
+      if (!seen.has(work.workId)) next.push(work);
+    }
+    if (JSON.stringify(prev) === JSON.stringify(next)) return [];
+    return this.applyState({ backgroundWorks: next });
+  }
+
+  setTitle(
+    title: string,
+    titleSource: ConversationSnapshot["meta"]["titleSource"] = "custom",
+  ): ConversationDelta[] {
+    // 手改标题之后，jsonl 重放和自动总结都只能再写 custom。否则侧栏会闪回生成标题。
+    if (titleSource !== "custom" && this.snapshot.meta.titleSource === "custom") return [];
+    if (titleSource !== "custom" && isControlCommandTitle(title)) return [];
+    return this.applyState({ meta: { title, titleSource } });
+  }
+
+  setContextUsage(
+    usedTokens: number,
+    maxTokens: number,
+    breakdown?: ZCodeContextUsageBreakdownItem[],
+  ): ConversationDelta[] {
+    const current = this.snapshot.usage.contextWindow;
+    const nextBreakdown = breakdown && breakdown.length > 0 ? breakdown : undefined;
+    if (
+      current?.usedTokens === usedTokens &&
+      current.maxTokens === maxTokens &&
+      sameBreakdown(current.breakdown, nextBreakdown)
+    ) {
+      return [];
+    }
+    return this.applyState({
+      usage: {
+        ...this.snapshot.usage,
+        contextWindow: {
+          usedTokens,
+          maxTokens,
+          autoCompactThresholdTokens: current?.autoCompactThresholdTokens ?? null,
+          ...(current?.cache ? { cache: current.cache } : {}),
+          ...(nextBreakdown ? { breakdown: nextBreakdown } : {}),
+        },
+      },
+    });
+  }
+
+  private applyState(patch: StatePatch): ConversationDelta[] {
+    const deltas: ConversationDelta[] = [{ op: "state.updated", patch }];
+    this.seq += 1;
+    const withSeq = this.attachRevision(deltas);
+    this.snapshot = { ...applyConversationDeltas(this.snapshot, withSeq), seq: this.seq };
+    return withSeq;
+  }
+
+  private attachRevision(deltas: ConversationDelta[]): ConversationDelta[] {
+    const bump = deltas.some((delta) => delta.op !== "row.delta");
+    if (!bump) return deltas;
+    const revision = this.snapshot.revision + 1;
+    const hasState = deltas.some((delta) => delta.op === "state.updated");
+    const mapped = deltas.map((delta) => {
+      if (delta.op !== "state.updated") return delta;
+      return { ...delta, patch: { ...delta.patch, revision } };
+    });
+    return hasState ? mapped : [...mapped, { op: "state.updated", patch: { revision } }];
+  }
+
+  private routing(
+    queue: QueueState,
+    running = this.snapshot.control.phase === "running",
+  ): ConversationSnapshot["inputRouting"] {
+    const followup = this.snapshot.config.followupMode;
+    if (running) return { mode: followup === "guide" ? "guide" : "enqueue" };
+    if (queue.items.length > 0 && !queue.autoDrain) return { mode: "choice" };
+    return { mode: "startNow" };
+  }
+
+  /** 重放时用 jsonl 上的原时间。缺省才用当前墙钟，避免一段工具被收成「工作 1 秒」。 */
+  private stamp: number | undefined;
+
+  private reduce(event: PiHostEvent): ConversationDelta[] {
+    this.stamp = "at" in event && typeof event.at === "number" ? event.at : undefined;
+    switch (event.type) {
+      case "agent_start":
+        return this.startTurn(event.at);
+      case "agent_end":
+        if (event.willRetry) {
+          this.pendingError = undefined;
+          return [];
+        }
+        return this.settleTurn();
+
+      case "auto_retry_start":
+        return this.noteRetry(event);
+      case "auto_retry_end":
+        if (!event.success || !this.snapshot.control.apiRetry) return [];
+        this.retryFailures = [];
+        return this.applyState({
+          control: { ...this.snapshot.control, apiRetry: null },
+        });
+      case "agent_settled":
+        return this.settleTurn(event.at);
+      case "message_end": {
+        if (event.message.role !== "assistant") return [];
+        this.pendingError = clipError(
+          event.message.stopReason === "error" ? event.message.errorMessage : undefined,
+        );
+        // 用量要在 flush 之后追加：flushAssistant 可能把上一条没冲完的正文写完，
+        // 两条 delta 的先后不影响行序，但先写正文再写轮头更新更好读。
+        const usage = this.recordTurnUsage(event.message);
+        const flushed = this.flushAssistant(event.message.content);
+        return usage.length === 0 ? flushed : [...flushed, ...usage];
+      }
+      case "message_start":
+        if (event.message.role === "assistant") {
+          // 同一轮里 Pi 会连续写多条 assistant（工具来回、插件 custom_message）。
+          // 上一条正文留下的 streaming 行会让 flushAssistant 把后面的正文全部丢掉。
+          if (!event.message.id || event.message.id !== this.assistantMessageId) {
+            this.streamingTextRowId = null;
+            this.streamingReasoningRowId = null;
+          }
+          if (event.message.id) this.assistantMessageId = event.message.id;
+          // 一次模型调用的开始：首 token 等待从这里起算。Pi 的 timestamp 是请求
+          // 发出时刻；legacy 消息没有它，退回收到事件的本机时钟。重放不打点：
+          // jsonl 里的 message_start 是合成的，拿重放时刻起算会和后面的 live 增量错配。
+          if (!this.replaying) {
+            this.requestStartedAt = event.message.timestamp ?? Date.now();
+            this.firstTokenAt = undefined;
+          }
+          return [];
+        }
+        return event.message.role === "user"
+          ? this.appendUser(messageText(event.message.content), event.message.id)
+          : this.appendCustomMessageEvent(event);
+      case "message_update":
+        // 首 token 时刻只能在这里打点：Pi 给 usage 和 durationMs，但不给首输出
+        // 时刻，而吐字速度要用它把等待时间从分母里扣掉。toolCall 也是一种输出，
+        // 先调工具再补正文的消息不能等到 text_delta 才算首 token。
+        if (
+          !this.replaying &&
+          this.firstTokenAt === undefined &&
+          (event.assistantMessageEvent.type === "text_delta" ||
+            event.assistantMessageEvent.type === "thinking_delta" ||
+            event.assistantMessageEvent.type === "toolcall_start" ||
+            event.assistantMessageEvent.type === "toolcall_delta")
+        ) {
+          this.firstTokenAt = Date.now();
+        }
+        return this.stream(event.assistantMessageEvent);
+      case "tool_execution_start":
+        return this.toolStart(event);
+      case "tool_execution_update":
+        return this.toolUpdate(event);
+      case "tool_execution_end":
+        return this.toolEnd(event);
+      case "compaction_start":
+        return this.compactStart();
+      case "compaction_end":
+        return this.compactEnd(event);
+      case "branch_summary":
+        return [
+          {
+            op: "row.appended",
+            row: {
+              ...this.base(this.turnId || "branch"),
+              kind: "timelineMarker",
+              lane: "turnTailBoundary",
+              marker: { type: "branchSummary", summary: event.summary, status: "done" },
+            },
+          },
+        ];
+      case "extension_output":
+        if (!event.text.trim()) return [];
+        return [
+          {
+            op: "row.appended",
+            row: {
+              ...this.base(this.turnId || "extension"),
+              kind: "timelineMarker",
+              lane: "turnTailBoundary",
+              marker: { type: "extensionOutput", command: event.command, text: event.text },
+            },
+          },
+        ];
+      case "extension_error":
+        return this.applyState({
+          control: {
+            ...this.snapshot.control,
+            lastError: {
+              code: "fault.extension",
+              message: event.error,
+              recoverable: true,
+              at: Date.now(),
+              source: "runtime" as const,
+            },
+          },
+        });
+      default:
+        return [];
+    }
+  }
+
+  private base(turnId = this.turnId || "turn") {
+    const rowId = this.nextRowId++;
+    return {
+      rowId,
+      turnId,
+      entityId: `row:${rowId}`,
+      productTurnId: this.productTurnId || turnId,
+      createdAt: this.stamp ?? Date.now(),
+      createdAtSeq: rowId,
+    };
+  }
+
+  private noteRetry(
+    event: Extract<PiHostEvent, { type: "auto_retry_start" }>,
+  ): ConversationDelta[] {
+    const presented = presentModelError(event.errorMessage);
+    this.retryFailures = [
+      ...this.retryFailures,
+      { attempt: event.attempt, message: presented.message },
+    ].slice(-20);
+    return [
+      {
+        op: "state.updated",
+        patch: {
+          control: {
+            ...this.snapshot.control,
+            // 展示层把 maxAttempts 当成「含首次请求」。Pi 这里给的是重试上限。
+            apiRetry: {
+              attempt: event.attempt,
+              maxAttempts: event.maxAttempts + 1,
+              nextRetryAt: Date.now() + Math.max(0, event.delayMs),
+              reasonCode: presented.message,
+              failures: this.retryFailures,
+            },
+          },
+        },
+      },
+    ];
+  }
+
+  private startTurn(at?: number): ConversationDelta[] {
+    // Pi 重试会再发 agent_start。上一轮还在跑时不能再开一条「工作中」。
+    if (this.snapshot.control.phase === "running" && this.turnId) {
+      // 重试的下一次请求不能把用户已经按过的停止清掉。
+      if (!this.stopRequested) this.aborted = false;
+      this.streamingTextRowId = null;
+      this.streamingReasoningRowId = null;
+      this.assistantMessageId = undefined;
+      return [];
+    }
+    this.pendingError = undefined;
+    this.retryFailures = [];
+    this.stopRequested = false;
+    this.aborted = false;
+    this.turnId = `turn:${this.nextRowId}`;
+    this.productTurnId = this.turnId;
+    this.streamingTextRowId = null;
+    this.streamingReasoningRowId = null;
+    this.assistantMessageId = undefined;
+    this.turnUsage = undefined;
+    this.requestStartedAt = undefined;
+    this.firstTokenAt = undefined;
+    const startedAt = at ?? Date.now();
+    const header: ConversationRow = {
+      ...this.base(this.turnId),
+      kind: "turnHeader",
+      origin: "userInput",
+      executionKind: "agent",
+      state: "running",
+      startedAt,
+    };
+    return [
+      { op: "row.appended", row: header },
+      {
+        op: "state.updated",
+        patch: {
+          // 开轮就计一轮。重试再发的 agent_start 在上面已早退，不会重复计。
+          usage: {
+            ...this.snapshot.usage,
+            cumulative: {
+              ...this.snapshot.usage.cumulative,
+              turns: this.snapshot.usage.cumulative.turns + 1,
+            },
+          },
+          control: {
+            phase: "running",
+            sessionEnded: false,
+            canStop: true,
+            stopState: "stoppable",
+            stopTargetKind: "assistant",
+            activeWorks: [
+              {
+                kind: "primaryTurn",
+                startedAt,
+                ...(this.workId ? { foregroundExecutionId: this.workId } : {}),
+              },
+            ],
+            lastError: null,
+            apiRetry: null,
+          },
+          availability: emptyAvailability(true),
+          // control 尚未提交；路由按这一批的新相位派生，避免实时和冷恢复落后一拍。
+          inputRouting: this.routing(this.snapshot.queue, true),
+        },
+      },
+    ];
+  }
+
+  noteUserAttachments(
+    attachments: Extract<ConversationRow, { kind: "userInput" }>["attachments"],
+  ): void {
+    this.pendingUserAttachments = attachments?.length ? attachments : undefined;
+  }
+
+  private appendUser(text: string, messageId?: string): ConversationDelta[] {
+    const attachments = this.pendingUserAttachments;
+    this.pendingUserAttachments = undefined;
+    text = visibleUserText(text);
+    if (!text && !attachments?.length && this.snapshot.control.phase === "draft") return [];
+    const row: ConversationRow = {
+      ...this.base(this.turnId || `turn:${this.nextRowId}`),
+      kind: "userInput",
+      text,
+      origin: "realUser",
+      ...(attachments?.length ? { attachments } : {}),
+    };
+    if (messageId) row.entityId = messageId;
+    const deltas: ConversationDelta[] = [{ op: "row.appended", row }];
+    // 历史重放不能先把首条原文推进侧栏。这一帧会把已经总结好的标题闪回原文，
+    // 随后的 session_info 名字再改回来。重放结束后由 jsonl 摘要一次写入。
+    if (this.replaying) return deltas;
+    const compact = text.trim().replace(/\s+/gu, " ");
+    const current = this.snapshot.meta;
+    const replaceCommandTitle =
+      current.titleSource === "generated" && isControlCommandTitle(current.title);
+    if (
+      compact &&
+      !isControlCommandTitle(compact) &&
+      (current.titleSource === "default" || !current.title || replaceCommandTitle)
+    ) {
+      deltas.push({
+        op: "state.updated",
+        patch: {
+          meta: {
+            title: compact.length > 60 ? `${compact.slice(0, 59)}…` : compact,
+            titleSource: "generated",
+          },
+        },
+      });
+    }
+    return deltas;
+  }
+
+  private stream(delta: PiAssistantDelta): ConversationDelta[] {
+    const paths = DELIVERY_PROFILES[this.profile].streamPaths;
+    if (delta.type === "text_delta") {
+      return this.appendStream("text", delta.delta ?? "", paths.text, "assistantText");
+    }
+    if (delta.type === "thinking_delta") {
+      return this.appendStream("text", delta.delta ?? "", paths.text, "reasoning");
+    }
+    if (delta.type === "text_end" || delta.type === "thinking_end") {
+      const rowId =
+        delta.type === "text_end" ? this.streamingTextRowId : this.streamingReasoningRowId;
+      if (rowId == null) return [];
+      const row = this.snapshot.rows.window.find((item) => item.rowId === rowId);
+      if (!row || (row.kind !== "assistantText" && row.kind !== "reasoning")) return [];
+      const durationMs =
+        delta.type === "thinking_end" && row.kind === "reasoning"
+          ? Math.max(0, (this.stamp ?? Date.now()) - row.createdAt)
+          : undefined;
+      return [
+        {
+          op: "row.upserted",
+          row: {
+            ...row,
+            state: "complete",
+            ...(durationMs !== undefined && durationMs > 0 ? { durationMs } : {}),
+          },
+        },
+      ];
+    }
+    if (delta.type === "toolcall_start") {
+      if (!delta.id) return [];
+      this.streamingToolId = delta.id;
+      this.toolArgs.set(delta.id, "");
+      if (!delta.toolName) return [];
+      return this.ensureToolRow(delta.id, delta.toolName, "inputStreaming", "");
+    }
+    if (delta.type === "toolcall_delta") {
+      // 片段没有 id。追加到最后一个 key 会把这次 edit 拼进上一个工具。
+      const id = this.streamingToolId;
+      if (!id) return [];
+      const next = (this.toolArgs.get(id) ?? "") + (delta.delta ?? "");
+      this.toolArgs.set(id, next);
+      const rowId = this.toolRowId.get(id);
+      if (rowId == null) return [];
+      if (DELIVERY_PROFILES[this.profile].streamPaths.inputText) {
+        return [{ op: "row.delta", rowId, path: "inputText", append: delta.delta ?? "" }];
+      }
+      return [];
+    }
+    if (delta.type === "toolcall_end" && delta.toolCall) {
+      const inputText =
+        typeof delta.toolCall.arguments === "string"
+          ? delta.toolCall.arguments
+          : JSON.stringify(delta.toolCall.arguments ?? {});
+      this.streamingToolId = null;
+      this.toolArgs.set(delta.toolCall.id, inputText);
+      return this.ensureToolRow(
+        delta.toolCall.id,
+        delta.toolCall.name,
+        "inputStreaming",
+        inputText,
+        true,
+      );
+    }
+    return [];
+  }
+
+  private appendStream(
+    path: "text",
+    append: string,
+    stream: boolean,
+    kind: "assistantText" | "reasoning",
+  ): ConversationDelta[] {
+    const currentId =
+      kind === "assistantText" ? this.streamingTextRowId : this.streamingReasoningRowId;
+    if (currentId == null) {
+      const row: ConversationRow =
+        kind === "assistantText"
+          ? { ...this.base(), kind, text: stream ? append : "", state: "streaming" }
+          : { ...this.base(), kind, text: stream ? append : "", state: "streaming" };
+      if (kind === "assistantText" && this.assistantMessageId)
+        row.entityId = this.assistantMessageId;
+      if (kind === "assistantText") this.streamingTextRowId = row.rowId;
+      else this.streamingReasoningRowId = row.rowId;
+      if (!stream) {
+        return [{ op: "row.appended", row: { ...row, text: append, state: "streaming" } }];
+      }
+      return [{ op: "row.appended", row }];
+    }
+    if (stream) return [{ op: "row.delta", rowId: currentId, path, append }];
+    const row = this.snapshot.rows.window.find((item) => item.rowId === currentId);
+    if (!row || (row.kind !== "assistantText" && row.kind !== "reasoning")) return [];
+    return [{ op: "row.upserted", row: { ...row, text: row.text + append } }];
+  }
+
+  /**
+   * 工具 / 扩展注入的 custom message（`pi.sendMessage`）。后台子代理的结果走这条路。
+   *
+   * 口径必须与 `jsonl-history.ts` 的回放一致：那里把 `display !== false` 的 custom_message
+   * 带 customType 与 details 重放成同一事件，实时与重载后才会长得一样。
+   * `display: false`（如 ui-design 的提醒）只进上下文，不占画面。
+   *
+   * 后台子代理的 details 带 `{agent, status, childSessionId, text}`，落成
+   * `subagentSettlement` 让 UI 把这条通知画成工具卡；其它 custom message 照旧只是正文行。
+   */
+  private appendCustomMessageEvent(
+    event: Extract<PiHostEvent, { type: "message_start" }>,
+  ): ConversationDelta[] {
+    if (event.message.role !== "custom" || event.message.display === false) return [];
+    const text = messageText(event.message.content).trim();
+    if (!text) return [];
+    const settlement = parseSubagentSettlement(event.message.details);
+    const row: ConversationRow = {
+      ...this.base(),
+      kind: "assistantText",
+      text,
+      state: "complete",
+      ...(settlement ? { subagentSettlement: settlement } : {}),
+    };
+    if (event.message.id) row.entityId = event.message.id;
+    return [{ op: "row.appended", row }];
+  }
+
+  private ensureToolRow(
+    toolCallId: string,
+    toolName: string,
+    status: ToolCallRow["status"],
+    inputText: string,
+    replace = false,
+  ): ConversationDelta[] {
+    const mapped = mapPiToolName(toolName, this.viaRegistry);
+    const existing = this.toolRowId.get(toolCallId);
+    const row: ToolCallRow = {
+      ...(existing != null
+        ? (this.snapshot.rows.window.find((item) => item.rowId === existing) as ToolCallRow)
+        : // 工具行要有起点：会话统计的工具耗时靠它与 endedAt 相减。
+          { ...this.base(), startedAt: this.stamp ?? Date.now() }),
+      kind: "toolCall",
+      toolCallId,
+      toolName: mapped,
+      status,
+      inputText,
+      ...(this.workId ? { workId: this.workId } : {}),
+    };
+    if (existing == null) {
+      this.toolRowId.set(toolCallId, row.rowId);
+      return [{ op: "row.appended", row }];
+    }
+    return replace || existing != null
+      ? [{ op: "row.upserted", row: { ...row, rowId: existing } }]
+      : [];
+  }
+
+  /** 流式 id 是 `fc_…`，执行 id 是 `call-…|fc_…`。对到同一行，否则完整参数会留在还没 success 的那行。 */
+  private canonicalToolId(toolCallId: string): string {
+    if (this.toolRowId.has(toolCallId) || this.toolArgs.has(toolCallId)) return toolCallId;
+    const leaf = toolCallId.slice(toolCallId.lastIndexOf("|") + 1);
+    if (!leaf) return toolCallId;
+    return this.toolLeafIndex.get(leaf) ?? toolCallId;
+  }
+
+  /** 记住 id 的叶子段，供 `canonicalToolId` O(1) 匹配。 */
+  private rememberToolLeaf(id: string): void {
+    const leaf = id.slice(id.lastIndexOf("|") + 1);
+    if (leaf) this.toolLeafIndex.set(leaf, id);
+  }
+
+  private aliasToolId(toolCallId: string, canonicalId: string): void {
+    const rowId = this.toolRowId.get(canonicalId);
+    if (rowId != null) this.toolRowId.set(toolCallId, rowId);
+    this.rememberToolLeaf(canonicalId);
+  }
+
+  /** 执行事件的 args 可能比流式参数短。短的那份会把完整 edit 盖掉，底部就只剩最后一小段。 */
+  private rememberArgs(id: string, incoming: unknown): string {
+    const previous = this.toolArgs.get(id) ?? "";
+    if (incoming === undefined) return previous;
+    const next = typeof incoming === "string" ? incoming : JSON.stringify(incoming);
+    const chosen = next.length >= previous.length ? next : previous;
+    if (chosen) this.toolArgs.set(id, chosen);
+    return this.toolArgs.get(id) ?? "";
+  }
+
+  private toolStart(
+    event: Extract<PiHostEvent, { type: "tool_execution_start" }>,
+  ): ConversationDelta[] {
+    // 执行 id 常是 `call-…|fc_…`，流式 id 只是后半。对不上就会另起一行，完整 edit 留在还没 success 的那行里，汇总就只看到最后一小段。
+    const id = this.canonicalToolId(event.toolCallId);
+    const inputText = this.rememberArgs(id, event.args);
+    const deltas = this.ensureToolRow(id, event.toolName, "running", inputText, true);
+    this.aliasToolId(event.toolCallId, id);
+    this.rememberToolLeaf(id);
+    return deltas;
+  }
+
+  private toolUpdate(
+    event: Extract<PiHostEvent, { type: "tool_execution_update" }>,
+  ): ConversationDelta[] {
+    const rowId = this.toolRowId.get(this.canonicalToolId(event.toolCallId));
+    if (rowId == null) return [];
+    const row = this.snapshot.rows.window.find((item) => item.rowId === rowId);
+    if (!row || row.kind !== "toolCall") return [];
+    const text = toolResultText(event.partialResult);
+    const profile = DELIVERY_PROFILES[this.profile];
+    const next: ToolCallRow = {
+      ...row,
+      outputPreview: text
+        ? {
+            text: text.slice(0, 4096),
+            fullText: text.slice(0, 4096),
+            totalLines: text.split("\n").length,
+            totalBytes: text.length,
+            linesEstimated: false,
+          }
+        : row.outputPreview,
+      progress:
+        profile.toolProgress && text
+          ? { bytes: text.length, previewLine: text.slice(0, 200), updatedAt: Date.now() }
+          : undefined,
+    };
+    return [{ op: "row.upserted", row: next }];
+  }
+
+  private toolEnd(
+    event: Extract<PiHostEvent, { type: "tool_execution_end" }>,
+  ): ConversationDelta[] {
+    const id = this.canonicalToolId(event.toolCallId);
+    const rowId = this.toolRowId.get(id);
+    const existing = this.snapshot.rows.window.find((item) => item.rowId === rowId);
+    const inputText =
+      this.toolArgs.get(id) || (existing && existing.kind === "toolCall" ? existing.inputText : "");
+    this.aliasToolId(event.toolCallId, id);
+    const reviewDeltas = this.noteOpenPlanReview(event.toolName, event.result, event.isError);
+    const settled = this.settledInteractionDeltas(id, event.toolCallId, event.toolName);
+    if (rowId == null) {
+      return [
+        ...reviewDeltas,
+        ...this.ensureToolRow(id, event.toolName, event.isError ? "error" : "success", inputText),
+        ...settled,
+      ];
+    }
+    const row = this.snapshot.rows.window.find((item) => item.rowId === rowId);
+    if (!row || row.kind !== "toolCall") return [...reviewDeltas, ...settled];
+    const text = toolResultText(event.result);
+    const details = event.result?.details;
+    const mapped = mapPiToolName(event.toolName, this.viaRegistry);
+    const display =
+      mapped === "Edit" || mapped === "Write"
+        ? editDisplay(details, toolInputPath(inputText))
+        : mapped === "Bash"
+          ? bashDisplay(text, details)
+          : undefined;
+    const next: ToolCallRow = {
+      ...row,
+      toolName: mapped,
+      status: this.aborted ? "cancelled" : event.isError ? "error" : "success",
+      output: {
+        text,
+        ...(display
+          ? { display: display as NonNullable<NonNullable<ToolCallRow["output"]>["display"]> }
+          : {}),
+      },
+      ...(event.isError ? { error: { code: "tool.error", message: text || "tool failed" } } : {}),
+      // 工具自报的后台派发（`picode_subagent` 的 details）：UI 靠它显示角标，
+      // 也靠它区分“这行还在阻塞 turn”与“已经交给后台了”。
+      ...(isBackgroundToolResult(details) ? { backgrounded: true as const } : {}),
+      outputPreview: undefined,
+      progress: undefined,
+      endedAt: this.stamp ?? Date.now(),
+    };
+    // 工具耗时只在两端都有可靠时间时累加：重放 jsonl 时 start/end 共用同一个
+    // 落盘时间戳，相减为 0，历史会话的工具用时会偏低。宁可为 0 也不拿墙钟估。
+    // 终态之后不会再需要完整参数：row.inputText 已经持有它。留着等于每次工具调用
+    // （尤其 Write/Edit 的大文件）在会话里多存一份，且只随 reload 释放。
+    this.toolArgs.delete(id);
+    const toolMs =
+      row.startedAt === undefined
+        ? 0
+        : Math.max(0, (this.stamp ?? Date.now()) - row.startedAt);
+    return [
+      ...reviewDeltas,
+      { op: "row.upserted", row: next },
+      ...settled,
+      ...(toolMs === 0 ? [] : this.addCumulativeUsage({ toolMs })),
+    ];
+  }
+
+  /**
+   * 工具已经终态，侧栏不能继续显示「等待确认」。
+   * 问卷经常没有 toolCallId，只靠 AskUserQuestion 身份对上。
+   */
+  private settledInteractionDeltas(
+    toolCallId: string,
+    rawToolCallId: string,
+    toolName: string,
+  ): ConversationDelta[] {
+    if (this.replaying) return [];
+    const mapped = mapPiToolName(toolName, this.viaRegistry);
+    const ask = mapped === "AskUserQuestion";
+    const remaining = this.snapshot.pendingInteractions.filter((item) => {
+      const payload = item.payload;
+      if (payload.kind !== "permission" && payload.kind !== "userInput") return true;
+      if (
+        payload.toolCallId &&
+        (payload.toolCallId === toolCallId || payload.toolCallId === rawToolCallId)
+      ) {
+        return false;
+      }
+      if (!ask || payload.kind !== "userInput") return true;
+      const name = payload.toolName?.trim().toLowerCase();
+      if (name === "askuserquestion" || name === "ask_user_question") return false;
+      // 旧问卷没有 toolName，也没有 select 的 options。只清这次询问留下的题目。
+      return Boolean(
+        payload.toolCallId ||
+          payload.toolName ||
+          (payload.options?.length ?? 0) > 0 ||
+          !payload.questions?.length,
+      );
+    });
+    if (remaining.length === this.snapshot.pendingInteractions.length) return [];
+    return [{ op: "state.updated", patch: { pendingInteractions: remaining } }];
+  }
+
+  private noteOpenPlanReview(
+    toolName: string,
+    result: { details?: unknown } | undefined,
+    isError: boolean | undefined,
+  ): ConversationDelta[] {
+    if (!isOpenPlanReviewResult(toolName, result, isError)) return [];
+    if (!this.turnId || this.openPlanReviewTurnId === this.turnId) return [];
+    const finished = this.finishOpenPlanReviewDeltas();
+    this.openPlanReviewTurnId = this.turnId;
+    this.openReviewKind = "plan";
+    return finished;
+  }
+
+  private finishOpenPlanReviewDeltas(at?: number): ConversationDelta[] {
+    const turnId = this.openPlanReviewTurnId;
+    if (!turnId) return [];
+    this.openPlanReviewTurnId = null;
+    this.openReviewKind = null;
+    const endedAt = at ?? this.stamp ?? Date.now();
+    const deltas: ConversationDelta[] = [];
+    for (const row of this.snapshot.rows.window) {
+      if (row.kind !== "turnHeader" || row.turnId !== turnId || row.state !== "running") continue;
+      deltas.push({
+        op: "row.upserted",
+        row: {
+          ...row,
+          state: "completedSuccess",
+          endedAt,
+          activeMs: Math.max(0, endedAt - row.startedAt),
+        },
+      });
+    }
+    // 审查等待把停止键留着。收口时模型已经闲了，停止键要一起拿掉。
+    if (this.snapshot.control.phase !== "running" && this.snapshot.control.canStop) {
+      deltas.push({
+        op: "state.updated",
+        patch: {
+          control: {
+            ...this.snapshot.control,
+            canStop: false,
+            stopState: "idle",
+            stopTargetKind: "unknown",
+            activeWorks: [],
+          },
+        },
+      });
+    }
+    return deltas;
+  }
+
+  private dropPlanReviewIfGone(): void {
+    const turnId = this.openPlanReviewTurnId;
+    if (!turnId) return;
+    const kept = this.snapshot.rows.window.some(
+      (row) => row.kind === "turnHeader" && row.turnId === turnId,
+    );
+    if (!kept) {
+      this.openPlanReviewTurnId = null;
+      this.openReviewKind = null;
+    }
+  }
+
+  private compactStart(): ConversationDelta[] {
+    const row: ConversationRow = {
+      ...this.base(this.turnId || "compact"),
+      kind: "timelineMarker",
+      // 轮尾，不进「已工作」折叠。否则空闲压缩时分隔线被收起，跑完也看不到。
+      lane: "turnTailBoundary",
+      marker: { type: "compact", origin: "manual", status: "running" },
+    };
+    const deltas: ConversationDelta[] = [{ op: "row.appended", row }];
+    // 空闲时压缩没有 running 轮次。不打开 canStop，停止键不会出现。
+    if (this.snapshot.control.phase !== "running") {
+      deltas.push({
+        op: "state.updated",
+        patch: {
+          control: {
+            ...this.snapshot.control,
+            canStop: true,
+            stopState: "stoppable",
+            stopTargetKind: "compact",
+            activeWorks: [{ kind: "compact", startedAt: Date.now() }],
+          },
+        },
+      });
+    }
+    return deltas;
+  }
+
+  private compactEnd(event: Extract<PiHostEvent, { type: "compaction_end" }>): ConversationDelta[] {
+    const presented = event.errorMessage
+      ? presentModelError(event.errorMessage.replace(/^Compaction failed:\s*/i, ""))
+      : undefined;
+    const status: "cancelled" | "success" | "failed" = event.aborted
+      ? "cancelled"
+      : event.result
+        ? "success"
+        : "failed";
+    const marker = {
+      type: "compact" as const,
+      origin: "manual" as const,
+      status,
+      tokensBefore: event.result?.tokensBefore,
+      tokensAfter: event.result?.estimatedTokensAfter,
+      ...(event.result?.summary ? { summary: event.result.summary } : {}),
+      ...(presented ? { error: presented.message } : {}),
+    };
+    // 只收口这次正在跑的压缩。倒序碰到的任意 marker 可能是模型切换，
+    // 盖上去会让失败从时间线上消失。
+    const existing = [...this.snapshot.rows.window]
+      .reverse()
+      .find(
+        (item) =>
+          item.kind === "timelineMarker" &&
+          item.marker.type === "compact" &&
+          item.marker.status === "running",
+      );
+    const deltas: ConversationDelta[] = [
+      existing && existing.kind === "timelineMarker"
+        ? { op: "row.upserted", row: { ...existing, marker } }
+        : {
+            op: "row.appended",
+            row: {
+              ...this.base(this.turnId || "compact"),
+              kind: "timelineMarker",
+              lane: "turnTailBoundary",
+              marker,
+            },
+          },
+    ];
+    let control = this.snapshot.control;
+    if (control.phase !== "running") {
+      control = {
+        ...control,
+        canStop: false,
+        stopState: "idle",
+        stopTargetKind: "unknown",
+        activeWorks: [],
+      };
+    }
+    if (status === "failed" && presented) {
+      control = {
+        ...control,
+        lastError: {
+          code: "fault.compact",
+          message: presented.message,
+          ...(presented.detail ? { detail: presented.detail } : {}),
+          recoverable: true,
+          at: Date.now(),
+          source: "runtime",
+        },
+      };
+    } else if (
+      (status === "success" || status === "cancelled") &&
+      control.lastError?.code === "fault.compact"
+    ) {
+      control = { ...control, lastError: null };
+    }
+    if (control !== this.snapshot.control) {
+      deltas.push({ op: "state.updated", patch: { control } });
+    }
+    return deltas;
+  }
+
+  /**
+   * 累加本轮用量并回写到 turnHeader。Pi 的 usage 是原始字段：`input` 是未缓存
+   * 输入，与 cacheRead/cacheWrite 互不相交，派生值交给 turn-usage 的纯函数去算。
+   */
+  private recordTurnUsage(message: {
+    usage?: PiMessageUsage;
+    durationMs?: number;
+    provider?: string;
+    model?: string;
+  }): ConversationDelta[] {
+    const usage = message.usage;
+    if (usage === undefined) return [];
+    const inputTokens = Math.max(0, usage.input ?? 0);
+    const cacheReadTokens = Math.max(0, usage.cacheRead ?? 0);
+    const cacheWriteTokens = Math.max(0, usage.cacheWrite ?? 0);
+    const outputTokens = Math.max(0, usage.output ?? 0);
+    // 失败、中断和 deferred 回填也会走 message_end，而 Pi 这时给的 usage 是全零
+    // （仍有 timestamp，但没有 durationMs）。把它们当真实调用会白白拉长分母，
+    // 还会让下面「缺一次首 token 就整体丢弃」连带废掉整轮的速度。
+    if (inputTokens + cacheReadTokens + cacheWriteTokens + outputTokens === 0) return [];
+    const durationMs = message.durationMs;
+    // 首 token 等待只能在这里取：下面会把两个打点清掉。
+    const ttftMs =
+      this.requestStartedAt === undefined || this.firstTokenAt === undefined
+        ? undefined
+        : Math.max(0, this.firstTokenAt - this.requestStartedAt);
+    this.turnUsage = addTurnUsage(this.turnUsage, {
+      ...(message.provider === undefined ? {} : { providerId: message.provider }),
+      ...(message.model === undefined ? {} : { modelId: message.model }),
+      inputTokens,
+      cacheReadTokens,
+      cacheWriteTokens,
+      outputTokens,
+      // legacy 消息和 deferred 结果没有 durationMs。缺了就不写时长，卡片只隐去
+      // 吐字速度那一行，token 数和命中率照常显示。
+      ...(durationMs === undefined ? {} : { llmDurationMs: Math.max(0, durationMs) }),
+      ...(ttftMs === undefined ? {} : { ttftMs }),
+    });
+    this.requestStartedAt = undefined;
+    this.firstTokenAt = undefined;
+    return [
+      ...this.upsertTurnUsage(),
+      // 会话累计量与单轮用量同源同口径：一次产生用量的模型调用算一步。
+      // 时间指标只累加真实可得的时长，缺数不拿墙钟估。
+      ...this.addCumulativeUsage({
+        inputTokens,
+        outputTokens,
+        cacheReadTokens,
+        cacheWriteTokens,
+        steps: 1,
+        ...(durationMs === undefined ? {} : { llmMs: Math.max(0, durationMs) }),
+        ...(ttftMs === undefined ? {} : { ttftMs, ttftSteps: 1 }),
+        // 解码时长是首 token 之后的净输出时间；两个前提缺一不可。
+        ...(durationMs === undefined || ttftMs === undefined
+          ? {}
+          : {
+              decodeMs: Math.max(0, durationMs - ttftMs),
+              decodeTokens: outputTokens,
+            }),
+      }),
+    ];
+  }
+
+  /**
+   * 会话累计量。与 turnHeader 的单轮用量分开：它是整个会话的单调累加。
+   * 冷恢复不需要额外的种子——回放 jsonl 同样逐条走 message_end，累计自然补齐。
+   */
+  private addCumulativeUsage(delta: {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+    turns?: number;
+    steps?: number;
+    llmMs?: number;
+    toolMs?: number;
+    ttftMs?: number;
+    ttftSteps?: number;
+    decodeMs?: number;
+    decodeTokens?: number;
+  }): ConversationDelta[] {
+    const current = this.snapshot.usage.cumulative;
+    return this.applyState({
+      usage: {
+        ...this.snapshot.usage,
+        cumulative: {
+          inputTokens: current.inputTokens + (delta.inputTokens ?? 0),
+          outputTokens: current.outputTokens + (delta.outputTokens ?? 0),
+          cacheReadTokens: current.cacheReadTokens + (delta.cacheReadTokens ?? 0),
+          cacheWriteTokens: current.cacheWriteTokens + (delta.cacheWriteTokens ?? 0),
+          turns: current.turns + (delta.turns ?? 0),
+          steps: current.steps + (delta.steps ?? 0),
+          llmMs: current.llmMs + (delta.llmMs ?? 0),
+          toolMs: current.toolMs + (delta.toolMs ?? 0),
+          ttftMs: current.ttftMs + (delta.ttftMs ?? 0),
+          ttftSteps: current.ttftSteps + (delta.ttftSteps ?? 0),
+          decodeMs: current.decodeMs + (delta.decodeMs ?? 0),
+          decodeTokens: current.decodeTokens + (delta.decodeTokens ?? 0),
+        },
+      },
+    });
+  }
+
+  private upsertTurnUsage(): ConversationDelta[] {
+    // turnId 为空说明还没开轮（message_end 早于 agent_start）；这时没有行可写。
+    if (this.turnUsage === undefined || this.turnId === "") return [];
+    const header = this.snapshot.rows.window.find(
+      (row): row is Extract<ConversationRow, { kind: "turnHeader" }> =>
+        row.kind === "turnHeader" && row.turnId === this.turnId,
+    );
+    if (header === undefined) return [];
+    return [{ op: "row.upserted", row: { ...header, usage: this.turnUsage } }];
+  }
+
+  private flushAssistant(content: unknown): ConversationDelta[] {
+    if (this.streamingTextRowId != null || this.streamingReasoningRowId != null) return [];
+    let thinking = "";
+    let text = "";
+    if (typeof content === "string") {
+      text = content;
+    } else if (Array.isArray(content)) {
+      for (const part of content) {
+        if (!part || typeof part !== "object") continue;
+        if ("thinking" in part && typeof part.thinking === "string") thinking += part.thinking;
+        if ("text" in part && typeof part.text === "string") text += part.text;
+      }
+    }
+    const deltas: ConversationDelta[] = [];
+    if (thinking) {
+      const at = this.stamp ?? Date.now();
+      const previous = this.earlierActivityAt(at);
+      const durationMs = previous === undefined ? undefined : Math.max(0, at - previous);
+      const row: ConversationRow = {
+        ...this.base(),
+        kind: "reasoning",
+        text: thinking,
+        state: "complete",
+        ...(durationMs !== undefined && durationMs > 0 ? { durationMs } : {}),
+      };
+      this.streamingReasoningRowId = row.rowId;
+      deltas.push({ op: "row.appended", row });
+    }
+    if (text) {
+      const row: ConversationRow = {
+        ...this.base(),
+        kind: "assistantText",
+        text,
+        state: "complete",
+      };
+      if (this.assistantMessageId) row.entityId = this.assistantMessageId;
+      this.streamingTextRowId = row.rowId;
+      deltas.push({ op: "row.appended", row });
+    }
+    return deltas;
+  }
+
+  /** 这条消息之前最近的活动时间。同一条消息上刚写入的工具不算。 */
+  private earlierActivityAt(before: number): number | undefined {
+    let best: number | undefined;
+    for (const row of this.snapshot.rows.window) {
+      if (row.turnId !== this.turnId) continue;
+      const stamps: number[] = [];
+      if (row.kind === "toolCall") {
+        if (row.createdAt < before) stamps.push(row.createdAt);
+        if (row.startedAt !== undefined && row.startedAt < before) stamps.push(row.startedAt);
+        if (row.endedAt !== undefined && row.endedAt < before) stamps.push(row.endedAt);
+      } else if (row.kind === "turnHeader") {
+        if (row.startedAt < before) stamps.push(row.startedAt);
+      } else if (row.createdAt < before) {
+        stamps.push(row.createdAt);
+      }
+      for (const stamp of stamps) best = best === undefined ? stamp : Math.max(best, stamp);
+    }
+    return best;
+  }
+
+  private settleTurn(at?: number): ConversationDelta[] {
+    // agent_end 已经收过口时，紧跟着的 agent_settled 不能把 interrupted 盖成 success。
+    if (this.snapshot.control.phase !== "running") return [];
+    const endedAt = at ?? Date.now();
+    const errorText = this.pendingError;
+    this.pendingError = undefined;
+    const presented = errorText ? presentModelError(errorText) : undefined;
+    if (presented) {
+      const attempt = (this.retryFailures.at(-1)?.attempt ?? 0) + 1;
+      this.retryFailures = [...this.retryFailures, { attempt, message: presented.message }].slice(
+        -20,
+      );
+    }
+    // 审查还开着。header 继续 running。停止键也留着，避免时间线在工作中、输入框却是发送。
+    const holdPlanReview = this.openPlanReviewTurnId === this.turnId && !this.aborted;
+    if (this.aborted && this.openPlanReviewTurnId === this.turnId) {
+      this.openPlanReviewTurnId = null;
+      this.openReviewKind = null;
+    }
+    // 模型报错不能收成 completedSuccess。通知和任务列表只看 phase，
+    // 收成成功会让失败也走完成提醒。用户中断仍算 interrupted。
+    const failed = Boolean(presented) && !this.aborted;
+    const state = this.aborted ? "completedInterrupted" : failed ? "failed" : "completedSuccess";
+    const failureLines = this.retryFailures.map(
+      (failure) => `${failure.attempt}. ${failure.message}`,
+    );
+    if (presented?.detail) failureLines.push(presented.detail);
+    const detail =
+      failureLines.length > 1 || presented?.detail ? failureLines.join("\n") : undefined;
+    const deltas: ConversationDelta[] = [];
+    for (const row of this.snapshot.rows.window) {
+      if (
+        !holdPlanReview &&
+        row.kind === "turnHeader" &&
+        row.turnId === this.turnId &&
+        row.state === "running"
+      ) {
+        deltas.push({
+          op: "row.upserted",
+          row: {
+            ...row,
+            state,
+            endedAt,
+            activeMs: Math.max(0, endedAt - row.startedAt),
+          },
+        });
+      }
+      if (row.kind === "assistantText" && row.state === "streaming") {
+        deltas.push({
+          op: "row.upserted",
+          row: { ...row, state: this.aborted ? "interrupted" : "complete" },
+        });
+      }
+      if (row.kind === "reasoning" && row.state === "streaming") {
+        deltas.push({
+          op: "row.upserted",
+          row: { ...row, state: this.aborted ? "interrupted" : "complete" },
+        });
+      }
+      if (
+        row.kind === "toolCall" &&
+        (row.status === "running" || row.status === "inputStreaming")
+      ) {
+        deltas.push({
+          op: "row.upserted",
+          row: { ...row, status: this.aborted ? "cancelled" : "error", endedAt: Date.now() },
+        });
+      }
+    }
+    this.streamingTextRowId = null;
+    this.streamingReasoningRowId = null;
+    deltas.push({
+      op: "state.updated",
+      patch: {
+        control: {
+          phase: this.aborted ? "completedInterrupted" : failed ? "error" : "completedSuccess",
+          sessionEnded: false,
+          canStop: holdPlanReview,
+          stopState: holdPlanReview ? "stoppable" : "idle",
+          stopTargetKind: holdPlanReview ? "assistant" : "unknown",
+          activeWorks: holdPlanReview
+            ? [
+                {
+                  kind: "primaryTurn" as const,
+                  startedAt: this.snapshot.control.activeWorks[0]?.startedAt ?? endedAt,
+                },
+              ]
+            : [],
+          lastError: presented
+            ? {
+                code: "fault.model",
+                message: presented.message,
+                ...(detail ? { detail } : {}),
+                recoverable: true,
+                at: Date.now(),
+                source: "runtime" as const,
+              }
+            : this.snapshot.control.phase === "running"
+              ? null
+              : this.snapshot.control.lastError,
+          apiRetry: null,
+        },
+        availability: emptyAvailability(false),
+        // 结束增量与 control 同步；仍在等审查时保留入队语义，其余按已结束处理。
+        inputRouting: this.routing(this.snapshot.queue, holdPlanReview),
+      },
+    });
+    this.aborted = false;
+    this.stopRequested = false;
+    return deltas;
+  }
+
+  private syncActions(): ConversationDelta[] {
+    const running = this.snapshot.control.phase === "running";
+    // 子代理结算卡片不是答复：它既不能当分叉/重试的锚点，也不应挂上动作行。
+    const assistants = this.snapshot.rows.window.filter(
+      (row) => row.kind === "assistantText" && row.state === "complete" && !row.subagentSettlement,
+    );
+    const latestAssistant = assistants.at(-1);
+    const forkRowByTurn = new Map<string, number>();
+    for (const row of assistants) forkRowByTurn.set(row.turnId, row.rowId);
+    const blocked = running || this.snapshot.pendingInteractions.length > 0;
+    const deltas: ConversationDelta[] = [];
+    for (const row of this.snapshot.rows.window) {
+      if (row.kind === "turnHeader") {
+        const next = this.turnHeaderWithFileChanges(row, blocked);
+        if (next) deltas.push({ op: "row.upserted", row: next });
+        continue;
+      }
+      if (row.kind !== "userInput" && row.kind !== "assistantText") continue;
+      const forkable =
+        !running &&
+        row.kind === "assistantText" &&
+        !row.subagentSettlement &&
+        forkRowByTurn.get(row.turnId) === row.rowId;
+      const nextActions =
+        !running && row.kind === "userInput" && row.origin === "realUser"
+          ? { canEdit: true as const, editDisposition: "rewind" as const }
+          : forkable && row.rowId === latestAssistant?.rowId
+            ? { canRetry: true as const, canFork: true as const }
+            : forkable
+              ? { canFork: true as const }
+              : undefined;
+      if (JSON.stringify(row.actions) === JSON.stringify(nextActions)) continue;
+      const next = { ...row, actions: nextActions };
+      if (!nextActions) delete next.actions;
+      deltas.push({ op: "row.upserted", row: next });
+    }
+    return deltas;
+  }
+
+  private turnHeaderWithFileChanges(
+    row: Extract<ConversationRow, { kind: "turnHeader" }>,
+    blocked: boolean,
+  ): ConversationRow | null {
+    const summary = summarizeTurnFileChanges(this.snapshot.rows.window, row.turnId);
+    const fileChanges = summary
+      ? {
+          additions: summary.additions,
+          deletions: summary.deletions,
+          files: summary.files,
+          state:
+            row.fileChanges?.state === "reverted" ? ("reverted" as const) : ("active" as const),
+        }
+      : undefined;
+    const actions = { ...row.actions };
+    if (fileChanges?.state === "active" && row.state !== "running" && !blocked) {
+      actions.canRewindFiles = true;
+    } else {
+      delete actions.canRewindFiles;
+    }
+    const nextActions = Object.keys(actions).length > 0 ? actions : undefined;
+    if (
+      JSON.stringify(row.fileChanges) === JSON.stringify(fileChanges) &&
+      JSON.stringify(row.actions) === JSON.stringify(nextActions)
+    ) {
+      return null;
+    }
+    const next: Extract<ConversationRow, { kind: "turnHeader" }> = {
+      ...row,
+      ...(nextActions ? { actions: nextActions } : {}),
+    };
+    if (!nextActions) delete next.actions;
+    if (fileChanges) next.fileChanges = fileChanges;
+    else delete next.fileChanges;
+    return next;
+  }
+}

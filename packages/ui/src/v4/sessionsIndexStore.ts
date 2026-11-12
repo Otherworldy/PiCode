@@ -9,9 +9,9 @@ import {
   type SessionSummary,
   type SessionsIndexTopicFrame,
   type TopicFrameDeliveryKind,
-} from "@zcode/shared/zcode-protocol-v4";
-import { isZCodeFileLockTimeoutError } from "@zcode/shared";
-import { ZCODE_AGENT_RUNTIME_UNAVAILABLE_CODE } from "@zcode/services";
+} from "@picode/shared/picode-protocol-v4";
+import { isZCodeFileLockTimeoutError } from "@picode/shared";
+import { ZCODE_AGENT_RUNTIME_UNAVAILABLE_CODE } from "@picode/services";
 import { logger } from "@/logger.js";
 import type { SessionsIndexTransport } from "@/v4/agentSessionsIndexTransport.js";
 

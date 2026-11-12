@@ -1,5 +1,5 @@
 import { Loader2Icon } from "lucide-react";
-import type { UsageEntitlementSubscriptionDetail, UsageQuotaLimit } from "@zcode/shared";
+import type { UsageEntitlementSubscriptionDetail, UsageQuotaLimit } from "@picode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { formatStartPlanBucketResetTime } from "@/lib/codingPlanQuotaPresentation.js";
 import { formatStartPlanExpireDate } from "./CodingPlanStatusMeta.js";

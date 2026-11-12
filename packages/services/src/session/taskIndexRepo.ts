@@ -17,12 +17,12 @@ import {
   OFF_PEAK_DEFAULT_GROUP_ID,
   type ZCodeProvider,
   type ZCodeTaskMeta,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type {
   ZCodeTaskListQuery,
   ZCodeTaskListResult,
   ZCodeTaskListItem,
-} from "#src/session/zcodeTaskListTypes.js";
+} from "#src/session/picodeTaskListTypes.js";
 import type {
   ZCodeGroupedTaskRef,
   ZCodeGroupedTaskView,
@@ -35,7 +35,7 @@ import type {
   ZCodeGroupedTaskViewTopLevelNodeRef,
   ZCodeTaskGroup,
   ZCodeTaskGroupColor,
-} from "#src/session/zcodeTaskListTypes.js";
+} from "#src/session/picodeTaskListTypes.js";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
 import { getTasksIndexDatabasePath } from "#src/paths.js";
 import { runTasksDatabaseMigrations } from "#src/session/tasksDatabase/migrations.js";
@@ -295,7 +295,7 @@ function normalizeWorkspaceBootstrapScopes(
   scopes: Array<{
     workspacePath: string;
     workspaceIdentity?: string;
-    workspacePurpose?: import("@zcode/shared").WorkspacePurpose;
+    workspacePurpose?: import("@picode/shared").WorkspacePurpose;
   }>,
 ): WorkspaceBootstrapScope[] {
   const seen = new Set<string>();

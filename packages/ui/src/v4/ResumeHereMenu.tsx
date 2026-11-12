@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { FileTextIcon, GitBranchIcon, PencilIcon, TrendingUpDownIcon } from "lucide-react";
-import { TID_V4_RESUME_MENU, testId } from "@zcode/shared";
+import { TID_V4_RESUME_MENU, testId } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { cn } from "@/components/lib/utils.js";
 import {

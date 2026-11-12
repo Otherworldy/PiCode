@@ -4,7 +4,7 @@
 // 消费者走这里）。与 SessionDataLayer 的 per-session acquire/release 同构。
 // 复用键加 endpoint 维度——remote shard（web/手机远控/SSH workspace）的 sessions-index
 // 走各自 endpoint 的 agentService proxy，同 workspaceKey 不同 endpoint 不能共用 store。
-import type { IZCodeAgentService } from "@zcode/services";
+import type { IZCodeAgentService } from "@picode/services";
 import { logger } from "@/logger.js";
 import { remoteAgentServiceGeneration } from "@/lib/remoteAgentServiceGeneration.js";
 import { findRemoteWorkspaceSessionIdForAgentService } from "@/store/remoteWorkspaceSessionStore.js";

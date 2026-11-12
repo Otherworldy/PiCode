@@ -1,9 +1,9 @@
 import { useSyncExternalStore } from "react";
 import { Loader2 } from "lucide-react";
-import type { ZCodeTaskMeta } from "@zcode/shared";
-import type { IZCodeTaskService } from "@zcode/services";
+import type { ZCodeTaskMeta } from "@picode/shared";
+import type { IZCodeTaskService } from "@picode/services";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
-import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { useZCodeSessionStore } from "@/store/picodeSessionStore.js";
 import { updateTaskQueryCacheTaskMetaPreservingMembership } from "@/store/taskQueryCacheStore.js";
 
 const pending = new Set<string>();

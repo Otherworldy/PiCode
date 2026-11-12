@@ -3,7 +3,7 @@ import {
   buildZCodeEndpointUrls,
   DEFAULT_ZCODE_ENDPOINT_ORIGIN,
   resolveBigModelApiOrigin,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 interface WebImportMetaEnv {
   VITE_DEV_ORIGIN?: string;

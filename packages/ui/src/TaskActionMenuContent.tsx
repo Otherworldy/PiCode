@@ -1,4 +1,4 @@
-import { TID_V4_TASK_OPEN_IN_SPLIT } from "@zcode/shared";
+import { TID_V4_TASK_OPEN_IN_SPLIT } from "@picode/shared";
 
 interface TaskActionMenuItemProps {
   children: React.ReactNode;

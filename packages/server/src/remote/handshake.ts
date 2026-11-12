@@ -1,5 +1,5 @@
-import type { HelloMessage, HelloAckMessage } from "@zcode/shared";
-import { ZCODE_VERSION, formatZodError, helloMessageSchema } from "@zcode/shared";
+import type { HelloMessage, HelloAckMessage } from "@picode/shared";
+import { ZCODE_VERSION, formatZodError, helloMessageSchema } from "@picode/shared";
 import type { StdioStream } from "./backend.js";
 
 const MAX_HANDSHAKE_DIAGNOSTIC_CHARS = 2048;

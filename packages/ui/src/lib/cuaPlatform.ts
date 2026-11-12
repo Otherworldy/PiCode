@@ -1,4 +1,4 @@
-import type { IPlatformService } from "@zcode/shared";
+import type { IPlatformService } from "@picode/shared";
 
 // macOS 才具备 TCC 权限、授权引导和 Helper 状态轮询；Windows 本地桌面仅复用
 // zcode-cua 插件总开关，不读取 TCC 或 Helper 状态。Linux、普通 Web 和手机远控不展示电脑控制设置。

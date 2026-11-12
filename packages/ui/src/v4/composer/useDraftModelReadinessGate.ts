@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ZCODE_AGENT_PROVIDER, type ZCodeProvider } from "@zcode/shared";
-import type { IModelSelectionService, ModelSelectionView } from "@zcode/services";
+import { ZCODE_AGENT_PROVIDER, type ZCodeProvider } from "@picode/shared";
+import type { IModelSelectionService, ModelSelectionView } from "@picode/services";
 import {
   buildModelConfigMissingUiError,
   type ModelConfigMissingUiError,

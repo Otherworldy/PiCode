@@ -8,7 +8,7 @@ Desktop 启动时要等两个异步阶段完成，两者都是「子进程/worke
 | --- | --- | --- |
 | tasks-index 迁移 | `packages/desktop/src/host/storagePreparationProcesses.ts` `prepareHostStorage` | Worker |
 | session 库迁移 | 同文件 `runSessionStorageWorker` | Worker（带 3 次重试） |
-| Agent 进程的 SQLite 启动 | `packages/services/src/zcode-agent/zcodeStorageStartupGate.ts` | Agent 子进程 |
+| Agent 进程的 SQLite 启动 | `packages/services/src/picode-agent/picodeStorageStartupGate.ts` | Agent 子进程 |
 
 三处都有同一个缺陷：**首个状态帧到达就 `clearTimeout`，之后再没有任何定时器**。
 
@@ -152,7 +152,7 @@ Gate 保持自己的实现（phase 驱动、ready/failed 分支更直接），�
 - **`runSessionStorageWorker` 的 3 次重试叠加。** 每次 attempt 各自持有一个看门狗，最坏情况下
   `startup_status_timeout` 不满足 `shouldRetrySessionStorageWorker`（要求 `kind === "transport_closed"` 或 `EBUSY/EPERM/EACCES/EPIPE/UNKNOWN` 且 `storageWorkerBeforePath === true`），所以 stall 超时第一次就抛出，最坏是一次 180s 而不是 3×180s。
 - **`prepareSessionStorage` 的 `observePath` 预算（250ms/路径）** 与看门狗无关，未改。
-- **`packages/desktop/src/main/zcodeDataSizeWorkerClient.ts:32-59` 是同族缺陷**：等单个 worker 的
+- **`packages/desktop/src/main/picodeDataSizeWorkerClient.ts:32-59` 是同族缺陷**：等单个 worker 的
   唯一终态消息，只有 abort / error / 非 0 退出的 exit 能结算，**没有任何超时**。worker 内部的
   `maxDurationMs: 30_000` 是在 Worker 自己的循环里计时，worker 卡死时该预算同样不生效。
   症状轻（遥测旁路），未在本轮修。

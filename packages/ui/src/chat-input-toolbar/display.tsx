@@ -16,7 +16,7 @@ import {
   type ZCodeConfigOption,
   type ZCodeConfigSelectValue,
   type ZCodeProvider,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import {
   Select,

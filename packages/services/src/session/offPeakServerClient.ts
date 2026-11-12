@@ -3,7 +3,7 @@
    （由 idle plan per-turn provider 在 agent 进程内直连）。
    无内建重试：排队/退避语义在调用方（offPeakTaskService 轮询 / 适配层）。 */
 import { z } from "zod";
-import type { OffPeakTakeNumberAvailability } from "@zcode/shared";
+import type { OffPeakTakeNumberAvailability } from "@picode/shared";
 import type { ServiceLogger } from "../logger/serviceLogger.js";
 import {
   withRequestIdHeader,

@@ -8,7 +8,7 @@ import {
   getZCodeAgentAvailableModes,
   testId,
   type ZCodeConfigOption,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   DropdownMenu,
   DropdownMenuTrigger,

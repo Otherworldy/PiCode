@@ -1,5 +1,5 @@
 import { autoUpdate } from "@floating-ui/dom";
-import type { PluginSandboxHandle } from "@zcode/shared/mcp-apps";
+import type { PluginSandboxHandle } from "@picode/shared/mcp-apps";
 import type { SandboxPagePlacement } from "../contract.js";
 
 function parkingRoot(): HTMLElement {

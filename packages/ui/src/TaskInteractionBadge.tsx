@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import type { ZCodeTaskPendingInteraction } from "@zcode/shared";
+import type { ZCodeTaskPendingInteraction } from "@picode/shared";
 import { cn } from "@/components/lib/utils.js";
 
 interface TaskInteractionBadgeProps {

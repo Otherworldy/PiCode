@@ -22,8 +22,8 @@ import { dirname, join, resolve, sep } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { setTimeout as sleep } from "node:timers/promises";
-import { fileExists } from "@zcode/server/remote/deployShared.js";
-import { extractTarGzArchive } from "@zcode/server/remote/localTarGz.js";
+import { fileExists } from "@picode/server/remote/deployShared.js";
+import { extractTarGzArchive } from "@picode/server/remote/localTarGz.js";
 import {
   assertRemoteCdnBaseVersionMatches,
   buildComponentArtifactUrlCandidates,
@@ -31,11 +31,11 @@ import {
   buildReleaseBaseCandidates,
   normalizeRemoteAssetRelativePath,
   resolveRemoteCdnBaseUrls,
-} from "@zcode/server/remote/remoteAssetCdn.js";
+} from "@picode/server/remote/remoteAssetCdn.js";
 import {
   resolveRemoteAssetFetch,
   type RemoteAssetNetworkPort,
-} from "@zcode/server/remote/remoteAssetNetwork.js";
+} from "@picode/server/remote/remoteAssetNetwork.js";
 
 const MANIFEST_FILE_NAME_PREFIX = "manifest-";
 const REMOTE_ASSET_READY_MARKER = ".ready";

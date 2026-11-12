@@ -1,4 +1,4 @@
-import type { ZCodePiPluginsResult } from "@zcode/shared";
+import type { ZCodePiPluginsResult } from "@picode/shared";
 import { create } from "zustand";
 import {
   applyPiPluginUpdateSnapshot,

@@ -14,7 +14,7 @@ import type {
   SettingsDirectorySource,
   NativeMcpServerRecord,
   SaveCliMcpToUserDirectoryRequest,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { McpConfigKeyName } from "./types.js";
 import {
   ensurePiMcpFiles,
@@ -22,7 +22,7 @@ import {
   piUserMcpFile,
   toPiStoredMcpServer,
   withFileLock,
-} from "@zcode/shared/node";
+} from "@picode/shared/node";
 import { isRecord, readJsonObject, writeTextAtomic } from "./utils.js";
 import { migrateLegacyCommonMcp } from "./legacy.js";
 

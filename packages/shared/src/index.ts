@@ -75,7 +75,7 @@ export type { SessionCreateSource } from "./sessionCreateSource.js";
 export { resolveSafeEndpointHostname } from "./endpointHostname.js";
 export * from "./validation.js";
 export * from "./api.js";
-export * from "./zcode-protocol/index.js";
+export * from "./picode-protocol/index.js";
 export {
   isRecommendedPiPluginInstalled,
   isRecommendedPiPluginSource,
@@ -92,28 +92,28 @@ export {
 } from "./pi-plugin-source.js";
 export * from "./account-provider-state.js";
 // re-home：旧协议承重面的幸存文件（消费者继续走 barrel，零感知）
-export * from "./zcode-protocol-legacy-types.js";
-export * from "./zcode-task-types-core.js";
+export * from "./picode-protocol-legacy-types.js";
+export * from "./picode-task-types-core.js";
 export * from "./task-realtime-core.js";
 export * from "./remote-workspace-identity.js";
-export * from "./zcode-api-retry-status.js";
-export * from "./zcode-network-debug-status.js";
-export * from "./zcode-session-visible-content.js";
+export * from "./picode-api-retry-status.js";
+export * from "./picode-network-debug-status.js";
+export * from "./picode-session-visible-content.js";
 export * from "./official-mcp-auth.js";
 export * from "./official-mcp-tool-error.js";
 export * from "./conversation-message-projection-policy.js";
 export * from "./conversation-share.js";
 export * from "./conversation-preview-artifacts.js";
-export * from "./zcode-session-task-status.js";
-export * from "./zcode-tool-projection-memory.js";
-export * from "./zcode-slash-command-help.js";
-export * from "./zcodeEndpoint.js";
-export * from "./zcode-source-headers.js";
-export * from "./zcode-agent-policy.js";
-export * from "./zcode-media-policy.js";
+export * from "./picode-session-task-status.js";
+export * from "./picode-tool-projection-memory.js";
+export * from "./picode-slash-command-help.js";
+export * from "./picodeEndpoint.js";
+export * from "./picode-source-headers.js";
+export * from "./picode-agent-policy.js";
+export * from "./picode-media-policy.js";
 export * from "./media-preview.js";
 export * from "./plugin-display-name.js";
-export * from "./zcode-agent-runtime.js";
+export * from "./picode-agent-runtime.js";
 export * from "./runtimeEnv.js";
 export * from "./markdown-artifact-images.js";
 export * from "./serviceAuthority.js";
@@ -208,8 +208,8 @@ export type {
   OpenCuaPermissionOnboardingOptions,
   PrepareCuaHelperPermissionDragResult,
 } from "./cuaAccessibilitySettings.js";
-export type { ZCodeTaskCreateResult } from "./zcode-task-types.js";
-export * from "./zcode-task-types.js";
+export type { ZCodeTaskCreateResult } from "./picode-task-types.js";
+export * from "./picode-task-types.js";
 export * from "./automation-types.js";
 export * from "./off-peak-types.js";
 export * from "./todo-types.js";
@@ -217,7 +217,7 @@ export * from "./background-task-control-merge.js";
 export * from "./background-task-controls.js";
 export * from "./background-task-notifications.js";
 export * from "./background-bash-jobs.js";
-export * from "./zcode-agent-model-state.js";
+export * from "./picode-agent-model-state.js";
 export * from "./task-realtime.js";
 export { formatTimestamp, formatLogPrefix } from "./log-format.js";
 export * from "./model-provider-types.js";
@@ -249,7 +249,7 @@ export * from "./mcp.js";
 export * from "./runtime-tool-runtime.js";
 export * from "./git.js";
 export * from "./assistant-message-parts.js";
-export * from "./zcodePersistedMessageMerge.js";
+export * from "./picodePersistedMessageMerge.js";
 export * from "./assistant-presentation.js";
 export * from "./tool-call-summary.js";
 export * from "./tool-identity.js";

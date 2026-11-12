@@ -2,8 +2,8 @@ import type {
   McpAppCspRelaxations,
   McpAppsResourcePermission,
   McpToolUiCsp,
-} from "@zcode/shared/mcp-apps";
-import { normalizeCspOrigin } from "@zcode/shared/mcp-apps";
+} from "@picode/shared/mcp-apps";
+import { normalizeCspOrigin } from "@picode/shared/mcp-apps";
 import { buildPluginSandboxShellUrl } from "./contract.js";
 
 /**

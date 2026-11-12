@@ -5,7 +5,7 @@ import {
   isStartPlanModelProviderId,
   testId,
   type ProviderFamilyConnectionSelectionSettings,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { InfoIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import {

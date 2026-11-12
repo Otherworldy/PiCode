@@ -25,7 +25,7 @@ import {
   resolveWorkspaceKey,
   type ZCodeAutomation,
   type ZCodeOffPeakTask,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import {
   DropdownMenu,

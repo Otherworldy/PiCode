@@ -1,4 +1,4 @@
-import type { ZCodeConfigOption } from "@zcode/shared";
+import type { ZCodeConfigOption } from "@picode/shared";
 
 function areJsonEquivalent(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);

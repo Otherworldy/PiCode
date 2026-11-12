@@ -9,7 +9,7 @@ import type {
   IPluginUiAppToolsService,
   IPluginUiBridgeService,
   IPluginUiSamplingService,
-} from "@zcode/services";
+} from "@picode/services";
 import type {
   McpAppsToolInputPayload,
   McpAppsToolResultPayload,
@@ -17,7 +17,7 @@ import type {
   PluginSandboxPlatformPort,
   PluginSandboxTransportPort,
   PluginUiScopeRef,
-} from "@zcode/shared/mcp-apps";
+} from "@picode/shared/mcp-apps";
 import type { PluginUiPresentation, PluginUiResourceNotificationTarget } from "../contract.js";
 import type { PluginUiHostBridge } from "./pluginUiHostBridge.js";
 import { type PluginUiInteractionCallbacks } from "./pluginUiInteractionPorts.js";

@@ -2,7 +2,7 @@ import { shouldExposeE2EStoreBridge } from "@/lib/e2eStoreBridge.js";
 import { useSkillStore } from "@/store/skillStore.js";
 import { useSubagentsStore } from "@/store/subagentsStore.js";
 import { useWhiteboardStore } from "@/store/whiteboardStore.js";
-import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { useZCodeSessionStore } from "@/store/picodeSessionStore.js";
 
 declare global {
   interface Window {

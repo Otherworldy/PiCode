@@ -8,8 +8,8 @@ import {
   type ZCodeAutomationRun,
   type ZCodeAutomationScheduleRule,
   type ModelSelection,
-} from "@zcode/shared";
-import type { IZCodeAgentService } from "@zcode/services";
+} from "@picode/shared";
+import type { IZCodeAgentService } from "@picode/services";
 import { logger } from "@/logger.js";
 
 // 定时任务(automation)管理 store：走 zcode-agent RPC（列表 / 创建 / 编辑 / 启停 / 重跑 / 删除 + 运行历史）。

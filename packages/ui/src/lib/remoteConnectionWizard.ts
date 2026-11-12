@@ -3,8 +3,8 @@ import type {
   RemoteTarget,
   SshProxyEndpoint,
   SshProxyKind,
-} from "@zcode/shared";
-import { isValidWslUser, normalizeRemoteResourcePackageSelection } from "@zcode/shared";
+} from "@picode/shared";
+import { isValidWslUser, normalizeRemoteResourcePackageSelection } from "@picode/shared";
 import type { SSHAuthMethod } from "@/hooks/useRemoteConnectionForm.js";
 import type { RemoteWizardStep } from "@/RemoteConnectionWizardChrome.js";
 

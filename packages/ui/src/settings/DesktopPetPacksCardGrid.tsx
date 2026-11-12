@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { buildLocalMediaPreviewUrl, type DesktopPetInstalledPack } from "@zcode/shared";
+import { buildLocalMediaPreviewUrl, type DesktopPetInstalledPack } from "@picode/shared";
 import { Download, FolderInput, PawPrint, RotateCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { usePlatform } from "@/hooks/usePlatform.js";

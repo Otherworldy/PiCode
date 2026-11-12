@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
-import type { IDisposable } from "@zcode/rpc";
-import type { GitRepositorySummary } from "@zcode/shared";
+import type { IDisposable } from "@picode/rpc";
+import type { GitRepositorySummary } from "@picode/shared";
 import {
   buildGitAutoRefreshWatchPaths,
   GIT_AUTO_REFRESH_POLL_MS,

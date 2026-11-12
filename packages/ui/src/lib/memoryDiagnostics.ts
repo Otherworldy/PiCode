@@ -5,7 +5,7 @@ import {
   MEMORY_SAMPLE_INTERVAL_MS,
   type MemoryDiagnosticsRegistry,
   type MemorySample,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { logMemoryDiagnostics } from "@/logger.js";
 
 /**

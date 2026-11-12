@@ -1,5 +1,5 @@
 import { FileText, X } from "lucide-react";
-import type { TodoAttachment } from "@zcode/shared";
+import type { TodoAttachment } from "@picode/shared";
 import { todoAttachmentRecord } from "@/todos/todoAttachmentRecord.js";
 
 export const MAX_TODO_FILES = 8;

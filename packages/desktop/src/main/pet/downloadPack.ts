@@ -11,7 +11,7 @@ import { dirname, join, resolve, sep } from "node:path";
 import { finished, pipeline } from "node:stream/promises";
 import { open as openZip, type Entry, type ZipFile } from "yauzl";
 import { findPetPackDir } from "./pack.js";
-import type { DesktopPetDownloadFailure } from "@zcode/shared";
+import type { DesktopPetDownloadFailure } from "@picode/shared";
 
 const MAX_PACK_BYTES = 512 * 1024 * 1024;
 

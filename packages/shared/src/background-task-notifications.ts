@@ -1,6 +1,6 @@
-import type { ZCodeMessageWithParts } from "./zcode-protocol-legacy-types.js";
-import { textFromZCodeMessageParts } from "./zcode-protocol-legacy-types.js";
-import type { ZCodeStreamEvent } from "./zcode-task-types-core.js";
+import type { ZCodeMessageWithParts } from "./picode-protocol-legacy-types.js";
+import { textFromZCodeMessageParts } from "./picode-protocol-legacy-types.js";
+import type { ZCodeStreamEvent } from "./picode-task-types-core.js";
 
 export interface ZCodeBackgroundTaskNotificationInfo {
   error?: string;

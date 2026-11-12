@@ -9,12 +9,12 @@ import {
   VSBuffer,
   type ISocket,
   type MessagePortLike,
-} from "@zcode/rpc";
+} from "@picode/rpc";
 import {
   resolveWorkspaceKey,
   type MobileRemoteWorkspaceListItem,
   type WindowWorkspaceCatalogEntry,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 export const MOBILE_REMOTE_PAIR_COOKIE = "zcode_mobile_pair";
 

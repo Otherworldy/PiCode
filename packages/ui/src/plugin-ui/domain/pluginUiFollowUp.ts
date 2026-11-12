@@ -1,4 +1,4 @@
-import { MCP_APPS_STRUCTURED_CONTENT_MAX_BYTES } from "@zcode/shared/mcp-apps";
+import { MCP_APPS_STRUCTURED_CONTENT_MAX_BYTES } from "@picode/shared/mcp-apps";
 
 /** `ui/message` 的 structuredContent 序列化后允许的最大 UTF-8 字节数（与工具结果同一上限）。 */
 export const PLUGIN_UI_FOLLOW_UP_STRUCTURED_MAX_BYTES = MCP_APPS_STRUCTURED_CONTENT_MAX_BYTES;

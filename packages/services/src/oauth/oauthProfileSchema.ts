@@ -3,7 +3,7 @@ import {
   type OAuthProviderId,
   type OAuthTokenSet,
   type OAuthUserProfile,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { OAuthProviderAdapter } from "./providers/index.js";
 
 const BIGMODEL_PROFILE_SCHEMA_VERSION = 2;

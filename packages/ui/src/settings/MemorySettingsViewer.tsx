@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import type { ProjectMemoryFileSummary, ProjectMemoryWorkspaceSummary } from "@zcode/services";
+import type { ProjectMemoryFileSummary, ProjectMemoryWorkspaceSummary } from "@picode/services";
 import {
   TID_SETTINGS_MEMORY_COUNT,
   TID_SETTINGS_MEMORY_FILE,
@@ -16,7 +16,7 @@ import {
   TID_WORKSPACE_MEMORY_CREATE,
   TID_WORKSPACE_MEMORY_DELETE,
   testId,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { Trash2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert.js";
 import { Button } from "@/components/ui/button.js";

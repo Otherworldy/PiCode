@@ -13,7 +13,7 @@ import {
   type ResourceUsageProcess,
   type ResourceUsageSnapshot,
   type ZCodeProvider,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { logger } from "./logger.js";
 import { normalizeElectronCpuToMachinePercent } from "./electronCpuNormalization.js";
 import { buildAuxiliaryRendererName } from "./resourceManagerProcessNames.js";

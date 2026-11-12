@@ -2,8 +2,8 @@
 // membership，sessions-index 只在后续投影中补充实时 activity/detail。
 // unread 同为组织态（setTaskUnread 写 tasks-index），与 pin/archive 同类，
 // 不进冻结的 sessions-index schema；这里平行拉取 unreadAt map，列表构建时 join。
-import type { IZCodeTaskService } from "@zcode/services";
-import type { ZCodeTaskMeta } from "@zcode/shared";
+import type { IZCodeTaskService } from "@picode/services";
+import type { ZCodeTaskMeta } from "@picode/shared";
 import { buildTaskEntityKey } from "@/lib/taskQueryCache.js";
 
 interface TaskListMembershipScope {

@@ -1,6 +1,6 @@
 /* oxlint-disable eslint(max-lines) -- summary 与同源 detail 投影暂集中维护，本次 review fix 不扩大重构范围。 */
 import { type ReactNode, useCallback, useMemo } from "react";
-import type { ApplicationIconRequest } from "@zcode/shared";
+import type { ApplicationIconRequest } from "@picode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { isZCodeCuaToolName } from "@/lib/cuaPermissionAction.js";
 import { ToolLayout } from "@/ToolCallBlocks/ToolLayout.js";

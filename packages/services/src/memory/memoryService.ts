@@ -16,7 +16,7 @@ import {
   setWorkspaceMemoryExpiryDays as writeWorkspaceMemoryExpiryDays,
   setWorkspaceMemoryModel as writeWorkspaceMemoryModel,
   type WorkspaceMemoryCategory,
-} from "@zcode/shared/node";
+} from "@picode/shared/node";
 import { lstat, readdir, readFile, realpath, unlink } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";

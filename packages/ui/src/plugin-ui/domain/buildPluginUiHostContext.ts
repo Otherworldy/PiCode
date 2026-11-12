@@ -4,7 +4,7 @@ import type {
   McpUiHostContext,
   McpUiStyles,
 } from "@modelcontextprotocol/ext-apps/app-bridge";
-import type { McpAppsHostTitleBar, McpAppsStyleVariables } from "@zcode/shared/mcp-apps";
+import type { McpAppsHostTitleBar, McpAppsStyleVariables } from "@picode/shared/mcp-apps";
 import { PLUGIN_UI_CARD_MAX_HEIGHT_PX } from "../contract.js";
 
 export interface PluginUiHostContextInput {

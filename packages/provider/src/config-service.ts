@@ -17,7 +17,7 @@ import {
   resolveProviderTemplateName,
 } from "./config/index.js";
 import { resolveOwnedOrder } from "./owned-order.js";
-import type { ModelSelection } from "@zcode/shared/model-selection";
+import type { ModelSelection } from "@picode/shared/model-selection";
 import type { ProviderConfigSnapshot, ProviderSource } from "./sources.js";
 
 export interface ProviderConfigLayerSnapshot {

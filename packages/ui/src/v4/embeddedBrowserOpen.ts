@@ -1,5 +1,5 @@
-import type { EmbeddedBrowserOpenUrlRequest } from "@zcode/shared";
-import type { ConversationDelta } from "@zcode/shared/zcode-protocol-v4";
+import type { EmbeddedBrowserOpenUrlRequest } from "@picode/shared";
+import type { ConversationDelta } from "@picode/shared/picode-protocol-v4";
 
 export interface EmbeddedBrowserOpenScope {
   workspacePath: string;

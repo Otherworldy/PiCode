@@ -2,9 +2,9 @@ import type {
   ZCodeTaskListKind,
   ZCodeTaskListSortBy,
   ZCodeTaskListWorkspaceScope,
-} from "@zcode/services";
-import type { ZCodeTaskMeta } from "@zcode/shared";
-import { resolveWorkspaceStateKey } from "@/store/zcodeSessionStoreSelectors.js";
+} from "@picode/services";
+import type { ZCodeTaskMeta } from "@picode/shared";
+import { resolveWorkspaceStateKey } from "@/store/picodeSessionStoreSelectors.js";
 
 export type TaskEntityKey = string;
 export type TaskListCacheKey = string;

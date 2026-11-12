@@ -8,7 +8,7 @@ import { copyGenUiRuntimeAssets } from "./gen-ui-runtime-assets.mjs";
 it("packages the same pinned runtime assets used by standalone export", async () => {
   const directory = await mkdtemp(join(tmpdir(), "gen-ui-assets-"));
   const source = new URL(
-    "../../../apps/zcode-cli/packages/visualize-plugin/skills/visualize/assets/",
+    "../../../apps/picode-cli/packages/visualize-plugin/skills/visualize/assets/",
     import.meta.url,
   );
   const manifest = JSON.parse(await readFile(new URL("runtime-manifest.json", source), "utf8"));

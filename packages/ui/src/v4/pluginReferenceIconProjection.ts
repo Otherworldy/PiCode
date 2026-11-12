@@ -1,5 +1,5 @@
 import { resolvePluginIconSource } from "@/lib/pluginIconSource.js";
-import type { ZCodePluginReferenceCatalogEntry } from "@zcode/shared";
+import type { ZCodePluginReferenceCatalogEntry } from "@picode/shared";
 import type { ConversationStoreStatus } from "@/v4/conversationProjectionStore.js";
 
 export function isSessionPluginCatalogReady(

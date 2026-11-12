@@ -1,4 +1,4 @@
-import type { DesktopPetReaderBubbleRect, DesktopPetStageCrop } from "@zcode/shared";
+import type { DesktopPetReaderBubbleRect, DesktopPetStageCrop } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { SettingsRow } from "./SettingsPageParts.js";

@@ -1,4 +1,4 @@
-import { BIGMODEL_PROVIDER_ID, buildBigModelApiUrl } from "@zcode/shared";
+import { BIGMODEL_PROVIDER_ID, buildBigModelApiUrl } from "@picode/shared";
 import type { OAuthProviderRuntimeConfig } from "../runtimeConfig.js";
 import {
   buildDesktopOAuthRedirectUriFromEnv,

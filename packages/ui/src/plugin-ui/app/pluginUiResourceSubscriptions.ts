@@ -4,7 +4,7 @@ import type {
   ReadResourceResult,
 } from "@modelcontextprotocol/client";
 import { INVALID_PARAMS, ProtocolError } from "@modelcontextprotocol/client";
-import type { IPluginUiBridgeService, PluginUiPluginScope } from "@zcode/services";
+import type { IPluginUiBridgeService, PluginUiPluginScope } from "@picode/services";
 import type { PluginUiHostBridge } from "./pluginUiHostBridge.js";
 
 /**

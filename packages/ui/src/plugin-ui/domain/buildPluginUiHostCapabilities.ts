@@ -4,7 +4,7 @@ import {
   MCP_APPS_SURFACE_EXPERIMENTAL_KEY,
   MCP_APPS_WIDGET_STATE_EXPERIMENTAL_KEY,
   buildMcpAppsCspExperimentalCapability,
-} from "@zcode/shared/mcp-apps";
+} from "@picode/shared/mcp-apps";
 
 /** 宿主实例真实可用的交互；缺省项对应的能力不声明，插件据此降级。 */
 export interface PluginUiHostCapabilityInput {

@@ -1,4 +1,4 @@
-import type { ZCodeTaskMeta } from "@zcode/shared";
+import type { ZCodeTaskMeta } from "@picode/shared";
 import type { CachedTaskListResult } from "@/lib/taskQueryCache.js";
 import {
   mergeWorkspaceTaskListItemsWithOptimistic,

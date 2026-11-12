@@ -1,6 +1,6 @@
 import { type ComponentProps, useCallback, useMemo } from "react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
-import type { AppUsageSnapshot } from "@zcode/shared";
+import type { AppUsageSnapshot } from "@picode/shared";
 import {
   ChartContainer,
   ChartTooltip,

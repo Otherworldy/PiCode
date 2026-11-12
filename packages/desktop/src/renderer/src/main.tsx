@@ -12,9 +12,9 @@ import {
   createRemoteWorkspaceDisconnectedError,
   playTaskNotificationSound,
   setStreamClientId,
-} from "@zcode/ui";
-import "@zcode/ui/styles.css";
-import { connectViaMessagePort, createMessagePortServiceConnection } from "@zcode/client";
+} from "@picode/ui";
+import "@picode/ui/styles.css";
+import { connectViaMessagePort, createMessagePortServiceConnection } from "@picode/client";
 import {
   InternalChannels,
   databaseStartupStateSchema,
@@ -23,9 +23,9 @@ import {
   LAUNCH_MARKS_QUERY_KEY,
   type LaunchMarks,
   DEFAULT_LOCALE,
-} from "@zcode/shared";
-import type { Locale } from "@zcode/shared";
-import type { IServiceAccessor } from "@zcode/services";
+} from "@picode/shared";
+import type { Locale } from "@picode/shared";
+import type { IServiceAccessor } from "@picode/services";
 import { createDesktopPlatform } from "./desktopPlatform.js";
 import { startPerformanceTimelineCleanup } from "./performanceTimelineCleanup.js";
 import { buildRemoteWorkspaceSessionServices } from "./remoteWorkspaceSessionServices.js";
@@ -72,7 +72,7 @@ function registerE2EStoreBridgesIfEnabled() {
     return;
   }
 
-  void import("@zcode/ui/e2e-store-bridge").then(({ registerE2EStoreBridges }) => {
+  void import("@picode/ui/e2e-store-bridge").then(({ registerE2EStoreBridges }) => {
     registerE2EStoreBridges();
   });
 }

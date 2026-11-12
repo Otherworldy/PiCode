@@ -1,10 +1,10 @@
-import { createLocalServices, type ZCodeAgentCommandResolver } from "@zcode/services/node";
+import { createLocalServices, type ZCodeAgentCommandResolver } from "@picode/services/node";
 import {
   parseServiceAuthorityMode,
   ZCODE_REMOTE_HTTP_PROXY_ENV_KEY,
   ZCODE_REMOTE_NO_PROXY_ENV_KEY,
   ZCODE_REMOTE_RUNTIME_NETWORK_AUTHORITY_ENV_KEY,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 interface CreateStdioServicesOptions {
   env?: Record<string, string | undefined>;

@@ -1,12 +1,12 @@
 import { useProviderSettingsView } from "@/hooks/useProviderSettingsView.js";
 import { buildStartPlanEntitlementOptions } from "@/lib/startPlanEntitlementOptions.js";
 import { useCallback } from "react";
-import type { ModelSelectionView } from "@zcode/provider";
+import type { ModelSelectionView } from "@picode/provider";
 import {
   TID_START_PLAN_RECOMMENDATION_DIALOG,
   isStartPlanModelProviderId,
   type ModelSelection,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { useOptionalBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { useUsageEntitlementWithService } from "@/hooks/useUsageEntitlement.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";

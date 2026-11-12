@@ -3,7 +3,7 @@ import {
   ZAI_PROVIDER_ID,
   buildBigModelApiUrl,
   buildRuntimeZaiBusinessUrl,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { ICredentialService } from "#src/credential/credential.js";
 import { resolveBigModelUserinfoUrl } from "#src/oauth/providers/bigmodelProviderConfig.js";
 import { resolveZaiUserinfoUrl } from "#src/oauth/providers/zaiProviderConfig.js";

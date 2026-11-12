@@ -1,8 +1,8 @@
 packages:
   - packages/*
-  - apps/zcode-cli
-  - apps/zcode-cli/packages/*
-  - apps/zcode-cli/tools/*
+  - apps/picode-cli
+  - apps/picode-cli/packages/*
+  - apps/picode-cli/tools/*
 supportedArchitectures:
   os:
     - current

@@ -5,7 +5,7 @@
  * 替代直接调用 window.zcode。
  */
 import { createContext, useContext, useCallback, type ReactNode } from "react";
-import type { IPlatformService, RemoteTarget } from "@zcode/shared";
+import type { IPlatformService, RemoteTarget } from "@picode/shared";
 
 const PlatformContext = createContext<IPlatformService | null>(null);
 

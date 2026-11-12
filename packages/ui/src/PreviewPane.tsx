@@ -11,7 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { EditorInfo } from "@zcode/shared";
+import type { EditorInfo } from "@picode/shared";
 import {
   ChevronRightIcon,
   Ellipsis,
@@ -24,8 +24,8 @@ import { nanoid } from "nanoid";
 import { Button } from "@/components/ui/button.js";
 import { toast } from "@/components/ui/toast.js";
 import { cn } from "@/components/lib/utils.js";
-import type { FileBinaryPreview, FileMediaPreview, FileTextSlice } from "@zcode/shared";
-import { TID_PREVIEW_PANE } from "@zcode/shared";
+import type { FileBinaryPreview, FileMediaPreview, FileTextSlice } from "@picode/shared";
+import { TID_PREVIEW_PANE } from "@picode/shared";
 import { useWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { usePptxFileWatch } from "@/hooks/usePptxFileWatch.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";

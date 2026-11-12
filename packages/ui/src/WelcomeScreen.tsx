@@ -15,10 +15,10 @@ import {
   TID_OAUTH_LOGIN_BUTTON,
   ZAI_PROVIDER_ID,
   testId,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { Alert, AlertDescription } from "./components/ui/alert.js";
 import { Button } from "./components/ui/button.js";
-import { ZCodeAboutLogo } from "@/components/ui/ZCodeAboutLogo.js";
+import { ZCodeAboutLogo } from "@/components/ui/PiCodeAboutLogo.js";
 import { useOAuth } from "./hooks/useOAuth.js";
 import { useZCodeIntl } from "./i18n/IntlProvider.js";
 import { LoginApiKeyForm } from "./login/LoginApiKeyForm.js";

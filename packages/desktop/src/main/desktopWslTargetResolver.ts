@@ -1,5 +1,5 @@
-import type { RemoteTarget } from "@zcode/shared";
-import { WSLBackend } from "@zcode/server/remote/wsl-backend.js";
+import type { RemoteTarget } from "@picode/shared";
+import { WSLBackend } from "@picode/server/remote/wsl-backend.js";
 
 type WslTarget = Extract<RemoteTarget, { kind: "wsl" }>;
 

@@ -1,4 +1,4 @@
-import type { McpAppsDownloadFileItem } from "@zcode/shared/mcp-apps";
+import type { McpAppsDownloadFileItem } from "@picode/shared/mcp-apps";
 
 /**
  * ui/download-file 的纯规则——每项归一成 `{ name, mimeType, source }`，

@@ -1,11 +1,11 @@
-import type { GitRepositorySummary } from "@zcode/shared";
+import type { GitRepositorySummary } from "@picode/shared";
 import type {
   BackgroundWorkSummary,
   GoalState,
   PlanState,
   RunningSubagentSummary,
   ToolCallRow,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared/picode-protocol-v4";
 import { extractPlanToolCallContent, getPlanDirectoryTitle } from "../lib/planToolCall.js";
 
 export interface ConversationStatusPanelGitModel {

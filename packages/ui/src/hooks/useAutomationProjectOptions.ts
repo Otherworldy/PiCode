@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { WorkspacePurpose } from "@zcode/shared";
+import type { WorkspacePurpose } from "@picode/shared";
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceTab, type WorkspaceTabState } from "@/store/tabStore.js";
 import { useLocalWorkspaceScopes } from "@/hooks/useLocalWorkspaceScopes.js";

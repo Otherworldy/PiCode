@@ -7,8 +7,8 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
-import type { ZCodeElicitationQuestion, ZCodeElicitationRequest } from "@zcode/shared";
-import type { InteractionAutoResolution } from "@zcode/shared/zcode-protocol-v4";
+import type { ZCodeElicitationQuestion, ZCodeElicitationRequest } from "@picode/shared";
+import type { InteractionAutoResolution } from "@picode/shared/picode-protocol-v4";
 import { CheckIcon, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Info, XIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
@@ -16,7 +16,7 @@ import { cn } from "@/components/lib/utils.js";
 import { Textarea } from "@/components/ui/textarea.js";
 import { InteractionRequestOriginBadge } from "@/InteractionRequestOriginBadge.js";
 import { isImeComposingKeyEvent } from "@/lib/imeComposition.js";
-import type { ElicitationFormDraft } from "@/store/zcodeSessionStoreTypes.js";
+import type { ElicitationFormDraft } from "@/store/picodeSessionStoreTypes.js";
 import { useZCodeIntl } from "./i18n/IntlProvider.js";
 
 interface ElicitationDialogProps {

@@ -42,9 +42,9 @@ import type {
   StartPlanPreviewConfig,
   ZCodeModelContextBudgetStrategy,
   ForceUpdateConfig,
-} from "@zcode/shared";
-import type { ModelSelectionView } from "@zcode/provider";
-import { ServiceChannels } from "@zcode/shared";
+} from "@picode/shared";
+import type { ModelSelectionView } from "@picode/provider";
+import { ServiceChannels } from "@picode/shared";
 import { createServiceDescriptor } from "../descriptors.js";
 
 export interface OffPeakClientConfig {

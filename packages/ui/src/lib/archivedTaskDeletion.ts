@@ -1,4 +1,4 @@
-import type { IZCodeTaskService } from "@zcode/services";
+import type { IZCodeTaskService } from "@picode/services";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
 import { logger } from "@/logger.js";
 

@@ -6,7 +6,7 @@
 //
 // 本 helper 在重启后轮询 accessibility:脱离 stale(granted/denied/unknown)即视为"已解决"返回 false;
 // 直到超时仍 stale(或一直 unavailable/抛错)才返回 true,触发 UI 升级到"重启 PiCode"兜底。
-import { isCuaPermissionStatusAvailable, type CuaPermissionStatusResult } from "@zcode/services";
+import { isCuaPermissionStatusAvailable, type CuaPermissionStatusResult } from "@picode/services";
 
 interface WaitForAccessibilityNotStaleOptions {
   /** 总超时(默认 6s):覆盖 tccd 传播 lag,首轮通常立即 granted。 */

@@ -1,4 +1,4 @@
-import type { SessionSummary } from "./zcode-protocol-v4/sessions-index.js";
+import type { SessionSummary } from "./picode-protocol-v4/sessions-index.js";
 
 /** 桌面宠物的持续心情。完成和失败不是心情，它们仍是一次性提醒。 */
 export type DesktopPetMood = "idle" | "thinking" | "busy" | "waiting";

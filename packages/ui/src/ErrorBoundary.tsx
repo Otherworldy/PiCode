@@ -1,7 +1,7 @@
 import { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";
-import type { Locale } from "@zcode/shared";
-import { DEFAULT_LOCALE } from "@zcode/shared";
+import type { Locale } from "@picode/shared";
+import { DEFAULT_LOCALE } from "@picode/shared";
 import { DesktopWindowFrame } from "@/DesktopWindowFrame.js";
 import zhCN from "@/i18n/locales/zh-CN.js";
 import enUS from "@/i18n/locales/en-US.js";

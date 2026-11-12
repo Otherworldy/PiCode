@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PluginSandboxRegisterInput } from "@zcode/shared/mcp-apps";
+import type { PluginSandboxRegisterInput } from "@picode/shared/mcp-apps";
 import { createPluginUiBridgeService } from "./pluginUiBridgeService.js";
 const instance = { runtimeId: "agent", generation: 1, token: "token", appIdentity: "a".repeat(64) };
 const params = {

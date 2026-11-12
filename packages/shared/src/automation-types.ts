@@ -1,4 +1,4 @@
-import type { ZCodeTaskMode } from "./zcode-task-types-core.js";
+import type { ZCodeTaskMode } from "./picode-task-types-core.js";
 import type { ModelSelection } from "./model-selection.js";
 
 // ---- 定时任务(Automation)领域类型 ----

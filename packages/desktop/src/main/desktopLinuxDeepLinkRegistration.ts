@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { desktopProductIdentities } from "../../scripts/desktop-product-identity.mjs";
 import { installLinuxAppImageDesktopIconBestEffort } from "./desktopLinuxAppImageIcon.js";
 import {
   runXdgCommand,
@@ -8,7 +9,7 @@ import {
   type LinuxDeepLinkRegistrationLogger,
 } from "./desktopLinuxXdg.js";
 
-const LINUX_DEEP_LINK_DESKTOP_FILE = "zcode.desktop";
+const LEGACY_LINUX_DEEP_LINK_DESKTOP_FILE = "zcode.desktop";
 const LINUX_DEEP_LINK_MIME_TYPE = "x-scheme-handler/zcode";
 // 归属标记：用于识别用户级 zcode.desktop 是否由本应用写入（历史所有版本都带这行 Comment）。
 const LINUX_DESKTOP_ENTRY_OWNERSHIP_MARKER = "Comment=PiCode Desktop App";
@@ -107,10 +108,10 @@ function createLinuxDeepLinkDesktopEntry(params: {
   executablePath: string;
   args?: string[];
   productName?: string;
-  iconName?: string;
+  iconName: string;
 }): string {
   const productName = params.productName ?? "PiCode";
-  const iconName = params.iconName ?? "zcode";
+  const iconName = params.iconName;
   const command = {
     executablePath: params.executablePath,
     args: params.args ?? [],
@@ -151,9 +152,12 @@ function resolveLinuxSystemApplicationDirs(env?: { XDG_DATA_DIRS?: string }): st
   return dataDirs.map((dir) => join(dir, "applications"));
 }
 
-function findSystemLevelDesktopEntryPath(systemApplicationDirs: string[]): string | undefined {
+function findSystemLevelDesktopEntryPath(
+  systemApplicationDirs: string[],
+  desktopFileName: string,
+): string | undefined {
   for (const dir of systemApplicationDirs) {
-    const candidate = join(dir, LINUX_DEEP_LINK_DESKTOP_FILE);
+    const candidate = join(dir, desktopFileName);
     // 边界：目录或损坏的路径不应被当成有效系统级条目，否则纯 AppImage 用户
     // 的用户级注册会被病态路径误抑制。只有普通文件才参与遮蔽判断。
     try {
@@ -188,23 +192,23 @@ function removeOwnedUserDesktopEntry(
     return;
   }
   if (!isOwnedDesktopEntry(desktopFilePath)) {
-    logger.warn("[deep-link] Linux 用户级 zcode.desktop 非本应用写入，保留不清理", {
+    logger.warn("[deep-link] Linux 用户级 desktop entry 非本应用写入，保留不清理", {
       desktopFilePath,
     });
     return;
   }
   try {
     rmSync(desktopFilePath);
-    logger.info("[deep-link] 已清理遗留的用户级 zcode.desktop，恢复系统级条目", {
+    logger.info("[deep-link] 已清理遗留的用户级 desktop entry，恢复系统级条目", {
       desktopFilePath,
     });
   } catch (error) {
-    logger.warn("[deep-link] 清理遗留用户级 zcode.desktop 失败", { desktopFilePath, error });
+    logger.warn("[deep-link] 清理遗留用户级 desktop entry 失败", { desktopFilePath, error });
   }
 }
 
-function resolveLinuxDeepLinkDesktopFilePath(dataDir: string): string {
-  return join(dataDir, "applications", LINUX_DEEP_LINK_DESKTOP_FILE);
+function resolveLinuxDeepLinkDesktopFilePath(dataDir: string, desktopFileName: string): string {
+  return join(dataDir, "applications", desktopFileName);
 }
 
 function writeFileIfChanged(path: string, content: string): boolean {
@@ -224,36 +228,51 @@ export function registerLinuxDeepLinkProtocol(options: RegisterLinuxDeepLinkProt
     argv: options.argv,
   });
   const dataDir = resolveLinuxUserDataDir({ env: options.env, homeDir: options.homeDir });
-  const desktopFilePath = resolveLinuxDeepLinkDesktopFilePath(dataDir);
+  // 打包身份由同一个构建模块持有；Preview 不能继续注册正式版的 Exec/Icon。
+  const isPreview = options.productName === "PiCode Preview";
+  const identity = desktopProductIdentities[isPreview ? "preview" : "production"] as {
+    linuxExecutableName: string;
+  };
+  const iconName = identity.linuxExecutableName;
+  const desktopFileName = `${iconName}.desktop`;
+  const desktopFilePath = resolveLinuxDeepLinkDesktopFilePath(dataDir, desktopFileName);
   const applicationsDir = dirname(desktopFilePath);
   const desktopEntry = createLinuxDeepLinkDesktopEntry({
     ...command,
     productName: options.productName,
+    iconName,
   });
   let protocolRegistered = false;
   const runCommand = options.runCommand ?? runXdgCommand;
 
-  // 用户级 zcode.desktop 在 XDG
-  // 解析中永远优先于系统级同名条目。rpm/deb 安装后，旧 AppImage 写入的用户级条目会把
-  // /usr/share/applications/zcode.desktop 持续遮蔽，快捷方式和 zcode:// deep link 一直
-  // 指向旧 AppImage（文件还在时）或直接失效（文件被删后），只有手动跑一次新版才会被覆盖。
-  // 现在只要检测到系统级同 ID 条目：
-  // - 系统安装形态（rpm/deb）运行时：清掉本应用写入的遗留用户级条目，且不再写用户级；
-  // - AppImage 运行时：不再写用户级条目和用户级图标，避免旧 AppImage 再度遮蔽系统安装。
-  // 用户手写的自定义 zcode.desktop（无归属标记）不受影响，保留不清理。
+  // 用户级同名条目会遮蔽系统安装；只清理带归属标记的条目，保留用户自定义注册。
+  // 新身份使用独立 desktop ID，同时保留旧 zcode.desktop 的系统安装清理逻辑。
+  const systemApplicationDirs =
+    options.systemApplicationDirs ?? resolveLinuxSystemApplicationDirs(options.env);
   const systemDesktopEntryPath = findSystemLevelDesktopEntryPath(
-    options.systemApplicationDirs ?? resolveLinuxSystemApplicationDirs(options.env),
+    systemApplicationDirs,
+    desktopFileName,
+  );
+  const legacySystemDesktopEntryPath = findSystemLevelDesktopEntryPath(
+    systemApplicationDirs,
+    LEGACY_LINUX_DEEP_LINK_DESKTOP_FILE,
   );
 
   try {
     let changed = false;
+    if ((!isPreview && systemDesktopEntryPath) || legacySystemDesktopEntryPath) {
+      removeOwnedUserDesktopEntry(
+        resolveLinuxDeepLinkDesktopFilePath(dataDir, LEGACY_LINUX_DEEP_LINK_DESKTOP_FILE),
+        options.logger,
+      );
+    }
     if (systemDesktopEntryPath) {
       options.logger.info("[deep-link] Linux 系统级 desktop entry 已存在", {
         systemDesktopEntryPath,
         desktopFilePath,
       });
       removeOwnedUserDesktopEntry(desktopFilePath, options.logger);
-    } else {
+    } else if (!existsSync(desktopFilePath) || isOwnedDesktopEntry(desktopFilePath)) {
       changed = writeFileIfChanged(desktopFilePath, desktopEntry);
     }
     // AppImage 直跑不会像 deb 安装包一样稳定写入系统 desktop entry。
@@ -262,7 +281,7 @@ export function registerLinuxDeepLinkProtocol(options: RegisterLinuxDeepLinkProt
     const updateResult = runCommand("update-desktop-database", [applicationsDir]);
     const defaultResult = runCommand("xdg-mime", [
       "default",
-      LINUX_DEEP_LINK_DESKTOP_FILE,
+      desktopFileName,
       LINUX_DEEP_LINK_MIME_TYPE,
     ]);
 
@@ -315,15 +334,17 @@ export function registerLinuxDeepLinkProtocol(options: RegisterLinuxDeepLinkProt
     });
   }
 
+  const iconInstallOptions = {
+    dataDir,
+    env: options.env,
+    iconName,
+    iconSourcePath: options.iconSourcePath,
+    logger: options.logger,
+    runCommand,
+  };
   const iconInstallResult = systemDesktopEntryPath
     ? null
-    : installLinuxAppImageDesktopIconBestEffort({
-        dataDir,
-        env: options.env,
-        iconSourcePath: options.iconSourcePath,
-        logger: options.logger,
-        runCommand,
-      });
+    : installLinuxAppImageDesktopIconBestEffort(iconInstallOptions);
   if (iconInstallResult) {
     options.logger.info("[deep-link] Linux AppImage 用户级图标安装完成", {
       protocolRegistered,

@@ -4,7 +4,7 @@ import {
   TID_WORKSPACE_MEMORY_EDITOR_CONTENT,
   TID_WORKSPACE_MEMORY_EDITOR_NAME,
   TID_WORKSPACE_MEMORY_EDITOR_SAVE,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { Alert, AlertDescription } from "@/components/ui/alert.js";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";

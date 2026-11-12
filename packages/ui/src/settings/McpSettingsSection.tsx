@@ -11,7 +11,7 @@ import {
   TID_MCP_OPEN_AUTHORIZATION_BUTTON,
   TID_PLUGIN_MCP_SERVER_ROW,
   testId,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type {
   RemoteTarget,
   ZCodeAvailablePluginSummary,
@@ -20,8 +20,8 @@ import type {
   ZCodeMcpServer,
   ZCodeMcpServerStatusSnapshot,
   ZCodePluginInfo,
-} from "@zcode/shared";
-import { isZCodeAgentMcpStatusModeUnsupportedError, type IMcpSyncService } from "@zcode/services";
+} from "@picode/shared";
+import { isZCodeAgentMcpStatusModeUnsupportedError, type IMcpSyncService } from "@picode/services";
 import { Button } from "@/components/ui/button.js";
 import { toast } from "@/components/ui/toast.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";

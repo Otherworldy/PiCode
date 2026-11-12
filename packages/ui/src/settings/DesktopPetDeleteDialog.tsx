@@ -1,4 +1,4 @@
-import type { DesktopPetInstalledPack } from "@zcode/shared";
+import type { DesktopPetInstalledPack } from "@picode/shared";
 import {
   AlertDialog,
   AlertDialogAction,

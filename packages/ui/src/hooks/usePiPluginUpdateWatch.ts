@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { toast } from "@/components/ui/toast.js";
-import { useZCodeSessionService } from "@/hooks/useZCodeSessionService.js";
+import { useZCodeSessionService } from "@/hooks/usePiCodeSessionService.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import {
   piPluginUpdateCacheIsFresh,

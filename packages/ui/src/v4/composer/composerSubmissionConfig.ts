@@ -1,7 +1,7 @@
-import type { ModelSelection } from "@zcode/shared";
-import { submissionModeSchema, type SubmissionMode } from "@zcode/shared/zcode-protocol-v4";
-import type { ModelSelectionView } from "@zcode/services";
-import { validateModelSelectionOptions } from "@zcode/provider";
+import type { ModelSelection } from "@picode/shared";
+import { submissionModeSchema, type SubmissionMode } from "@picode/shared/picode-protocol-v4";
+import type { ModelSelectionView } from "@picode/services";
+import { validateModelSelectionOptions } from "@picode/provider";
 
 export interface ComposerSubmissionConfig {
   modelSelection: ModelSelection;

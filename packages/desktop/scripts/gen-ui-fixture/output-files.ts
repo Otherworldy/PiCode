@@ -1,6 +1,6 @@
 import { copyFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { getGenUiOutputDirectory } from "@zcode/shared/node";
+import { getGenUiOutputDirectory } from "@picode/shared/node";
 
 export async function prepareOutputFiles(root: string) {
   const workspacePath = join(root, "workspace");

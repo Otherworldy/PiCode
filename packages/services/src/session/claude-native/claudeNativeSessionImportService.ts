@@ -1,7 +1,7 @@
 import { access, rm } from "node:fs/promises";
 import { constants } from "node:fs";
 import { normalize, resolve } from "node:path";
-import type { ZCodeImportSessionsResult, ZCodeTaskMeta } from "@zcode/shared";
+import type { ZCodeImportSessionsResult, ZCodeTaskMeta } from "@picode/shared";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
 import { buildImportedClaudeTaskFile } from "#src/session/claude-native/buildImportedClaudeTaskFile.js";
 import type { ClaudeNativeImportedSessionSource } from "#src/session/claude-native/claudeNativeImportedSessionTypes.js";

@@ -1,4 +1,4 @@
-import type { McpAppInstance } from "@zcode/shared/mcp-apps";
+import type { McpAppInstance } from "@picode/shared/mcp-apps";
 import { createHash } from "node:crypto";
 import type { PluginUiPluginScope, PluginUiPrepareSandboxParams } from "./contract.js";
 

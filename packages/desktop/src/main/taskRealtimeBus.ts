@@ -18,7 +18,7 @@ import {
   HostMessageTypes,
   HostResponseTypes,
   hostResponseMessageSchema,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { logger as defaultLogger } from "./logger.js";
 
 const STREAM_MIRROR_FLUSH_INTERVAL_MS = 1000;

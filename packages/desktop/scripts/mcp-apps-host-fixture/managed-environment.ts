@@ -1,7 +1,7 @@
 import { BrowserWindow, ipcMain, webContents, type WebContents } from "electron";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { V4_WIRE_PROTOCOL_VERSION } from "@zcode/shared/zcode-protocol-v4";
+import { V4_WIRE_PROTOCOL_VERSION } from "@picode/shared/picode-protocol-v4";
 import { installPluginSandboxHost } from "../../src/main/pluginSandbox/index.js";
 import { createPluginUiBridgeService } from "../../../services/src/plugin-ui-bridge/pluginUiBridgeService.js";
 import { createPluginUiSamplingService } from "../../../services/src/plugin-ui-bridge/pluginUiSamplingService.js";

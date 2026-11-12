@@ -3,7 +3,7 @@ import {
   BROWSER_SCREENSHOT_SURFACE_PREPARE_TIMEOUT_MS,
   type BrowserViewportSize,
   type BrowserViewScreenshotSurfacePreparePayload,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { safeWebviewCall } from "@/embeddedBrowserHelpers.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { logger } from "@/logger.js";

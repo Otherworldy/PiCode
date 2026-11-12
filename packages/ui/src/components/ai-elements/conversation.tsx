@@ -6,7 +6,7 @@
  */
 "use client";
 
-// 这些 ai-elements 组件本身就位于 @zcode/ui 包内部；如果继续写 @zcode/ui/... 自引用，
+// 这些 ai-elements 组件本身就位于 @picode/ui 包内部；如果继续写 @picode/ui/... 自引用，
 // TypeScript 在 NodeNext 下会先套用 package.json 的 exports，而当前并没有导出这些深层源码路径。
 // 这里统一改成带 .js 后缀的相对导入，让源码、声明产物和消费方都按同一套 ESM 规则解析。
 import { Button } from "../ui/button.js";

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { GitRepositorySummary } from "@zcode/shared";
+import type { GitRepositorySummary } from "@picode/shared";
 import {
   buildConversationStatusPanelModel,
   planFromPlannotatorProgress,

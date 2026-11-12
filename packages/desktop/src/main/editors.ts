@@ -19,8 +19,8 @@ import { createRequire } from "node:module";
 import { promisify } from "node:util";
 import { join, win32 as pathWin32 } from "node:path";
 import { app, nativeImage } from "electron";
-import type { EditorInfo } from "@zcode/shared";
-import { getZCodeDataRootDir } from "@zcode/services/node";
+import type { EditorInfo } from "@picode/shared";
+import { getZCodeDataRootDir } from "@picode/services/node";
 import { logger } from "./logger.js";
 
 const require = createRequire(import.meta.url);

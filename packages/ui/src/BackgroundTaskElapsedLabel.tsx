@@ -2,7 +2,7 @@ import { useRef } from "react";
 import {
   getZCodeBackgroundTaskControlItemElapsedMs,
   type ZCodeBackgroundTaskControlItem,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 

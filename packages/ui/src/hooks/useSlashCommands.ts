@@ -3,7 +3,7 @@
  *
  * 返回当前 workspace 下 Agent 广播的可用 slash commands 列表。
  */
-import { useZCodeSessionStore, selectWorkspaceZCodeState } from "../store/zcodeSessionStore.js";
+import { useZCodeSessionStore, selectWorkspaceZCodeState } from "../store/picodeSessionStore.js";
 
 export function useSlashCommands(workspacePath: string, workspaceIdentity?: string) {
   return useZCodeSessionStore(

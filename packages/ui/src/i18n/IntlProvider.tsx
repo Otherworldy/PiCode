@@ -8,9 +8,9 @@ import {
   useRef,
 } from "react";
 import type { ReactNode } from "react";
-import type { Locale, LocalePreference } from "@zcode/shared";
-import { DEFAULT_LOCALE } from "@zcode/shared";
-import type { BroadcastMessage, IBroadcastService, ISettingService } from "@zcode/services";
+import type { Locale, LocalePreference } from "@picode/shared";
+import { DEFAULT_LOCALE } from "@picode/shared";
+import type { BroadcastMessage, IBroadcastService, ISettingService } from "@picode/services";
 import {
   readNavigatorLanguage,
   readSafeLocalStorage,

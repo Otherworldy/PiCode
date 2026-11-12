@@ -1,5 +1,5 @@
 /* eslint-disable max-lines */
-import { ensureAppDataDir } from "@zcode/shared/node";
+import { ensureAppDataDir } from "@picode/shared/node";
 import { access, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import {
@@ -30,7 +30,7 @@ import {
   type SubAgentConfig,
   type SubagentsListMode,
   type ZCodeProvider,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { normalizeSubagentModelSelection } from "./subagentModelSelection.js";
 import { serializeSubagentMarkdown, parseSubagentMarkdown } from "./subagentMarkdown.js";
 import {
@@ -47,7 +47,7 @@ import {
   migrateUserSubagentMarkdown,
   migrateSubagentStateFile,
   scanOfficialPluginCacheRoots,
-} from "@zcode/shared/node";
+} from "@picode/shared/node";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
 
 const subagentLogger = createServiceLogger("subagents");

@@ -5,7 +5,7 @@ import {
   formatZodError,
   resolveStartupLocalWorkspaceSessionIndex,
   type WorkspacePurpose,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 interface StartupWorkspaceLogger {
   info?: (...args: unknown[]) => void;

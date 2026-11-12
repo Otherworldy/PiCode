@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog.js";
 import { Input } from "@/components/ui/input.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import type { ModelConfigObject } from "@zcode/provider";
+import type { ModelConfigObject } from "@picode/provider";
 import type {
   ProviderModelDraftValues,
   ProviderModelDraftCommitResult,

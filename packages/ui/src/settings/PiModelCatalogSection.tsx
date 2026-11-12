@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pencil, PlugZap, Plus, Star, Trash2 } from "lucide-react";
-import type { ZCodePiModelsMutateParams, ZCodePiModelsMutateResult } from "@zcode/shared";
-import { useZCodeSessionService } from "@/hooks/useZCodeSessionService.js";
+import type { ZCodePiModelsMutateParams, ZCodePiModelsMutateResult } from "@picode/shared";
+import { useZCodeSessionService } from "@/hooks/usePiCodeSessionService.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { Button } from "@/components/ui/button.js";
 import { toast } from "@/components/ui/toast.js";

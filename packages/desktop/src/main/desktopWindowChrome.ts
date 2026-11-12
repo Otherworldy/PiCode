@@ -8,7 +8,7 @@ import type {
   WebContents,
   WindowOpenHandlerResponse,
 } from "electron";
-import type { DesktopTitleBarTheme, Locale } from "@zcode/shared";
+import type { DesktopTitleBarTheme, Locale } from "@picode/shared";
 import {
   DEFAULT_LOCALE,
   desktopMenuMessageIds,
@@ -16,7 +16,7 @@ import {
   isTrustedCodingPlanWebviewOrigin,
   resolveZaiBusinessBaseUrl,
   PlatformChannels,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { loadWindow, type WindowBootstrapOptions } from "./desktopHostProcess.js";
 import {
   buildWindowsTitleBarOverlayForZoomLevel,

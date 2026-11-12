@@ -31,7 +31,7 @@ import type { SessionLease } from "@/v4/sessionDataLayer.js";
 import { toolCallRowToLegacyNode } from "@/v4/toolCallRowAdapter.js";
 import { useConversationProjection } from "@/v4/useConversationProjection.js";
 import { V4PaneConversationProvider, useV4Conversation } from "@/v4/V4ConversationContext.js";
-import type { McpAppsDisplayMode, PluginUiScopeRef } from "@zcode/shared/mcp-apps";
+import type { McpAppsDisplayMode, PluginUiScopeRef } from "@picode/shared/mcp-apps";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { resolvePluginUiLogicalScope } from "../domain/pluginUiLogicalScope.js";
 

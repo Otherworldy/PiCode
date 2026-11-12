@@ -4,7 +4,7 @@ import type {
   EnterpriseCodingPlanPricingProduct,
   EnterpriseCodingPlanSubscribePeriod,
   ProviderFamilyDomain,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   normalizeCodingPlanCardCopyItems,
   type CodingPlanPriceUnit,

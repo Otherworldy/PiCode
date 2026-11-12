@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import type { IServiceAccessor } from "@zcode/services";
-import type { ZCodeProvider } from "@zcode/shared";
+import type { IServiceAccessor } from "@picode/services";
+import type { ZCodeProvider } from "@picode/shared";
 import { toast } from "@/components/ui/toast.js";
 import {
   buildWorkspaceSessionReloadDraftError,
@@ -9,7 +9,7 @@ import {
 import { resolveWorkspaceModelConfigSyncScope } from "@/lib/modelConfigSync.js";
 import { prepareWorkspaceWithZCodeSessionService } from "@/hooks/useWorkspacePrepare.js";
 import { logger } from "@/logger.js";
-import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { useZCodeSessionStore } from "@/store/picodeSessionStore.js";
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceTab } from "@/store/tabStore.js";
 

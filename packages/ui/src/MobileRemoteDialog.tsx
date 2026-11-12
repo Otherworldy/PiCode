@@ -4,7 +4,7 @@ import {
   MOBILE_REMOTE_DEFAULT_PORT,
   parseMobileRemotePort,
   type MobileRemotePairingStatus,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
 import {

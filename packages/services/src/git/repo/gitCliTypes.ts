@@ -11,7 +11,7 @@ import type {
   GitWorkspaceRepositoryInfo,
   GitWorktreeInfo,
   GitWorktreeMutationResult,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 export interface GitLineStat {
   added: number;

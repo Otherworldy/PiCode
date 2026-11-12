@@ -112,7 +112,7 @@ await updateJsonConfigFile(filePath, (parsed) => {
 
 ## 未覆盖（记录为后续项）
 
-- **CLI 进程是另一族写者**：`apps/zcode-cli/packages/adapters/src/config/file-config.adapter.ts`
+- **CLI 进程是另一族写者**：`apps/picode-cli/packages/adapters/src/config/file-config.adapter.ts`
   （`DEFAULT_BASE_DIR = "~/.PiCode/cli"` + `config.json`）有 8 个「读 → patch → 原子写」函数，
   **不带 `.lock`**。它写的是同一份用户级文件，但属于另一个进程。
   额外风险：CLI 侧用 `homedir()`，services 侧用 `HOME || USERPROFILE || homedir()`；Windows

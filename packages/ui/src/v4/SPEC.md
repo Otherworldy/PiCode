@@ -1,6 +1,6 @@
 # 打开耗时
 
-时间线第一次把某个 `sessionKey` 的行提交进 DOM 后，打一行 `ui.v4.conversation.first_frame`。`firstFrameRenderMs` 只算这次渲染到 layout，不算宿主读 jsonl 或建 Pi 会话。没有行不打。草稿（`sessionKey` 为 `draft`）不打。换会话再打一次。生产构建走 lifecycle 日志。宿主三段耗时见 `apps/zcode-cli/packages/pi-host/SPEC.md`。
+时间线第一次把某个 `sessionKey` 的行提交进 DOM 后，打一行 `ui.v4.conversation.first_frame`。`firstFrameRenderMs` 只算这次渲染到 layout，不算宿主读 jsonl 或建 Pi 会话。没有行不打。草稿（`sessionKey` 为 `draft`）不打。换会话再打一次。生产构建走 lifecycle 日志。宿主三段耗时见 `apps/picode-cli/packages/pi-host/SPEC.md`。
 
 # 对话工作折叠
 
@@ -60,7 +60,7 @@
 
 ## 所有者
 
-本轮用量的所有者是 CLI 投影（`apps/zcode-cli/packages/pi-host/src/projector.ts`）。它从 Pi 的 `message_end` 读 `usage`、`timestamp`、`durationMs`，累加进 `turnHeader` 行的 `usage` 字段，客户端只读不算。
+本轮用量的所有者是 CLI 投影（`apps/picode-cli/packages/pi-host/src/projector.ts`）。它从 Pi 的 `message_end` 读 `usage`、`timestamp`、`durationMs`，累加进 `turnHeader` 行的 `usage` 字段，客户端只读不算。
 
 TTFT 由投影在收到首个文本或思考增量时用本机时钟打点，Pi 不提供这个数。历史重放没有首 token 时刻，`ttftMs` 缺省，命中率与总量不受影响。
 
@@ -88,10 +88,10 @@ TTFT 由投影在收到首个文本或思考增量时用本机时钟打点，Pi 
 
 ## 所有者
 
-会话累计量的所有者是快照的 `usage.cumulative`（`packages/shared/src/zcode-protocol-v4/snapshot.ts`），由投影单点写入，客户端只读不算：
+会话累计量的所有者是快照的 `usage.cumulative`（`packages/shared/src/picode-protocol-v4/snapshot.ts`），由投影单点写入，客户端只读不算：
 
-- Pi 路径：`apps/zcode-cli/packages/pi-host/src/projector.ts`。`recordTurnUsage` 在累加本轮用量时同步累加 `cumulative` 与 `steps`，`startTurn` 累加 `turns`。
-- store 物化路径：`apps/zcode-cli/packages/bootstrap/src/zcode-protocol-v4/product-projection.ts`，`onModelComplete` 累加 token 与 `steps`，`onTurnStarted` 累加 `turns`。
+- Pi 路径：`apps/picode-cli/packages/pi-host/src/projector.ts`。`recordTurnUsage` 在累加本轮用量时同步累加 `cumulative` 与 `steps`，`startTurn` 累加 `turns`。
+- store 物化路径：`apps/picode-cli/packages/bootstrap/src/picode-protocol-v4/product-projection.ts`，`onModelComplete` 累加 token 与 `steps`，`onTurnStarted` 累加 `turns`。
 
 不引入种子：冷恢复时 Pi 投影本来就要逐条重放 `message_end`，累计量自然补齐，再写一份 seed 就会出现两个写入方。`usage.contextWindow.usedTokens > 0` 那类早退门只该管上下文水位，不该拦累计量。
 
@@ -171,7 +171,7 @@ widget 文本的所有者是 Pi extension UI（`setWidget` → 快照 `extension
 
 ## 所有者
 
-`packages/ui/src/lib/subagentDisplayName.ts` 是唯一所有者。词条放在两个 locale 文件的 `subagent.builtin.<name>`（名字）与 `subagent.builtin.<name>.description`（描述）下，不放进 `@zcode/shared` 的角色定义：那份定义同时供 CLI、宿主和系统提示词消费，翻译进去会污染提示词和派发名。
+`packages/ui/src/lib/subagentDisplayName.ts` 是唯一所有者。词条放在两个 locale 文件的 `subagent.builtin.<name>`（名字）与 `subagent.builtin.<name>.description`（描述）下，不放进 `@picode/shared` 的角色定义：那份定义同时供 CLI、宿主和系统提示词消费，翻译进去会污染提示词和派发名。
 
 改名字表时两边一起改：`BUILT_IN_SUBAGENTS` / `BUILT_IN_SUBAGENT_NAMES`（`packages/shared`）是角色清单与英文原文，locale 文件是展示名与译名。英文描述词条必须与源定义逐字一致，有测试卡住这一点。
 

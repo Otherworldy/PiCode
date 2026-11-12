@@ -4,7 +4,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { WorkspaceSidebarItem, type SortableBindings } from "./WorkspaceSidebarItem.js";
 import type { WorkspaceTabState } from "@/store/tabStore.js";
 import type { RemoteConnectionLogEntry } from "@/hooks/useRemoteConnectionLogs.js";
-import type { ZCodeTaskMeta } from "@zcode/shared";
+import type { ZCodeTaskMeta } from "@picode/shared";
 
 export type { SortableBindings };
 

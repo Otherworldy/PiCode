@@ -1,7 +1,7 @@
 import { RefreshCcw } from "lucide-react";
 import { Fragment, lazy, useState } from "react";
-import { APP_USAGE_RANGES } from "@zcode/shared";
-import type { AppUsageRange, AppUsageSnapshot } from "@zcode/shared";
+import { APP_USAGE_RANGES } from "@picode/shared";
+import type { AppUsageRange, AppUsageSnapshot } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";

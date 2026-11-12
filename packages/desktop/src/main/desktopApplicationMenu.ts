@@ -7,8 +7,8 @@ import {
   ZCODE_ENV,
   type DesktopCommandId,
   type Locale,
-} from "@zcode/shared";
-import { readZCodeStdioTapDevState } from "@zcode/services/node";
+} from "@picode/shared";
+import { readZCodeStdioTapDevState } from "@picode/services/node";
 import {
   DESKTOP_ZOOM_MAX_LEVEL,
   DESKTOP_ZOOM_MIN_LEVEL,

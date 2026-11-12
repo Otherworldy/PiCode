@@ -1,5 +1,5 @@
-import { getVisibleTaskMetas } from "@/store/zcodeSessionStoreSelectors.js";
-import type { WorkspaceZCodeUIState } from "@/store/zcodeSessionStoreTypes.js";
+import { getVisibleTaskMetas } from "@/store/picodeSessionStoreSelectors.js";
+import type { WorkspaceZCodeUIState } from "@/store/picodeSessionStoreTypes.js";
 
 type WorkspaceUnreadState = Pick<
   WorkspaceZCodeUIState,

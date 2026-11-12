@@ -3,7 +3,7 @@ import {
   buildRuntimeZaiBusinessUrl,
   buildRuntimeZaiOAuthUrl,
   resolveZaiOAuthClientId,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { OAuthProviderRuntimeConfig } from "../runtimeConfig.js";
 import {
   buildDesktopOAuthRedirectUriFromEnv,

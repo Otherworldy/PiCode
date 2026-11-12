@@ -4,7 +4,7 @@ import type {
   PluginSandboxHandle,
   PluginSandboxPlatformPort,
   PluginSandboxRegisterInput,
-} from "@zcode/shared/mcp-apps";
+} from "@picode/shared/mcp-apps";
 import { createHash } from "node:crypto";
 
 /** privileged scheme 与 URL / partition 派生规则。 */
@@ -29,7 +29,7 @@ export function buildPluginSandboxPartition(input: { appIdentity: string }): str
   return `${PLUGIN_SANDBOX_PARTITION_PREFIX}${hash}`;
 }
 
-export type { PluginSandboxRegisterInput } from "@zcode/shared/mcp-apps";
+export type { PluginSandboxRegisterInput } from "@picode/shared/mcp-apps";
 
 export interface PluginSandboxRecord extends PluginSandboxHandle {
   workspacePath?: string;

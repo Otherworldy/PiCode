@@ -13,7 +13,7 @@ import type {
   ConversationShareContinuation,
   ConversationShareRecord,
   Locale,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   decodeConversationShareRows,
   buildConversationPreviewArtifactCandidates,
@@ -22,17 +22,17 @@ import {
   type ConversationPreviewArtifactCandidate,
   localizeConversationShareUrl,
   resolveRuntimeZCodeEndpointOrigin,
-} from "@zcode/shared";
-import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared";
+import type { ConversationRow } from "@picode/shared/picode-protocol-v4";
 import {
   PROTOCOL_V4_LIMITS,
   ZCODE_ATTACHMENT_FAULT_CODES,
   readZCodeAttachmentFaultCode,
-} from "@zcode/shared/zcode-protocol-v4";
-import { Emitter } from "@zcode/rpc";
+} from "@picode/shared/picode-protocol-v4";
+import { Emitter } from "@picode/rpc";
 
-import type { IZCodeAgentService } from "../zcode-agent/zcodeAgent.js";
-import type { IZCodeSessionService } from "#src/zcode-session/zcodeSession.js";
+import type { IZCodeAgentService } from "../picode-agent/picodeAgent.js";
+import type { IZCodeSessionService } from "#src/picode-session/picodeSession.js";
 import { getConversationWorkspaceDir } from "#src/paths.js";
 import { createServiceLogger, type ServiceLogger } from "#src/logger/serviceLogger.js";
 import {

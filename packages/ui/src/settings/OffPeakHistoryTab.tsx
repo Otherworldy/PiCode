@@ -1,7 +1,7 @@
 /* 闲时任务 History tab：
    一行汇总一次完整执行（3h 续跑分段对用户透明）：Instructions / Triggered /
    Status / Duration + 行菜单 Go to session / Delete；无执行记录 → 「No history yet.」 */
-import { isOffPeakTerminalStatus, type ZCodeOffPeakTask } from "@zcode/shared";
+import { isOffPeakTerminalStatus, type ZCodeOffPeakTask } from "@picode/shared";
 import {
   DropdownMenu,
   DropdownMenuContent,

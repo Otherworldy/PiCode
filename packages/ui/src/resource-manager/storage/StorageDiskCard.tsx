@@ -4,7 +4,7 @@ import {
   TID_RESOURCE_MANAGER_STORAGE_DISK_CARD,
   TID_RESOURCE_MANAGER_STORAGE_ROOT,
   testId,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { formatBytes } from "@/resource-manager/resourceUsageView.js";

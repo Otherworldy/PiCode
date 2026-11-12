@@ -15,8 +15,8 @@ PiCode 是 [Pi](https://pi.dev) 的图形工作台。循环、内置工具、压
 ## 能做什么
 
 - **桌面应用。** 用 Electron 打开本地项目，在会话里和 Agent 协作。
-- **浏览器。** 同一套工作台跑在浏览器里。`zcode --web` 在本机打开它，不需要 Electron。
-- **和 Pi 共用会话。** 对话写在 `~/.pi/agent/sessions/`。本仓库不提供终端 TUI。不带参数的 `zcode` 只打印帮助。
+- **浏览器。** 同一套工作台跑在浏览器里。`picode --web` 在本机打开它，不需要 Electron。
+- **和 Pi 共用会话。** 对话写在 `~/.pi/agent/sessions/`。本仓库不提供终端 TUI。不带参数的 `picode` 只打印帮助。
 - **配置跟着 Pi 走。** 模型、MCP、技能和插件读 `~/.pi/agent`，以及当前项目的 `.pi`。设置页可以开关 Pi 包、改已有的插件配置。已打开的会话不热更新，下次新建会话才生效。
 - **内置工具有卡片。** `read`、`bash`、`edit`、`write`、`grep`、`find`、`ls` 用现有的阅读、执行、编辑和搜索卡片。不认识的工具走通用卡片。
 - **内置浏览器。** 这是宿主能力，不是可安装的 Pi 插件。桌面会话可以直接操作页面。
@@ -25,7 +25,7 @@ PiCode 是 [Pi](https://pi.dev) 的图形工作台。循环、内置工具、压
 
 ## 怎么接
 
-PiCode 不另跑一套模型循环，也不仿真 Pi 的终端界面。桌面和浏览器共用一套界面协议。`@zcode/pi-host` 把协议命令交给 Pi 的 `AgentSession`，再把 Pi 的事件投回界面。
+PiCode 不另跑一套模型循环，也不仿真 Pi 的终端界面。桌面和浏览器共用一套界面协议。`@picode/pi-host` 把协议命令交给 Pi 的 `AgentSession`，再把 Pi 的事件投回界面。
 
 ```mermaid
 flowchart LR
@@ -108,10 +108,10 @@ pnpm dev:web
 装好或构建出命令行包之后，在项目目录里可以：
 
 ```bash
-zcode --web
+picode --web
 ```
 
-不带参数的 `zcode` 只打印帮助。
+不带参数的 `picode` 只打印帮助。
 
 ## 源码在哪
 
@@ -120,8 +120,8 @@ zcode --web
 | `packages/desktop` | 桌面应用 |
 | `packages/web`、`packages/server` | 浏览器界面和本地服务 |
 | `packages/ui` | 桌面和浏览器共用的界面 |
-| `apps/zcode-cli` | 命令行。`zcode --web` 和桌面拉起的 `app-server` |
-| `apps/zcode-cli/packages/pi-host` | Pi 会话、工具呈现、插件界面和上面的专项适配 |
+| `apps/picode-cli` | 命令行。`picode --web` 和桌面拉起的 `app-server` |
+| `apps/picode-cli/packages/pi-host` | Pi 会话、工具呈现、插件界面和上面的专项适配 |
 
 ## 许可
 

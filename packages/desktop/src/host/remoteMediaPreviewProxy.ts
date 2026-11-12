@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import type { IFileService, IMediaPreviewService, MediaPreviewPreparation } from "@zcode/services";
-import { getMediaPreviewFormat, type WindowHostAttachmentScope } from "@zcode/shared";
+import type { IFileService, IMediaPreviewService, MediaPreviewPreparation } from "@picode/services";
+import { getMediaPreviewFormat, type WindowHostAttachmentScope } from "@picode/shared";
 import {
   isPathWithinWorkspace,
   listen,

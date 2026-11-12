@@ -35,7 +35,7 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import {
   TID_WORKSPACE_FILE_TREE_PANEL,
   TID_WORKSPACE_FILE_TREE_REFRESH_BUTTON,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   areWorkspaceFilePathsEqual,
   createCodeViewerSourceForWorkspaceFile,

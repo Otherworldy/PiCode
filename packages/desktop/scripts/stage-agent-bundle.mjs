@@ -1,4 +1,4 @@
-// Agent bundle 的暂存动作：把 apps/zcode-cli/packages/cli/dist/zcode.cjs 放进
+// Agent bundle 的暂存动作：把 apps/picode-cli/packages/cli/dist/zcode.cjs 放进
 // bundled-agents/<平台>/glm，并写 meta。
 //
 // dev 与打包**必须**用同一份暂存实现。
@@ -11,7 +11,7 @@
 import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-export const AGENT_BUNDLE_SOURCE_RELATIVE = "apps/zcode-cli/packages/cli/dist/zcode.cjs";
+export const AGENT_BUNDLE_SOURCE_RELATIVE = "apps/picode-cli/packages/cli/dist/zcode.cjs";
 
 export function resolveAgentBundlePaths({ repoRoot, platformKey }) {
   const glmDir = resolve(repoRoot, "packages", "desktop", "bundled-agents", platformKey, "glm");

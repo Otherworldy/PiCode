@@ -33,7 +33,7 @@ import type {
   McpAppsDisplayMode,
   PluginSandboxHandle,
   PluginUiScopeRef,
-} from "@zcode/shared/mcp-apps";
+} from "@picode/shared/mcp-apps";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { resolvePluginUiLogicalScope } from "../domain/pluginUiLogicalScope.js";
 

@@ -1,4 +1,4 @@
-import type { GitCommitGraphCommit } from "@zcode/shared";
+import type { GitCommitGraphCommit } from "@picode/shared";
 
 export interface GraphPoint {
   laneIndex: number;

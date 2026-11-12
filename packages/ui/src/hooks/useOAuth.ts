@@ -5,12 +5,12 @@
  * OAuth 回调监听在 Root/App 常驻层，不在此 hook 中。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { OAuthProviderId, OAuthProviderMeta } from "@zcode/shared";
+import type { OAuthProviderId, OAuthProviderMeta } from "@picode/shared";
 import {
   BIGMODEL_PROVIDER_ID,
   isCredentialDecryptError,
   ZAI_PROVIDER_ID,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import type { LoginEntryPurpose } from "@/store/index.js";
 import { useZCodeStore } from "@/store/StoreProvider.js";

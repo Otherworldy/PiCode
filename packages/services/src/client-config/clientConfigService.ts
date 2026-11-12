@@ -4,7 +4,7 @@ import {
   parseClientConfigSnapshot,
   type ApiClient,
   type ClientConfigSnapshot,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { IClientConfigService } from "./clientConfig.js";
 
 const CACHE_TTL_MS = 60 * 60 * 1000;

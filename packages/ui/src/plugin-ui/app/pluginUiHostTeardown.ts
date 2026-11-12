@@ -1,6 +1,6 @@
 import type { Transport } from "@modelcontextprotocol/client";
-import type { PluginSandboxHandle, PluginSandboxPlatformPort } from "@zcode/shared/mcp-apps";
-import { MCP_APPS_TEARDOWN_TIMEOUT_MS } from "@zcode/shared/mcp-apps";
+import type { PluginSandboxHandle, PluginSandboxPlatformPort } from "@picode/shared/mcp-apps";
+import { MCP_APPS_TEARDOWN_TIMEOUT_MS } from "@picode/shared/mcp-apps";
 import type { PluginUiHostBridge } from "./pluginUiHostBridge.js";
 
 /**

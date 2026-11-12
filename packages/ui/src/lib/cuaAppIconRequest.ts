@@ -1,4 +1,4 @@
-import type { ApplicationIconRequest } from "@zcode/shared";
+import type { ApplicationIconRequest } from "@picode/shared";
 
 /**
  * producer 的 `appKey` → 平台图标 locator。

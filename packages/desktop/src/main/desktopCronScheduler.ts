@@ -3,7 +3,7 @@
 // 把 host 回报的 CronRunResult 转回 scheduler 结算。scheduler 只碰 tasks-index，createTask 在 host 域执行。
 import { utilityProcess as electronUtilityProcess } from "electron";
 import type { UtilityProcess as ElectronUtilityProcess } from "electron";
-import { HostMessageTypes } from "@zcode/shared";
+import { HostMessageTypes } from "@picode/shared";
 import { buildHostProcessEnv, schedulerModulePath } from "./desktopRuntimeEnv.js";
 import type {
   MainToSchedulerMessage,

@@ -2,14 +2,14 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { IGitService } from "#src/git/git.js";
-import type { AttachmentRef } from "@zcode/shared/zcode-protocol-v4";
+import type { AttachmentRef } from "@picode/shared/picode-protocol-v4";
 import type {
   ModelSelection,
   TodoAttachment,
   TodoCreateParams,
   TodoItem,
   TodoUpdateParams,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { TodoRepo } from "#src/todos/todoRepo.js";
 import { TodoStateError, type ITodoService } from "#src/todos/todo.js";
 

@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { ZCodeGroupedTaskViewNode } from "@zcode/services";
+import type { ZCodeGroupedTaskViewNode } from "@picode/services";
 import { taskKey } from "@/workspace-grouped-tasks/ids.js";
 import {
   isPotentialVerticalScrollContainer,

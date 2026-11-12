@@ -1,4 +1,4 @@
-import type { SessionSummary } from "@zcode/shared/zcode-protocol-v4";
+import type { SessionSummary } from "@picode/shared/picode-protocol-v4";
 
 // 打开中的 pane 才有 conversation snapshot。侧栏 sessions-index 会晚一拍，
 // 运行图标以这里的 phase 为准；pane 卸掉后删掉，列表回到 index。

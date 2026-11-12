@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { SessionSummary } from "@zcode/shared/zcode-protocol-v4";
+import type { SessionSummary } from "@picode/shared/picode-protocol-v4";
 import { collectTerminalTaskNotificationPayloads } from "./taskNotificationOrchestrator.js";
 
 function session(

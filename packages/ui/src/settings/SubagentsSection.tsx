@@ -3,7 +3,7 @@ import { useStartPlanRecommendation } from "@/hooks/useStartPlanRecommendation.j
 import { hasExplicitModelChanged } from "@/lib/startPlanRecommendation.js";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Bot, Check, Plus, Trash2 } from "lucide-react";
-import { completeNewModelSelection } from "@zcode/provider";
+import { completeNewModelSelection } from "@picode/provider";
 import {
   TID_SUBAGENT_BUILT_IN_MODEL_TRIGGER,
   TID_SUBAGENT_ROW,
@@ -20,8 +20,8 @@ import {
   type ModelSelection,
   type SubAgentConfig,
   type ZCodeAgentToolCatalogEntry,
-} from "@zcode/shared";
-import type { ModelSelectionView } from "@zcode/services";
+} from "@picode/shared";
+import type { ModelSelectionView } from "@picode/services";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
 import {
@@ -52,8 +52,8 @@ import {
   resolveModelDisplayName,
 } from "@/lib/modelSelectionGroups.js";
 import { resolveModelThoughtOption } from "@/lib/modelThoughtOption.js";
-import { parseModelPickerValue } from "@/lib/zcodeSessionProjection.js";
-import { encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
+import { parseModelPickerValue } from "@/lib/picodeSessionProjection.js";
+import { encodeCustomModelValue } from "@/lib/picodeCustomModelValue.js";
 import { SUBAGENT_COLORS, SUBAGENT_COLOR_CLASS } from "@/lib/subagentColors.js";
 import { subagentDisplayDescription, subagentDisplayName } from "@/lib/subagentDisplayName.js";
 import { SettingsResourceGroupHeader } from "@/settings/SettingsResourceGroupHeader.js";

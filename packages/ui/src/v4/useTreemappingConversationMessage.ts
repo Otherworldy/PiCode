@@ -7,7 +7,7 @@
 // SessionDataLayer；pane 当前默认从侧边栏隐藏（workspaceSidePane sanitize 过滤
 // treemapping tab），该订阅只在 pane 真实挂载时才会建立。
 import { useEffect, useMemo, useState } from "react";
-import type { ConversationRow, ToolCallRow } from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationRow, ToolCallRow } from "@picode/shared/picode-protocol-v4";
 import type { TaskChatMessage } from "@/lib/taskChatMessageTypes.js";
 import { useServices } from "@/hooks/useServices.js";
 import { createAgentConversationTransport } from "@/v4/agentConversationTransport.js";

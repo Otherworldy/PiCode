@@ -5,13 +5,13 @@ import type {
   OAuthProviderId,
   OAuthSessionCallbackResult,
   UserInfo,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   DesktopCommandIds,
   resolveProviderFamilyDomainFromOAuthProvider,
   ZCODE_JWT_INVALID_BROADCAST_CHANNEL,
-} from "@zcode/shared";
-import type { IServiceAccessor } from "@zcode/services";
+} from "@picode/shared";
+import type { IServiceAccessor } from "@picode/services";
 import { useAlertDialog } from "@/hooks/useAlertDialog.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
@@ -22,7 +22,7 @@ import {
   refreshRestoredOAuthProviderFamilyAfterStartup,
 } from "@/root/oauthProviderFamilySelectionRefresh.js";
 import { applyCachedOAuthSessionRestoreResult } from "@/root/oauthCachedSessionRestore.js";
-import { markZcodeJwtInvalidRestart } from "@/root/zcodeJwtInvalidRestartMarker.js";
+import { markZcodeJwtInvalidRestart } from "@/root/picodeJwtInvalidRestartMarker.js";
 import { shouldApplyOAuthPollingFailure } from "@/root/oauthLoginAttemptGuard.js";
 import { useAccountConnectionLossNotification } from "@/root/useAccountConnectionLossNotification.js";
 

@@ -6,7 +6,7 @@ import {
   type MouseEvent,
 } from "react";
 import { X } from "lucide-react";
-import { MAX_TODO_TAGS, normalizeTodoTags, splitTodoTagDraft } from "@zcode/shared";
+import { MAX_TODO_TAGS, normalizeTodoTags, splitTodoTagDraft } from "@picode/shared";
 
 function isComposingInput(event: Event): boolean {
   return "isComposing" in event && event.isComposing === true;

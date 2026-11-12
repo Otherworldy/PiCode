@@ -1,4 +1,4 @@
-import { buildGenUiScopeKey } from "@zcode/shared/gen-ui";
+import { buildGenUiScopeKey } from "@picode/shared/gen-ui";
 import { sandboxPages, type SandboxPageOwner } from "@/plugin-ui/hostPrimitives.js";
 import { EMPTY_GEN_UI_SNAPSHOT, type GenUiPage, type GenUiPageSnapshot } from "../contract.js";
 import { createGenUiPage, type GenUiPageInput } from "./page.js";

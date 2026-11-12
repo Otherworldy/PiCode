@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import type { IChannelClient } from "@zcode/rpc";
+import type { IChannelClient } from "@picode/rpc";
 import { RemoteServiceAccess } from "./remoteServiceAccess.js";
 it("connects the renderer sampling accessor to the host sampling RPC channel", async () => {
   const call = vi.fn(async (..._args: unknown[]) => ({ cancelled: false }));

@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- 聚合命令、任务、文件三类搜索结果，后续可按 result section 拆分。 */
 import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { unpackWorkspaceFileEntries } from "@zcode/shared/workspaceFileEntriesCodec";
+import { unpackWorkspaceFileEntries } from "@picode/shared/workspaceFileEntriesCodec";
 import { fetchWorkspaceFileEntriesPacked } from "@/workspace-file-search/fetchWorkspaceFileEntries.js";
 import { Command as CommandPrimitive } from "cmdk";
 import {
@@ -13,7 +13,7 @@ import {
   SearchIcon,
   Trash2Icon,
 } from "lucide-react";
-import type { WorkspaceFileEntry, ZCodeTaskChangeSummary, ZCodeTaskMeta } from "@zcode/shared";
+import type { WorkspaceFileEntry, ZCodeTaskChangeSummary, ZCodeTaskMeta } from "@picode/shared";
 import {
   Command,
   CommandDialog,

@@ -5,7 +5,7 @@ import type {
   GitRepositorySummary,
   ZCodeProvider,
   ZCodeTaskChangeSummary,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { CodeViewerSource } from "@/lib/codeViewer.js";
 import type { AssistantPreviewCardsAutoOpenRequest } from "@/lib/assistantPreviewCards.js";
 import type { OpenAutomationsMain } from "@/lib/taskNavigationHistory.js";

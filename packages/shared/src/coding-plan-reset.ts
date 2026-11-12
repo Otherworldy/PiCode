@@ -39,4 +39,4 @@ export interface CodingPlanResetUseRequest extends CodingPlanResetScopeRequest {
 export interface CodingPlanResetUseResult {
   used: true;
 }
-import type { ZCodeAccountAccess, ZCodeProviderAccountAccess } from "./zcode-protocol/index.js";
+import type { ZCodeAccountAccess, ZCodeProviderAccountAccess } from "./picode-protocol/index.js";

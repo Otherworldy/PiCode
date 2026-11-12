@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
-import type { ToolCallRow } from "@zcode/shared/zcode-protocol-v4";
+import type { ToolCallRow } from "@picode/shared/picode-protocol-v4";
 import { ZCodeIntlProvider } from "../../../ui/src/i18n/IntlProvider.js";
 import { TabStoreProvider } from "../../../ui/src/store/TabStoreProvider.js";
 import { ConversationTimeline } from "../../../ui/src/v4/ConversationTimeline.js";

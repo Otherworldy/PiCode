@@ -1,5 +1,5 @@
 import { ipcRenderer } from "electron";
-import { PluginSandboxChannels } from "@zcode/shared";
+import { PluginSandboxChannels } from "@picode/shared";
 
 /**
  * 插件 UI 沙箱 guest 的 preload。只做一件事：把 main 送来的那条 MessagePort 经 window.postMessage

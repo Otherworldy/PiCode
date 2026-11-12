@@ -1,4 +1,4 @@
-import type { ZCodeOffPeakTask } from "@zcode/shared";
+import type { ZCodeOffPeakTask } from "@picode/shared";
 import type { IntlInstance } from "@/i18n/IntlProvider.js";
 import type { OffPeakTakeNumberAvailabilityStatus } from "@/store/offPeakTaskStore.js";
 

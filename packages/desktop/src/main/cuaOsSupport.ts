@@ -1,5 +1,5 @@
 import { release } from "node:os";
-import type { CuaOsSupport } from "@zcode/shared";
+import type { CuaOsSupport } from "@picode/shared";
 
 // 承诺地板 = max(Helper Info.plist LSMinimumSystemVersion 12.0, SEA 二进制 minos 11.0)。
 // 2026-08 事故：地板检查缺位时，低版本 macOS 用户只看到授权反复无响应

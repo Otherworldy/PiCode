@@ -7,7 +7,7 @@
 // - agent 没有任何原生 NAPI 插件（ripgrep 是 WASM，其余纯 JS），可直接跑在 Electron 的 Node 上；
 // - Electron 41 内置 Node 24.x，与 zcode-cli 的目标运行时一致；
 // - 单平台体积从 ~180MB 降到 ~16MB，且同一份 JS 跨平台通用；
-// - app-server 命令路径不会加载 @zcode/tui，所以这里天然不打包 TUI。
+// - app-server 命令路径不会加载 @picode/tui，所以这里天然不打包 TUI。
 //
 // 远端（SSH/WSL/Docker）没有 Electron，仍走 prepare:remote-assets 的原生二进制，互不影响。
 
@@ -21,15 +21,15 @@ import { stageAgentBundle } from "./stage-agent-bundle.mjs";
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = resolve(scriptDir, "..");
 const repoRoot = resolve(desktopRoot, "..", "..");
-const cliBundlePath = resolve(repoRoot, "apps/zcode-cli/packages/cli/dist/zcode.cjs");
-const adaptersRoot = resolve(repoRoot, "apps/zcode-cli/packages/adapters");
+const cliBundlePath = resolve(repoRoot, "apps/picode-cli/packages/cli/dist/zcode.cjs");
+const adaptersRoot = resolve(repoRoot, "apps/picode-cli/packages/adapters");
 const pnpmRunEnv = {
   ...process.env,
-  // pnpm 11 会在 apps/zcode-cli 子 workspace 执行 run 前触发 install；
-  // 子 workspace 不能解析根 workspace 的 @zcode/shared，Docker/web app 打包会因此卡在插件 runtime 构建。
+  // pnpm 11 会在 apps/picode-cli 子 workspace 执行 run 前触发 install；
+  // 子 workspace 不能解析根 workspace 的 @picode/shared，Docker/web app 打包会因此卡在插件 runtime 构建。
   PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false",
 };
-const BROWSER_USE_PLUGIN_PACKAGE_NAME = "@zcode/browser-use-plugin";
+const BROWSER_USE_PLUGIN_PACKAGE_NAME = "@picode/browser-use-plugin";
 
 // 平台目录命名：darwin/win32/linux + x64/arm64，
 // 支持 ZCODE_TARGET_OS / ZCODE_TARGET_ARCH 覆盖（交叉打包时由 CI 注入）。
@@ -72,8 +72,8 @@ const platformKey = `${platform}-${arch}`;
 const glmDir = resolve(desktopRoot, "bundled-agents", platformKey, "glm");
 // zcode.cjs / .node-bundle-meta.json 的落点由 stage-agent-bundle.mjs 自己解析（同源）。
 // node_repl 宿主抽成独立包
-// @zcode/node-repl-host 之后，browser-use 不再产出 dist/mcp/server.js，CUA 资产
-// （docs/computer-use.md、scripts/computer-use-client.mjs）也已归 @zcode/zcode-cua-plugin。
+// @picode/node-repl-host 之后，browser-use 不再产出 dist/mcp/server.js，CUA 资产
+// （docs/computer-use.md、scripts/computer-use-client.mjs）也已归 @picode/picode-cua-plugin。
 // 这份清单当时漏改，打包准备阶段照旧去 browser-use 要那三个文件，直接 missing runtime 挂掉。
 // dev 链路走的是 scripts/build-desktop-agent-cli.mjs 的 requiredDevPluginRuntimeBuilds（那份改对了），
 // 两份平行清单各自维护，所以 dev 测不出来 —— 权威归属见 bootstrap/official-plugin-definitions.ts。
@@ -90,8 +90,8 @@ const browserUseRequiredRuntimePaths = [
 ];
 const officialPluginPackages = [
   {
-    packageName: "@zcode/visualize-plugin",
-    relativePath: "apps/zcode-cli/packages/visualize-plugin",
+    packageName: "@picode/visualize-plugin",
+    relativePath: "apps/picode-cli/packages/visualize-plugin",
     requiresRuntime: false,
     requiredSeedPaths: [
       "skills/visualize/SKILL.md",
@@ -124,9 +124,9 @@ const officialPluginPackages = [
   },
   {
     // browser-use 只携带自己的 client script 与 skill/docs；node_repl MCP runtime 归
-    // @zcode/node-repl-host（见上方常量注释）。
-    packageName: "@zcode/browser-use-plugin",
-    relativePath: "apps/zcode-cli/packages/browser-use-plugin",
+    // @picode/node-repl-host（见上方常量注释）。
+    packageName: "@picode/browser-use-plugin",
+    relativePath: "apps/picode-cli/packages/browser-use-plugin",
     requiresRuntime: true,
     requiredRuntimePaths: browserUseRequiredRuntimePaths,
     runtimeBuildScript: "scripts/build.mjs",
@@ -137,8 +137,8 @@ const officialPluginPackages = [
     // node_repl 宿主：Browser Use 与 Computer Use 共用的 MCP runtime，本轮抽成独立包。
     // 它没有 listing（不进插件市场展示面），但生产包首启 seed 必须拿到它的 dist runtime，
     // 否则 bua/cua 任一开启时都会连不上 node_repl。
-    packageName: "@zcode/node-repl-host",
-    relativePath: "apps/zcode-cli/packages/node-repl-host",
+    packageName: "@picode/node-repl-host",
+    relativePath: "apps/picode-cli/packages/node-repl-host",
     requiresRuntime: true,
     requiredRuntimePaths: ["dist/mcp/server.js"],
     runtimeBuildScript: "scripts/build.mjs",
@@ -176,7 +176,7 @@ const isBootstrapWithRemote = process.env.ZCODE_BOOTSTRAP_WITH_REMOTE === "1";
 
 function buildCliBundle() {
   console.log("[prepare:agent-bundle] building zcode-cli app-server bundle ...");
-  // 复用仓库根脚本（turbo build:desktop-agent --filter=@zcode/cli），命中缓存时几乎瞬时。
+  // 复用仓库根脚本（turbo build:desktop-agent --filter=@picode/cli），命中缓存时几乎瞬时。
   runCommand(process.execPath, [resolve(repoRoot, "scripts/build-desktop-agent-cli.mjs")], {
     cwd: repoRoot,
     env: pnpmRunEnv,
@@ -200,7 +200,7 @@ function buildOfficialPluginRuntimes() {
 
     runCommand(
       "pnpm",
-      ["--dir", resolve(repoRoot, "apps/zcode-cli"), "--filter", plugin.packageName, "build"],
+      ["--dir", resolve(repoRoot, "apps/picode-cli"), "--filter", plugin.packageName, "build"],
       {
         cwd: repoRoot,
         env: pnpmRunEnv,
@@ -287,7 +287,7 @@ function stageOfficialPlugins() {
 // __dirname 附近没有官方插件目录，启动时 seed 找不到 source，用户侧不会自动得到内置插件。
 // 这里把官方插件按 bootstrap 的 rootCandidates 期望放到 glm/packages/*-plugin，
 // 让 Electron Node 运行 zcode.cjs 时复用同一套 filesystem seed 逻辑。
-// browser-use runtime 的声明生成依赖 @zcode/core/dist。CI 干净检出没有该产物，
+// browser-use runtime 的声明生成依赖 @picode/core/dist。CI 干净检出没有该产物，
 // 必须先构建 CLI 依赖，再构建官方插件；开发机残留的 dist 曾掩盖这个顺序问题。
 buildCliBundle();
 buildOfficialPluginRuntimes();

@@ -9,7 +9,7 @@ import type {
   McpServerConfig,
   MigrateLegacyCommonMcpRequest,
   MigrateLegacyCommonMcpResult,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { isRecord, normalizeServerMap } from "./utils.js";
 
 function extractBalancedJson(text: string, startIndex: number): string | null {

@@ -1,4 +1,4 @@
-import type { CuaAccessibilitySettingsResult } from "@zcode/shared";
+import type { CuaAccessibilitySettingsResult } from "@picode/shared";
 
 function normalizeToolName(value: string | null | undefined): string {
   return value?.trim().toLowerCase().replace(/_/g, "-") ?? "";

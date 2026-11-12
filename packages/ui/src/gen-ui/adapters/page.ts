@@ -4,8 +4,8 @@ import {
   type McpUiHostContext,
 } from "@modelcontextprotocol/ext-apps/app-bridge";
 import { z } from "zod";
-import type { IGenUiService } from "@zcode/services";
-import type { PluginSandboxPlatformPort, PluginSandboxHandle } from "@zcode/shared/mcp-apps";
+import type { IGenUiService } from "@picode/services";
+import type { PluginSandboxPlatformPort, PluginSandboxHandle } from "@picode/shared/mcp-apps";
 import {
   GEN_UI_STATE_METHOD,
   GEN_UI_FOLLOW_UP_METHOD,
@@ -19,7 +19,7 @@ import {
   genUiTweakMessageSchema,
   genUiTweakResultSchema,
   type GenUiTweakValues,
-} from "@zcode/shared/gen-ui";
+} from "@picode/shared/gen-ui";
 import {
   createPluginUiPagePlane,
   createPluginUiMessagePortTransport,

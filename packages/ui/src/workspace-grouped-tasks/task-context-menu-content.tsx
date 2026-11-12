@@ -1,4 +1,4 @@
-import type { ZCodeTaskMeta } from "@zcode/shared";
+import type { ZCodeTaskMeta } from "@picode/shared";
 import {
   ContextMenuContent,
   ContextMenuItem,
@@ -8,7 +8,7 @@ import {
   ContextMenuSubTrigger,
 } from "@/components/ui/context-menu.js";
 import { toast } from "@/components/ui/toast.js";
-import { useZCodeTaskService } from "@/hooks/useZCodeTaskService.js";
+import { useZCodeTaskService } from "@/hooks/usePiCodeTaskService.js";
 import { requestSessionTitleSummary } from "@/sessionTitleSummaryPending.js";
 import { TaskGroupColorDot } from "@/workspace-grouped-tasks/colors.js";
 import type { TaskGroupMenuItem } from "@/workspace-grouped-tasks/types.js";

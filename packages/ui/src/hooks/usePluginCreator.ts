@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ZCODE_AGENT_PROVIDER } from "@zcode/shared";
+import { ZCODE_AGENT_PROVIDER } from "@picode/shared";
 import type { CreateTaskRequest } from "@/app-shell/types.js";
 import { useWorkspaceServicesResolution } from "@/hooks/useWorkspaceServices.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";

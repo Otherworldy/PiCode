@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { IPlatformService, TaskNotificationPayload } from "@zcode/shared";
-import type { ConversationSnapshot, SessionSummary } from "@zcode/shared/zcode-protocol-v4";
+import type { IPlatformService, TaskNotificationPayload } from "@picode/shared";
+import type { ConversationSnapshot, SessionSummary } from "@picode/shared/picode-protocol-v4";
 import { useServices } from "@/hooks/useServices.js";
 import type { IntlInstance } from "@/i18n/index.js";
 import { logger } from "@/logger.js";

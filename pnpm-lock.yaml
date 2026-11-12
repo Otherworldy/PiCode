@@ -91,7 +91,7 @@ importers:
         specifier: 4.1.4
         version: 4.1.4(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(msw@2.13.3(@types/node@25.6.0)(typescript@6.0.2))(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0))
 
-  apps/zcode-cli:
+  apps/picode-cli:
     dependencies:
       dotenv:
         specifier: ^17.4.2
@@ -131,7 +131,7 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
-  apps/zcode-cli/packages/adapters:
+  apps/picode-cli/packages/adapters:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: 3.0.81
@@ -145,21 +145,21 @@ importers:
       '@modelcontextprotocol/client':
         specifier: 2.0.0
         version: 2.0.0
-      '@zcode/contracts':
+      '@picode/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@zcode/model-option-map':
+      '@picode/model-option-map':
         specifier: workspace:*
         version: link:../../../../packages/model-option-map
-      '@zcode/provider':
+      '@picode/provider':
         specifier: workspace:*
         version: link:../../../../packages/provider
-      '@zcode/shared':
+      '@picode/shared':
         specifier: workspace:*
         version: link:../../../../packages/shared
-      '@zcode/zcode-cua':
+      '@picode/picode-cua':
         specifier: workspace:*
-        version: link:../../../../packages/zcode-cua
+        version: link:../../../../packages/picode-cua
       ai:
         specifier: 6.0.193
         version: 6.0.193(zod@4.6.5)
@@ -204,30 +204,30 @@ importers:
         specifier: ^2.10.3
         version: 2.10.3
 
-  apps/zcode-cli/packages/bootstrap:
+  apps/picode-cli/packages/bootstrap:
     dependencies:
-      '@zcode/adapters':
+      '@picode/adapters':
         specifier: workspace:*
         version: link:../adapters
-      '@zcode/contracts':
+      '@picode/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@zcode/core':
+      '@picode/core':
         specifier: workspace:*
         version: link:../core
-      '@zcode/i18n':
+      '@picode/i18n':
         specifier: workspace:*
         version: link:../i18n
-      '@zcode/pi-host':
+      '@picode/pi-host':
         specifier: workspace:*
         version: link:../pi-host
-      '@zcode/provider':
+      '@picode/provider':
         specifier: workspace:*
         version: link:../../../../packages/provider
-      '@zcode/provider-node':
+      '@picode/provider-node':
         specifier: workspace:*
         version: link:../../../../packages/provider-node
-      '@zcode/shared':
+      '@picode/shared':
         specifier: workspace:*
         version: link:../../../../packages/shared
       diff:
@@ -243,28 +243,28 @@ importers:
       '@types/yazl':
         specifier: ^3.3.1
         version: 3.3.1
-      '@zcode/formal-proof':
+      '@picode/formal-proof':
         specifier: workspace:*
         version: link:../../../../packages/formal-proof
       yazl:
         specifier: ^3.3.1
         version: 3.3.1
 
-  apps/zcode-cli/packages/browser-use-plugin:
+  apps/picode-cli/packages/browser-use-plugin:
     dependencies:
       '@modelcontextprotocol/server':
         specifier: 2.0.0
         version: 2.0.0
-      '@zcode/contracts':
+      '@picode/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@zcode/core':
+      '@picode/core':
         specifier: workspace:*
         version: link:../core
-      '@zcode/node-repl-host':
+      '@picode/node-repl-host':
         specifier: workspace:*
         version: link:../node-repl-host
-      '@zcode/shared':
+      '@picode/shared':
         specifier: workspace:*
         version: link:../../../../packages/shared
       zod:
@@ -277,10 +277,10 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.12.2
-      '@zcode/adapters':
+      '@picode/adapters':
         specifier: workspace:*
         version: link:../adapters
-      '@zcode/bootstrap':
+      '@picode/bootstrap':
         specifier: workspace:*
         version: link:../bootstrap
       esbuild:
@@ -293,30 +293,30 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
-  apps/zcode-cli/packages/cli:
+  apps/picode-cli/packages/cli:
     dependencies:
-      '@zcode/adapters':
+      '@picode/adapters':
         specifier: workspace:*
         version: link:../adapters
-      '@zcode/bootstrap':
+      '@picode/bootstrap':
         specifier: workspace:*
         version: link:../bootstrap
-      '@zcode/contracts':
+      '@picode/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@zcode/core':
+      '@picode/core':
         specifier: workspace:*
         version: link:../core
-      '@zcode/i18n':
+      '@picode/i18n':
         specifier: workspace:*
         version: link:../i18n
-      '@zcode/provider-node':
+      '@picode/provider-node':
         specifier: workspace:*
         version: link:../../../../packages/provider-node
-      '@zcode/shared':
+      '@picode/shared':
         specifier: workspace:*
         version: link:../../../../packages/shared
-      '@zcode/shared-types':
+      '@picode/shared-types':
         specifier: workspace:*
         version: link:../shared-types
       dotenv:
@@ -326,9 +326,9 @@ importers:
         specifier: 1.59.1
         version: 1.59.1
 
-  apps/zcode-cli/packages/contracts:
+  apps/picode-cli/packages/contracts:
     dependencies:
-      '@zcode/shared':
+      '@picode/shared':
         specifier: workspace:*
         version: link:../../../../packages/shared
       zod:
@@ -342,20 +342,20 @@ importers:
         specifier: ^24.0.0
         version: 24.12.2
 
-  apps/zcode-cli/packages/core:
+  apps/picode-cli/packages/core:
     dependencies:
-      '@zcode/contracts':
+      '@picode/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@zcode/shared':
+      '@picode/shared':
         specifier: workspace:*
         version: link:../../../../packages/shared
-      '@zcode/shared-types':
+      '@picode/shared-types':
         specifier: workspace:*
         version: link:../shared-types
-      '@zcode/zcode-cua':
+      '@picode/picode-cua':
         specifier: workspace:*
-        version: link:../../../../packages/zcode-cua
+        version: link:../../../../packages/picode-cua
       cheerio:
         specifier: ^1.0.0
         version: 1.2.0
@@ -382,7 +382,7 @@ importers:
         specifier: ^24.0.0
         version: 24.12.2
 
-  apps/zcode-cli/packages/debug:
+  apps/picode-cli/packages/debug:
     dependencies:
       '@hono/node-server':
         specifier: ^1.14.4
@@ -428,29 +428,29 @@ importers:
         specifier: ^7.2.6
         version: 7.3.3(@types/node@24.12.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.9.0)
 
-  apps/zcode-cli/packages/i18n:
+  apps/picode-cli/packages/i18n:
     dependencies:
-      '@zcode/contracts':
+      '@picode/contracts':
         specifier: workspace:*
         version: link:../contracts
 
-  apps/zcode-cli/packages/node-repl-host:
+  apps/picode-cli/packages/node-repl-host:
     dependencies:
       '@modelcontextprotocol/server':
         specifier: 2.0.0
         version: 2.0.0
-      '@zcode/contracts':
+      '@picode/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@zcode/core':
+      '@picode/core':
         specifier: workspace:*
         version: link:../core
-      '@zcode/shared':
+      '@picode/shared':
         specifier: workspace:*
         version: link:../../../../packages/shared
-      '@zcode/zcode-cua':
+      '@picode/picode-cua':
         specifier: workspace:*
-        version: link:../../../../packages/zcode-cua
+        version: link:../../../../packages/picode-cua
       zod:
         specifier: ^4.4.3
         version: 4.6.5
@@ -468,7 +468,7 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
-  apps/zcode-cli/packages/pi-host:
+  apps/picode-cli/packages/pi-host:
     dependencies:
       '@earendil-works/pi-ai':
         specifier: ^1.5.0
@@ -479,7 +479,7 @@ importers:
       '@earendil-works/pi-mcp':
         specifier: ^1.5.0
         version: 1.5.0
-      '@zcode/shared':
+      '@picode/shared':
         specifier: workspace:*
         version: link:../../../../packages/shared
     devDependencies:
@@ -490,21 +490,21 @@ importers:
         specifier: ^4.20.0
         version: 4.21.0
 
-  apps/zcode-cli/packages/shared-types:
+  apps/picode-cli/packages/shared-types:
     devDependencies:
       '@types/node':
         specifier: ^24.0.0
         version: 24.12.2
 
-  apps/zcode-cli/packages/swift-bridge:
+  apps/picode-cli/packages/swift-bridge:
     dependencies:
-      '@zcode/shared-types':
+      '@picode/shared-types':
         specifier: workspace:*
         version: link:../shared-types
 
-  apps/zcode-cli/packages/visualize-plugin: {}
+  apps/picode-cli/packages/visualize-plugin: {}
 
-  apps/zcode-cli/tools/prompt-trajectory:
+  apps/picode-cli/tools/prompt-trajectory:
     devDependencies:
       '@types/node':
         specifier: ^24.0.0
@@ -516,17 +516,17 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
-  apps/zcode-cli/tools/typescript: {}
+  apps/picode-cli/tools/typescript: {}
 
   packages/client:
     dependencies:
-      '@zcode/rpc':
+      '@picode/rpc':
         specifier: workspace:*
         version: link:../rpc
-      '@zcode/services':
+      '@picode/services':
         specifier: workspace:*
         version: link:../services
-      '@zcode/shared':
+      '@picode/shared':
         specifier: workspace:*
         version: link:../shared
     devDependencies:
@@ -560,33 +560,33 @@ importers:
       '@modelcontextprotocol/ext-apps':
         specifier: 2.0.0
         version: 2.0.0(@modelcontextprotocol/client@2.0.0)(@modelcontextprotocol/core@2.0.0)(@modelcontextprotocol/server@2.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.5)
-      '@zcode/client':
+      '@picode/client':
         specifier: workspace:*
         version: link:../client
-      '@zcode/provider':
+      '@picode/provider':
         specifier: workspace:*
         version: link:../provider
-      '@zcode/provider-node':
+      '@picode/provider-node':
         specifier: workspace:*
         version: link:../provider-node
-      '@zcode/rpc':
+      '@picode/rpc':
         specifier: workspace:*
         version: link:../rpc
-      '@zcode/server':
+      '@picode/server':
         specifier: workspace:*
         version: link:../server
-      '@zcode/services':
+      '@picode/services':
         specifier: workspace:*
         version: link:../services
-      '@zcode/shared':
+      '@picode/shared':
         specifier: workspace:*
         version: link:../shared
-      '@zcode/ui':
+      '@picode/ui':
         specifier: workspace:*
         version: link:../ui
-      '@zcode/zcode-cua':
+      '@picode/picode-cua':
         specifier: workspace:*
-        version: link:../zcode-cua
+        version: link:../picode-cua
       module-details-from-path:
         specifier: ^1.0.4
         version: 1.0.4
@@ -706,10 +706,10 @@ importers:
 
   packages/provider:
     dependencies:
-      '@zcode/model-option-map':
+      '@picode/model-option-map':
         specifier: workspace:*
         version: link:../model-option-map
-      '@zcode/shared':
+      '@picode/shared':
         specifier: workspace:*
         version: link:../shared
       zod:
@@ -722,10 +722,10 @@ importers:
 
   packages/provider-node:
     dependencies:
-      '@zcode/provider':
+      '@picode/provider':
         specifier: workspace:*
         version: link:../provider
-      '@zcode/shared':
+      '@picode/shared':
         specifier: workspace:*
         version: link:../shared
       zod:
@@ -735,7 +735,7 @@ importers:
       '@types/node':
         specifier: ^25.5.0
         version: 25.6.0
-      '@zcode/model-option-map':
+      '@picode/model-option-map':
         specifier: workspace:*
         version: link:../model-option-map
       typescript:
@@ -771,16 +771,16 @@ importers:
       '@lydell/node-pty-linux-x64':
         specifier: 1.2.0-beta.10
         version: 1.2.0-beta.10
-      '@zcode/client':
+      '@picode/client':
         specifier: workspace:*
         version: link:../client
-      '@zcode/rpc':
+      '@picode/rpc':
         specifier: workspace:*
         version: link:../rpc
-      '@zcode/services':
+      '@picode/services':
         specifier: workspace:*
         version: link:../services
-      '@zcode/shared':
+      '@picode/shared':
         specifier: workspace:*
         version: link:../shared
       axios:
@@ -853,21 +853,21 @@ importers:
       '@larksuiteoapi/node-sdk':
         specifier: 1.64.0
         version: 1.64.0
-      '@zcode/provider':
+      '@picode/provider':
         specifier: workspace:*
         version: link:../provider
-      '@zcode/provider-node':
+      '@picode/provider-node':
         specifier: workspace:*
         version: link:../provider-node
-      '@zcode/rpc':
+      '@picode/rpc':
         specifier: workspace:*
         version: link:../rpc
-      '@zcode/shared':
+      '@picode/shared':
         specifier: workspace:*
         version: link:../shared
-      '@zcode/zcode-cua':
+      '@picode/picode-cua':
         specifier: workspace:*
-        version: link:../zcode-cua
+        version: link:../picode-cua
       croner:
         specifier: ^10.0.1
         version: 10.0.1
@@ -914,7 +914,7 @@ importers:
 
   packages/shared:
     dependencies:
-      '@zcode/model-option-map':
+      '@picode/model-option-map':
         specifier: workspace:*
         version: link:../model-option-map
       zod:
@@ -1017,16 +1017,16 @@ importers:
       '@xyflow/react':
         specifier: ^12.10.1
         version: 12.10.2(@types/react@19.2.14)(immer@11.1.8)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@zcode/provider':
+      '@picode/provider':
         specifier: workspace:*
         version: link:../provider
-      '@zcode/rpc':
+      '@picode/rpc':
         specifier: workspace:*
         version: link:../rpc
-      '@zcode/services':
+      '@picode/services':
         specifier: workspace:*
         version: link:../services
-      '@zcode/shared':
+      '@picode/shared':
         specifier: workspace:*
         version: link:../shared
       ai:
@@ -1168,13 +1168,13 @@ importers:
 
   packages/web:
     dependencies:
-      '@zcode/client':
+      '@picode/client':
         specifier: workspace:*
         version: link:../client
-      '@zcode/shared':
+      '@picode/shared':
         specifier: workspace:*
         version: link:../shared
-      '@zcode/ui':
+      '@picode/ui':
         specifier: workspace:*
         version: link:../ui
       react:
@@ -1209,9 +1209,9 @@ importers:
         specifier: ^8.20.0
         version: 8.20.0
 
-  packages/zcode-cua: {}
+  packages/picode-cua: {}
 
-  packages/zcode-server-cli:
+  packages/picode-server-cli:
     dependencies:
       '@hono/node-server':
         specifier: ^1.19.11
@@ -1219,13 +1219,13 @@ importers:
       '@hono/node-ws':
         specifier: ^1.3.0
         version: 1.3.0(@hono/node-server@1.19.14(hono@4.12.12))(hono@4.12.12)
-      '@zcode/rpc':
+      '@picode/rpc':
         specifier: workspace:*
         version: link:../rpc
-      '@zcode/services':
+      '@picode/services':
         specifier: workspace:*
         version: link:../services
-      '@zcode/shared':
+      '@picode/shared':
         specifier: workspace:*
         version: link:../shared
       hono:

@@ -4,7 +4,7 @@ import { z } from "zod";
 // 额度类型拆在 usage-quota.ts，见该文件头部说明；这里 re-export 保持既有 import 路径不变。
 export * from "./usage-quota.js";
 import type { UsageMcpQuotaSnapshot, UsageQuotaSnapshot } from "./usage-quota.js";
-import type { ZCodeAccountAccess, ZCodeProviderAccountAccess } from "./zcode-protocol/index.js";
+import type { ZCodeAccountAccess, ZCodeProviderAccountAccess } from "./picode-protocol/index.js";
 
 export const ESTIMATED_TOKEN_CHAR_DIVISOR = 3;
 

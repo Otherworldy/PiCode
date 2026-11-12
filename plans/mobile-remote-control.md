@@ -14,7 +14,7 @@ Bot Channel 已删除，侧栏入口也没了。手机要看并控制这台桌�
 不做：
 
 - 不为手机另起 Agent、Local Host、远程会话或 Pi。
-- 不走 `pnpm dev:web`，也不走 `?remote=`。那是另一套 `@zcode/server`，而且 `/ws/remote/:id` 只桥接文件、Git、系统和终端。
+- 不走 `pnpm dev:web`，也不走 `?remote=`。那是另一套 `@picode/server`，而且 `/ws/remote/:id` 只桥接文件、Git、系统和终端。
 - 不合并 `desktop-continuous` 与 `web-remote-replayable`。
 - Main 不保存任务队列或快照。工作区列表只用于把手机挂到已有 attachment。
 
@@ -54,7 +54,7 @@ Bot Channel 已删除，侧栏入口也没了。手机要看并控制这台桌�
 - 远端 replayable 挂接：`attachRemoteWorkspaceSessionHost`。
 - 浏览器 RPC：`packages/client/src/websocket.ts` 的 `connectViaWebSocket`。
 - 手机页面：`packages/web/src/main.tsx` 已把 `Root` 挂到 WebSocket 服务上。桌面布局里 `isDesktop === false` 的分支继续用来收起桌面 chrome。
-- 两套 flush、同一投影：`apps/zcode-cli/packages/pi-host/SPEC.md`。replayable 150ms，continuous 30ms。快照可从 Pi jsonl 重建。
+- 两套 flush、同一投影：`apps/picode-cli/packages/pi-host/SPEC.md`。replayable 150ms，continuous 30ms。快照可从 Pi jsonl 重建。
 
 ## Steps
 

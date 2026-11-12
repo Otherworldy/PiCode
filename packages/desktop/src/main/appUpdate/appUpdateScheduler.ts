@@ -1,4 +1,4 @@
-import type { AppUpdateSnapshot } from "@zcode/shared";
+import type { AppUpdateSnapshot } from "@picode/shared";
 
 export const APP_UPDATE_INITIAL_DELAY_MS = 15_000;
 export const APP_UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;

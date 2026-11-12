@@ -1,4 +1,4 @@
-import { ensureAppDataDir } from "@zcode/shared/node";
+import { ensureAppDataDir } from "@picode/shared/node";
 /* eslint-disable max-lines */
 import "./desktopEarlyDataBaseDirBootstrap.js";
 import "./desktopEarlyChromiumHardwareAccelerationBootstrap.js";
@@ -69,7 +69,7 @@ import {
   getConversationWorkspaceDir,
   normalizeRuntimeProcessEnv,
   setDataBaseDir,
-} from "@zcode/services/node";
+} from "@picode/services/node";
 import {
   desktopMenuMessageIds,
   type Locale,
@@ -83,7 +83,7 @@ import {
   buildZCodeEndpointUrls,
   resolveZCodeEndpointOrigin,
   HostMessageTypes,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { logger } from "./logger.js";
 import { markMainLaunchAppReady } from "./desktopLaunchMarks.js";
 import { createCuaPipFocusRouter, resolveCuaPipWindowKey } from "./cuaPipFocusRouter.js";

@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- Grouped 视图 hook 集中维护 optimistic overlay、排序保存和 ungroup 持久化，拆开会让同一份 view 状态在多个 hook 间漂移。 */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ZCodeTaskMeta } from "@zcode/shared";
+import type { ZCodeTaskMeta } from "@picode/shared";
 import type {
   ZCodeGroupedTaskView,
   ZCodeGroupedTaskViewOrderInput,
@@ -8,7 +8,7 @@ import type {
   ZCodeGroupedTaskViewTopLevelNodeRef,
   ZCodeTaskGroup,
   ZCodeTaskGroupColor,
-} from "@zcode/services";
+} from "@picode/services";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { useLocalWorkspaceScopes } from "@/hooks/useLocalWorkspaceScopes.js";
 import type { WorkspaceTabState } from "@/store/tabStore.js";
@@ -18,9 +18,9 @@ import { mergeTaskListMembershipFields } from "@/v4/taskListRowActivity.js";
 import { fetchTaskListMembershipSets } from "@/lib/taskListMembershipSets.js";
 import { useTaskListMembershipVersion } from "@/v4/taskListMembershipVersion.js";
 import { useGlobalTaskList } from "@/hooks/useGlobalTaskList.js";
-import { selectWorkspaceZCodeState, useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { selectWorkspaceZCodeState, useZCodeSessionStore } from "@/store/picodeSessionStore.js";
 import { buildTaskEntityKey, buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
-import { mergeTaskWithOptimisticMeta } from "@/lib/zcodeTaskMetaMerge.js";
+import { mergeTaskWithOptimisticMeta } from "@/lib/picodeTaskMetaMerge.js";
 import {
   useWorkspaceTaskOptimisticOverlayByWorkspaceKey,
   type WorkspaceOptimisticTaskOverlay,

@@ -2,7 +2,7 @@ import type {
   ZCodeAutomationIntervalUnit,
   ZCodeAutomationScheduleRule,
   ZCodeAutomationUpdateParams,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 /** 会话侧自定义重复 carrier 的受控上限；不要收紧管理页历史 scheduleRule 的领域上限。 */
 const MAX_SESSION_AUTOMATION_INTERVAL = 200;

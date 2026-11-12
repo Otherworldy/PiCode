@@ -18,7 +18,7 @@ const alias = {
   "@": join(root, "packages/ui/src"),
   ...Object.fromEntries(
     Object.entries(shared.exports).map(([key, path]) => [
-      `@zcode/shared${key === "." ? "" : key.slice(1)}`,
+      `@picode/shared${key === "." ? "" : key.slice(1)}`,
       resolve(root, "packages/shared", path),
     ]),
   ),
@@ -115,7 +115,7 @@ await writeFile(
   '<p>Standalone state</p><i data-lucide="search"></i><button data-tooltip="Offline tooltip">Details</button><viz-calendar date="2026-09-29" start="09:00" end="12:00"></viz-calendar><script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script><script>window.initialCount=window.zcode.widgetState?.privateContent?.count??0;window.calendarWasReady=typeof customElements.get("viz-calendar")==="function";d3.select(document.body).append("svg").append("rect").attr("data-d3-probe","").attr("width",d3.sum([3,4]));</script>',
 );
 await promisify(execFile)("python3", [
-  join(root, "apps/zcode-cli/packages/visualize-plugin/skills/visualize/scripts/render.py"),
+  join(root, "apps/picode-cli/packages/visualize-plugin/skills/visualize/scripts/render.py"),
   join(output, "standalone-fragment.html"),
   join(output, "standalone.html"),
 ]);

@@ -1,5 +1,5 @@
 import type { JSONRPCMessage, Transport } from "@modelcontextprotocol/client";
-import type { PluginSandboxTransportPort } from "@zcode/shared/mcp-apps";
+import type { PluginSandboxTransportPort } from "@picode/shared/mcp-apps";
 
 /**
  * 宿主 renderer 侧的 MCP `Transport`：一条 MessagePort（main 建的 channel 的 port2）上跑原始 JSON-RPC，

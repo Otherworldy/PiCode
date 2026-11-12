@@ -6,7 +6,7 @@ import type {
   CommandsQueryParams,
   CommandsQueryResult,
   ConversationSnapshot,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared/picode-protocol-v4";
 import type { PendingCommandClientContext } from "@/v4/pendingCommandWorkspace.js";
 import { pendingCommandReplayFor, type PendingCommandReplay } from "@/v4/pendingCommandReplay.js";
 export type { PendingCommandReplay } from "@/v4/pendingCommandReplay.js";

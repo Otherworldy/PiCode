@@ -41,7 +41,7 @@ Pi 的系统提示词正文只在这两个文件里。设置页和项目按钮�
 
 同名文件项目优先于全局，两份不合并。`SYSTEM.md` 和 `APPEND_SYSTEM.md` 不是同名，会叠在一起：先确定替换段，再追加追加段。
 
-路径、空白删除和 256 KiB 上限在 `@zcode/shared/node` 的 `agentSystemPromptFile`。本地落盘在 `agentSystemPrompt.ts`。
+路径、空白删除和 256 KiB 上限在 `@picode/shared/node` 的 `agentSystemPromptFile`。本地落盘在 `agentSystemPrompt.ts`。
 
 只含空白的保存删掉文件。空的 `SYSTEM.md` 仍会替换内置提示词，空的 `APPEND_SYSTEM.md` 仍会占掉追加位。超过 256 KiB 拒绝写入，也不把已有超限文件截断后交给编辑器。
 

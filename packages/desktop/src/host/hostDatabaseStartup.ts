@@ -2,8 +2,8 @@ import {
   getTasksIndexDatabasePath,
   markTasksStoragePrepared,
   resolveZCodeAgentSpawnCwd,
-} from "@zcode/services/storage-startup";
-import type { DatabaseStartupState } from "@zcode/shared";
+} from "@picode/services/storage-startup";
+import type { DatabaseStartupState } from "@picode/shared";
 import { DatabaseStartupCoordinator } from "./databaseStartupCoordinator.js";
 import { StartupDiskSampler } from "./startupDiskSampler.js";
 import { prepareHostStorage, prepareSessionStorage } from "./storagePreparationProcesses.js";

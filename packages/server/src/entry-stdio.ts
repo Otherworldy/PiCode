@@ -1,12 +1,12 @@
-import { disposeServiceResourcesAndWait, getAppConfigDir } from "@zcode/services/node";
+import { disposeServiceResourcesAndWait, getAppConfigDir } from "@picode/services/node";
 import {
   ZCODE_VERSION,
   SERVICE_AUTHORITY_MODE_ENV,
   formatLogPrefix,
   formatZodError,
   helloAckMessageSchema,
-} from "@zcode/shared";
-import type { HelloMessage, HelloAckMessage } from "@zcode/shared";
+} from "@picode/shared";
+import type { HelloMessage, HelloAckMessage } from "@picode/shared";
 import { createStdioServer } from "./stdio.js";
 import { registerStdioProcessLifecycle } from "./stdio-lifecycle.js";
 import { createStdioServices } from "./stdioServices.js";
@@ -14,7 +14,7 @@ import { ensureRemoteServerDeviceMid } from "./stdioDeviceMid.js";
 import {
   materializeBundledZCodeBuiltinProviderConfig,
   readBundledZCodeBuiltinProviderConfig,
-} from "./bundledZCodeBuiltinProviderConfig.js";
+} from "./bundledPiCodeBuiltinProviderConfig.js";
 
 // In stdio mode, all logging goes to stderr
 const log = (...args: unknown[]) =>

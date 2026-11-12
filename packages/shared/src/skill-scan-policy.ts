@@ -2,8 +2,8 @@
 // Skill scan policy (pure, no I/O)
 // ============================================================
 //
-// 技能目录扫描的共享策略，被 @zcode/services（桌面端递归扫描）与
-// apps/zcode-cli 的 @zcode/adapters（agent 端单层扫描）共同消费，
+// 技能目录扫描的共享策略，被 @picode/services（桌面端递归扫描）与
+// apps/picode-cli 的 @picode/adapters（agent 端单层扫描）共同消费，
 // 避免两端对“什么目录该进入”产生分歧。
 //
 // 必须保持纯逻辑、不引入 node:* 依赖，否则会破坏 web bundle。

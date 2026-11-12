@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { toPiModelSelectionView } from "../src/zcode-agent/piModelCatalog.js";
+import { toPiModelSelectionView } from "../src/picode-agent/piModelCatalog.js";
 
 test("目录模型的 contextWindow 进入选择视图，供圆环在提交前读取", () => {
   const view = toPiModelSelectionView({

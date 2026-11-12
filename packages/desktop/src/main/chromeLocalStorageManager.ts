@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, sep as pathSeparator } from "node:path";
 import { BrowserWindow } from "electron";
 import type { Session, WebContents } from "electron";
-import type { ChromeBrowserDataImportError } from "@zcode/shared";
+import type { ChromeBrowserDataImportError } from "@picode/shared";
 import { WebSocket, type RawData } from "ws";
 import { resolveChromeExecutablePath } from "./chromeProfileDiscovery.js";
 import type { LinuxChromePasswordStore } from "./chromeInstallationCandidates.js";

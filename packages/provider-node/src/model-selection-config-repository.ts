@@ -1,4 +1,4 @@
-import type { ModelSelection, PersonalProviderConfigRepository } from "@zcode/provider";
+import type { ModelSelection, PersonalProviderConfigRepository } from "@picode/provider";
 
 export interface NodeModelSelectionConfigRepositoryOptions {
   readonly personalRepository: PersonalProviderConfigRepository;

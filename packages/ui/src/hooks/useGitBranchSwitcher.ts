@@ -4,7 +4,7 @@ import type {
   GitBranchMutationResult,
   GitLocalBranchListResult,
   GitRepositorySummary,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { toast } from "@/components/ui/toast.js";
 import {
   buildGitBranchAutoCommitMessage,

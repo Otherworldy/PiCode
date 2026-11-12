@@ -1,6 +1,6 @@
 import { Eye, EyeOff, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useState } from "react";
-import type { ZCodePluginInfo, ZCodePluginScope, ZCodePluginUserConfigOption } from "@zcode/shared";
+import type { ZCodePluginInfo, ZCodePluginScope, ZCodePluginUserConfigOption } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
 import { Switch } from "@/components/ui/switch.js";

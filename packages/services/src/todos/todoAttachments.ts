@@ -1,4 +1,4 @@
-import type { TodoAttachment, TodoItem } from "@zcode/shared";
+import type { TodoAttachment, TodoItem } from "@picode/shared";
 
 export function storedAttachments(raw: string | null): TodoItem["attachments"] {
   if (!raw) return [];

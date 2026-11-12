@@ -18,7 +18,7 @@ function ToolSummaryTrailingSlot() {
     </span>
   );
 }
-import { testId, TID_TOOL_SUMMARY_TRIGGER } from "@zcode/shared";
+import { testId, TID_TOOL_SUMMARY_TRIGGER } from "@picode/shared";
 import { cn } from "@/components/lib/utils.js";
 import { CollapsibleTrigger } from "@/components/ui/collapsible.js";
 import { QueuedSummaryContent } from "@/ToolCallBlocks/QueuedSummaryContent.js";

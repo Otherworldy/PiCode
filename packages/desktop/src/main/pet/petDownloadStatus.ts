@@ -1,5 +1,5 @@
 import { BrowserWindow } from "electron";
-import { PlatformChannels, type DesktopPetDownloadStatus } from "@zcode/shared";
+import { PlatformChannels, type DesktopPetDownloadStatus } from "@picode/shared";
 import { PetPackDownloadError } from "./downloadPack.js";
 
 let current: DesktopPetDownloadStatus = { phase: "idle" };

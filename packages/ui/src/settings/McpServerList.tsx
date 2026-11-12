@@ -4,7 +4,7 @@ import {
   testId,
   type McpServerStatus,
   type ZCodeMcpServer,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { Switch } from "@/components/ui/switch.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { GitFork } from "lucide-react";
-import { TID_SESSION_BRANCH_GRAPH_TOGGLE } from "@zcode/shared";
+import { TID_SESSION_BRANCH_GRAPH_TOGGLE } from "@picode/shared";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";

@@ -1,4 +1,4 @@
-import type { BrowserCommand, BrowserCommandResult } from "@zcode/shared";
+import type { BrowserCommand, BrowserCommandResult } from "@picode/shared";
 import {
   handleCheck,
   handleClick,

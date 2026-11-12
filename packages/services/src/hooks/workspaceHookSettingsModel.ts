@@ -5,7 +5,7 @@ import type {
   HookEvent,
   SettingsDirectoryLocation,
   WorkspaceHookDiscoveryState,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   resolveWorkspaceHookEntries,
   type CanonicalWorkspaceHookEntryData,
@@ -14,7 +14,7 @@ import {
   type WorkspaceHookRuntimeRoot,
   type WorkspaceHookSourceInput,
   type WorkspaceHooksConfig,
-} from "@zcode/shared/workspace-hook-discovery";
+} from "@picode/shared/workspace-hook-discovery";
 
 interface LegacyHookDefinition {
   type?: "command" | "process" | string;

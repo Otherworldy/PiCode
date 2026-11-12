@@ -8,7 +8,7 @@ Pi 的扩展 API 提供了后台派发的原语，PiCode 里已经在用：
 
 - `AgentSession.sendCustomMessage(msg, { triggerTurn, deliverAs })`（`pi-coding-agent/dist/core/agent-session.d.ts:611`）—— 就是 `pi.sendMessage` 的底层，streaming 时排队，空闲时 `triggerTurn` 直接开新 turn。
 - `process` 工具就是靠这套机制（`notify: turn` 唤醒 / `context` 静默追加），所以后台进程能"派出去继续干活"。
-- 协议和 UI 也预留了：`toolCallRowSchema.backgrounded` / `subagentRowSchema.backgrounded`（`packages/shared/src/zcode-protocol-v4/rows.ts:250,297`），UI 已按 `row.backgrounded !== true && status === "running"` 判断阻塞（`packages/ui/src/v4/conversationTurnRenderUnits.ts:194,200`）。
+- 协议和 UI 也预留了：`toolCallRowSchema.backgrounded` / `subagentRowSchema.backgrounded`（`packages/shared/src/picode-protocol-v4/rows.ts:250,297`），UI 已按 `row.backgrounded !== true && status === "running"` 判断阻塞（`packages/ui/src/v4/conversationTurnRenderUnits.ts:194,200`）。
 - `live-subagents.ts:113` 的 `subagentControlWorks()` 已经能把 running 子会话产成 `kind: "subagent"` 的 backgroundWorks，带单独 Stop。
 
 缺的只是 pi-host 侧：工具没有后台分支，没人设置 `backgrounded`，也没有完成通知。
@@ -79,12 +79,12 @@ Pi 的扩展 API 提供了后台派发的原语，PiCode 里已经在用：
 
 ## Files to modify
 
-- `apps/zcode-cli/packages/pi-host/src/subagent-background.ts` — **新增**：后台子代理的唯一所有者
-- `apps/zcode-cli/packages/pi-host/src/subagent-background.test.ts` — **新增**：该模块的单测
-- `apps/zcode-cli/packages/pi-host/src/host-capabilities.ts` — 参数、`runSubagent` 签名、`onStarted` 透传
-- `apps/zcode-cli/packages/pi-host/src/session-factory.ts` — 构造 runner、接线、`dispose`
-- `apps/zcode-cli/packages/pi-host/src/host-capabilities.test.ts` — 现有用例随签名调整
-- `apps/zcode-cli/packages/pi-host/src/index.ts` — 若需要导出新模块（仅内部用则不加）
+- `apps/picode-cli/packages/pi-host/src/subagent-background.ts` — **新增**：后台子代理的唯一所有者
+- `apps/picode-cli/packages/pi-host/src/subagent-background.test.ts` — **新增**：该模块的单测
+- `apps/picode-cli/packages/pi-host/src/host-capabilities.ts` — 参数、`runSubagent` 签名、`onStarted` 透传
+- `apps/picode-cli/packages/pi-host/src/session-factory.ts` — 构造 runner、接线、`dispose`
+- `apps/picode-cli/packages/pi-host/src/host-capabilities.test.ts` — 现有用例随签名调整
+- `apps/picode-cli/packages/pi-host/src/index.ts` — 若需要导出新模块（仅内部用则不加）
 - `docs/specs/subagent-background-dispatch.md` — **新增** spec（先写）
 
 不改：
@@ -118,12 +118,12 @@ Pi 的扩展 API 提供了后台派发的原语，PiCode 里已经在用：
 - [x] `host-capabilities.ts`：`runZcodeSubagent` 增加 `onStarted`，在 `:444` 的 `trackLiveSubagent` 处调用
 - [x] `session-factory.ts`：`live` 的类型放宽到能调 `sendCustomMessage`；构造 runner；`dispose` 先 `abortAll()` 再 `shutdownPiSession`
 - [x] 更新 `host-capabilities.test.ts` 里现有 `runSubagent` 调用签名
-- [x] 跑 `pnpm --filter @zcode/pi-host test`、`pnpm typecheck`、`pnpm lint`
+- [x] 跑 `pnpm --filter @picode/pi-host test`、`pnpm typecheck`、`pnpm lint`
 - [ ] 跑 `pnpm architecture:check --changed`
 
 ## Verification
 
-**单测**（`pnpm --filter @zcode/pi-host test`）
+**单测**（`pnpm --filter @picode/pi-host test`）
 
 `subagent-background.test.ts`：
 

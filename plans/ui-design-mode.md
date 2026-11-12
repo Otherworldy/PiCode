@@ -24,12 +24,12 @@ Plannotator 的 `annotate` 已经能把 `.html` 按真实页面打开，批注�
 
 - `packages/ui/src/v4/composer/V4ComposerModeControls.tsx` — 模式菜单加上 UI 设计勾选，开启后加上与计划标记同样的关闭按钮。
 - `packages/ui/src/v4/SessionPane.tsx` 与 `packages/ui/src/v4/composer/useDraftConfigControl.ts` — 勾选改草稿；已有会话则发会话控制，不发聊天文本。
-- `packages/shared/src/zcode-protocol-v4/command.ts` — 新增开关命令，只带是否开启。
-- `apps/zcode-cli/packages/pi-host/src/ui-design-mode.ts` — 新建。接住开关、状态、路径判断、工具拦截、每轮约束。
-- `apps/zcode-cli/packages/pi-host/src/ui-design-mode.test.ts` — 路径与拦截。
-- `apps/zcode-cli/packages/pi-host/src/session-factory.ts` — 把扩展放进 `extensionFactories`，挨着现有的权限扩展。
+- `packages/shared/src/picode-protocol-v4/command.ts` — 新增开关命令，只带是否开启。
+- `apps/picode-cli/packages/pi-host/src/ui-design-mode.ts` — 新建。接住开关、状态、路径判断、工具拦截、每轮约束。
+- `apps/picode-cli/packages/pi-host/src/ui-design-mode.test.ts` — 路径与拦截。
+- `apps/picode-cli/packages/pi-host/src/session-factory.ts` — 把扩展放进 `extensionFactories`，挨着现有的权限扩展。
 - 协议命令的宿主处理，跟 `switchCollaborationMode` 同一条分发—— 把开关交给上面的扩展。
-- `apps/zcode-cli/packages/pi-host/SPEC.md` — 补上勾选开关、写入边界，以及审查页仍走现有拦截。
+- `apps/picode-cli/packages/pi-host/SPEC.md` — 补上勾选开关、写入边界，以及审查页仍走现有拦截。
 - 中英文案：勾选名称和关闭提示。
 
 不改 `@plannotator/pi-extension`。不改 `plannotator-browser-redirect.ts` 和右侧浏览器打开路径。

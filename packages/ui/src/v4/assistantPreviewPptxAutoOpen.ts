@@ -1,4 +1,4 @@
-import type { ConversationRow, SessionPhase } from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationRow, SessionPhase } from "@picode/shared/picode-protocol-v4";
 import { isAssistantBodyTextRow } from "@/v4/processEventText.js";
 
 interface AssistantPreviewPptxCompletedTurn {

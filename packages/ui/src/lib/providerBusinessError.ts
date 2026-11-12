@@ -13,7 +13,7 @@
  * | 闲时票据不可用 | 3102 | 400  | 单段运行时间到顶，提示新建闲时任务续跑 |
  * | 上游 HTTP 异常 | 2007 | 500  | 可重试；刷新配额，勿本地扣额度 |
  */
-import { isOffPeakTicketExpiredError } from "@zcode/shared";
+import { isOffPeakTicketExpiredError } from "@picode/shared";
 
 const PROVIDER_BUSINESS_ERROR_CODES = [
   "1006",

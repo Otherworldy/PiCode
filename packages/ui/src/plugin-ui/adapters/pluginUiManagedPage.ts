@@ -18,8 +18,8 @@ import type {
   McpUiAppCapabilities,
   McpUiHostContext,
 } from "@modelcontextprotocol/ext-apps/app-bridge";
-import type { PluginSandboxHandle } from "@zcode/shared/mcp-apps";
-import { buildPluginSandboxScopeId } from "@zcode/shared/mcp-apps";
+import type { PluginSandboxHandle } from "@picode/shared/mcp-apps";
+import { buildPluginSandboxScopeId } from "@picode/shared/mcp-apps";
 import { clearPluginUiSurfaceFeed } from "../app/pluginUiSurfaceFeedStore.js";
 import {
   PLUGIN_UI_CARD_DEFAULT_HEIGHT_PX,
@@ -30,8 +30,8 @@ import { buildPluginUiHostCapabilities } from "../domain/buildPluginUiHostCapabi
 import { buildPluginUiHostContext } from "../domain/buildPluginUiHostContext.js";
 
 import { acquireWorkspaceConnection } from "@/v4/workspaceConnectionRegistry.js";
-import type { IServiceAccessor } from "@zcode/services";
-import type { IPlatformService } from "@zcode/shared";
+import type { IServiceAccessor } from "@picode/services";
+import type { IPlatformService } from "@picode/shared";
 import { buildPluginUiSessionKey } from "../contract.js";
 import type { Page, UsePluginUiHostInput, UsePluginUiHostResult } from "./pluginUiHostTypes.js";
 import { createPluginUiPagePlane } from "./pluginUiPagePlane.js";

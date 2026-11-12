@@ -7,12 +7,12 @@
 // - dataBase64（粘贴截图等内联图）→ 高层 put（内部 begin/chunk/commit）→ artifact ref；
 // - textContent（无路径文本，web 回退面）→ 编码后同走 put；
 // - 三者皆无（元信息-only）→ 丢弃并告警（无内容可发，不伪造引用）。
-import type { ZCodePromptAttachment } from "@zcode/shared";
+import type { ZCodePromptAttachment } from "@picode/shared";
 import type {
   AttachmentRef,
   V4AttachmentPutParams,
   V4AttachmentPutResult,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared/picode-protocol-v4";
 import { logger } from "@/logger.js";
 import type { AttachmentUploadOptions } from "@/v4/attachmentUploadTransaction.js";
 

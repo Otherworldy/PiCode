@@ -1,12 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { atomicWritePrivateTextFile, backupCorruptFile, withFileLock } from "@zcode/shared/node";
+import { atomicWritePrivateTextFile, backupCorruptFile, withFileLock } from "@picode/shared/node";
 import {
   credentialKeySchema,
   credentialRecordSchema,
   credentialValueSchema,
   formatZodError,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { ICredentialService } from "./credential.js";
 import {
   createCredentialCipherProvider,

@@ -1,4 +1,4 @@
-import { BIGMODEL_PROVIDER_ID } from "@zcode/shared";
+import { BIGMODEL_PROVIDER_ID } from "@picode/shared";
 
 const ACTIVE_PROVIDER_KEY = "oauth:active_provider";
 const ZCODE_JWT_TOKEN_KEY = "zcodejwttoken";

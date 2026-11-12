@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readdir, writeFile, symlink, rm } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { getGenUiOutputDirectory } from "@zcode/shared/node";
+import { getGenUiOutputDirectory } from "@picode/shared/node";
 import { readGenUiDocument } from "./files.js";
 
 const roots: string[] = [];

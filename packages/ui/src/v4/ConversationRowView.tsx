@@ -45,7 +45,7 @@ import {
   TID_V4_ROW,
   TID_V4_ROW_ATTACHMENTS,
   testId,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type {
   AttachmentRef,
   ArtifactRow,
@@ -62,7 +62,7 @@ import type {
   TurnUsage,
   UserInputRow,
   V4ConversationFileRewindPreviewResult,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared/picode-protocol-v4";
 import { AssistantPreviewCards } from "@/AssistantPreviewCards.js";
 import { ConversationSubagentSettlementCard } from "@/v4/ConversationSubagentSettlementCard.js";
 import { AssistantCodeCommentCards } from "@/AssistantCodeCommentCards.js";

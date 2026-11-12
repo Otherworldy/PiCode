@@ -1,16 +1,16 @@
 import { useMemo, useRef } from "react";
-import type { ZCodeProvider, ZCodeTaskMeta } from "@zcode/shared";
+import type { ZCodeProvider, ZCodeTaskMeta } from "@picode/shared";
 import { useActiveTaskSnapshotMeta } from "@/hooks/useActiveTaskSnapshotMeta.js";
 import { useTaskNativeSessionLogFile } from "@/hooks/useTaskNativeSessionLogFile.js";
 import { useTaskSessionFilePath } from "@/hooks/useTaskSessionFilePath.js";
 import { buildTaskEntityKey } from "@/lib/taskQueryCache.js";
-import { mergeTaskMetaCandidates } from "@/lib/zcodeTaskMetaMerge.js";
+import { mergeTaskMetaCandidates } from "@/lib/picodeTaskMetaMerge.js";
 import { resolveWorkspaceHeaderProvider } from "@/lib/workspaceHeaderProvider.js";
 import {
   getTaskMeta,
   selectWorkspaceZCodeState,
   useZCodeSessionStore,
-} from "@/store/zcodeSessionStore.js";
+} from "@/store/picodeSessionStore.js";
 import { useTaskQueryCacheStore } from "@/store/taskQueryCacheStore.js";
 
 interface UseWorkspaceActiveTaskStateParams {

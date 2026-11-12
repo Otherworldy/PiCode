@@ -1,0 +1,373 @@
+import type { BackgroundBashOutputResult } from "@picode/shared";
+import type { BackgroundWorkSummary } from "@picode/shared/picode-protocol-v4";
+import type { PiContextUsage } from "./context-breakdown.js";
+import type { ToolPermissionCheck } from "./permission-gate.js";
+import type { ToolLoadoutPort } from "./tool-loadout.js";
+
+export type PiThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
+export type PiAssistantDelta =
+  | { type: "text_start"; contentIndex: number }
+  | { type: "text_delta"; contentIndex: number; delta: string }
+  | { type: "text_end"; contentIndex: number; content?: string }
+  | { type: "thinking_start"; contentIndex: number }
+  | { type: "thinking_delta"; contentIndex: number; delta: string }
+  | { type: "thinking_end"; contentIndex: number; content?: string }
+  | { type: "toolcall_start"; contentIndex: number; id: string; toolName?: string }
+  | { type: "toolcall_delta"; contentIndex: number; delta: string }
+  | {
+      type: "toolcall_end";
+      contentIndex: number;
+      toolCall?: { id: string; name: string; arguments?: unknown };
+    };
+
+export type PiToolResult = {
+  content?: Array<{ type?: string; text?: string }>;
+  details?: Record<string, unknown>;
+};
+
+/**
+ * Pi `Usage` 的字段子集。`input` 是未缓存输入，与 `cacheRead` / `cacheWrite`
+ * 互不相交，三类相加才是 prompt 总量。
+ */
+export type PiMessageUsage = {
+  input?: number;
+  output?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  reasoning?: number;
+  totalTokens?: number;
+};
+
+export type PiHostEvent =
+  | { type: "agent_start"; at?: number }
+  | { type: "agent_end"; willRetry?: boolean }
+  | {
+      type: "auto_retry_start";
+      attempt: number;
+      maxAttempts: number;
+      delayMs: number;
+      errorMessage: string;
+    }
+  | { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string }
+  | { type: "agent_settled"; at?: number }
+  | {
+      type: "message_start";
+      at?: number;
+      message: {
+        role: string;
+        content?: unknown;
+        id?: string;
+        /** 请求开始时刻，Pi 的 `AssistantMessage.timestamp`（ms）。 */
+        timestamp?: number;
+        /** `role: "custom"` 的来源标识（`pi.sendMessage` 的 customType）。 */
+        customType?: string;
+        /** `role: "custom"` 是否上屏；`false` 只进上下文。 */
+        display?: boolean;
+        /** `role: "custom"` 的结构化事实（`pi.sendMessage` 的 details）。 */
+        details?: unknown;
+      };
+    }
+  | {
+      type: "message_end";
+      at?: number;
+      message: {
+        role: string;
+        content?: unknown;
+        id?: string;
+        stopReason?: string;
+        errorMessage?: string;
+        /** 这一跳的 token 用量。legacy 消息可能缺。 */
+        usage?: PiMessageUsage;
+        /** 请求开始时刻，Pi 的 `AssistantMessage.timestamp`（ms）。 */
+        timestamp?: number;
+        /** 请求到响应的单调钟耗时。legacy 消息和 deferred 结果缺。 */
+        durationMs?: number;
+        provider?: string;
+        model?: string;
+      };
+    }
+  | { type: "message_update"; assistantMessageEvent: PiAssistantDelta }
+  | {
+      type: "tool_execution_start";
+      at?: number;
+      toolCallId: string;
+      toolName: string;
+      args?: unknown;
+      workId?: string;
+    }
+  | {
+      type: "tool_execution_update";
+      toolCallId: string;
+      toolName: string;
+      partialResult?: PiToolResult;
+    }
+  | {
+      type: "tool_execution_end";
+      at?: number;
+      toolCallId: string;
+      toolName: string;
+      result?: PiToolResult;
+      isError?: boolean;
+      workId?: string;
+    }
+  | { type: "compaction_start"; reason?: string }
+  | {
+      type: "compaction_end";
+      reason?: string;
+      aborted?: boolean;
+      errorMessage?: string;
+      result?: { summary?: string; tokensBefore?: number; estimatedTokensAfter?: number };
+    }
+  | { type: "branch_summary"; summary: string }
+  | { type: "extension_output"; command: string; text: string; at?: number }
+  | { type: "extension_error"; extensionPath?: string; error: string }
+  | PiExtensionUiEvent;
+
+export type PiExtensionUiEvent = {
+  type: "extension_ui_request";
+  id: string;
+  method:
+    | "select"
+    | "confirm"
+    | "input"
+    | "editor"
+    | "ask"
+    | "notify"
+    | "setStatus"
+    | "setWidget"
+    | "setTitle"
+    | "set_editor_text"
+    | "custom";
+  title?: string;
+  message?: string;
+  options?: string[];
+  /** ask-me 的结构化问卷。问题和选项分开，不把示意拼进 title。 */
+  questions?: HostAskQuestion[];
+  placeholder?: string;
+  prefill?: string;
+  timeout?: number;
+  notifyType?: "info" | "warning" | "error";
+  statusKey?: string;
+  statusText?: string;
+  widgetKey?: string;
+  widgetLines?: string[];
+  widgetPlacement?: "aboveEditor" | "belowEditor";
+  text?: string;
+  pluginId?: string;
+  view?: string;
+  state?: unknown;
+};
+
+export type HostAskQuestion = {
+  question: string;
+  header?: string;
+  multiSelect?: boolean;
+  options: Array<{ label: string; description?: string; preview?: string }>;
+};
+
+export type HostAskAnswer = {
+  question: string;
+  answer: string;
+  custom: boolean;
+  selected?: string[];
+  preview?: string;
+};
+
+export type PiExtensionUiResponse =
+  | { id: string; cancelled: true }
+  | { id: string; confirmed: boolean }
+  | { id: string; value: string; content?: Record<string, unknown> }
+  | { id: string; content: Record<string, unknown> };
+
+export interface PiSlashCommandView {
+  name: string;
+  description: string;
+  inputHint: string;
+  source: "builtin" | "custom" | "extension";
+}
+
+export interface PiSkillView {
+  name: string;
+  description: string;
+  path: string;
+  scope: "user" | "project" | "temporary";
+  origin: "package" | "top-level";
+  packageName?: string;
+}
+
+export type PiSessionTreeNode = {
+  id: string;
+  parentId: string | null;
+  role: "user" | "assistant" | "tool" | "summary" | "compaction" | "other";
+  preview: string;
+  label?: string;
+  depth: number;
+  active: boolean;
+  leaf: boolean;
+};
+
+export type SessionResumeRequest = {
+  entryId: string;
+  text?: string;
+  role?: "user" | "assistant" | "tool";
+  summarize: boolean;
+  customInstructions?: string;
+  label?: string;
+};
+
+export type SessionResumeResult = {
+  cancelled: boolean;
+  editorText?: string;
+  tree: PiSessionTreeNode[];
+};
+
+export interface PiSessionPort {
+  readonly sessionId: string;
+  readonly sessionFile?: string;
+  readonly isStreaming: boolean;
+  /** 压缩、重试或轮次还没结束。缺省时按 !isStreaming。 */
+  readonly isIdle?: boolean;
+  readonly currentModel?: { providerId: string; modelId: string };
+  /** Pi 当前思考档位；恢复会话时投影要按它对齐，不能用默认值。 */
+  readonly thinkingLevel?: string;
+  /** 当前模型支持的档位（thinkingLevelMap）。缺席时投影保留默认列表。 */
+  thoughtLevels?(): string[];
+  listModels?(): Array<{ providerId: string; modelId: string; name?: string }>;
+  /** 这个会话里 Pi 已经加载的技能，含用户目录、项目目录和包技能。 */
+  listSkills?(): PiSkillView[];
+  /** Pi 自动补全那份斜杠命令：内置、提示词、扩展命令、skill: 。 */
+  listSlashCommands?(): PiSlashCommandView[];
+  prompt(
+    text: string,
+    options?: { images?: Array<{ type: "image"; data: string; mimeType: string }> },
+  ): Promise<boolean | "handled">;
+  /** 扩展命令的 notify 原文。只进会话文件，不进模型上下文。 */
+  recordExtensionOutput?(command: string, text: string): void;
+  waitTurn?(): Promise<void>;
+  steer(
+    text: string,
+    images?: Array<{ type: "image"; data: string; mimeType: string }>,
+  ): Promise<void>;
+  followUp(
+    text: string,
+    images?: Array<{ type: "image"; data: string; mimeType: string }>,
+  ): Promise<void>;
+  abort(): Promise<void>;
+  /** 插件 sendUserMessage 的原文。对上才结束计划审查的「工作中」。 */
+  takeMatchingPlanDecision?(text: string): boolean;
+  /** UI 设计标注页刚打开。消费一次，让当前轮保持工作中。 */
+  consumeDesignReviewOpened?(): boolean;
+  /** 模型失败后从当前上下文接着跑。命令在 agent_start 后返回。 */
+  continueAfterError?(): Promise<void>;
+  /** pi-processes 列表变化。没装插件时列表一直是空的。 */
+  subscribeManagedProcesses?(listener: (works: BackgroundWorkSummary[]) => void): () => void;
+  killManagedProcess?(id: string): Promise<boolean>;
+  readManagedProcessOutput?(workId: string): Promise<BackgroundBashOutputResult>;
+  compact(): Promise<void>;
+  /** Pi `getContextUsage()`，外加按来源拆开的估算。 */
+  contextUsage?(): PiContextUsage | null;
+  readonly isCompacting?: boolean;
+  abortBranchSummary?(): void;
+  /** 裁切前记下将被丢掉的路径。没有可总结的内容时不返回。 */
+  captureAbandonedBranch?(request: {
+    entryId: string;
+    text?: string;
+    role?: "user" | "assistant" | "tool";
+  }): { entries: readonly unknown[] } | undefined;
+  /** 当前叶子已经是新分支之后，再把丢掉的路径写成摘要。 */
+  summarizeAbandonedBranch?(
+    captured: { entries: readonly unknown[] },
+    options?: { customInstructions?: string; label?: string },
+  ): Promise<{ cancelled: boolean; summary?: string }>;
+  navigateTree?(
+    targetId: string,
+    options?: {
+      summarize?: boolean;
+      customInstructions?: string;
+      replaceInstructions?: boolean;
+      label?: string;
+    },
+  ): Promise<{
+    editorText?: string;
+    cancelled?: boolean;
+    aborted?: boolean;
+    summaryEntry?: { summary?: string };
+  } | void>;
+  readTree?(): PiSessionTreeNode[];
+  labelEntry?(id: string, label?: string): void;
+  deleteBranch?(entryId: string): void;
+  contextEvents?(): PiHostEvent[];
+  /** 从工具调用分叉后，裁掉同一条助手消息里这个工具之后的内容。 */
+  trimAssistantAtToolCall?(toolCallId: string): void;
+  resolveEntry?(
+    id: string,
+    hint?: { text?: string; role?: "user" | "assistant" | "tool" },
+  ): string | undefined;
+  /** Pi `createBranchedSession`：新文件只含到该节点的路径。 */
+  branchFrom?(entryId: string): { sessionId: string; sessionFile: string };
+  hasEntry?(id: string): boolean;
+  /** 画面行 id 不是树节点时，用用户原文找回 Pi entry。 */
+  matchUserEntry?(text: string): string | undefined;
+  setModel?(provider: string, modelId: string, thought?: string): Promise<boolean | void>;
+  setThinkingLevel?(level: PiThinkingLevel): void;
+  setSteeringMode?(mode: "all" | "one-at-a-time"): void;
+  setFollowUpMode?(mode: "all" | "one-at-a-time"): void;
+  setUiDesignMode?(enabled: boolean): void;
+  isUiDesignMode?(): boolean;
+  /** annotate 审查收口：这次是否本模式自己打开的那次，并清掉配对。 */
+  settleDesignReview?(): boolean;
+  /** 声明给模型的激活工具列表。发送前用来把插件工具补回去。 */
+  toolLoadout?: ToolLoadoutPort;
+  readonly sessionName?: string;
+  setSessionName?(name: string): Promise<void> | void;
+  bindUi?(ui: unknown): Promise<void>;
+  subscribe(listener: (event: PiHostEvent) => void): () => void;
+  /**
+   * 助手消息写进会话树之后通知。此时 message_end 已经画完，entryId 才是分叉点。
+   */
+  notePersistedMessage?(listener: (notice: { role: string; entryId: string }) => void): () => void;
+  /** 先等 session_shutdown 关掉 MCP 子进程，再拆 Pi session。重复调用等同一次关闭。 */
+  dispose(): void | Promise<void>;
+}
+
+export interface CreatePiSessionInput {
+  sessionId: string;
+  cwd: string;
+  sessionFile: string;
+  parentSessionId?: string;
+  /** 子会话不挂 codemode、tool_search、MCP。对话分叉即使有 parentSessionId 也不要设。 */
+  omitHostExtensions?: boolean;
+  loadExtensions: boolean;
+  /**
+   * 本会话是否允许使用工作区记忆（本地工作区、非侧聊）。
+   * 这只是能力位：项目开关每轮由扩展读 .pi/picode.json 决定，不受这里影响。
+   */
+  memoryEnabled?: boolean;
+  /** 记忆根目录。worktree 会话仍跟随 workspacePath，不是 cwd。 */
+  memoryRoot?: string;
+  /** 记忆开关所在的项目根目录，用于每轮重新读取 .pi/picode.json。 */
+  memoryWorkspacePath?: string;
+  checkPermission?: ToolPermissionCheck;
+}
+
+export type CreatePiSession = (input: CreatePiSessionInput) => Promise<PiSessionPort>;
+
+export function asPiEvent(event: unknown): PiHostEvent | null {
+  if (!event || typeof event !== "object" || !("type" in event)) return null;
+  return event as PiHostEvent;
+}
+
+/** 上下文环跟着 Pi getContextUsage。流式合并，整轮结束才推就晚了。 */
+export function contextUsagePublish(event: PiHostEvent): "now" | "soon" | "no" {
+  if (event.type === "message_update") return "soon";
+  if (
+    event.type === "message_end" ||
+    event.type === "tool_execution_end" ||
+    event.type === "compaction_end" ||
+    (event.type === "agent_end" && !event.willRetry)
+  ) {
+    return "now";
+  }
+  return "no";
+}

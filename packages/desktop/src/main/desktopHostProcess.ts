@@ -22,12 +22,12 @@ import {
   RUNTIME_ZCODE_DEBUG,
   serializeLaunchMarks,
   ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED_ENV,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type {
   PluginSandboxHandle,
   PluginSandboxRegisterRequestPayload,
   PluginSandboxRegisterResultPayload,
-} from "@zcode/shared/mcp-apps";
+} from "@picode/shared/mcp-apps";
 import { BroadcastHub } from "./broadcastHub.js";
 import { getMainLaunchPartialMarks } from "./desktopLaunchMarks.js";
 import {

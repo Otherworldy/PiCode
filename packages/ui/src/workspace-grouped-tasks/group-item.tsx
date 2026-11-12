@@ -2,12 +2,12 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
-import type { ZCodeGroupedTaskViewNode, ZCodeTaskGroupColor } from "@zcode/services";
+import type { ZCodeGroupedTaskViewNode, ZCodeTaskGroupColor } from "@picode/services";
 import {
   CRON_DEFAULT_GROUP_ID,
   OFF_PEAK_DEFAULT_GROUP_ID,
   type ZCodeTaskMeta,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { ChevronDownIcon, ChevronRightIcon, MessageCirclePlus } from "lucide-react";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";

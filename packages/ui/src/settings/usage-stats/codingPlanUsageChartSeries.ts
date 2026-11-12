@@ -3,7 +3,7 @@ import type {
   CodingPlanToolData,
   CodingPlanUsageDetailMetric,
   CodingPlanUsageDetailSubject,
-} from "@zcode/shared";
+} from "@picode/shared";
 
 type CodingPlanLineChartSeries = Array<{
   name: string;

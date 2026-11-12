@@ -1,4 +1,4 @@
-import { ZCODE_AGENT_PROVIDER_NOT_READY_CODE } from "@zcode/shared";
+import { ZCODE_AGENT_PROVIDER_NOT_READY_CODE } from "@picode/shared";
 
 type RpcLogLevel = "debug" | "info" | "warn";
 

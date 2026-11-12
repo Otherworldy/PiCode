@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import type { DesktopPetInstalledPack } from "@zcode/shared";
+import type { DesktopPetInstalledPack } from "@picode/shared";
 import { loadPetPack } from "./pack.js";
 
 /** 生成本地导入目录的唯一标识。 */

@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
-import { InternalChannels, PlatformChannels } from "@zcode/shared";
-import type { PluginSandboxCaptureRequest } from "@zcode/shared/mcp-apps";
+import { InternalChannels, PlatformChannels } from "@picode/shared";
+import type { PluginSandboxCaptureRequest } from "@picode/shared/mcp-apps";
 import { enableSandboxRetainedMoves } from "./retainedMoves.js";
 
 export function installPluginSandboxHostBridge(): void {

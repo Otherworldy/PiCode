@@ -9,9 +9,9 @@ import {
   ZCODE_PROTOCOL_NAME,
   ZCODE_PROTOCOL_VERSION,
   zcodeSessionStateSnapshotSchema,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { TaskIndexRepo } from "../src/session/taskIndexRepo.js";
-import { createZCodeTaskServiceAdapter } from "../src/zcode-agent/zcodeTaskServiceAdapter.js";
+import { createZCodeTaskServiceAdapter } from "../src/picode-agent/picodeTaskServiceAdapter.js";
 import { getLegacyTaskSessionSnapshotPath, setDataBaseDir } from "../src/paths.js";
 import { createMemoryService } from "../src/memory/memoryService.js";
 import { parseLegacyTaskSessionFile } from "../src/session/legacyTaskSessionFile.js";
@@ -222,7 +222,7 @@ test("current Provider configuration starts without an old config migration call
   const dir = await mkdtemp(join(tmpdir(), "zcode-provider-current-"));
   const runtime = createProviderConfigRuntime({
     zcodeBuiltinFilePath: fileURLToPath(
-      new URL("../../../config/provider/zcode-builtin.json", import.meta.url),
+      new URL("../../../config/provider/picode-builtin.json", import.meta.url),
     ),
     personalFilePath: join(dir, "personal.json"),
     personalPollingIntervalMs: false,

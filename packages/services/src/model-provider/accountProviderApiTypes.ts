@@ -1,4 +1,4 @@
-import { BIGMODEL_PROVIDER_ID, ZAI_PROVIDER_ID } from "@zcode/shared";
+import { BIGMODEL_PROVIDER_ID, ZAI_PROVIDER_ID } from "@picode/shared";
 
 export type AccountApiProviderId = typeof BIGMODEL_PROVIDER_ID | typeof ZAI_PROVIDER_ID;
 

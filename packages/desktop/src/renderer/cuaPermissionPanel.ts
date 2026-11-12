@@ -2,7 +2,7 @@ import type {
   CuaPermissionKind,
   Locale,
   PrepareCuaHelperPermissionDragResult,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { resolveCuaPermissionPanelMessages } from "./cuaPermissionPanelMessages.js";
 
 interface CuaPermissionPanelState {

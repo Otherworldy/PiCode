@@ -3,8 +3,8 @@ import type {
   ProviderFamilyConnectionSelection,
   ProviderFamilyDomain,
   UsageEntitlementSnapshot,
-} from "@zcode/shared";
-import { getModelProviderFamilySpec } from "@zcode/shared";
+} from "@picode/shared";
+import { getModelProviderFamilySpec } from "@picode/shared";
 import { hasActiveUsageEntitlementSnapshot } from "@/lib/codingPlanProvider.js";
 
 export type ModelProviderFamilyConnectionSelection = ProviderFamilyConnectionSelection;

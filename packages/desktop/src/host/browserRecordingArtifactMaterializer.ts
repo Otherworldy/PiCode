@@ -1,8 +1,8 @@
 import { copyFile, mkdir, rename, rm } from "node:fs/promises";
 import { dirname, posix, relative, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
-import type { IRemoteBackend } from "@zcode/server/remote";
-import type { BrowserRecordingArtifact } from "@zcode/shared";
+import type { IRemoteBackend } from "@picode/server/remote";
+import type { BrowserRecordingArtifact } from "@picode/shared";
 
 function resolveWorkspaceRecordingPath(workspacePath: string, outputPath: string): string {
   const root = resolve(workspacePath);

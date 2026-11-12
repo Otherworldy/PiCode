@@ -2,7 +2,7 @@ import { IGenUiService } from "./gen-ui/contract.js";
 import { createGenUiService } from "./gen-ui/node.js";
 /* eslint-disable max-lines -- host process 服务注册和启动装配需要集中维护，拆散后会更难追踪依赖注入顺序 */
 // Node.js service implementations — NOT safe to import in browser code
-import { ensureAppDataDir } from "@zcode/shared/node";
+import { ensureAppDataDir } from "@picode/shared/node";
 import { randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -11,19 +11,19 @@ import {
   createNodeProviderRuntimePathEnv,
   NodeModelSelectionConfigRepository,
   PERSONAL_PROVIDER_CONFIG_FILE_NAME,
-} from "@zcode/provider-node";
+} from "@picode/provider-node";
 import { getAppConfigDir as resolveAppConfigDir } from "./paths.js";
 import {
   buildLocalMediaPreviewUrl,
   isProviderProvisioningAccountCredentialKey,
   type ProviderProvisioningTrigger,
-} from "@zcode/shared";
-import { sshWorkspaceSpawnEnv } from "@zcode/shared/node";
+} from "@picode/shared";
+import { sshWorkspaceSpawnEnv } from "@picode/shared/node";
 
 export {
   materializeZCodeBuiltinProviderConfig,
   ZCODE_BUILTIN_PROVIDER_CONFIG_FILE_ENV,
-} from "@zcode/provider-node";
+} from "@picode/provider-node";
 
 export { createFileService } from "./file/fileService.js";
 export {
@@ -88,28 +88,28 @@ export {
 } from "./setting/settingService.js";
 export { createCredentialService } from "./credential/credentialService.js";
 export { createBroadcastService } from "./broadcast/broadcastService.js";
-export { createZCodeAgentService } from "./zcode-agent/zcodeAgentService.js";
-export { createZCodeTaskServiceAdapter } from "./zcode-agent/zcodeTaskServiceAdapter.js";
-export { createZCodeSessionService } from "./zcode-session/zcodeSessionService.js";
+export { createZCodeAgentService } from "./picode-agent/picodeAgentService.js";
+export { createZCodeTaskServiceAdapter } from "./picode-agent/picodeTaskServiceAdapter.js";
+export { createZCodeSessionService } from "./picode-session/picodeSessionService.js";
 export {
   resolveDefaultZCodeAgentCommand,
   ZCodeAgentProcessManager,
-} from "./zcode-agent/zcodeAgentProcessManager.js";
+} from "./picode-agent/picodeAgentProcessManager.js";
 export type {
   ZCodeAgentCommand,
   ZCodeAgentCommandResolver,
   ZCodeAgentCommandResolverContext,
   ZCodeAgentProcessManagerOptions,
-} from "./zcode-agent/zcodeAgentProcessManager.js";
-export { ZCodeProtocolClient } from "./zcode-agent/zcodeProtocolClient.js";
-export type { ZCodeProtocolTransport } from "./zcode-agent/zcodeProtocolTransport.js";
-export { ZCodeStdioTransport } from "./zcode-agent/zcodeStdioTransport.js";
+} from "./picode-agent/picodeAgentProcessManager.js";
+export { ZCodeProtocolClient } from "./picode-agent/picodeProtocolClient.js";
+export type { ZCodeProtocolTransport } from "./picode-agent/picodeProtocolTransport.js";
+export { ZCodeStdioTransport } from "./picode-agent/picodeStdioTransport.js";
 export {
   getZCodeStdioTapDevLogDir,
   readZCodeStdioTapDevState,
   setZCodeStdioTapDevEnabled,
-} from "./zcode-agent/zcodeStdioTapDevConfig.js";
-export type { ZCodeStdioTapDevState } from "@zcode/shared";
+} from "./picode-agent/picodeStdioTapDevConfig.js";
+export type { ZCodeStdioTapDevState } from "@picode/shared";
 export {
   createCuaHelperInstaller,
   requestHelperAccessibilityPermissionViaLaunchServices,
@@ -297,10 +297,10 @@ import { ITerminalService } from "./terminal/terminal.js";
 import { ISettingService } from "./setting/setting.js";
 import { ICredentialService } from "./credential/credential.js";
 import { IBroadcastService } from "./broadcast/broadcast.js";
-import { IZCodeTaskService } from "./session/zcodeTaskService.js";
-import { IZCodeAgentService } from "./zcode-agent/zcodeAgent.js";
-import type { CuaOperationStateReporter } from "./zcode-agent/cuaOperationTurnTracker.js";
-import { IZCodeSessionService } from "./zcode-session/zcodeSession.js";
+import { IZCodeTaskService } from "./session/picodeTaskService.js";
+import { IZCodeAgentService } from "./picode-agent/picodeAgent.js";
+import type { CuaOperationStateReporter } from "./picode-agent/cuaOperationTurnTracker.js";
+import { IZCodeSessionService } from "./picode-session/picodeSession.js";
 import {
   createUnsupportedConversationShareService,
   IConversationShareService,
@@ -343,12 +343,12 @@ import { createLegacyTeamOrganizationResolver } from "./model-provider/legacyTea
 import { createObservableSettingService } from "./setting/observableSettingService.js";
 import { createCredentialService } from "./credential/credentialService.js";
 import { createBroadcastService } from "./broadcast/broadcastService.js";
-import { createZCodeAgentService } from "./zcode-agent/zcodeAgentService.js";
-import type { ZCodeAgentCommandResolver } from "./zcode-agent/zcodeAgentProcessManager.js";
-import { resolveZCodeAgentPresentationSurface } from "./zcode-agent/zcodeAgentPresentationSurface.js";
-import { createZCodeTaskServiceAdapter } from "./zcode-agent/zcodeTaskServiceAdapter.js";
-import { createZCodeSessionService } from "./zcode-session/zcodeSessionService.js";
-import { createZCodeTaskIndexSyncer } from "./zcode-agent/zcodeTaskIndexSyncer.js";
+import { createZCodeAgentService } from "./picode-agent/picodeAgentService.js";
+import type { ZCodeAgentCommandResolver } from "./picode-agent/picodeAgentProcessManager.js";
+import { resolveZCodeAgentPresentationSurface } from "./picode-agent/picodeAgentPresentationSurface.js";
+import { createZCodeTaskServiceAdapter } from "./picode-agent/picodeTaskServiceAdapter.js";
+import { createZCodeSessionService } from "./picode-session/picodeSessionService.js";
+import { createZCodeTaskIndexSyncer } from "./picode-agent/picodeTaskIndexSyncer.js";
 import { TaskIndexRepo } from "./session/taskIndexRepo.js";
 import type { SessionMessageSendRequested } from "#src/session/sessionMailbox.js";
 import { createFileWatcherService } from "./fileWatcher/fileWatcherService.js";
@@ -370,7 +370,7 @@ import { bindAccountProviderInvalidation } from "./model-provider/accountProvide
 import { AccountProviderApiClient } from "./model-provider/accountProviderApiClient.js";
 import { AccountProviderApiKeyResolver } from "./model-provider/accountProviderApiKeyResolver.js";
 import { createProviderConfigRuntime } from "./model-provider/providerConfigRuntime.js";
-import { fetchZCodeBuiltinRemoteRelease } from "./model-provider/zcodeBuiltinRemoteConfig.js";
+import { fetchZCodeBuiltinRemoteRelease } from "./model-provider/picodeBuiltinRemoteConfig.js";
 import {
   createProviderRuntimeFromConfigRuntime,
   type ProviderRuntime,
@@ -382,7 +382,7 @@ import {
 import {
   getPiModelSelectionView,
   overlayPiModelSelectionService,
-} from "./zcode-agent/piModelCatalog.js";
+} from "./picode-agent/piModelCatalog.js";
 import { createProviderSettingsConnectivityTester } from "./model-provider/providerSettingsConnectivity.js";
 import {
   createProviderProvisioningSource,
@@ -415,7 +415,7 @@ import {
   createPluginUiAppToolsService,
   createPluginUiBridgeService,
 } from "./plugin-ui-bridge/index.js";
-import type { PluginSandboxHandle, PluginSandboxRegisterInput } from "@zcode/shared/mcp-apps";
+import type { PluginSandboxHandle, PluginSandboxRegisterInput } from "@picode/shared/mcp-apps";
 import { createPluginSyncService } from "./plugin-sync/pluginSyncService.js";
 import { createPluginsService } from "./plugins/pluginsService.js";
 import { createPluginManagementService } from "./plugins/pluginManagementService.js";
@@ -444,7 +444,7 @@ import {
   buildAgentRuntimeEnv,
 } from "./runtime-tools/agentProxyEnv.js";
 import { ensureAppCaCert } from "./runtime-tools/appCaCert.js";
-import { buildHelperOpenArgs, isCuaLocalDevelopmentRuntime } from "@zcode/zcode-cua/broker/server";
+import { buildHelperOpenArgs, isCuaLocalDevelopmentRuntime } from "@picode/picode-cua/broker/server";
 import { createServiceLogger, type ServiceLogger } from "#src/logger/serviceLogger.js";
 
 const todoAlignLogger = createServiceLogger("todo-align");
@@ -469,7 +469,7 @@ import {
 import {
   createOfficialMcpTrustedOriginRegistry,
   OFFICIAL_MCP_DEV_TRUSTED_ORIGINS_ENV,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   BROKER_SOCKET_ENV,
   BROKER_UNAVAILABLE_ENV,
@@ -510,8 +510,8 @@ import {
 } from "#src/cua-permission-broker/windowsCuaDevRuntime.js";
 import { createCanonicalCuaHelperInstaller } from "./cua-permission-broker/cuaHelperInstaller.js";
 import { WindowsCuaHelperHost } from "#src/cua-permission-broker/windowsCuaDevHelperHost.js";
-import { DEV_HELPER_APP_NAME, HELPER_APP_NAME } from "@zcode/zcode-cua/broker/helperConstants";
-import { resolveBrokerSocketPath } from "@zcode/zcode-cua/broker/socketPath";
+import { DEV_HELPER_APP_NAME, HELPER_APP_NAME } from "@picode/picode-cua/broker/helperConstants";
+import { resolveBrokerSocketPath } from "@picode/picode-cua/broker/socketPath";
 import {
   DEFAULT_ZCODE_MODEL_CONTEXT_BUDGET_STRATEGY,
   resolveSafeEndpointHostname,
@@ -540,9 +540,9 @@ import {
   ZCODE_VERSION,
   ZCODE_ENV,
   buildRuntimeZCodeApiUrl,
-} from "@zcode/shared";
+} from "@picode/shared";
 
-// 这些 conversation-share 实现依赖 Node 文件系统；仅通过 @zcode/services/node 暴露，
+// 这些 conversation-share 实现依赖 Node 文件系统；仅通过 @picode/services/node 暴露，
 // 防止 browser-safe 根入口把 node:* 依赖带进 renderer。
 export {
   ConversationShareService,
@@ -1109,7 +1109,7 @@ function isGlobalCliZCodeCuaServer(name: string, config: unknown): boolean {
   if (config.enabled === false) return false;
   if (typeof config.type === "string" && config.type !== "stdio") return false;
   if (name === "computer-use") return true;
-  // 与 desktop/services resolver 和 CLI bootstrap 共用 @zcode/shared 的单一事实源，避免第三处
+  // 与 desktop/services resolver 和 CLI bootstrap 共用 @picode/shared 的单一事实源，避免第三处
   // 判定漂移：git/.git/本地路径形态的 zcode-cua 若这里漏判，全局 CLI env 注入不会带 broker
   // socket/token，agent 会回退成 Python/uvx 自己持有 macOS TCC（违反 product broker 边界）。
   if (typeof config.command === "string" && isZCodeCuaMcpCommand(config.command)) {
@@ -1836,7 +1836,7 @@ export function createLocalServices(options: {
   // 签名门查询；产品 Helper 不嵌 dev policy，这对 argv 无效（产品签名天然过 Team 门）。
   // 拉起后轮询 ping（5s/100ms），就绪返回 socket 路径，否则 null。
   //
-  // dev 判定直接用上游的 isCuaLocalDevelopmentRuntime（@zcode/zcode-cua/broker/server，
+  // dev 判定直接用上游的 isCuaLocalDevelopmentRuntime（@picode/picode-cua/broker/server，
   // 即本文件已经用来 import buildHelperOpenArgs 的那个 subpath，可正常导入）。
   //
   // 行为等价性（别误读成安全加固）：上游是 `COMPILED_LOCAL_DEVELOPMENT_RUNTIME &&
@@ -1975,7 +1975,7 @@ export function createLocalServices(options: {
         }
         // standalone Helper 上直接查权限真值（身份模式，无 token）。
         try {
-          const { callBrokerMethod } = await import("@zcode/zcode-cua/broker/helperHealth");
+          const { callBrokerMethod } = await import("@picode/picode-cua/broker/helperHealth");
           const report = await callBrokerMethod<{
             grant_owner: string;
             owner?: { display_name?: string };
@@ -2164,7 +2164,7 @@ export function createLocalServices(options: {
       modelSelectionService: providerRuntime.modelSelection,
     }),
     // host 是身份权威边界：provenance/origin 必须在这里再校验一次，不能只依赖 agent
-    // adapter 的 fetch wrapper。判定实现与 CLI 侧共用 @zcode/shared 的同一份，避免分叉。
+    // adapter 的 fetch wrapper。判定实现与 CLI 侧共用 @picode/shared 的同一份，避免分叉。
     // origin 解析复用 resolveCurrentZCodeEndpointOrigin——与闲时任务同口径（含 settings
     // 覆盖），否则会出现"闲时任务能连、官方 MCP 连不上"。
     // dev 开关必须同样传入，否则本地自测会被 host 单方面拒绝。

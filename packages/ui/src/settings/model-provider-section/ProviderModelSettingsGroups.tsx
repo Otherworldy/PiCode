@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { ModelConfigObject } from "@zcode/provider";
+import type { ModelConfigObject } from "@picode/provider";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import type { ProviderModelDraftValues } from "@/settings/model-provider-section/ProviderModelMetadata.js";
 import { JsonSlotEditor } from "@/settings/model-provider-section/ProviderModelMetadataFields.js";

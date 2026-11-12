@@ -3,7 +3,7 @@ import {
   ensureAppDataDir,
   updateJsonConfigFile,
   userCliConfigFilePath,
-} from "@zcode/shared/node";
+} from "@picode/shared/node";
 import type {
   McpServerConfig,
   SettingsSyncAgent,
@@ -25,7 +25,7 @@ import type {
   SettingsSyncSourceScope,
   SettingsSyncSourceRootSummary,
   SettingsSyncTaskImportResult,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   copyFile,
   cp,

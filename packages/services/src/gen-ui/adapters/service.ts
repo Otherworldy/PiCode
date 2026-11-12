@@ -1,13 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { z } from "zod";
-import { GEN_UI_OUTPUT_DIRECTORY } from "@zcode/shared/node";
+import { GEN_UI_OUTPUT_DIRECTORY } from "@picode/shared/node";
 import {
   GEN_UI_STATIC_DOMAINS,
   buildGenUiScopeKey,
   genUiStateTargetSchema,
-} from "@zcode/shared/gen-ui";
-import type { PluginSandboxHandle, PluginSandboxRegisterInput } from "@zcode/shared/mcp-apps";
+} from "@picode/shared/gen-ui";
+import type { PluginSandboxHandle, PluginSandboxRegisterInput } from "@picode/shared/mcp-apps";
 import type { IGenUiService } from "../contract.js";
 import { getAppConfigDir } from "../../paths.js";
 import { assertGenUiFragment, readGenUiDocument } from "./files.js";

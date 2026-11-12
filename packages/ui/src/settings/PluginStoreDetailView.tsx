@@ -14,7 +14,7 @@ import {
   TriangleAlert,
   WandSparkles,
 } from "lucide-react";
-import type { ZCodePluginComponentKind, ZCodePluginsDescribeResult } from "@zcode/shared";
+import type { ZCodePluginComponentKind, ZCodePluginsDescribeResult } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useOptionalPlatform } from "@/hooks/usePlatform.js";

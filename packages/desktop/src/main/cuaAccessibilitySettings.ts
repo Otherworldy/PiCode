@@ -9,16 +9,16 @@ import { randomUUID } from "node:crypto";
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { shell } from "electron";
-import type { CuaHelperInstallerOptions } from "@zcode/services/node";
+import type { CuaHelperInstallerOptions } from "@picode/services/node";
 import {
   resolveHelperPermissionSubjectIdentity,
   type HelperPermissionSubjectIdentity,
-} from "@zcode/services/cua-permission-broker";
+} from "@picode/services/cua-permission-broker";
 import type {
   CuaAccessibilitySettingsResult,
   CuaPermissionKind,
   PrepareCuaHelperPermissionDragResult,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { createDesktopCuaHelperInstaller } from "./desktopCuaHelperInstaller.js";
 
 const MACOS_ACCESSIBILITY_SETTINGS_URL =

@@ -6,7 +6,7 @@ import {
   type GenUiTweakAnnotation,
   type GenUiTweak,
   type GenUiTweakValues,
-} from "@zcode/shared/gen-ui";
+} from "@picode/shared/gen-ui";
 
 type Registration = Extract<GenUiTweakMessage, { type: "register" | "update" }>;
 

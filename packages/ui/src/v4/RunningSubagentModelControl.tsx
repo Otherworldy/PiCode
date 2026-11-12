@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
-import { ZCODE_AGENT_PROVIDER, type ZCodeProvider } from "@zcode/shared";
-import type { ModelSelectionView } from "@zcode/services";
+import { ZCODE_AGENT_PROVIDER, type ZCodeProvider } from "@picode/shared";
+import type { ModelSelectionView } from "@picode/services";
 import { ModelConfigSelect } from "@/ModelConfigSelect.js";
 import { SubagentReasoningField } from "@/settings/SubagentReasoningField.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { buildRegistryModelSelectGroups } from "@/lib/modelSelectionGroups.js";
 import { resolveModelThoughtOption } from "@/lib/modelThoughtOption.js";
-import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/zcodeCustomModelValue.js";
+import { decodeCustomModelValue, encodeCustomModelValue } from "@/lib/picodeCustomModelValue.js";
 
 /** 状态面板一行里的模型 / 思考档。24px，和停止按钮同高。 */
 const COMPACT_CONTROL_CLASS =

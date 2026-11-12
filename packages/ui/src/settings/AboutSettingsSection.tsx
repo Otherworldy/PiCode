@@ -10,7 +10,7 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react";
-import { ZCODE_VERSION, type AppUpdateSnapshot } from "@zcode/shared";
+import { ZCODE_VERSION, type AppUpdateSnapshot } from "@picode/shared";
 import piLogoUrl from "@/assets/pi_logo.svg";
 import { Button } from "@/components/ui/button.js";
 import { toast } from "@/components/ui/toast.js";

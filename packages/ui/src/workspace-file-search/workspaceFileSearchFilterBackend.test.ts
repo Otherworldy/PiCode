@@ -1,5 +1,5 @@
-import type { WorkspaceFileEntry } from "@zcode/shared";
-import { packWorkspaceFileEntries } from "@zcode/shared/workspaceFileEntriesCodec";
+import type { WorkspaceFileEntry } from "@picode/shared";
+import { packWorkspaceFileEntries } from "@picode/shared/workspaceFileEntriesCodec";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { logger } from "@/logger.js";
 import { createWorkerWorkspaceFileSearchFilterBackend } from "./workspaceFileSearchFilterBackend.js";

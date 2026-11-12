@@ -8,7 +8,7 @@ import {
   type OffPeakCodingPlanSupport,
   type OffPeakCodingPlanUnsupportedReason,
   type ZCodeAccountAccess,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { isOffPeakMockEnabled, startOffPeakMockGateway } from "./offPeakMockGateway.js";
 import type { ServiceLogger } from "../logger/serviceLogger.js";
 import { AccountRequestCredentialUnavailableError } from "../model-provider/accountProviderRequestAuthService.js";

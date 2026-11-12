@@ -1,7 +1,7 @@
 import { BIGMODEL_PROVIDER_ID, type OAuthProviderId, ZAI_PROVIDER_ID } from "./oauth.js";
 import { BUILTIN_MODEL_PROVIDER_IDS, type BuiltinModelProviderId } from "./model-provider-types.js";
 import { ZCODE_ENV } from "./env.js";
-import { buildBigModelCodingPlanTeamManageUrl } from "./zcodeEndpoint.js";
+import { buildBigModelCodingPlanTeamManageUrl } from "./picodeEndpoint.js";
 
 export type ModelProviderFamilyId = "zai" | "bigmodel";
 export type ProviderFamilyDomain = ModelProviderFamilyId;

@@ -1,4 +1,4 @@
-import type { MobileRemoteWorkspaceListItem } from "@zcode/shared";
+import type { MobileRemoteWorkspaceListItem } from "@picode/shared";
 
 function copy(zh: string, en: string): string {
   return /^zh\b/i.test(navigator.language) ? zh : en;

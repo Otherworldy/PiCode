@@ -6,9 +6,9 @@ import type {
   GitRepositorySummary,
   RemoteTarget,
   UserInfo,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { useState } from "react";
-import { TID_WORKSPACE_HEADER } from "@zcode/shared";
+import { TID_WORKSPACE_HEADER } from "@picode/shared";
 import type { ConversationDropTargetController } from "@/v4/composer/conversationDropTarget.js";
 import { cn } from "@/components/lib/utils.js";
 import {

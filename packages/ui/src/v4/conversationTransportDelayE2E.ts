@@ -1,4 +1,4 @@
-import type { CommandAck } from "@zcode/shared/zcode-protocol-v4";
+import type { CommandAck } from "@picode/shared/picode-protocol-v4";
 import { shouldExposeE2EStoreBridge } from "@/lib/e2eStoreBridge.js";
 
 interface DelayPlan {

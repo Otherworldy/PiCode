@@ -18,7 +18,7 @@ import type {
   UsageStatsRequest,
   UsageStatsSnapshot,
   ZCodeAccountAccess,
-} from "@zcode/shared";
+} from "@picode/shared";
 import {
   ApiError,
   BUILTIN_MODEL_PROVIDER_IDS,
@@ -28,8 +28,8 @@ import {
   buildBigModelApiUrl,
   buildRuntimeZaiBusinessUrl,
   buildRuntimeZCodeApiUrl,
-} from "@zcode/shared";
-import type { ProviderFamilyDomain } from "@zcode/shared";
+} from "@picode/shared";
+import type { ProviderFamilyDomain } from "@picode/shared";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
 import type { ICredentialService } from "../../credential/credential.js";
 import type { IAccountRequestAuthService } from "../../model-provider/accountRequestAuthService.js";
@@ -65,7 +65,7 @@ import { fetchBigModelSubscriptionSummary } from "./bigmodelSubscriptionProvider
 import {
   fetchMcpQuotaSnapshot,
   type OfficialMcpCredentialSource,
-} from "./zcodeMcpQuotaProvider.js";
+} from "./picodeMcpQuotaProvider.js";
 import type { BigModelUsageQuotaEnvelope } from "./bigmodelUsageQuotaMapper.js";
 import { normalizeLimits, pickPrimaryLimit } from "./bigmodelUsageQuotaMapper.js";
 

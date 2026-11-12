@@ -10,7 +10,7 @@ import type {
   McpUiHostCapabilities,
   McpUiHostContext,
 } from "@modelcontextprotocol/ext-apps";
-import type { McpAppsDownloadFileItem } from "@zcode/shared/mcp-apps";
+import type { McpAppsDownloadFileItem } from "@picode/shared/mcp-apps";
 
 /** `window.zcode` / `window.openai` 的公开形状；实现在 aliasRuntime / openaiAlias，两边只依赖这里。 */
 export interface ZcodeAliasApi {

@@ -1,4 +1,4 @@
-import type { Locale, ZCodeTaskMeta } from "@zcode/shared";
+import type { Locale, ZCodeTaskMeta } from "@picode/shared";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

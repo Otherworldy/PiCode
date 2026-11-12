@@ -5,7 +5,7 @@
 // grouped 视图整树 refresh、虚拟器重测量、workspace 行缓存被 invalidate——表现为
 // 「右侧输出 tool 结果时左侧列表整个重新加载」。这里做逐条引用稳定化：内容等价复用旧对象；
 // 整表等价复用旧数组，让依赖数组/元素身份的 memo 与 effect 全部短路。
-import type { ZCodeTaskMeta } from "@zcode/shared";
+import type { ZCodeTaskMeta } from "@picode/shared";
 
 export function buildTaskListItemIdentityKey(meta: ZCodeTaskMeta): string {
   return `${meta.workspaceIdentity?.trim() || meta.workspacePath}::${meta.taskId}`;

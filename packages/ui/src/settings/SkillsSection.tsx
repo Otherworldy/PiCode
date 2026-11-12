@@ -22,13 +22,13 @@ import type {
   SkillSummary,
   SkillsCapability,
   RemoteTarget,
-} from "@zcode/shared";
-import { ZCODE_AGENT_PROVIDER } from "@zcode/shared";
+} from "@picode/shared";
+import { ZCODE_AGENT_PROVIDER } from "@picode/shared";
 import type { CreateTaskRequest } from "@/app-shell/types.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { toast } from "@/components/ui/toast.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
-import { useZCodeSessionService } from "@/hooks/useZCodeSessionService.js";
+import { useZCodeSessionService } from "@/hooks/usePiCodeSessionService.js";
 import {
   useBaseWorkspaceServices,
   useWorkspaceServicesResolution,
@@ -36,7 +36,7 @@ import {
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { buildSkillMentionMarkdown } from "@/mentions/mentionMarkdown.js";
 import { filterSkillsForProvider } from "@/lib/skillSourceFilter.js";
-import { invalidateDeferredDraftSessionForSkillChange } from "@/lib/zcodeDraftSkillInvalidation.js";
+import { invalidateDeferredDraftSessionForSkillChange } from "@/lib/picodeDraftSkillInvalidation.js";
 import { PluginStoreAvatar } from "@/settings/PluginStoreAvatar.js";
 import { SettingsResourceHeaderActions } from "@/settings/SettingsResourceHeaderActions.js";
 import {

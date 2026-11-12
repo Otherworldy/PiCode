@@ -11,7 +11,7 @@ import {
 import { shouldBlockTaskSelectionDuringModelRestart } from "@/lib/taskSwitchGuard.js";
 import { logger } from "@/logger.js";
 import { toast } from "@/components/ui/toast.js";
-import { getVisibleTaskMetas, useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { getVisibleTaskMetas, useZCodeSessionStore } from "@/store/picodeSessionStore.js";
 import { buildTaskEntityKey, buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
 import {
   markTaskQueryCacheScopesStale,

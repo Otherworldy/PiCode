@@ -3,7 +3,7 @@ import type {
   ZCodeImportSessionsResult,
   ZCodeImportableSessionCandidate,
   ZCodeImportedSessionSkippedItem,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type { ClaudeSessionMigrationSupportState } from "@/hooks/useClaudeSessionMigration.js";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert.js";
 import { Badge } from "@/components/ui/badge.js";

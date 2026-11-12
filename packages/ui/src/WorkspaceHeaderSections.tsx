@@ -7,7 +7,7 @@ import {
   TID_WORKSPACE_TITLE,
   type RemoteTarget,
   type ZCodeTaskMeta,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { useMemo, useRef, useState } from "react";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { cn } from "@/components/lib/utils.js";
@@ -39,7 +39,7 @@ import type {
   WorkspaceHeaderTitleSectionProps,
 } from "@/WorkspaceHeaderSections/shared.js";
 import { applyTaskQueryCacheMutation } from "@/store/taskQueryCacheStore.js";
-import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import { useZCodeSessionStore } from "@/store/picodeSessionStore.js";
 import { useRemotePinnedTaskStore } from "@/store/remotePinnedTaskStore.js";
 import { useRemoteTimelineTaskStore } from "@/store/remoteTimelineTaskStore.js";
 import { TaskRenameDialog } from "@/TaskRenameDialog.js";
@@ -48,7 +48,7 @@ import {
   RemoteSyncMenuItems,
   shouldShowRemoteSyncActions,
 } from "@/settings/RemoteSyncActions.js";
-import { invalidateDeferredDraftSessionForSkillChange } from "@/lib/zcodeDraftSkillInvalidation.js";
+import { invalidateDeferredDraftSessionForSkillChange } from "@/lib/picodeDraftSkillInvalidation.js";
 import { refreshSharedSkillStoreForWorkspace } from "@/lib/skillStoreRefresh.js";
 import { refreshWorkspacePluginCapabilitiesAfterRemoteSync } from "@/lib/remotePluginSyncRefresh.js";
 import { useMcpStore } from "@/store/mcpStore.js";

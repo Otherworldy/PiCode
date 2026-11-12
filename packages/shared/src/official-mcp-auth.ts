@@ -1,7 +1,7 @@
 /* PiCode 官方 Server MCP 鉴权的共享常量与类型。
    放在 shared 是因为头集合有两个消费者且分属不同包：
    - `packages/services` 侧生产身份头；
-   - `apps/zcode-cli/packages/adapters` 侧（Plugin parser + MCP adapter）拦截保留头。
+   - `apps/picode-cli/packages/adapters` 侧（Plugin parser + MCP adapter）拦截保留头。
    两侧必须同源，否则新增身份头时会漏掉黑名单，出现静态 header 覆盖凭证的缺口。 */
 
 /** `.mcp.json` 中 `auth.type` 的唯一合法值；区分大小写，不接受别名。 */
@@ -103,8 +103,8 @@ export type OfficialMcpAuthFailureKind =
 
 // ── 官方 MCP 信任判定──
 // 放在 shared 而非 CLI bootstrap，是因为有两个消费者且分属互不可见的包：
-//   - apps/zcode-cli/packages/adapters：请求发出前的本地校验；
-//   - packages/services（host）：身份权威边界的二次校验（只依赖 @zcode/shared，
+//   - apps/picode-cli/packages/adapters：请求发出前的本地校验；
+//   - packages/services（host）：身份权威边界的二次校验（只依赖 @picode/shared，
 //     无法 import CLI 侧包）。
 // 单源是硬要求：双处判定分叉会让一侧放行、另一侧拒绝。
 

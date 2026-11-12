@@ -9,7 +9,7 @@ import {
   type AppUpdateInstallKind,
   type AppUpdateRuntime,
   type AppUpdateSnapshot,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { AppUpdateAborted, downloadReleaseAsset } from "./downloadReleaseAsset.js";
 
 const PROGRESS_INTERVAL_MS = 200;

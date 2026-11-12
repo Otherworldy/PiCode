@@ -1,5 +1,5 @@
 /* eslint-disable max-lines -- Playwright isolated-world selector、frame target 与 CDP trusted input 必须共享同一会话状态。 */
-import type { BrowserPlaywrightAction, BrowserPlaywrightModifier } from "@zcode/shared";
+import type { BrowserPlaywrightAction, BrowserPlaywrightModifier } from "@picode/shared";
 import { logger } from "../logger.js";
 import { dispatchClickAt, dispatchKey, modifiersBitmask } from "./browserCommandInput.js";
 import type { ControlledView } from "./browserCommandTypes.js";

@@ -1,4 +1,4 @@
-import type { ConversationRow, TurnHeaderRow } from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationRow, TurnHeaderRow } from "@picode/shared/picode-protocol-v4";
 import { describe, expect, test } from "vitest";
 import { applyLiveWorkDuration } from "@/v4/conversationTimelineLiveDuration.js";
 import { buildConversationTurnRenderUnits } from "@/v4/conversationTurnRenderUnits.js";

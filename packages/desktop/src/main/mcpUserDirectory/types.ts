@@ -2,7 +2,7 @@
  * MCP 用户目录模块 - 类型和常量定义
  */
 
-import type { CliMcpSource, McpFileFormat } from "@zcode/shared";
+import type { CliMcpSource, McpFileFormat } from "@picode/shared";
 
 /**
  * MCP 配置键名类型

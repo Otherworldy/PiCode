@@ -1,8 +1,8 @@
 /* eslint-disable max-lines -- 商店列表页把标题/搜索/已安装条/公开-个人分段/Featured/分类折叠聚合成一个连贯浏览面，拆散反而难以维持 1:1 布局。 */
 import { useMemo, useState } from "react";
 import { Download, Loader2, Settings2 } from "lucide-react";
-import type { PluginStoreOrder, ZCodePluginMarketplaceSummary } from "@zcode/shared";
-import { ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID } from "@zcode/shared";
+import type { PluginStoreOrder, ZCodePluginMarketplaceSummary } from "@picode/shared";
+import { ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID } from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";

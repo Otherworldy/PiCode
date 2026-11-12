@@ -5,7 +5,7 @@
  * 判定规则本身全部在 lib/cuaComposerEntryState.ts，这里不复制任何一条分支。
  */
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { isRemoteWorkspaceIdentity, ZCODE_CUA_OFFICIAL_PLUGIN_ID } from "@zcode/shared";
+import { isRemoteWorkspaceIdentity, ZCODE_CUA_OFFICIAL_PLUGIN_ID } from "@picode/shared";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useServices } from "@/hooks/useServices.js";
 import { useSettings } from "@/hooks/useSettingService.js";
@@ -20,8 +20,8 @@ import {
 } from "@/lib/cuaPlatform.js";
 import { setPendingSettingsSectionIntent } from "@/lib/settingsNavigation.js";
 import { usePluginManagementStore } from "@/store/pluginManagementStore.js";
-import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
-import { getVisibleTaskMetas, getWorkspaceState } from "@/store/zcodeSessionStoreSelectors.js";
+import { useZCodeSessionStore } from "@/store/picodeSessionStore.js";
+import { getVisibleTaskMetas, getWorkspaceState } from "@/store/picodeSessionStoreSelectors.js";
 import { useOptionalTabStore } from "@/store/TabStoreProvider.js";
 
 /** 与 zcodeSessionStoreTaskSlice 的 isRunningStatus 同口径。 */

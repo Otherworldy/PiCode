@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { homedir, platform, userInfo } from "node:os";
-import { CREDENTIAL_DECRYPT_ERROR_CODE, CREDENTIAL_DECRYPT_ERROR_PREFIX } from "@zcode/shared";
+import { CREDENTIAL_DECRYPT_ERROR_CODE, CREDENTIAL_DECRYPT_ERROR_PREFIX } from "@picode/shared";
 
 const ENCRYPTED_VALUE_PREFIX = "enc:v1:";
 const CREDENTIAL_CIPHER_ALGORITHM = "aes-256-gcm";

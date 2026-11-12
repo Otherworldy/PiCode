@@ -1,25 +1,25 @@
-import { ZCODE_VERSION } from "@zcode/shared";
-import type { IRemoteBackend, RemoteEnvironment } from "@zcode/server/remote/backend.js";
+import { ZCODE_VERSION } from "@picode/shared";
+import type { IRemoteBackend, RemoteEnvironment } from "@picode/server/remote/backend.js";
 import {
   REMOTE_BASE,
   type DeployLoggers,
   type RemoteAssetDeployOptions,
-} from "@zcode/server/remote/deployShared.js";
+} from "@picode/server/remote/deployShared.js";
 import {
   readRemoteAssetComponentMeta,
   writeRemoteAssetComponentMeta,
-} from "@zcode/server/remote/remoteAssetLiveIdentity.js";
+} from "@picode/server/remote/remoteAssetLiveIdentity.js";
 import {
   fetchRemoteAssetManifestFromCdn,
   resolveRemoteAssetComponentCacheVersion,
   selectRemoteAssetManifestComponents,
   type RemoteAssetManifest,
-} from "@zcode/server/remote/remoteAssetCache.js";
+} from "@picode/server/remote/remoteAssetCache.js";
 import {
   LocalUploadAssetInstaller,
   type RemoteAssetInstaller,
-} from "@zcode/server/remote/remoteAssetInstaller.js";
-import type { RemoteAssetNetworkPort } from "@zcode/server/remote/remoteAssetNetwork.js";
+} from "@picode/server/remote/remoteAssetInstaller.js";
+import type { RemoteAssetNetworkPort } from "@picode/server/remote/remoteAssetNetwork.js";
 
 const REMOTE_NODE_PTY_PATH = `${REMOTE_BASE}/build/Release/pty.node`;
 const REMOTE_NODE_PTY_SPAWN_HELPER_PATH = `${REMOTE_BASE}/build/Release/spawn-helper`;

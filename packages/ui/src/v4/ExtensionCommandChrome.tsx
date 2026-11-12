@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationSnapshot } from "@picode/shared/picode-protocol-v4";
 import { Button } from "@/components/ui/button.js";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
 import { XIcon } from "lucide-react";

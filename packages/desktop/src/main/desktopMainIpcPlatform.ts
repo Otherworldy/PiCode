@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- 桌面平台 IPC 集中装配，拆散会让权限边界更难审计；行数随平台能力增长。 */
 import { BrowserWindow, dialog, ipcMain, nativeTheme } from "electron";
-import { readZCodeStdioTapDevState } from "@zcode/services/node";
+import { readZCodeStdioTapDevState } from "@picode/services/node";
 import {
   DesktopCommandIds,
   appSettingsPatchSchema,
@@ -19,7 +19,7 @@ import {
   type SaveCliMcpToUserDirectoryRequest,
   type CreateTempTextAttachmentRequest,
   type WindowControlsOverlayReadyPayload,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { getInstalledEditors } from "./editors.js";
 import { getApplicationIcon } from "./applicationIcons.js";
 import { exportLogs } from "./exportLogs.js";
@@ -63,7 +63,7 @@ import { registerCuaPipActiveSessionIpc } from "./desktopCuaPipIpc.js";
  */
 function toAppSettingsPatch(
   patch: import("zod").infer<typeof appSettingsPatchSchema>,
-): Partial<import("@zcode/shared").AppSettings> {
+): Partial<import("@picode/shared").AppSettings> {
   const { providerFamilyDomain, ...rest } = patch;
   return providerFamilyDomain === undefined || providerFamilyDomain === ""
     ? rest
@@ -96,17 +96,17 @@ export function registerPlatformIpcHandlers(options: {
   };
   // 调用点传的是 appSettingsPatchSchema 校验后的结果；声明成 Partial<AppSettings> 而不是 unknown，
   // 否则 main 的真实实现会因参数逆变无法赋值。
-  syncAppSettings: (patch: Partial<import("@zcode/shared").AppSettings>) => void;
-  getDesktopPetSettings?: () => import("@zcode/shared").DesktopPetPersistedSettings;
-  getDesktopPetDownloadStatus?: () => import("@zcode/shared").DesktopPetDownloadStatus;
-  listDesktopPetInstalledPacks?: () => import("@zcode/shared").DesktopPetInstalledPack[];
+  syncAppSettings: (patch: Partial<import("@picode/shared").AppSettings>) => void;
+  getDesktopPetSettings?: () => import("@picode/shared").DesktopPetPersistedSettings;
+  getDesktopPetDownloadStatus?: () => import("@picode/shared").DesktopPetDownloadStatus;
+  listDesktopPetInstalledPacks?: () => import("@picode/shared").DesktopPetInstalledPack[];
   importDesktopPetPack?: (dir: string) => {
     success: boolean;
     error?: string;
-    pack?: import("@zcode/shared").DesktopPetInstalledPack;
+    pack?: import("@picode/shared").DesktopPetInstalledPack;
   };
   deleteDesktopPetPack?: (id: string, sourceType: "download" | "local") => boolean;
-  editDesktopPetBubble?: () => Promise<import("@zcode/shared").DesktopPetBubbleLayout | null>;
+  editDesktopPetBubble?: () => Promise<import("@picode/shared").DesktopPetBubbleLayout | null>;
   resetDesktopPetBubble?: () => void;
   stopDesktopPetDownload?: () => void;
   findDesktopPetReaderText?: (query: string) => Promise<boolean>;

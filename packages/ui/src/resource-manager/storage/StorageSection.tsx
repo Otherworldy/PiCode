@@ -15,7 +15,7 @@ import {
   TID_RESOURCE_MANAGER_STORAGE_SECTION,
   TID_RESOURCE_MANAGER_STORAGE_STATUS,
   TID_RESOURCE_MANAGER_STORAGE_TOTAL,
-} from "@zcode/shared";
+} from "@picode/shared";
 import { Button } from "@/components/ui/button.js";
 import { toast } from "@/components/ui/toast.js";
 import { useStorageUsage } from "./useStorageUsage.js";

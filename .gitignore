@@ -79,7 +79,7 @@ designs/
 packages/desktop/pets/
 
 # pi-host 的 tsc 产物：由 build-desktop-agent-cli 生成，仓库只跟踪 .ts 源文件。
-apps/zcode-cli/packages/pi-host/src/*.js
-apps/zcode-cli/packages/pi-host/src/*.js.map
-apps/zcode-cli/packages/pi-host/src/*.d.ts
-apps/zcode-cli/packages/pi-host/src/*.d.ts.map
+apps/picode-cli/packages/pi-host/src/*.js
+apps/picode-cli/packages/pi-host/src/*.js.map
+apps/picode-cli/packages/pi-host/src/*.d.ts
+apps/picode-cli/packages/pi-host/src/*.d.ts.map

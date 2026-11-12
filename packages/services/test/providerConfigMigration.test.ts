@@ -41,7 +41,7 @@ async function setup() {
   const recoveries: unknown[] = [];
   const runtime = createProviderConfigRuntime({
     zcodeBuiltinFilePath: fileURLToPath(
-      new URL("../../../config/provider/zcode-builtin.json", import.meta.url),
+      new URL("../../../config/provider/picode-builtin.json", import.meta.url),
     ),
     personalFilePath: personalPath,
     personalPollingIntervalMs: false,

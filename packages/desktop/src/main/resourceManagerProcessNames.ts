@@ -1,7 +1,7 @@
 import { BrowserWindow } from "electron";
 import type { WebContents } from "electron";
 import { basename } from "node:path";
-import { formatZCodeRendererProcessName } from "@zcode/shared";
+import { formatZCodeRendererProcessName } from "@picode/shared";
 
 /** 资源管理器里非 BrowserWindow 自带 renderer（WebContentsView / DevTools / webview）的显示名 */
 

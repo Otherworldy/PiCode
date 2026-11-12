@@ -3,7 +3,7 @@ import {
   overlapsAssistantTextRanges,
   type AssistantTextRange,
 } from "@/lib/assistantDirectiveParser.js";
-import { extractZCodeFileCitationDirectives } from "@/lib/zcodeFileCitation.js";
+import { extractZCodeFileCitationDirectives } from "@/lib/picodeFileCitation.js";
 
 function resolveCitationFileName(path: string): string {
   const normalizedPath = path.trim().replaceAll("\\", "/");

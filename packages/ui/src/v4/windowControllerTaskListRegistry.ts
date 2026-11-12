@@ -3,7 +3,7 @@ import type {
   WindowHostControllerFrame,
   WindowHostControllerTaskListResult,
   ZCodeTaskListQuery,
-} from "@zcode/services";
+} from "@picode/services";
 import {
   CONTROLLER_TASKS_INDEX_TOPIC,
   CONTROLLER_WORKSPACES_TOPIC,
@@ -12,7 +12,7 @@ import {
   type WindowHostControllerCursor,
   type WindowHostControllerTaskFrame,
   type WindowHostControllerTaskRow,
-} from "@zcode/shared/zcode-protocol-v4";
+} from "@picode/shared/picode-protocol-v4";
 import { logger } from "@/logger.js";
 
 interface WindowControllerTaskListRegistry {

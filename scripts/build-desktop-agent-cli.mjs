@@ -18,8 +18,8 @@ const useBootstrapWithRemoteBuild = process.env.ZCODE_BOOTSTRAP_WITH_REMOTE === 
 const pnpmRunEnv = {
   ...process.env,
   ZCODE_ENV: await resolveBuiltinProviderBuildEnvironment({ root: repoRoot }),
-  // pnpm 11 的 verify-deps-before-run 会在 apps/zcode-cli 子 workspace
-  // 执行每个 run 前触发 pnpm install；子 workspace 运行时依赖根仓库 @zcode/shared，
+  // pnpm 11 的 verify-deps-before-run 会在 apps/picode-cli 子 workspace
+  // 执行每个 run 前触发 pnpm install；子 workspace 运行时依赖根仓库 @picode/shared，
   // 自动 install 无法解析根 workspace 包，导致 dev:desktop:test 和 E2E onPrepare 失败。
   PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false",
 };
@@ -28,13 +28,13 @@ const pnpmRunEnv = {
 // 干净 CI 中该依赖的 dist 尚不存在，bootstrap 会因无法解析类型入口而失败。
 // 两条路径统一从这一份有序清单派生，避免后续新增 workspace 依赖时再次漂移。
 const cliWorkspaceBuilds = [
-  { packageName: "@zcode/shared-types", packageDir: "shared-types" },
-  { packageName: "@zcode/contracts", packageDir: "contracts" },
-  { packageName: "@zcode/core", packageDir: "core" },
-  { packageName: "@zcode/pi-host", packageDir: "pi-host" },
-  { packageName: "@zcode/adapters", packageDir: "adapters" },
-  { packageName: "@zcode/i18n", packageDir: "i18n" },
-  { packageName: "@zcode/bootstrap", packageDir: "bootstrap" },
+  { packageName: "@picode/shared-types", packageDir: "shared-types" },
+  { packageName: "@picode/contracts", packageDir: "contracts" },
+  { packageName: "@picode/core", packageDir: "core" },
+  { packageName: "@picode/pi-host", packageDir: "pi-host" },
+  { packageName: "@picode/adapters", packageDir: "adapters" },
+  { packageName: "@picode/i18n", packageDir: "i18n" },
+  { packageName: "@picode/bootstrap", packageDir: "bootstrap" },
 ];
 // 官方插件 manifest 可以在 server.js 缺失时被 filesystem seed，直到 session
 // 连接 MCP 才报错，造成“Helper ready 但 CUA 工具不存在”的半启动状态。所有普通 Dev 必需的
@@ -42,12 +42,12 @@ const cliWorkspaceBuilds = [
 const requiredDevPluginRuntimeBuilds = [
   {
     // node_repl 宿主：Browser Use 与 Computer Use 共用，产物归属独立包。
-    packageName: "@zcode/node-repl-host",
+    packageName: "@picode/node-repl-host",
     artifactPath: "node-repl-host/dist/mcp/server.js",
   },
   {
     // browser-use 自己的 runtime 只剩 browser-client；宿主不再由它携带。
-    packageName: "@zcode/browser-use-plugin",
+    packageName: "@picode/browser-use-plugin",
     artifactPath: "browser-use-plugin/scripts/browser-client.mjs",
   },
 ];
@@ -58,7 +58,7 @@ const defaultBuildFilters = [
 
 async function verifyRequiredDevPluginRuntimeArtifacts() {
   for (const runtime of requiredDevPluginRuntimeBuilds) {
-    const artifactPath = resolve(repoRoot, "apps/zcode-cli/packages", runtime.artifactPath);
+    const artifactPath = resolve(repoRoot, "apps/picode-cli/packages", runtime.artifactPath);
     try {
       await access(artifactPath);
     } catch (error) {
@@ -89,11 +89,11 @@ function stageDevAgentBundle() {
 }
 
 async function runBootstrapWithRemoteBuild() {
-  if (existsSync(resolve(repoRoot, "apps/zcode-cli/packages/cli/dist/zcode.cjs"))) {
+  if (existsSync(resolve(repoRoot, "apps/picode-cli/packages/cli/dist/zcode.cjs"))) {
     await stageBuiltinProviderConfig({
       root: repoRoot,
       env: pnpmRunEnv,
-      directory: resolve(repoRoot, "apps/zcode-cli/packages/cli/dist/provider"),
+      directory: resolve(repoRoot, "apps/picode-cli/packages/cli/dist/provider"),
     });
     console.log("[build-desktop-agent-cli] reuse existing zcode-cli desktop agent bundle");
     return;
@@ -107,20 +107,20 @@ async function runBootstrapWithRemoteBuild() {
     // gitignored 的产物，否则 tsc 因缺文件报错。
     if (prepareScript) {
       runCommand(process.execPath, [prepareScript], {
-        cwd: `apps/zcode-cli/packages/${packageDir}`,
+        cwd: `apps/picode-cli/packages/${packageDir}`,
         env: pnpmRunEnv,
         stdio: "inherit",
       });
     }
     runCommand(process.execPath, ["../../node_modules/typescript/bin/tsc"], {
-      cwd: `apps/zcode-cli/packages/${packageDir}`,
+      cwd: `apps/picode-cli/packages/${packageDir}`,
       env: pnpmRunEnv,
       stdio: "inherit",
     });
   }
 
   runCommand(process.execPath, ["scripts/build.mjs", "--desktop-agent"], {
-    cwd: "apps/zcode-cli/packages/cli",
+    cwd: "apps/picode-cli/packages/cli",
     env: pnpmRunEnv,
     stdio: "inherit",
   });
@@ -133,9 +133,9 @@ if (useBootstrapWithRemoteBuild) {
 }
 
 if (!useTurboBuild) {
-  // Linux 容器 demo 里没有仓库级 turbo 根，`turbo --cwd apps/zcode-cli`
-  // 会把 apps/zcode-cli 当根目录，并拒绝 turbo.json 中指向 ../../packages/shared 的 inputs。
-  // 同时 agent 子 workspace 不包含根 packages/shared，但 agent 包依赖 @zcode/shared。
+  // Linux 容器 demo 里没有仓库级 turbo 根，`turbo --cwd apps/picode-cli`
+  // 会把 apps/picode-cli 当根目录，并拒绝 turbo.json 中指向 ../../packages/shared 的 inputs。
+  // 同时 agent 子 workspace 不包含根 packages/shared，但 agent 包依赖 @picode/shared。
   // 因此默认改用仓库根 workspace 的明确 pnpm 包顺序构建，避免 WDIO 前置构建卡在子 workspace 解析。
   for (const filter of defaultBuildFilters) {
     runCommand("pnpm", ["--filter", filter, "build"], {
@@ -145,7 +145,7 @@ if (!useTurboBuild) {
   }
 
   await verifyRequiredDevPluginRuntimeArtifacts();
-  runCommand("pnpm", ["--filter", "@zcode/cli", "build:desktop-agent"], {
+  runCommand("pnpm", ["--filter", "@picode/cli", "build:desktop-agent"], {
     env: pnpmRunEnv,
     stdio: "inherit",
   });
@@ -160,10 +160,10 @@ runCommand(
     "turbo",
     "--skip-infer",
     "--cwd",
-    "apps/zcode-cli",
+    "apps/picode-cli",
     "run",
     "build:desktop-agent",
-    "--filter=@zcode/cli",
+    "--filter=@picode/cli",
   ],
   {
     env: pnpmRunEnv,

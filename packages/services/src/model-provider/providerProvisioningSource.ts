@@ -6,12 +6,12 @@ import {
   providerProvisioningEnvelopeSchema,
   type ProviderProvisioningCredentialEntry,
   type ProviderProvisioningEnvelope,
-} from "@zcode/shared";
+} from "@picode/shared";
 import type {
   PersonalProviderConfigRepository,
   ProviderConfigLayerSnapshot,
-} from "@zcode/provider";
-import { decodeProviderConfigFile, encodeProviderConfigFile } from "@zcode/provider-node";
+} from "@picode/provider";
+import { decodeProviderConfigFile, encodeProviderConfigFile } from "@picode/provider-node";
 import {
   createCredentialCipherProvider,
   type CredentialCipherProvider,

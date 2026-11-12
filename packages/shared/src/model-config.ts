@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { compileModelOptionMap } from "@zcode/model-option-map";
+import { compileModelOptionMap } from "@picode/model-option-map";
 import { sparseShape } from "./config-schema.js";
 
 function optionMapSchema(variableName: "reasoningLevel" | "maxOutputTokens") {
