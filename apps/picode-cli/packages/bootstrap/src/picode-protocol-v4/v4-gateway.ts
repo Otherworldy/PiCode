@@ -280,6 +280,17 @@ export interface V4GatewayHost {
   lookupDiscardedCommand?(key: CommandKey): Promise<CommandAck | null> | CommandAck | null;
   /** transcript 原子 promotion 后同步失效旧 lazy seed，再解除 CommandInbox live pin。 */
   invalidatePersistentCommandFacts?(sessionId: string): void;
+  /** Pi 的用户行拿到真实持久 entryId 后，才对账并解除 live pin。 */
+  materializePiInput?(
+    sessionId: string,
+    input: { sourceCommandId: string; clientId: string; messageId: string },
+  ): Promise<void>;
+  /** input handler 已处理而不会生成正文时，保存成功事实并终结 admitted input。 */
+  completeHandledPiInput?(
+    sessionId: string,
+    input: Pick<ConversationInputIntent, "sourceCommandId" | "clientId" | "queueItemId">,
+    ack: CommandAck,
+  ): Promise<void>;
   /** canonical goal complete 已进入 projection；宿主副作用必须 detached，禁止阻塞 ingest。 */
   onTargetCompleted?(sessionId: string, event: SessionEvent): void;
   /** 完整 chunk transaction commit 后一次性写 session artifact。 */
@@ -2067,6 +2078,25 @@ export class ConversationV4Gateway {
         ...(result ? { result } : {}),
         ...(memoryEnabled !== undefined ? { memoryEnabled } : {}),
       };
+      if (
+        durableInputIntent &&
+        outcome.envelope.sessionId !== null &&
+        result?.type === "inputAccepted" &&
+        result.delivery === "command" &&
+        this.host.completeHandledPiInput
+      ) {
+        try {
+          // handled 没有 user row，必须用成功命令事实收口，不能等不存在的 transcript。
+          await this.host.completeHandledPiInput(outcome.envelope.sessionId, durableInputIntent, {
+            ...outcome.ack,
+            ...final,
+          });
+          this.host.invalidatePersistentCommandFacts?.(outcome.envelope.sessionId);
+          releaseDurableInput(final);
+        } catch (error) {
+          reportError("v4.pi.input.handled", error);
+        }
+      }
       return settleOnce(final);
     } catch (error) {
       // noop 不是失败（同值切换收口）：不进 onError，noop ACK 返回。
@@ -2434,6 +2464,23 @@ export class ConversationV4Gateway {
     if (this.disposed || deltas.length === 0) return;
     const publisher = this.ensurePublisher(sessionId);
     publisher.ingestDeltas(deltas);
+    for (const delta of deltas) {
+      if (delta.op !== "row.appended" && delta.op !== "row.upserted") continue;
+      const row = delta.row;
+      if (
+        row.kind !== "userInput" ||
+        !row.sourceCommandId ||
+        !row.clientId ||
+        !row.entityId ||
+        row.entityId === `row:${row.rowId}`
+      )
+        continue;
+      void this.materializePiInput(sessionId, {
+        sourceCommandId: row.sourceCommandId,
+        clientId: row.clientId,
+        messageId: row.entityId,
+      });
+    }
     for (const [routeKey, state] of this.flushStates) {
       if (state.sessionId !== sessionId) continue;
       this.scheduleFlush(routeKey, state, publisher);
@@ -2441,6 +2488,26 @@ export class ConversationV4Gateway {
     // 流式 token 不刷侧栏。行新增和状态变化才入列，否则新建会话永远不出现。
     if (deltas.some((delta) => delta.op !== "row.delta" && delta.op !== "embeddedBrowser.open")) {
       this.publishCurrentSummaryToIndex(sessionId);
+    }
+  }
+
+  private async materializePiInput(
+    sessionId: string,
+    input: { sourceCommandId: string; clientId: string; messageId: string },
+  ): Promise<void> {
+    if (!this.host.materializePiInput) return;
+    try {
+      await this.host.materializePiInput(sessionId, input);
+      if (this.disposed) return;
+      this.host.invalidatePersistentCommandFacts?.(sessionId);
+      this.inbox.releaseLiveInput({ sessionId, commandId: input.sourceCommandId });
+    } catch (error) {
+      // 入库失败不能先解 pin，否则重试可能重复执行已被 SDK 消费的同一输入。
+      try {
+        this.host.onError?.("v4.pi.input.materialize", error);
+      } catch {
+        // 错误观察器不能让 detached 对账变成未处理的 rejection。
+      }
     }
   }
 

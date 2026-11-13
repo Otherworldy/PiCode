@@ -27,7 +27,7 @@ import {
 import { createEmptySnapshot, emptyAvailability, emptyCumulativeUsage } from "./snapshot.js";
 import { isControlCommandTitle, visibleUserText } from "./jsonl-history.js";
 import { isOpenPlanReviewResult } from "./plan-review-signal.js";
-import type { PiAssistantDelta, PiHostEvent, PiMessageUsage } from "./types.js";
+import type { PiAssistantDelta, PiHostEvent, PiInputIdentity, PiMessageUsage } from "./types.js";
 
 function messageText(content: unknown): string {
   if (typeof content === "string") return content;
@@ -315,6 +315,18 @@ export class PiToV4Projector {
     );
     this.snapshot.seq = this.seq;
     return withSeq;
+  }
+
+  /** 消费事件早于 Pi 落盘；只有真实 entryId 才能让账本把输入标记为 promoted。 */
+  bindPersistedUserEntry(identity: PiInputIdentity, entryId: string): ConversationDelta[] {
+    const row = this.snapshot.rows.window.find(
+      (row) =>
+        row.kind === "userInput" &&
+        row.sourceCommandId === identity.sourceCommandId &&
+        row.clientId === identity.clientId,
+    );
+    if (!row || row.entityId === entryId) return [];
+    return this.commit([{ op: "row.upserted", row: { ...row, entityId: entryId } }]);
   }
 
   bindQueuePublish(publish: (deltas: ConversationDelta[]) => void): void {
@@ -611,7 +623,11 @@ export class PiToV4Projector {
           return [];
         }
         return event.message.role === "user"
-          ? this.appendUser(messageText(event.message.content), event.message.id)
+          ? this.appendUser(
+              messageText(event.message.content),
+              event.message.id,
+              event.message.picodeInput,
+            )
           : this.appendCustomMessageEvent(event);
       case "message_update":
         // 首 token 时刻只能在这里打点：Pi 给 usage 和 durationMs，但不给首输出
@@ -795,8 +811,12 @@ export class PiToV4Projector {
     this.pendingUserAttachments = attachments?.length ? attachments : undefined;
   }
 
-  private appendUser(text: string, messageId?: string): ConversationDelta[] {
-    const attachments = this.pendingUserAttachments;
+  private appendUser(
+    text: string,
+    messageId?: string,
+    identity?: PiInputIdentity,
+  ): ConversationDelta[] {
+    const attachments = identity ? identity.attachments : this.pendingUserAttachments;
     this.pendingUserAttachments = undefined;
     text = visibleUserText(text);
     if (!text && !attachments?.length && this.snapshot.control.phase === "draft") return [];
@@ -805,10 +825,23 @@ export class PiToV4Projector {
       kind: "userInput",
       text,
       origin: "realUser",
+      ...(identity ? { sourceCommandId: identity.sourceCommandId, clientId: identity.clientId } : {}),
       ...(attachments?.length ? { attachments } : {}),
     };
     if (messageId) row.entityId = messageId;
     const deltas: ConversationDelta[] = [{ op: "row.appended", row }];
+    const queue = this.snapshot.queue;
+    const remaining = identity
+      ? queue.items.filter(
+          (item) =>
+            item.sourceCommandId !== identity.sourceCommandId || item.clientId !== identity.clientId,
+        )
+      : queue.items;
+    // pending 与正式正文必须同批交接；单独发布 queue 会让已接受输入短暂消失。
+    if (remaining.length !== queue.items.length) {
+      const nextQueue = { ...queue, items: remaining };
+      deltas.push({ op: "state.updated", patch: { queue: nextQueue, inputRouting: this.routing(nextQueue) } });
+    }
     // 历史重放不能先把首条原文推进侧栏。这一帧会把已经总结好的标题闪回原文，
     // 随后的 session_info 名字再改回来。重放结束后由 jsonl 摘要一次写入。
     if (this.replaying) return deltas;

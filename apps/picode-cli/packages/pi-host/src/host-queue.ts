@@ -90,15 +90,16 @@ export class HostQueue {
   }
 
   remove(queueItemId: string): QueueState | null {
+    const current = this.items.find((item) => item.queueItemId === queueItemId);
+    if (!current || current.dispatch.state !== "queued") return null;
     const next = this.items.filter((item) => item.queueItemId !== queueItemId);
-    if (next.length === this.items.length) return null;
     this.items = next;
     return this.snapshot();
   }
 
   reorder(queueItemId: string, beforeQueueItemId: string | null): QueueState | null {
     const from = this.items.findIndex((item) => item.queueItemId === queueItemId);
-    if (from < 0) return null;
+    if (from < 0 || this.items[from]?.dispatch.state !== "queued") return null;
     const copy = [...this.items];
     const [moved] = copy.splice(from, 1);
     if (!moved) return null;
@@ -112,9 +113,27 @@ export class HostQueue {
     return this.snapshot();
   }
 
+  /** 已交给 Pi 的 GUIDE 只能由消费/失败交接收口，不能被普通队列再次取走。 */
+  consume(sourceCommandId: string): QueueItem | undefined {
+    const item = this.items.find((item) => item.sourceCommandId === sourceCommandId);
+    if (item) this.items = this.items.filter((entry) => entry !== item);
+    return item;
+  }
+
+  markSteering(sourceCommandId: string): void {
+    this.items = this.items.map((item) =>
+      item.sourceCommandId === sourceCommandId ? { ...item, steer: { state: "steering" } } : item,
+    );
+  }
+
   shift(): QueueItem | undefined {
-    const [first, ...rest] = this.items;
-    this.items = rest;
+    // SDK 已持有的 GUIDE 只是待消费事实；跳过它唤醒普通 FIFO，其他 reservation 仍是屏障。
+    const index = this.items.findIndex(
+      (item) => !(item.dispatch.state === "reserved" && item.delivery.admitted === "guide"),
+    );
+    const first = this.items[index];
+    if (first?.dispatch.state !== "queued") return undefined;
+    this.items = this.items.filter((_, position) => position !== index);
     return first;
   }
 
@@ -124,7 +143,7 @@ export class HostQueue {
   }
 
   clear(): QueueState {
-    this.items = [];
+    this.items = this.items.filter((item) => item.dispatch.state !== "queued");
     return this.snapshot();
   }
 }

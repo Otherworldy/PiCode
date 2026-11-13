@@ -1,4 +1,5 @@
 import type { PiHostEvent, PiMessageUsage } from "./types.js";
+import { readPiInputIdentity } from "./pi-input-identity.js";
 
 export type PiJsonlSummary = {
   title: string;
@@ -343,7 +344,12 @@ export function readPiJsonl(
       beginTurn(timestamp);
       events.push({
         type: "message_start",
-        message: { role: "user", content: text, id: typeof entry.id === "string" ? entry.id : undefined },
+        message: {
+          role: "user",
+          content: text,
+          id: typeof entry.id === "string" ? entry.id : undefined,
+          picodeInput: readPiInputIdentity(message.picodeInput),
+        },
       });
       continue;
     }

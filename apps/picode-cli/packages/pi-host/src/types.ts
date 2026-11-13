@@ -39,6 +39,22 @@ export type PiMessageUsage = {
   totalTokens?: number;
 };
 
+export interface PiInputIdentity {
+  sourceCommandId: string;
+  clientId: string;
+  attachments?: import("@picode/shared/picode-protocol-v4").AttachmentRef[];
+}
+
+export type PiPersistedMessage = { role: string; entryId: string; picodeInput?: PiInputIdentity };
+
+export interface PiPromptOptions {
+  images?: Array<{ type: "image"; data: string; mimeType: string }>;
+  streamingBehavior?: "steer";
+  picodeInput?: PiInputIdentity;
+}
+
+export type PiPromptResult = boolean | "handled" | "queued";
+
 export type PiHostEvent =
   | { type: "agent_start"; at?: number }
   | { type: "agent_end"; willRetry?: boolean }
@@ -58,6 +74,8 @@ export type PiHostEvent =
         role: string;
         content?: unknown;
         id?: string;
+        /** Host 原命令身份随实际 SDK 用户消息走，不按正文或事件顺序对账。 */
+        picodeInput?: PiInputIdentity;
         /** 请求开始时刻，Pi 的 `AssistantMessage.timestamp`（ms）。 */
         timestamp?: number;
         /** `role: "custom"` 的来源标识（`pi.sendMessage` 的 customType）。 */
@@ -238,10 +256,7 @@ export interface PiSessionPort {
   listSkills?(): PiSkillView[];
   /** Pi 自动补全那份斜杠命令：内置、提示词、扩展命令、skill: 。 */
   listSlashCommands?(): PiSlashCommandView[];
-  prompt(
-    text: string,
-    options?: { images?: Array<{ type: "image"; data: string; mimeType: string }> },
-  ): Promise<boolean | "handled">;
+  prompt(text: string, options?: PiPromptOptions): Promise<PiPromptResult>;
   /** 扩展命令的 notify 原文。只进会话文件，不进模型上下文。 */
   recordExtensionOutput?(command: string, text: string): void;
   waitTurn?(): Promise<void>;
@@ -324,9 +339,9 @@ export interface PiSessionPort {
   bindUi?(ui: unknown): Promise<void>;
   subscribe(listener: (event: PiHostEvent) => void): () => void;
   /**
-   * 助手消息写进会话树之后通知。此时 message_end 已经画完，entryId 才是分叉点。
+   * 消息写进会话树之后通知。entryId 是持久树节点；用户消息还携带原命令身份。
    */
-  notePersistedMessage?(listener: (notice: { role: string; entryId: string }) => void): () => void;
+  notePersistedMessage?(listener: (notice: PiPersistedMessage) => void): () => void;
   /** 先等 session_shutdown 关掉 MCP 子进程，再拆 Pi session。重复调用等同一次关闭。 */
   dispose(): void | Promise<void>;
 }

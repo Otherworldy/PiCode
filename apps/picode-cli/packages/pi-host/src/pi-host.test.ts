@@ -920,7 +920,8 @@ test("image attachments are sent as bytes and shown on the user row", async () =
     session.isStreaming = false;
     assert.equal(await bridge.drainNext(), true);
     assert.equal(session.promptImages[1]?.[0]?.mimeType, "image/png");
-    assert.deepEqual(noted, [[file], [file]]);
+    assert.deepEqual(noted, []);
+    assert.deepEqual(session.promptOptions.map((options) => options?.picodeInput?.attachments?.map((ref) => ref.ref)), [[file], [file]]);
     const projector = new PiToV4Projector("s", "e1");
     projector.noteUserAttachments([
       { ref: file, fileName: "dot.png", mime: "image/png", bytes: png.length },
@@ -1004,7 +1005,8 @@ test("dragged text files are included in the model prompt", async () => {
     session.isStreaming = false;
     assert.equal(await bridge.drainNext(), true);
     assert.match(session.prompts[1] ?? "", /hello from the dropped file/);
-    assert.deepEqual(noted, [[file], [file]]);
+    assert.deepEqual(noted, []);
+    assert.deepEqual(session.promptOptions.map((options) => options?.picodeInput?.attachments?.map((ref) => ref.ref)), [[file], [file]]);
     const projector = new PiToV4Projector("s", "e1");
     projector.noteUserAttachments([
       { ref: file, fileName: "note.txt", mime: "text/plain", bytes: 26 },
@@ -1183,7 +1185,7 @@ test("inbox routes prompt/steer/queue without pi queue_update", async () => {
   });
   assert.equal(queued.kind, "queued");
   assert.equal(session.followUps.length, 0);
-  assert.equal(queue.snapshot().items.length, 1);
+  assert.deepEqual(queue.snapshot().items.map((item) => item.sourceCommandId), ["2", "3"]);
   await bridge.stop();
   await bridge.compact();
   assert.equal(session.aborted, true);

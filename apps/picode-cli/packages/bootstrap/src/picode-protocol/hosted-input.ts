@@ -13,6 +13,7 @@ export async function sendHostedInput(
   input: {
     text: string;
     inputId: string;
+    clientId?: string;
     delivery?: "startNow" | "queue" | "guide";
     attachments?: TurnAttachment[];
     modelSelection?: ModelSelection;
@@ -30,7 +31,7 @@ export async function sendHostedInput(
   const result = await hosted.bridge.admitSend({
     text: input.text,
     commandId: input.inputId,
-    clientId: "v4",
+    clientId: input.clientId ?? "v4",
     delivery: input.delivery ?? sendDelivery({ guide: false, phaseRunning, idle: hosted.isIdle }),
     streaming: phaseRunning || !hosted.isIdle,
     requireIdle: input.requireIdle,
@@ -48,10 +49,10 @@ export async function sendHostedInput(
   });
   hosted.projector.replaceQueue(hosted.queue.snapshot());
   if (result.kind === "handled") return result;
-  if (result.kind === "queued")
+  if (result.kind === "queued" || result.kind === "steer")
     return {
       kind: "queued",
-      pendingInputId: result.queueItemId,
+      pendingInputId: result.kind === "queued" ? result.queueItemId : input.inputId,
       queueLength: hosted.queue.snapshot().items.length,
     };
   return { kind: "started_turn", completion: hosted.waitTurn() };

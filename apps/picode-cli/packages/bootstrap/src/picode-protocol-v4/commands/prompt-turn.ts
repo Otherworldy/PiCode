@@ -115,6 +115,7 @@ export async function startPromptTurn(
       ? await sendHostedInput(record.hosted, {
           text: params.content,
           inputId: params.inputId,
+          ...(params.intent?.clientId ? { clientId: params.intent.clientId } : {}),
           requireIdle: params.requireIdle,
           consumer: params.hostedConsumer,
           ...(params.attachments ? { attachments: params.attachments } : {}),

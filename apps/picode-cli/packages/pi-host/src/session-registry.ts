@@ -1439,8 +1439,11 @@ export class HostSessionRegistry {
       }) ?? (() => undefined);
     const unsubscribePersisted =
       pi.notePersistedMessage?.((notice) => {
-        if (notice.role !== "assistant") return;
-        emit(projector.bindPersistedEntry(notice.entryId));
+        if (notice.role === "user" && notice.picodeInput) {
+          emit(projector.bindPersistedUserEntry(notice.picodeInput, notice.entryId));
+        } else if (notice.role === "assistant") {
+          emit(projector.bindPersistedEntry(notice.entryId));
+        }
       }) ?? (() => undefined);
     const titleGate = createSessionFirstGate();
     let pendingTitleName: string | undefined;
@@ -1482,6 +1485,16 @@ export class HostSessionRegistry {
           return;
         }
         if (event.type === "message_start" && event.message.role === "user") {
+          const identity = event.message.picodeInput;
+          // Pi 已消费的 GUIDE 才能退出 HostQueue；投影在 apply 内与 userInput 同批发布。
+          if (identity) {
+            const pending = queue.snapshot().items.find(
+              (item) =>
+                item.sourceCommandId === identity.sourceCommandId &&
+                item.clientId === identity.clientId,
+            );
+            if (pending?.delivery.admitted === "guide") queue.consume(identity.sourceCommandId);
+          }
           const text = textOfMessageContent(event.message.content);
           // 审查决定是插件 sendUserMessage。对上原文才结束「工作中」，用户自己的消息不收口。
           if (text && pi.takeMatchingPlanDecision?.(text)) {

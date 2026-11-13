@@ -1,4 +1,4 @@
-import type { PiHostEvent, PiSessionPort, PiSessionTreeNode } from "./types.js";
+import type { PiHostEvent, PiPromptOptions, PiPromptResult, PiSessionPort, PiSessionTreeNode } from "./types.js";
 
 export class FakePiSession implements PiSessionPort {
   sessionId: string;
@@ -14,6 +14,7 @@ export class FakePiSession implements PiSessionPort {
     source: "builtin" | "custom" | "extension";
   }> = [];
   promptImages: Array<Array<{ type: "image"; data: string; mimeType: string }>> = [];
+  promptOptions: Array<PiPromptOptions | undefined> = [];
   steers: string[] = [];
   followUps: string[] = [];
   aborted = false;
@@ -105,12 +106,18 @@ export class FakePiSession implements PiSessionPort {
     return this.slashCommands;
   }
 
-  async prompt(
-    text: string,
-    options?: { images?: Array<{ type: "image"; data: string; mimeType: string }> },
-  ): Promise<boolean | "handled"> {
-    this.prompts.push(text);
+  async prompt(text: string, options?: PiPromptOptions): Promise<PiPromptResult> {
+    this.promptOptions.push(options);
     this.promptImages.push(options?.images ?? []);
+    if (this.acceptPrompt === "handled" || this.acceptPrompt === false) {
+      this.prompts.push(text);
+      return this.acceptPrompt;
+    }
+    if (options?.streamingBehavior === "steer" && this.isStreaming) {
+      this.steers.push(text);
+      return "queued";
+    }
+    this.prompts.push(text);
     return this.acceptPrompt;
   }
 

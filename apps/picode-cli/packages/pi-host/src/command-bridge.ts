@@ -8,7 +8,7 @@ import {
 } from "./prompt-images.js";
 import { registeredExtensionCommandText } from "./pi-slash-commands.js";
 import { ensurePlannotatorToolActive } from "./tool-loadout.js";
-import type { PiSessionPort } from "./types.js";
+import type { PiInputIdentity, PiSessionPort } from "./types.js";
 
 export type SendDelivery = "startNow" | "queue" | "guide";
 
@@ -138,13 +138,47 @@ export class CommandBridge {
       if (input.requireIdle && busy) throw this.consumerBusy();
       if (extensionText) return await this.runExtension(input, extensionText, false);
       if (!input.requireIdle && busy && input.delivery === "guide" && this.session.isStreaming) {
-        await this.useModel(input.modelSelection);
-        await this.promptNow("steer", input.text, input.attachments);
-        return { kind: "steer" };
+        // GUIDE 已交付后仍由 HostQueue 持有可见事实；reserved 阻止普通 drain 重复投递。
+        const item = this.queue.createItem({
+          sourceCommandId: input.commandId,
+          clientId: input.clientId,
+          text: input.text,
+          admitted: "guide",
+          modelSelection: queuedSelection(input.modelSelection),
+          attachments: promptAttachmentRefs(input.attachments),
+        });
+        this.queue.enqueue({
+          ...item,
+          dispatch: { state: "reserved" },
+          steer: { state: "submitting" },
+        });
+        try {
+          await this.useModel(input.modelSelection);
+          const kind = await this.promptNow(
+            "steer",
+            input.text,
+            input.attachments,
+            false,
+            undefined,
+            {
+              sourceCommandId: input.commandId,
+              clientId: input.clientId,
+            },
+          );
+          if (kind === "handled") this.queue.consume(input.commandId);
+          else this.queue.markSteering(input.commandId);
+          return { kind };
+        } catch (error) {
+          this.queue.consume(input.commandId);
+          throw error;
+        }
       }
       if (!input.requireIdle && (busy || input.delivery === "queue")) return this.enqueue(input);
       await this.useModel(input.modelSelection);
-      const kind = await this.promptNow("prompt", input.text, input.attachments);
+      const kind = await this.promptNow("prompt", input.text, input.attachments, false, undefined, {
+        sourceCommandId: input.commandId,
+        clientId: input.clientId,
+      });
       return { kind };
     } finally {
       if (!input.consumer) consumer.release();
@@ -212,7 +246,10 @@ export class CommandBridge {
               }
             : undefined,
         );
-        await this.promptNow("prompt", item.text, item.attachments);
+        await this.promptNow("prompt", item.text, item.attachments, false, undefined, {
+          sourceCommandId: item.sourceCommandId,
+          clientId: item.clientId,
+        });
         return true;
       } catch (error) {
         this.queue.unshift(item);
@@ -229,27 +266,29 @@ export class CommandBridge {
     attachments: readonly PiPromptAttachment[] | undefined,
     allowBusy = false,
     onPromptInvoked?: () => void,
+    identity?: PiInputIdentity,
   ): Promise<"prompt" | "steer" | "handled"> {
     const body = await appendFileAttachments(text, attachments);
     const images = await loadPromptImages(attachments);
     const refs = promptAttachmentRefs(attachments);
-    if (kind === "steer") {
-      if (refs.length > 0) this.noteAttachments?.(refs);
-      await this.session.steer(body, images.length > 0 ? images : undefined);
-      return "steer";
-    }
-    // 等附件的空档里上一轮可能又开始跑。这时不能再 prompt。
-    // 扩展命令例外：Pi 在流式输出时也会立刻执行。
-    if (!allowBusy && piSessionBusy(this.session)) {
+    const options = {
+      ...(images.length > 0 ? { images } : {}),
+      ...(identity ? { picodeInput: { ...identity, attachments: refs } } : {}),
+      ...(kind === "steer" ? { streamingBehavior: "steer" as const } : {}),
+    };
+    // 附件和 SDK input handler 都可能跨过原轮次结束，最终忙闲交给 SDK prompt 判断。
+    // 已交给 SDK 的 GUIDE 不能在空闲时再次裸 steer，否则只入队却不会唤起运行。
+    if (kind !== "steer" && !allowBusy && piSessionBusy(this.session)) {
       throw Object.assign(new Error("pi prompt rejected: already streaming"), {
         reasonCode: "guard.queuePromotionBusy",
       });
     }
-    if (refs.length > 0) this.noteAttachments?.(refs);
-    const pending = this.session.prompt(body, images.length > 0 ? { images } : undefined);
+    if (refs.length > 0 && !identity) this.noteAttachments?.(refs);
+    const pending = this.session.prompt(body, Object.keys(options).length ? options : undefined);
     onPromptInvoked?.();
     const accepted = await pending;
     if (accepted === "handled") return "handled";
+    if (accepted === "queued") return "steer";
     if (!accepted) {
       if (refs.length > 0) this.noteAttachments?.([]);
       throw new Error("pi prompt rejected");

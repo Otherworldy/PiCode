@@ -31,7 +31,10 @@ import { createBackgroundSubagents } from "./subagent-background.js";
 import { readPiContextUsage } from "./context-breakdown.js";
 import { createPermissionExtension } from "./permission-gate.js";
 import { createImageIngestionExtension, type SessionImageDiagnostic } from "./image-ingestion.js";
-import { createRequestDiagnosticsExtension, type RequestDiagnostic } from "./request-diagnostics.js";
+import {
+  createRequestDiagnosticsExtension,
+  type RequestDiagnostic,
+} from "./request-diagnostics.js";
 import { createUiDesignMode } from "./ui-design-mode.js";
 import { createPlanReviewSignalExtension, takePlanDecision } from "./plan-review-signal.js";
 import { createWorkspaceMemoryExtension } from "./workspace-memory.js";
@@ -71,7 +74,13 @@ import {
   registerableMcpServers,
   type PiMcpCompat,
 } from "./pi-mcp.js";
-import { asPiEvent, type CreatePiSession, type PiSessionPort } from "./types.js";
+import { bindPiInputIdentity, readPiInputIdentity } from "./pi-input-identity.js";
+import {
+  asPiEvent,
+  type CreatePiSession,
+  type PiPersistedMessage,
+  type PiSessionPort,
+} from "./types.js";
 import {
   alignStoredModelApi,
   deleteProvider,
@@ -596,6 +605,7 @@ export function createSdkSessionFactory(
     });
     live = created.session;
     const session = created.session;
+    const inputIdentity = bindPiInputIdentity(session);
     // 编辑历史消息会先 abort 再 prompt。abort 的 agent_settled 和插件仍可能在
     // isStreaming 落下之前再进一次 prompt。Pi 抛 already processing，调用方经常不 await，
     // 进程错误边界会把 agent 打退出：模型第一句刚写出会话就没了。这里改成 followUp。
@@ -608,15 +618,18 @@ export function createSdkSessionFactory(
         return rawPrompt(text, { ...options, streamingBehavior: "followUp" });
       }
     }) as typeof session.prompt;
-    const persistedListeners = new Set<(notice: { role: string; entryId: string }) => void>();
+    const persistedListeners = new Set<(notice: PiPersistedMessage) => void>();
     // Bug：分叉把 row.entityId 当成树节点。Pi 的节点 id 在 appendMessage 才生成，
     // 而且发生在 message_end 监听者返回之后。不在这里接住，实时会话永远 Entry not found。
     const manager = session.sessionManager;
     const appendMessage = manager.appendMessage.bind(manager);
-    manager.appendMessage = ((message: { role?: string }) => {
+    manager.appendMessage = ((message: { role?: string; picodeInput?: unknown }) => {
+      inputIdentity.restore(message);
       const entryId = appendMessage(message as never);
-      if (message?.role === "assistant") {
-        for (const listener of persistedListeners) listener({ role: "assistant", entryId });
+      if (message?.role === "assistant" || message?.role === "user") {
+        const picodeInput = readPiInputIdentity(message.picodeInput);
+        for (const listener of persistedListeners)
+          listener({ role: message.role, entryId, ...(picodeInput ? { picodeInput } : {}) });
       }
       return entryId;
     }) as typeof manager.appendMessage;
@@ -686,33 +699,39 @@ export function createSdkSessionFactory(
         return opened;
       },
       prompt: (text, options) =>
-        new Promise<boolean | "handled">((resolve, reject) => {
+        new Promise<boolean | "handled" | "queued">((resolve, reject) => {
           const extension = registeredExtensionCommandText(text, listSessionSlashCommands(session));
           // 还在跑就不要进 Pi。裸 prompt 会抛 "already processing"，
           // 推迟执行的那次 rejection 接不住，进程会直接退出。
           // 扩展命令是 Pi 在跑的时候也立刻执行的，不走这条拒绝。
-          if (session.isStreaming && !extension) {
+          if (session.isStreaming && !extension && !options?.streamingBehavior) {
             reject(new Error("pi prompt rejected: already streaming"));
             return;
           }
           const prepared = extension ?? preparePromptText(text);
           let settled = false;
-          const pending = session
-            .prompt(prepared, {
-              ...(options?.images?.length ? { images: options.images } : {}),
-              preflightResult: (result) => {
-                settled = true;
-                resolve(result === "handled" ? "handled" : true);
+          const pending = inputIdentity
+            .prompt(
+              prepared,
+              {
+                ...(options?.images?.length ? { images: options.images } : {}),
+                ...(options?.streamingBehavior
+                  ? { streamingBehavior: options.streamingBehavior }
+                  : {}),
+                source: "rpc",
+                preflightResult: (result) => {
+                  settled = true;
+                  if (result === "started") lastTurn = pending;
+                  resolve(result === "handled" ? "handled" : result === "queued" ? "queued" : true);
+                },
               },
-            })
-            .then(() => {
-              if (!settled) resolve(true);
-            })
+              options?.picodeInput,
+            )
             .catch((error: unknown) => {
               if (!settled) reject(error);
             });
           // 扩展命令不是模型回合。盖掉 lastTurn 会让还在跑的那一轮被当成已经结束。
-          if (!extension) lastTurn = pending;
+          if (!extension && !options?.streamingBehavior) lastTurn = pending;
         }),
       recordExtensionOutput: (command, text) => {
         const body = text.trim();
@@ -871,6 +890,8 @@ export function createSdkSessionFactory(
       },
       subscribe: (listener) =>
         session.subscribe((event) => {
+          if ("message" in event && event.message && typeof event.message === "object")
+            inputIdentity.restore(event.message);
           const mapped = asPiEvent(event);
           if (mapped) listener(mapped);
         }),

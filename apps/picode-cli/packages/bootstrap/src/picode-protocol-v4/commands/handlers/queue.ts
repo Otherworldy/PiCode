@@ -196,6 +196,8 @@ async function sendQueuedNow(
       .snapshot()
       .items.find((item) => item.queueItemId === payload.queueItemId);
     if (!item) throw new V4QueueItemTextUnavailableError(payload.queueItemId);
+    // GUIDE 已归 SDK 消费；必须在抢占旧轮之前拒绝，不能中止后再靠 remove 失败兜底。
+    if (item.dispatch.state !== "queued") throw new V4QueueItemReservedError(payload.queueItemId);
     const automatic = commandExecutionContextOf(envelope)?.autoDrainPromotion === true;
     if (automatic && (!hosted.isIdle || !hosted.queue.canAutoDrain)) {
       throw new V4QueuePromotionLeaseUnavailableError();

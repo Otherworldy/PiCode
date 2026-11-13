@@ -609,6 +609,17 @@ export function createConversationV4Gateway(
       };
     },
   });
+  const piAdmittedInput = async (sessionId: string, commandId: string) => {
+    const input = await context.deps.sessionStore?.getSessionInputById?.(
+      queueItemIdForCommand(commandId),
+    );
+    const intent = input?.payload.conversationInputIntent as
+      | { sourceCommandId?: unknown; clientId?: unknown }
+      | undefined;
+    return input?.sessionID === sessionId && intent?.sourceCommandId === commandId
+      ? { input, intent }
+      : null;
+  };
   let nativeExecutor: V4CommandExecutor;
   const autoDrainRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const autoDrainV4QueueIfReady = async (record: ZCodeProtocolSessionRecord): Promise<void> => {
@@ -634,7 +645,21 @@ export function createConversationV4Gateway(
       }
       return;
     }
-    const head = context.v4Gateway?.getQueueHead(sessionIdOf(record));
+    const hostedQueue = record.hosted?.queue.snapshot();
+    // Pi 已持有的 GUIDE 不能重发，也不能挡住恢复后用于启动 SDK 的普通 FIFO。
+    // Legacy Core 继续使用原投影队首，保留其 reserved/lease 屏障。
+    const hostedHead = hostedQueue?.items.find(
+      (item) => !(item.dispatch.state === "reserved" && item.delivery.admitted === "guide"),
+    );
+    const head = hostedQueue
+      ? hostedHead && {
+          autoDrain: hostedQueue.autoDrain,
+          dispatchState: hostedHead.dispatch.state,
+          kind: hostedHead.kind,
+          queueItemId: hostedHead.queueItemId,
+          text: hostedHead.text,
+        }
+      : context.v4Gateway?.getQueueHead(sessionIdOf(record));
     if (!head) {
       // 外层恢复 FIFO 已消费到空；guide 仍只由 core tool-batch 边界行内消费。
       record.app?.completeExternalQueueDrain();
@@ -1572,10 +1597,48 @@ export function createConversationV4Gateway(
     },
     // commands/query 持久化 fallback：同 session 首次查询惰性建索引，后续四个来源
     // 共用该索引；anchor/marker/child/discarded 写入走 record 增量更新。
-    lookupTranscriptCommand: (key) =>
-      key.sessionId === null
-        ? lookupGlobalCreateSessionCommand(context.deps.sessionStore, key.commandId)
-        : persistentCommands.lookup("transcript", key),
+    lookupTranscriptCommand: async (key) => {
+      if (key.sessionId === null)
+        return lookupGlobalCreateSessionCommand(context.deps.sessionStore, key.commandId);
+      const fact = await persistentCommands.lookup("transcript", key);
+      if (fact) return fact;
+      // Pi 正文保存在 JSONL；promoted 账本补齐旧 message/part 索引不包含的命令事实。
+      const admitted = await piAdmittedInput(key.sessionId, key.commandId);
+      return admitted?.input.status === "promoted" && admitted.input.promotedMessageID
+        ? { commandId: key.commandId, status: "accepted", revisionAtDecision: 0 }
+        : null;
+    },
+    materializePiInput: async (sessionId, input) => {
+      const store = context.deps.sessionStore;
+      if (!store?.getSessionInputById) return;
+      const admitted = await piAdmittedInput(sessionId, input.sourceCommandId);
+      if (!admitted || admitted.intent.clientId !== input.clientId)
+        throw new Error("fault.command.inputIdentityMismatch");
+      if (admitted.input.status === "promoted") return;
+      if (!store.markSessionInputPromoted)
+        throw new Error("fault.command.inputPromotionUnavailable");
+      await store.markSessionInputPromoted({
+        id: admitted.input.id,
+        sessionID: sessionId as SessionId,
+        promotedMessageID: input.messageId as MessageId,
+      });
+      if ((await piAdmittedInput(sessionId, input.sourceCommandId))?.input.status !== "promoted")
+        throw new Error("fault.command.inputPromotionNotCommitted");
+    },
+    completeHandledPiInput: async (sessionId, input, ack) => {
+      const store = context.deps.sessionStore;
+      if (!store?.settleSessionInput) throw new Error("fault.command.inputSettlementUnavailable");
+      const admitted = await piAdmittedInput(sessionId, input.sourceCommandId);
+      if (!admitted || admitted.intent.clientId !== input.clientId)
+        throw new Error("fault.command.inputIdentityMismatch");
+      await savePersistentCommandFact(store, sessionId as SessionId, "timeline", ack);
+      await store.settleSessionInput({
+        id: admitted.input.id,
+        sessionID: sessionId as SessionId,
+        status: "cancelled",
+        reason: "input.handled",
+      });
+    },
     lookupTimelineCommand: (key) => persistentCommands.lookup("timeline", key),
     lookupChildCommand: (key) => persistentCommands.lookup("child", key),
     lookupDiscardedCommand: (key) => persistentCommands.lookup("discarded", key),

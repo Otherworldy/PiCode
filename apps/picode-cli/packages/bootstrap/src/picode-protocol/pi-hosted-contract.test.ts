@@ -717,14 +717,16 @@ test("failed Pi queue promotion keeps the original item and auto-drain preferenc
   }
 });
 
-test("Pi guide input steers the active session and retains its turn completion", async () => {
+test("Pi guide input reports queued admission until the active session consumes it", async () => {
   const f = await fixture();
   try {
     const guided: string[] = [];
     f.pi.isIdle = false;
     f.pi.isStreaming = true;
-    f.pi.steer = async (text) => {
+    f.pi.prompt = async (text, options) => {
+      assert.equal(options?.streamingBehavior, "steer");
       guided.push(text);
+      return "queued";
     };
     f.hosted.projector.apply({ type: "agent_start" });
     const result = await startPromptTurn({ getRecord: () => f.record }, f.record, {
@@ -742,11 +744,12 @@ test("Pi guide input steers the active session and retains its turn completion",
         { text: "guide now", requestedDelivery: "guide" },
       ),
     });
-    assert.equal(result.admission.kind, "started_turn");
+    assert.equal(result.admission.kind, "queued");
     assert.deepEqual(guided, ["guide now"]);
-    assert.equal(f.hosted.queue.snapshot().items.length, 0);
+    assert.equal(f.hosted.queue.snapshot().items.length, 1);
+    assert.equal(f.hosted.queue.snapshot().items[0]?.clientId, "test");
+    assert.equal("completion" in result.admission, false);
     f.finishTurn.resolve();
-    await result.completion;
   } finally {
     await f.close();
   }
