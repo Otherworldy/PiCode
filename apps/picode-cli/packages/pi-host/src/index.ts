@@ -1,3 +1,4 @@
+export { requestDiagnosticLogLevel, type RequestDiagnostic } from "./request-diagnostics.js";
 export { workspaceKey } from "./identity.js";
 export { EMPTY_PLUGIN_VIEW_REGISTRY, PluginViewRegistry } from "./plugin-adapters/registry.js";
 export { mapPiToolName, toolResultText, editDisplay, bashDisplay } from "./presentation.js";

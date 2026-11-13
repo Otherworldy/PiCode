@@ -30,6 +30,8 @@ import {
 import { createBackgroundSubagents } from "./subagent-background.js";
 import { readPiContextUsage } from "./context-breakdown.js";
 import { createPermissionExtension } from "./permission-gate.js";
+import { createImageIngestionExtension, type SessionImageDiagnostic } from "./image-ingestion.js";
+import { createRequestDiagnosticsExtension, type RequestDiagnostic } from "./request-diagnostics.js";
 import { createUiDesignMode } from "./ui-design-mode.js";
 import { createPlanReviewSignalExtension, takePlanDecision } from "./plan-review-signal.js";
 import { createWorkspaceMemoryExtension } from "./workspace-memory.js";
@@ -345,6 +347,8 @@ export function createSdkSessionFactory(
     skillPaths?: (cwd: string) => string[];
     /** 测试注入。生产路径仍用 Pi 的 ModelRuntime。 */
     modelRuntime?: ModelRuntime;
+    onImageDiagnostic?: (diagnostic: SessionImageDiagnostic) => void;
+    onRequestDiagnostic?: (diagnostic: RequestDiagnostic) => void;
   } = {},
 ): CreatePiSession {
   const isolated = Boolean(options.delegate || options.stream);
@@ -463,6 +467,16 @@ export function createSdkSessionFactory(
             ]
           : []),
         ...(processes?.factories ?? []),
+        createImageIngestionExtension({
+          autoResize: () => settingsManager.getImageAutoResize(),
+          parentSessionId: input.parentSessionId,
+          onDiagnostic: options.onImageDiagnostic,
+        }),
+        createRequestDiagnosticsExtension({
+          configuredTransport: () => settingsManager.getTransport(),
+          parentSessionId: input.parentSessionId,
+          onDiagnostic: options.onRequestDiagnostic,
+        }),
         // 必须放最后：handler 要用其它扩展写完的完整 system prompt。
         // 只在没有记忆根的会话（侧聊、远端）跳过；本地会话一律注册，
         // 开关由 enabled 回调每轮重读，用户中途打开不必重开会话。
@@ -517,6 +531,9 @@ export function createSdkSessionFactory(
         modelRuntime,
         model: live?.model,
         thinkingLevel: live?.thinkingLevel,
+        onImageDiagnostic: options.onImageDiagnostic,
+        onRequestDiagnostic: options.onRequestDiagnostic,
+        parentSessionId: input.sessionId,
         agentDir,
         ...rest,
         ...(requestedModel ? { requestedModel } : {}),

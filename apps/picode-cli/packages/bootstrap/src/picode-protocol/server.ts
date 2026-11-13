@@ -126,6 +126,7 @@ import {
   getPiSdkStatus,
   HostSessionRegistry,
   mapPiToolName,
+  requestDiagnosticLogLevel,
 } from "@picode/pi-host";
 import {
   createPiCapabilityPorts,
@@ -297,6 +298,21 @@ export class ZCodeProtocolAgentServer {
           );
         },
         createSession: createSdkSessionFactory({
+          onRequestDiagnostic: (diagnostic) => {
+            this.logger?.[requestDiagnosticLogLevel(diagnostic)]("Pi provider request", {
+              event: "pi_host.provider.request",
+              module: "pi-host",
+              ...diagnostic,
+            });
+          },
+          onImageDiagnostic: (diagnostic) => {
+            const level = diagnostic.failedImages > 0 ? "warn" : "info";
+            this.logger?.[level]("Pi image processing", {
+              event: "pi_host.image.processing",
+              module: "pi-host",
+              ...diagnostic,
+            });
+          },
           capabilities: createPiCapabilityPorts(() => this.context),
           mcpCompat: {
             runtimeServers: ({ cwd }) => piRuntimeMcpServers(this.context, cwd),

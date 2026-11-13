@@ -1,6 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { CreateAgentSessionOptions } from "@earendil-works/pi-coding-agent";
+import { createImageIngestionExtension, type SessionImageDiagnostic } from "./image-ingestion.js";
+import { createRequestDiagnosticsExtension, type RequestDiagnostic } from "./request-diagnostics.js";
 import { noteLiveSubagentUsage, trackLiveSubagent } from "./live-subagents.js";
 import { mapThought } from "./model-delegate.js";
 import { listPiAgentExtensions } from "./pi-agent-tools.js";
@@ -400,6 +402,9 @@ export async function runZcodeSubagent(input: {
   model?: CreateAgentSessionOptions["model"];
   thinkingLevel?: CreateAgentSessionOptions["thinkingLevel"];
   agentDir: string;
+  parentSessionId?: string;
+  onImageDiagnostic?: (diagnostic: SessionImageDiagnostic) => void;
+  onRequestDiagnostic?: (diagnostic: RequestDiagnostic) => void;
   check?: ToolPermissionCheck;
   /** SSH 工作区才传入。本地子会话用 Pi 内置工具，好让扩展替换 grep/find。 */
   sshTools?: readonly CodingTool[];
@@ -487,7 +492,19 @@ export async function runZcodeSubagent(input: {
     noExtensions: true,
     ...(extensionPaths.length > 0 ? { additionalExtensionPaths: extensionPaths } : {}),
     noSkills: true,
-    extensionFactories: [createPermissionExtension(input.check)],
+    extensionFactories: [
+      createPermissionExtension(input.check),
+      createImageIngestionExtension({
+        autoResize: () => childSettings.getImageAutoResize(),
+        parentSessionId: input.parentSessionId,
+        onDiagnostic: input.onImageDiagnostic,
+      }),
+      createRequestDiagnosticsExtension({
+        configuredTransport: () => childSettings.getTransport(),
+        parentSessionId: input.parentSessionId,
+        onDiagnostic: input.onRequestDiagnostic,
+      }),
+    ],
     appendSystemPrompt: [input.profile.systemPrompt || input.profile.description].filter(
       (line) => line.trim().length > 0,
     ),
