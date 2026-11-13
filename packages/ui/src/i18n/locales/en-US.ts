@@ -4667,6 +4667,14 @@ const enUS: Record<string, string> = {
     "Send or clear the current draft before editing a queued message.",
   "chat.queue.editRestoreFailed": "Couldn't return the queued message to the composer. Try again.",
   "chat.queue.remove": "Remove queued message",
+  "chat.queue.cancelGuide": "Cancel guide",
+  "chat.queue.cancelGuideFailed": "Couldn't cancel the guide. Try again.",
+  "chat.queue.cancelGuideClaimed":
+    "This guide has entered the current turn and can no longer be cancelled.",
+  "chat.queue.cancelSettlementFailed":
+    "Cancellation was requested but not finalized. Retry to finish.",
+  "chat.queue.retryCancelGuide": "Retry cancellation",
+  "chat.queue.cancelSettlementPending": "Cancellation not confirmed. Retry to finish.",
   "chat.queue.turnSteer.steering": "Steering conversation",
   "chat.queue.paused.stopped": "The queue was paused because you stopped the current response",
   "chat.queue.paused.error": "The queue was paused because the response failed",

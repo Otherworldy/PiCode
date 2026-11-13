@@ -383,6 +383,11 @@ function isConversationInputAdmissionCommand(type: CommandEnvelope["type"]): boo
   );
 }
 
+/** 账本收口错误带 reasonCode：命令 ACK 必须反映真实失败，而不是归一成 executionFailed。 */
+function inputLedgerFault(reasonCode: string): Error {
+  return Object.assign(new Error(reasonCode), { reasonCode });
+}
+
 function buildForkInitialInput(
   envelope: CommandEnvelope,
   childSessionId: string,
@@ -779,6 +784,13 @@ export function createConversationV4Gateway(
         return Promise.reject(new Error("v4 gateway unavailable for projection commit wait"));
       }
       return gateway.waitForProjectionEventCommit(sessionId, eventId, options);
+    },
+    cancelPendingGuideInput: (sessionId, input) => {
+      const gateway = context.v4Gateway;
+      if (!gateway) {
+        return Promise.reject(inputLedgerFault("fault.command.inputSettlementUnavailable"));
+      }
+      return gateway.cancelPendingGuideInput(sessionId, input);
     },
     admitInputCommand: async (envelope, sessionId, admission) => {
       if (!context.deps.sessionStore?.saveSessionInput) return null;
@@ -1638,6 +1650,24 @@ export function createConversationV4Gateway(
         status: "cancelled",
         reason: "input.handled",
       });
+    },
+    cancelPendingGuideInput: async (sessionId, input) => {
+      const store = context.deps.sessionStore;
+      if (!store?.settleSessionInput)
+        throw inputLedgerFault("fault.command.inputSettlementUnavailable");
+      // 账本 id 固定为 queue_<sourceCommandId>；身份按 session/command/client 三重核对。
+      const admitted = await piAdmittedInput(sessionId, input.sourceCommandId);
+      if (!admitted || admitted.intent.clientId !== input.clientId)
+        throw inputLedgerFault("fault.command.inputIdentityMismatch");
+      await store.settleSessionInput({
+        id: admitted.input.id,
+        sessionID: sessionId as SessionId,
+        status: "cancelled",
+        reason: "input.cancelled",
+      });
+      // SDK 消息已取不回来：只有确认账本真的收口才允许失效缓存/释放 live pin。
+      if ((await piAdmittedInput(sessionId, input.sourceCommandId))?.input.status !== "cancelled")
+        throw inputLedgerFault("fault.command.inputCancellationNotCommitted");
     },
     lookupTimelineCommand: (key) => persistentCommands.lookup("timeline", key),
     lookupChildCommand: (key) => persistentCommands.lookup("child", key),

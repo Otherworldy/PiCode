@@ -1416,6 +1416,233 @@ test(
   },
 );
 
+function reservedGuideEnvelope(sessionId: string, queueItemId: string, commandId: string) {
+  return {
+    commandId,
+    clientId: "desktop",
+    sessionId,
+    issuedAt: 1,
+    type: "deleteQueueItem" as const,
+    payload: { queueItemId },
+  };
+}
+
+/** 模拟 CommandBridge 已交付 SDK 的 GUIDE：reserved + steering 才是可撤回状态。 */
+function enqueueReservedGuide(
+  f: Awaited<ReturnType<typeof fixture>>,
+  sourceCommandId: string,
+  text = "same text",
+): ReturnType<typeof f.hosted.queue.createItem> {
+  const item = f.hosted.queue.createItem({
+    sourceCommandId,
+    clientId: "phone",
+    text,
+    admitted: "guide",
+  });
+  const reserved = {
+    ...item,
+    dispatch: { state: "reserved" as const },
+    steer: { state: "steering" as const },
+  };
+  f.hosted.queue.enqueue(reserved);
+  return reserved;
+}
+
+test("Pi pending guide cancellation withdraws the exact SDK message and settles its ledger", async () => {
+  const f = await fixture();
+  const steers: Array<{ sourceCommandId: string; clientId: string }> = [];
+  const settlements: Array<{ sessionId: string; sourceCommandId: string; clientId: string }> = [];
+  f.pi.cancelSteering = (identity) => {
+    steers.push({ ...identity });
+    return true;
+  };
+  const first = enqueueReservedGuide(f, "guide-first");
+  const second = enqueueReservedGuide(f, "guide-second");
+  f.hosted.projector.replaceQueue(f.hosted.queue.snapshot());
+  const host = {
+    getRecord: () => f.record,
+    async cancelPendingGuideInput(
+      sessionId: string,
+      input: { sourceCommandId: string; clientId: string },
+    ) {
+      settlements.push({ sessionId, ...input });
+    },
+  };
+  try {
+    await queueHandlers.deleteQueueItem(
+      host,
+      reservedGuideEnvelope(f.hosted.sessionId, first.queueItemId, "cancel-first"),
+    );
+    // 同文两条 GUIDE 只撤回指定 sourceCommandId + clientId 的 SDK 原始消息。
+    assert.deepEqual(
+      steers.map(({ sourceCommandId, clientId }) => ({ sourceCommandId, clientId })),
+      [{ sourceCommandId: "guide-first", clientId: "phone" }],
+    );
+    assert.deepEqual(
+      f.hosted.queue.snapshot().items.map((item) => item.queueItemId),
+      [second.queueItemId],
+    );
+    assert.deepEqual(
+      f.hosted.projector.getSnapshot().queue.items.map((item) => item.queueItemId),
+      [second.queueItemId],
+    );
+    assert.deepEqual(settlements, [
+      { sessionId: f.hosted.sessionId, sourceCommandId: "guide-first", clientId: "phone" },
+    ]);
+    // 重复取消：已撤回项不再存在，不能伪造第二次撤回或账本收口。
+    await assert.rejects(
+      queueHandlers.deleteQueueItem(
+        host,
+        reservedGuideEnvelope(f.hosted.sessionId, first.queueItemId, "cancel-again"),
+      ),
+      { reasonCode: "queue.itemMissing" },
+    );
+    assert.equal(steers.length, 1);
+    assert.equal(settlements.length, 1);
+  } finally {
+    await f.close();
+  }
+});
+
+test("Pi guide cancellation rejects submitting admission before calling the SDK", async () => {
+  const f = await fixture();
+  let cancellations = 0;
+  f.pi.cancelSteering = () => {
+    cancellations++;
+    return true;
+  };
+  const ready = enqueueReservedGuide(f, "guide-submitting");
+  f.hosted.queue.consume(ready.sourceCommandId);
+  f.hosted.queue.enqueue({ ...ready, steer: { state: "submitting" } });
+  const consumer = f.hosted.queue.tryAcquireConsumer();
+  assert.ok(consumer);
+  try {
+    await assert.rejects(
+      queueHandlers.deleteQueueItem(
+        { getRecord: () => f.record, async cancelPendingGuideInput() {} },
+        reservedGuideEnvelope(f.hosted.sessionId, ready.queueItemId, "cancel-submitting"),
+      ),
+      { reasonCode: "guard.queueItemReserved" },
+    );
+    assert.equal(cancellations, 0);
+    assert.equal(f.hosted.queue.snapshot().items[0]?.steer.state, "submitting");
+  } finally {
+    consumer.release();
+    await f.close();
+  }
+});
+
+test("Pi guide cancellation remains available while an ordinary FIFO consumer is preparing", async () => {
+  const f = await fixture();
+  f.pi.cancelSteering = () => true;
+  const item = enqueueReservedGuide(f, "guide-with-consumer");
+  const consumer = f.hosted.queue.tryAcquireConsumer();
+  assert.ok(consumer);
+  try {
+    await queueHandlers.deleteQueueItem(
+      { getRecord: () => f.record, async cancelPendingGuideInput() {} },
+      reservedGuideEnvelope(f.hosted.sessionId, item.queueItemId, "cancel-with-consumer"),
+    );
+    assert.equal(f.hosted.queue.snapshot().items.length, 0);
+    assert.equal(f.hosted.queue.ownsConsumer(consumer), true);
+  } finally {
+    consumer.release();
+    await f.close();
+  }
+});
+
+test("Pi pending guide cancellation noops when the SDK already claimed the message", async () => {
+  const f = await fixture();
+  const settlements: unknown[] = [];
+  f.pi.cancelSteering = () => false;
+  const item = enqueueReservedGuide(f, "guide-claimed");
+  f.hosted.projector.replaceQueue(f.hosted.queue.snapshot());
+  try {
+    await assert.rejects(
+      queueHandlers.deleteQueueItem(
+        {
+          getRecord: () => f.record,
+          async cancelPendingGuideInput(sessionId, input) {
+            settlements.push({ sessionId, ...input });
+          },
+        },
+        reservedGuideEnvelope(f.hosted.sessionId, item.queueItemId, "cancel-claimed"),
+      ),
+      { reasonCode: "queue.itemMissing" },
+    );
+    // 消费获胜：保留待生效事实，等真实消息事件交接，不能隐藏或伪造撤回成功。
+    assert.deepEqual(
+      f.hosted.queue.snapshot().items.map((entry) => entry.queueItemId),
+      [item.queueItemId],
+    );
+    assert.deepEqual(
+      f.hosted.projector.getSnapshot().queue.items.map((entry) => entry.queueItemId),
+      [item.queueItemId],
+    );
+    assert.deepEqual(settlements, []);
+  } finally {
+    await f.close();
+  }
+});
+
+test("Pi pending guide cancellation keeps a retryable fact after durable failure", async () => {
+  const f = await fixture();
+  let aborts = 0;
+  let settlements = 0;
+  const steers: unknown[] = [];
+  f.pi.cancelSteering = (identity) => {
+    steers.push(identity);
+    return true;
+  };
+  f.pi.abort = async () => {
+    aborts++;
+  };
+  const item = enqueueReservedGuide(f, "guide-ledger-fail");
+  f.hosted.projector.replaceQueue(f.hosted.queue.snapshot());
+  try {
+    await assert.rejects(
+      queueHandlers.deleteQueueItem(
+        {
+          getRecord: () => f.record,
+          async cancelPendingGuideInput() {
+            if (++settlements === 1)
+              throw Object.assign(new Error("fault.command.inputCancellationNotCommitted"), {
+                reasonCode: "fault.command.inputCancellationNotCommitted",
+              });
+          },
+        },
+        reservedGuideEnvelope(f.hosted.sessionId, item.queueItemId, "cancel-ledger-fail"),
+      ),
+      { reasonCode: "fault.command.inputCancellationNotCommitted" },
+    );
+    // SDK 消息已撤回：保留可重试队列事实，不补发；也不停止当前运行或重跑 input handler。
+    assert.equal(f.hosted.queue.snapshot().items[0]?.cancelSettlementPending, true);
+    assert.equal(f.hosted.projector.getSnapshot().queue.items[0]?.cancelSettlementPending, true);
+    assert.equal(steers.length, 1);
+    assert.equal(aborts, 0);
+    assert.deepEqual(f.prompts, []);
+    await queueHandlers.deleteQueueItem(
+      {
+        getRecord: () => f.record,
+        async cancelPendingGuideInput() {
+          if (++settlements === 1) throw new Error("unexpected first settlement");
+        },
+      },
+      reservedGuideEnvelope(f.hosted.sessionId, item.queueItemId, "retry-cancel-ledger"),
+    );
+    assert.equal(settlements, 2);
+    assert.equal(
+      steers.length,
+      1,
+      "retry settles only the ledger and does not touch the SDK queue",
+    );
+    assert.deepEqual(f.hosted.queue.snapshot().items, []);
+    assert.deepEqual(f.hosted.projector.getSnapshot().queue.items, []);
+  } finally {
+    await f.close();
+  }
+});
+
 test("same-model Pi thought changes publish a real config delta", async () => {
   const f = await fixture();
   const thoughts: string[] = [];

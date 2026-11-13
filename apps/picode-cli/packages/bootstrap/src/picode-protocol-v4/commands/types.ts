@@ -102,6 +102,14 @@ export interface V4CommandCoreHost {
     admission: { admissionSeq: number; admittedAt: number; queueItemId: string },
   ): Promise<ConversationInputIntent | null>;
   cancelInputCommand?(sessionId: string, queueItemId: string, reason: string): Promise<void>;
+  /**
+   * 已从 SDK 原始 steering queue 撤回的 GUIDE 的账本收口：
+   * durable cancelled → 失效命令缓存 → 释放 live pin。失败必须抛出并保留 pin。
+   */
+  cancelPendingGuideInput?(
+    sessionId: string,
+    input: { sourceCommandId: string; clientId: string },
+  ): Promise<void>;
   discardSharedContext?(sessionId: string, contextId: string): Promise<boolean>;
   /**
    * 当前输入路由模式（数据源 = v4 投影 inputRouting.mode）。

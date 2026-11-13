@@ -251,6 +251,8 @@ interface ConversationTimelineProps {
   rows: readonly ConversationRow[];
   /** CLI 权威 queue 中等待 model-step 注入的 guide；只改变 renderer 落位。 */
   pendingGuides?: readonly QueueItem[];
+  /** 取消单条待生效 GUIDE（deleteQueueItem command）；只读视图不传。 */
+  onCancelPendingGuide?: (queueItemId: string) => void;
   /** runtime memory 状态，只交给当前 live turn，不进入历史虚拟列表。 */
   apiRetry?: ApiRetryState | null;
   /** 投影全序行数（rows.totalCount；窗口截断后大于 rows.length，仅用于滚动条估计/诊断）。 */
@@ -345,6 +347,7 @@ interface ConversationTimelineProps {
 function ConversationTimelineImpl({
   rows,
   pendingGuides = EMPTY_PENDING_GUIDES,
+  onCancelPendingGuide,
   apiRetry = null,
   totalCount,
   sessionKey,
@@ -1812,6 +1815,7 @@ function ConversationTimelineImpl({
                   <ConversationPendingGuideList
                     context={rowContext}
                     items={pendingGuides}
+                    onCancel={onCancelPendingGuide}
                     turnId={
                       liveUnit?.turnId ??
                       rows.at(-1)?.productTurnId ??

@@ -748,6 +748,7 @@ export function createSdkSessionFactory(
       followUp: async (text, images) => {
         await session.followUp(preparePromptText(text), images);
       },
+      cancelSteering: (input) => inputIdentity.cancelSteering(input),
       abort: () => session.abort(),
       continueAfterError: () => {
         if (session.isStreaming) return Promise.reject(new Error("still running"));

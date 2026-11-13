@@ -31,6 +31,8 @@ PiCode 只做 Pi 的 GUI Host。循环、工具、压缩、extensions、子代�
   → desktop-continuous 30ms / web-remote-replayable 150ms
 ```
 
+待生效 GUIDE 的删除走同一条 `deleteQueueItem`：`CommandBridge.cancelGuide` 同步按 sourceCommandId / clientId 撤回 SDK 队列中的实际消息，并将 HostQueue 标记为取消待确认；durable cancelled 成功后 handler 才消费该项。SDK 已 drain（即使扩展尚未发布 `message_start`）时不可撤回；不清空其他输入，不中止或重发。账本暂时失败时保留 HostQueue 项与 live pin，界面可重试收口；重试不再访问 SDK 队列。Pi 1.5.0 缺少单条撤回公共 API，兼容访问只封装在输入身份适配器并校验结构。持久化与 live pin 收口由 CommandInbox / V4 接入层负责，详见 `docs/specs/pi-guide-input-delivery.md`。
+
 Registry drain 与 V4 提升共用 `HostQueue` 的真实 consumer claim，在模型、附件、抢占的第一个 await 前取得，准入结束后释放；两条消费入口保持原职责。claim 不改写 `autoDrain` 授权，释放不能覆盖 compact 失败或用户暂停。在途 consumer 存在时普通输入排队，不能超车或 steer；idle-only 提升在所有异步窗口后 busy 时拒绝，原项不重复入队。claim 释放按真实 Promise 边界唤醒已有 V4 ready 检查，不新增调度器。
 
 同一所有者，两套 flush。jsonl 为对话树真相；V4 snapshot 为 UI/远控派生缓存，可从 jsonl 重建。打开时若 publisher 还没有行，订阅前用 jsonl 再画一次；否则会交出空快照，加载结束后只剩输入框。runtime `dispose` 后从注册表摘掉，不删 jsonl；留着已关掉的实例会让下次打开直接复用它，冷恢复不再读文件，画面仍是空的。

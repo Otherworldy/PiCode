@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AgentSession, PromptOptions } from "@earendil-works/pi-coding-agent";
 import { attachmentRefSchema } from "@picode/shared/picode-protocol-v4";
 import type { PiInputIdentity } from "./types.js";
@@ -58,6 +59,52 @@ export function bindPiInputIdentity(
   session.steer = (...args) => scope.run(undefined, () => steer(...args));
   session.followUp = (...args) => scope.run(undefined, () => followUp(...args));
   return {
+    cancelSteering(input: Pick<PiInputIdentity, "sourceCommandId" | "clientId">): boolean {
+      // Pi 1.5.0 只有清空整个队列的公开 API；只在此兼容边界同步撤回仍未被 drain 的实际对象。
+      const sdk = session as unknown as {
+        agent?: { steeringQueue?: { messages?: AgentMessage[] } };
+        _steeringMessages?: string[];
+        _emitQueueUpdate?: () => void;
+      };
+      const messages = sdk.agent?.steeringQueue?.messages;
+      const texts = sdk._steeringMessages;
+      if (
+        !Array.isArray(messages) ||
+        !Array.isArray(texts) ||
+        typeof sdk._emitQueueUpdate !== "function"
+      ) {
+        throw Object.assign(new Error("Pi SDK steering cancellation is unavailable"), {
+          reasonCode: "fault.command.guideCancellationUnavailable",
+        });
+      }
+      const index = messages.findIndex((message) => {
+        const identity = identities.get(message);
+        return (
+          identity?.sourceCommandId === input.sourceCommandId &&
+          identity.clientId === input.clientId
+        );
+      });
+      const message = messages[index];
+      // SDK 已取走但 message_start 尚未发布时，也必须由消费获胜。
+      if (!message || message.role !== "user") return false;
+      const text =
+        typeof message.content === "string"
+          ? message.content
+          : message.content
+              .filter((part) => part.type === "text")
+              .map((part) => part.text)
+              .join("");
+      const textIndex = texts.indexOf(text);
+      messages.splice(index, 1);
+      // 身份已由实际对象确定；展示镜像可能已被同文输入的 message_start 消耗，只在命中时同步。
+      if (textIndex >= 0) texts.splice(textIndex, 1);
+      try {
+        sdk._emitQueueUpdate();
+      } catch {
+        // 队列撤回已完成；observer 异常不能让 HostQueue 留下无法重试的幽灵 GUIDE。
+      }
+      return true;
+    },
     prompt(text: string, options: PromptOptions, input?: PiInputIdentity) {
       const submission: Submission = {
         input,

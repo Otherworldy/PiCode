@@ -2,7 +2,13 @@
 
 时间线第一次把某个 `sessionKey` 的行提交进 DOM 后，打一行 `ui.v4.conversation.first_frame`。`firstFrameRenderMs` 只算这次渲染到 layout，不算宿主读 jsonl 或建 Pi 会话。没有行不打。草稿（`sessionKey` 为 `draft`）不打。换会话再打一次。生产构建走 lifecycle 日志。宿主三段耗时见 `apps/picode-cli/packages/pi-host/SPEC.md`。
 
-# 对话工作折叠
+## 待生效引导取消
+
+- 可取消入口只对 reserved + steering 的 GUIDE 展示；submitting 阶段尚无 SDK 队列对象，不显示取消按钮。
+- SDK 撤回成功但 durable cancelled 收口失败时，队列投影保留 `cancelSettlementPending` 条目，显示可重试的取消收口状态；重试只提交账本收口，不再次操作 SDK 队列。只读视图不提供操作入口。
+- 消费已获胜、普通队列项和已移除条目不展示为可取消 GUIDE。
+
+## 对话工作折叠
 
 ## 行为
 

@@ -61,6 +61,15 @@ class V4QueueItemNotEditableError extends Error {
   }
 }
 
+/** 撤回已不可逆，但宿主没有账本收口能力：不能静默 accepted，必须报错并保留 live pin。 */
+class V4GuideCancelUnavailableError extends Error {
+  readonly reasonCode = "fault.command.inputSettlementUnavailable";
+  constructor(queueItemId: string) {
+    super(`v4 deleteQueueItem cannot settle cancelled guide input: ${queueItemId}`);
+    this.name = "V4GuideCancelUnavailableError";
+  }
+}
+
 export class V4QueuePromotionLeaseUnavailableError extends Error {
   readonly reasonCode = "guard.queuePromotionBusy";
   constructor(activeLeaseId?: string) {
@@ -79,7 +88,38 @@ async function deleteQueueItem(
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["deleteQueueItem"];
   const record = requireRecord(host, envelope.sessionId);
-  // 自动提升不经过外部 CommandInbox；消费占用期间不能改写它已读取的队列事实。
+  if (record.hosted) {
+    const hosted = record.hosted;
+    const queueItem = hosted.queue
+      .snapshot()
+      .items.find((item) => item.queueItemId === payload.queueItemId);
+    // 已交付 SDK 的 GUIDE 是 SDK 原始消息的权威生命周期事实：普通 remove 只覆盖 queued，
+    // 这里必须先同步撤回 SDK 消息（撤回与取走在同一裁决点），再收口账本。
+    if (queueItem?.delivery.admitted === "guide" && queueItem.dispatch.state === "reserved") {
+      // 准入尚在提交时 SDK 对象可能还未入队，不能误报成消费获胜；等到 steering 后再允许撤回。
+      if (queueItem.steer.state !== "steering")
+        throw new V4QueueItemReservedError(payload.queueItemId);
+      const settle = host.cancelPendingGuideInput;
+      if (!settle) throw new V4GuideCancelUnavailableError(payload.queueItemId);
+      // SDK 已取走时保留待生效事实；取消待账本确认时重试只结算账本，不再访问 SDK。
+      if (!hosted.bridge.cancelGuide(payload.queueItemId)) {
+        host.logger?.warn?.("v4 deleteQueueItem guide already claimed", {
+          queueItemId: payload.queueItemId,
+          sessionId: sessionIdOf(record),
+        });
+        throw new V4CommandNoopError("queue.itemMissing");
+      }
+      hosted.projector.replaceQueue(hosted.queue.snapshot());
+      await settle(sessionIdOf(record), {
+        sourceCommandId: queueItem.sourceCommandId,
+        clientId: queueItem.clientId,
+      });
+      hosted.queue.consume(queueItem.sourceCommandId);
+      hosted.projector.replaceQueue(hosted.queue.snapshot());
+      return undefined;
+    }
+  }
+  // 普通 FIFO consumer 不会取 reserved GUIDE；撤回 SDK 输入不改写它已读取的普通项。
   if (record.hosted?.queue.consumerReleased)
     throw new V4QueueItemReservedError(payload.queueItemId);
   // 未命中（并发 drain/重复删除的竞态）= noop，不算失败；留 warn 供观测。

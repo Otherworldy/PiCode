@@ -3051,20 +3051,43 @@ export function SessionPane({
     (queueItemId: string) => {
       const current = snapshotRef.current;
       if (!sessionId || current === null) return;
-      const sourceCommandId = current.queue.items.find(
-        (item) => item.queueItemId === queueItemId,
-      )?.sourceCommandId;
-      void dispatchCommand("deleteQueueItem", { queueItemId }, sessionId, current.revision).then(
-        (ack) => {
+      const item = current.queue.items.find((entry) => entry.queueItemId === queueItemId);
+      const sourceCommandId = item?.sourceCommandId;
+      // 待生效 GUIDE 的取消入口常驻且没有回滚草稿，失败必须给用户反馈，不能只留日志；
+      // 普通队列项保持既有静默行为（面板本身会随权威投影恢复）。
+      const isPendingGuide = item?.delivery.admitted === "guide";
+      const isSettlementRetry = Boolean(item?.cancelSettlementPending);
+      const reportFailure = () => {
+        if (isPendingGuide) {
+          toast(
+            intl.formatMessage({
+              id: isSettlementRetry
+                ? "chat.queue.cancelSettlementFailed"
+                : "chat.queue.cancelGuideFailed",
+            }),
+          );
+        }
+      };
+      void dispatchCommand("deleteQueueItem", { queueItemId }, sessionId, current.revision)
+        .then((ack) => {
           if (ack.status !== "accepted" && ack.status !== "noop") {
             logger.warn(`[v4-pane] deleteQueueItem 被拒绝: ${ack.status} ${ack.reasonCode ?? ""}`);
+            reportFailure();
             return;
           }
+          if (ack.status === "noop" && isPendingGuide) {
+            toast(intl.formatMessage({ id: "chat.queue.cancelGuideClaimed" }));
+          }
           if (sourceCommandId) pendingCommandRegistry.settle(sessionId, sourceCommandId);
-        },
-      );
+        })
+        .catch((error: unknown) => {
+          logger.warn("[v4-pane] deleteQueueItem 提交失败", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          reportFailure();
+        });
     },
-    [dispatchCommand, sessionId],
+    [dispatchCommand, intl, sessionId],
   );
 
   const handleEditQueueItem = useCallback(
@@ -4850,6 +4873,9 @@ export function SessionPane({
                 selectionPanelLayoutContainerRef={conversationLayoutContainerRef}
                 rows={timelineSnapshot?.rows.window ?? []}
                 pendingGuides={timelineSnapshot ? pendingGuideProjection?.pendingGuides : []}
+                onCancelPendingGuide={
+                  !readOnly && !selectionSideChat && sessionId ? handleDeleteQueueItem : undefined
+                }
                 apiRetry={timelineSnapshot?.control.apiRetry ?? null}
                 totalCount={timelineSnapshot?.rows.totalCount ?? 0}
                 sessionKey={sessionId ?? "draft"}

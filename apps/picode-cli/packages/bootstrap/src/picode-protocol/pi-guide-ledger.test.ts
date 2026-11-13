@@ -31,6 +31,19 @@ function fixture() {
     },
     settleSessionInput: async (value: unknown) => {
       settlements.push(value);
+      const settlement = value as {
+        id: string;
+        sessionID: string;
+        status: SessionInputRecord["status"];
+        reason?: string;
+      };
+      // 与真实账本一致：只有 admitted 能收口，且收口后状态必须可被重读确认。
+      if (
+        settlement.id === input.id &&
+        settlement.sessionID === input.sessionID &&
+        input.status === "admitted"
+      )
+        input = { ...input, status: settlement.status, statusReason: settlement.reason };
     },
     listSessionInputs: async () => [],
     getSessionInputById: async (id: string) => (id === input.id ? input : null),
@@ -185,6 +198,64 @@ test("Pi ledger lookup requires promoted status and the exact source command ide
         null,
       );
     }
+  } finally {
+    f.gateway.dispose();
+  }
+});
+
+test("cancelled pending guide settles the exact durable admission ID", async () => {
+  const f = fixture();
+  try {
+    await f.host.cancelPendingGuideInput?.("remote", {
+      sourceCommandId: "guide",
+      clientId: "phone",
+    });
+    assert.deepEqual(f.settlements, [
+      {
+        id: "queue_guide",
+        sessionID: "remote",
+        status: "cancelled",
+        reason: "input.cancelled",
+      },
+    ]);
+    assert.equal(f.getInput().status, "cancelled");
+  } finally {
+    f.gateway.dispose();
+  }
+});
+
+test("cancelled pending guide rejects a different session or client identity", async () => {
+  const f = fixture();
+  try {
+    await assert.rejects(
+      f.host.cancelPendingGuideInput!("remote", { sourceCommandId: "guide", clientId: "other" }),
+      /inputIdentityMismatch/,
+    );
+    await assert.rejects(
+      f.host.cancelPendingGuideInput!("local", { sourceCommandId: "guide", clientId: "phone" }),
+      /inputIdentityMismatch/,
+    );
+    await assert.rejects(
+      f.host.cancelPendingGuideInput!("remote", { sourceCommandId: "other", clientId: "phone" }),
+      /inputIdentityMismatch/,
+    );
+    assert.deepEqual(f.settlements, []);
+    assert.equal(f.getInput().status, "admitted");
+  } finally {
+    f.gateway.dispose();
+  }
+});
+
+test("cancelled pending guide requires the durable settlement to commit", async () => {
+  const f = fixture();
+  try {
+    // 已被 SDK 消费并落盘：迟到取消不能把 promoted 回退，必须如实报错。
+    f.setInput({ ...f.getInput(), status: "promoted" });
+    await assert.rejects(
+      f.host.cancelPendingGuideInput!("remote", { sourceCommandId: "guide", clientId: "phone" }),
+      /inputCancellationNotCommitted/,
+    );
+    assert.equal(f.getInput().status, "promoted");
   } finally {
     f.gateway.dispose();
   }

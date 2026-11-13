@@ -233,6 +233,8 @@ export const queueItemSchema = conversationInputIntentSchema.extend({
     state: z.enum(["queued", "reserved", "promoting"]),
   }),
   toolDisallowlist: z.array(z.string().min(1)).optional(),
+  // SDK 已撤回但 durable cancelled 尚未确认时保留同一队列项供重试，不代表仍在 SDK 队列。
+  cancelSettlementPending: z.boolean().optional(),
 });
 export type QueueItem = z.infer<typeof queueItemSchema>;
 

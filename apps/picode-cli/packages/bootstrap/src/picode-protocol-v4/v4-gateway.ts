@@ -285,6 +285,14 @@ export interface V4GatewayHost {
     sessionId: string,
     input: { sourceCommandId: string; clientId: string; messageId: string },
   ): Promise<void>;
+  /**
+   * 已从 SDK 原始 steering queue 撤回的 GUIDE：按 queue_<sourceCommandId> 核对
+   * session/command/client 身份后写成 cancelled，并确认账本真的收口。
+   */
+  cancelPendingGuideInput?(
+    sessionId: string,
+    input: { sourceCommandId: string; clientId: string },
+  ): Promise<void>;
   /** input handler 已处理而不会生成正文时，保存成功事实并终结 admitted input。 */
   completeHandledPiInput?(
     sessionId: string,
@@ -2154,6 +2162,24 @@ export class ConversationV4Gateway {
     return commandsQueryResultSchema.parse({
       results: await this.inbox.query(params.commands),
     });
+  }
+
+  /**
+   * 已撤回的待生效 GUIDE 的账本收口（命令层在 SDK 原始消息同步撤回、
+   * 投影删除待生效事实后调用）：durable cancelled → 失效命令缓存 → 释放 live pin。
+   * 写盘失败必须保留 pin 并抛出，由调用方返回失败 ACK；已撤回的 SDK 消息不回滚、不补发。
+   */
+  async cancelPendingGuideInput(
+    sessionId: string,
+    input: { sourceCommandId: string; clientId: string },
+  ): Promise<void> {
+    const settle = this.host.cancelPendingGuideInput;
+    if (!settle) throw new Error("fault.command.inputSettlementUnavailable");
+    await settle(sessionId, input);
+    // persistent index 可能缓存过旧 admitted 事实；先失效再解 pin，
+    // 后续 LRU 淘汰回源时才能命中刚提交的 cancelled 账本。
+    this.host.invalidatePersistentCommandFacts?.(sessionId);
+    this.inbox.releaseLiveInput({ sessionId, commandId: input.sourceCommandId });
   }
 
   getQueueItem(sessionId: string, queueItemId: string): QueueItem | null {

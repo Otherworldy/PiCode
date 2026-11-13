@@ -268,6 +268,8 @@ export interface PiSessionPort {
     text: string,
     images?: Array<{ type: "image"; data: string; mimeType: string }>,
   ): Promise<void>;
+  /** 同步撤回仍在 SDK 队列中的精确输入；已被 SDK 取走时返回 false。 */
+  cancelSteering?(input: Pick<PiInputIdentity, "sourceCommandId" | "clientId">): boolean;
   abort(): Promise<void>;
   /** 插件 sendUserMessage 的原文。对上才结束计划审查的「工作中」。 */
   takeMatchingPlanDecision?(text: string): boolean;

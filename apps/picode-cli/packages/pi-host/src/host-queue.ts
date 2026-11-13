@@ -113,7 +113,22 @@ export class HostQueue {
     return this.snapshot();
   }
 
-  /** 已交给 Pi 的 GUIDE 只能由消费/失败交接收口，不能被普通队列再次取走。 */
+  /** SDK 撤回成功后保留待生效事实，直到 durable cancelled 确认以便失败时可重试。 */
+  markGuideCancellationPending(sourceCommandId: string): QueueItem | undefined {
+    const current = this.items.find((item) => item.sourceCommandId === sourceCommandId);
+    if (
+      !current ||
+      current.delivery.admitted !== "guide" ||
+      current.dispatch.state !== "reserved" ||
+      current.steer.state !== "steering"
+    )
+      return undefined;
+    const next = { ...current, cancelSettlementPending: true };
+    this.items = this.items.map((item) => (item === current ? next : item));
+    return next;
+  }
+
+  /** GUIDE 只由消费、失败或 durable cancelled 确认后的撤回交接收口。 */
   consume(sourceCommandId: string): QueueItem | undefined {
     const item = this.items.find((item) => item.sourceCommandId === sourceCommandId);
     if (item) this.items = this.items.filter((entry) => entry !== item);

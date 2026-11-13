@@ -118,6 +118,18 @@ export class CommandBridge {
     private readonly extensionCommands?: ExtensionCommandRunner,
   ) {}
 
+  cancelGuide(queueItemId: string): boolean {
+    const item = this.queue.snapshot().items.find((entry) => entry.queueItemId === queueItemId);
+    if (!item || item.delivery.admitted !== "guide" || item.dispatch.state !== "reserved")
+      return false;
+    // SDK 已撤回、仅待账本收口时重试不得再次检查已空的 SDK 队列。
+    if (item.cancelSettlementPending) return true;
+    if (item.steer.state !== "steering") return false;
+    // 不能只删 HostQueue：SDK 仍会消费它。撤回与取走在同一同步边界裁决。
+    if (!this.session.cancelSteering?.(item)) return false;
+    return Boolean(this.queue.markGuideCancellationPending(item.sourceCommandId));
+  }
+
   async admitSend(input: AdmitSendInput): Promise<AdmitSendResult> {
     if (this.session.toolLoadout) ensurePlannotatorToolActive(this.session.toolLoadout);
     if (input.consumer && !this.queue.ownsConsumer(input.consumer)) throw this.consumerBusy();
