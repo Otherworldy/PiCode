@@ -1,6 +1,10 @@
 // 左侧列表投影：tasks-index 决定持久行集合与 membership，sessions-index 只补实时 activity/detail。
 // 这里保持纯函数，供 Project/Timeline/Pinned/Archived/Grouped 共用同一字段权威。
-import { isBareSlashCommandTitle, type ZCodeTaskMeta } from "@picode/shared";
+import {
+  isBareSlashCommandTitle,
+  resolveVersionedTaskTitle,
+  type ZCodeTaskMeta,
+} from "@picode/shared";
 import { matchesTaskListMembershipKind } from "@picode/shared/picode-protocol-v4";
 import { buildTaskEntityKey } from "@/lib/taskQueryCache.js";
 import { compareZCodeTaskListItems } from "@/lib/taskListOrdering.js";
@@ -57,9 +61,7 @@ function mergeTaskIndexRowWithSession(
   const sessionTitleWins =
     sessionTitle.length > 0 &&
     !sessionCommand &&
-    (sessionTask.titleOverridden === true ||
-      taskIndexTask.titleOverridden !== true ||
-      taskCommand);
+    (sessionTask.titleOverridden === true || taskIndexTask.titleOverridden !== true || taskCommand);
   const titleOverridden =
     sessionTask.titleOverridden === true || taskIndexTask.titleOverridden === true
       ? true
@@ -68,6 +70,7 @@ function mergeTaskIndexRowWithSession(
     ...taskIndexTask,
     title: sessionTitleWins ? sessionTask.title : taskIndexTask.title,
     titleOverridden,
+    ...resolveVersionedTaskTitle(sessionTask, taskIndexTask),
     // session activity 是创建/活动时间与终态的实时权威；task row 只在 summary 缺失时兜底。
     createdAt: sessionTask.createdAt || taskIndexTask.createdAt,
     updatedAt: (activity?.lastActivityAt ?? sessionTask.updatedAt) || taskIndexTask.updatedAt,
@@ -142,8 +145,11 @@ function joinTaskListMembershipMeta(
     const activity = getTaskListRowActivity(task);
     const unreadAt = unreadAtByTaskId?.get(task.taskId);
     const terminalStatus = terminalStatusByTaskId?.get(task.taskId);
+    // 字符串 map 仅兼容旧数据，不能给它的旧标题套上 task 的已确认版本。
     const titleOverride =
-      task.titleOverridden === true ? undefined : titleOverrideByTaskId?.get(task.taskId);
+      task.titleOverridden === true || (task.titleRevision ?? 0) > 0
+        ? undefined
+        : titleOverrideByTaskId?.get(task.taskId);
     const cronAutomationId = cronAutomationIdByTaskId?.get(task.taskId);
     const shouldUpdateUnread =
       unreadAtByTaskId !== undefined &&

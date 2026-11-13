@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- task query cache 的 descriptor、membership 与 mutation 必须在同一 Zustand 事务里维护，拆散会增加缓存一致性风险。 */
 import { create } from "zustand";
 import type { ZCodeTaskListItem } from "@picode/services";
-import type { ZCodeTaskMeta } from "@picode/shared";
+import { resolveVersionedTaskTitle, type ZCodeTaskMeta } from "@picode/shared";
 import { matchesTaskListMembershipKind } from "@picode/shared/picode-protocol-v4";
 import { mergeTaskMetaCandidates } from "@/lib/picodeTaskMetaMerge.js";
 import { compareZCodeTaskListItems } from "@/lib/taskListOrdering.js";
@@ -295,12 +295,17 @@ function mergeIncomingTaskListItem(params: {
         model: incomingWithActivity.model ?? params.existingItem?.model,
         provider: incomingWithActivity.provider ?? params.existingItem?.provider,
       } as CachedTaskListItem);
+  // 同版本查询也会重新发布旧行；保留已提交的新版标题，不影响本帧的活动和成员字段。
+  const title = params.existingItem
+    ? resolveVersionedTaskTitle(params.item, params.existingItem)
+    : undefined;
+  const itemWithTitle = title ? { ...mergedItem, ...title } : mergedItem;
   const itemWithUnreadOverlay = params.hasUnreadOverlay
     ? ({
-        ...mergedItem,
+        ...itemWithTitle,
         unreadAt: params.unreadAtOverlay ?? undefined,
       } as CachedTaskListItem)
-    : mergedItem;
+    : itemWithTitle;
   const nextItem =
     params.descriptor.search || !params.existingItem?.searchSnippet
       ? itemWithUnreadOverlay
@@ -357,7 +362,10 @@ function isQueryResultEquivalent(params: {
     return false;
   }
   return (
-    structuredEqual(previous.searchSnippetsByTaskKey ?? null, params.searchSnippetsByTaskKey ?? null) &&
+    structuredEqual(
+      previous.searchSnippetsByTaskKey ?? null,
+      params.searchSnippetsByTaskKey ?? null,
+    ) &&
     structuredEqual(
       previous.searchSnippetListsByTaskKey ?? null,
       params.searchSnippetListsByTaskKey ?? null,

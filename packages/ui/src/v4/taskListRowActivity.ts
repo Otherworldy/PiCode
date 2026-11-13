@@ -1,4 +1,4 @@
-import type { ZCodeTaskMeta } from "@picode/shared";
+import { resolveVersionedTaskTitle, type ZCodeTaskMeta } from "@picode/shared";
 import type { PendingInteractionSummary, SessionSummary } from "@picode/shared/picode-protocol-v4";
 
 // UI-only sidecar：不进入 shared task meta/schema，也不写回 tasks-index。
@@ -70,9 +70,10 @@ export function mergeTaskListMembershipFields(
   activityTask: ZCodeTaskMeta,
   membershipTask: ZCodeTaskMeta,
 ): ZCodeTaskMeta {
+  const title = resolveVersionedTaskTitle(membershipTask, activityTask);
   const activity = getTaskListRowActivity(activityTask);
   if (!activity) {
-    return membershipTask;
+    return title ? { ...membershipTask, ...title } : membershipTask;
   }
   const membershipOwnsUnreadAt = Object.prototype.hasOwnProperty.call(membershipTask, "unreadAt");
   // rename/pin/archive/unread 的 tasks-index 响应会携带自己的 updatedAt/status，
@@ -82,6 +83,7 @@ export function mergeTaskListMembershipFields(
     {
       ...activityTask,
       ...membershipTask,
+      ...title,
       createdAt: activityTask.createdAt,
       updatedAt: activity.lastActivityAt,
       status: activityTask.status,

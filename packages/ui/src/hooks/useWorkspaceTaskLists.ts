@@ -704,8 +704,8 @@ export function useWorkspaceTaskLists(params: {
             `[useWorkspaceTaskLists] 收到无法增量处理的 workspace_task_list_changed，刷新 workspace 行 workspace=${config.scope.workspacePath} reason=${event.reason}`,
           );
           // pin/archive/unread 归属持久化在 tasks-index，sessions-index 不感知；
-          // 归属类事件（本端 mutation 也会 emit；unread/rename 走 task_meta_changed）
-          // bump 版本号让派生列表重新拉取归属 join 面。
+          // 归属事件、本端 unread 和显式标题事件都需换代读取完整 task 行，
+          // 让派生列表拿到最新 membership、标题与 titleRevision。
           // 同一事件也会被 useGlobalTaskList 的共享订阅转发并 bump，
           // 按事件内容去重，一条事件只触发一轮全局归属重拉。
           bumpTaskListMembershipVersionForWorkspaceEvent(event);

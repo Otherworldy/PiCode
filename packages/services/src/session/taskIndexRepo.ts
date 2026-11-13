@@ -1385,7 +1385,8 @@ export class TaskIndexRepo {
     await this.ensureReady();
     return this.enqueueWrite(params.meta, () => {
       const database = this.getDatabase();
-      if (initializeGroupedAtTop) database.exec("BEGIN IMMEDIATE");
+      // 普通快照也必须先取写锁再读标题，避免跨 Repo 回写重命名前的版本。
+      database.exec("BEGIN IMMEDIATE");
       try {
         const existing = this.getTaskRow(params.meta);
         const existingMeta = existing ? rowToMeta(existing) : null;
@@ -1410,6 +1411,10 @@ export class TaskIndexRepo {
             incomingTitle: params.meta.title,
           }),
           titleOverridden,
+          // 版本由索引仓库拥有；快照只能在首次建档时携带合法历史版本。
+          titleRevision: existingMeta
+            ? existingMeta.titleRevision
+            : zcodeTaskMetaSchema.shape.titleRevision.parse(params.meta.titleRevision),
           // turn.completed 会先通过 applyAgentPatch 写入较新的 completed/error。
           // 随后到达的 protocol snapshot 可能仍带较旧 running；如果这里降级 status，
           // 手机 replayable 切回 task 时就会把已完成任务恢复成“工作中”。
@@ -1458,10 +1463,10 @@ export class TaskIndexRepo {
         const initializedGroupedOrder = initializeGroupedAtTop
           ? this.initializeGroupedTaskAtTopReady(meta)
           : false;
-        if (initializeGroupedAtTop) database.exec("COMMIT");
+        database.exec("COMMIT");
         return { meta: persistedMeta, initializedGroupedOrder };
       } catch (error) {
-        if (initializeGroupedAtTop) database.exec("ROLLBACK");
+        database.exec("ROLLBACK");
         throw error;
       }
     });
@@ -1559,27 +1564,42 @@ export class TaskIndexRepo {
   async seedTaskMetaIfMissing(meta: ZCodeTaskMeta): Promise<ZCodeTaskMeta> {
     await this.ensureReady();
     return this.enqueueWrite(meta, () => {
-      const existing = this.getTaskRow(meta);
-      if (!existing) {
-        return this.writeRecord({
-          meta,
-          pinned: false,
-          archived: false,
-          deleted: false,
-          titleOverridden: meta.titleOverridden ?? false,
-        });
+      const database = this.getDatabase();
+      // 基线补写也要在锁内读取，否则补分叉来源时可能回写旧标题和版本。
+      database.exec("BEGIN IMMEDIATE");
+      try {
+        const existing = this.getTaskRow(meta);
+        let result: ZCodeTaskMeta;
+        if (!existing) {
+          result = this.writeRecord({
+            meta: {
+              ...meta,
+              titleRevision: zcodeTaskMetaSchema.shape.titleRevision.parse(meta.titleRevision),
+            },
+            pinned: false,
+            archived: false,
+            deleted: false,
+            titleOverridden: meta.titleOverridden ?? false,
+          });
+        } else {
+          const current = rowToMeta(existing);
+          result =
+            meta.forkedFromTaskId && !current.forkedFromTaskId
+              ? this.writeRecord({
+                  meta: { ...current, forkedFromTaskId: meta.forkedFromTaskId },
+                  pinned: existing.pinned === 1,
+                  archived: existing.archived === 1,
+                  deleted: existing.deleted === 1,
+                  titleOverridden: existing.title_overridden === 1,
+                })
+              : current;
+        }
+        database.exec("COMMIT");
+        return result;
+      } catch (error) {
+        database.exec("ROLLBACK");
+        throw error;
       }
-      const current = rowToMeta(existing);
-      if (meta.forkedFromTaskId && !current.forkedFromTaskId) {
-        return this.writeRecord({
-          meta: { ...current, forkedFromTaskId: meta.forkedFromTaskId },
-          pinned: existing.pinned === 1,
-          archived: existing.archived === 1,
-          deleted: existing.deleted === 1,
-          titleOverridden: existing.title_overridden === 1,
-        });
-      }
-      return current;
     });
   }
 
@@ -1674,16 +1694,28 @@ export class TaskIndexRepo {
       const requestedUnreadAt = params.patch.unreadAt;
       const allocatingUnreadAt = typeof requestedUnreadAt === "number";
       const mutatingUnreadAt = "unreadAt" in params.patch;
-      const transactional = deleting || mutatingUnreadAt;
-      if (transactional) {
-        database.exec("BEGIN IMMEDIATE");
-      }
+      // pin/status 等写入也先锁后读，防止其他 Repo 已确认的标题版本被旧行回写。
+      database.exec("BEGIN IMMEDIATE");
       try {
         const row = this.getTaskRow(params);
         if (!row || row.deleted === 1) {
           throw new Error(`task index 中不存在 task: ${params.taskId}`);
         }
         const current = rowToMeta(row);
+        // 显式标题与版本在同一写锁内提交；同名重试不推进版本，旧记录首次确认从 1 开始。
+        const confirmingTitle =
+          typeof params.patch.title === "string" && params.patch.titleOverridden === true;
+        const advancingTitle =
+          confirmingTitle &&
+          (params.patch.title !== current.title ||
+            !current.titleOverridden ||
+            (current.titleRevision ?? 0) === 0);
+        const titleRevision = advancingTitle
+          ? (current.titleRevision ?? 0) + 1
+          : current.titleRevision;
+        if (titleRevision !== undefined && !Number.isSafeInteger(titleRevision)) {
+          throw new RangeError("task titleRevision 超出安全整数范围");
+        }
         // 毫秒时间戳可能让同一 task 的两个逻辑未读得到相同版本，
         // 且清除 unreadAt 后只看当前值会再次复用旧版本。必须在 SQLite 写锁内
         // 基于不会随清除重置的持久 watermark 分配严格递增 marker。
@@ -1701,6 +1733,7 @@ export class TaskIndexRepo {
           ...current,
           title: params.patch.title ?? current.title,
           titleOverridden: params.patch.titleOverridden ?? current.titleOverridden,
+          titleRevision,
           model: params.patch.model ?? current.model,
           updatedAt: params.patch.updatedAt ?? current.updatedAt,
           unreadAt,
@@ -1721,10 +1754,10 @@ export class TaskIndexRepo {
           // sessions-index 内容、task 可见性和 SQLite 分组归属长期处于互相矛盾的状态。
           this.deleteTaskGroupingReferencesReady(row.workspace_key, row.task_id);
         }
-        if (transactional) database.exec("COMMIT");
+        database.exec("COMMIT");
         return persistedMeta;
       } catch (error) {
-        if (transactional) database.exec("ROLLBACK");
+        database.exec("ROLLBACK");
         throw error;
       }
     });
@@ -1738,32 +1771,43 @@ export class TaskIndexRepo {
   }): Promise<ZCodeTaskMeta | null> {
     await this.ensureReady();
     return this.enqueueWrite(params, () => {
-      const row = this.getTaskRow(params);
-      if (!row || row.deleted === 1) {
-        return null;
+      const database = this.getDatabase();
+      // agent 状态和标题投影必须在写锁内读取，不能覆盖其他 Repo 刚确认的显式标题。
+      database.exec("BEGIN IMMEDIATE");
+      try {
+        const row = this.getTaskRow(params);
+        if (!row || row.deleted === 1) {
+          database.exec("COMMIT");
+          return null;
+        }
+        const current = rowToMeta(row);
+        const canAcceptAgentTitle = row.title_overridden !== 1;
+        const patchTitle = params.patch.title?.trim() ?? "";
+        // 斜杠命令不是标题。旧 first_input 已经写成 /plannotator-plan-mode 时，不能再被写回去。
+        const acceptTitle =
+          canAcceptAgentTitle && patchTitle.length > 0 && !isBareSlashCommandTitle(patchTitle);
+        const nextMeta: ZCodeTaskMeta = {
+          ...current,
+          title: acceptTitle ? patchTitle : current.title,
+          titleOverridden: row.title_overridden === 1,
+          updatedAt: params.patch.updatedAt ?? current.updatedAt,
+          status: params.patch.status ?? current.status,
+          lastError: "lastError" in params.patch ? params.patch.lastError : current.lastError,
+          target: "target" in params.patch ? params.patch.target : current.target,
+        };
+        const result = this.writeRecord({
+          meta: nextMeta,
+          pinned: row.pinned === 1,
+          archived: row.archived === 1,
+          deleted: row.deleted === 1,
+          titleOverridden: row.title_overridden === 1,
+        });
+        database.exec("COMMIT");
+        return result;
+      } catch (error) {
+        database.exec("ROLLBACK");
+        throw error;
       }
-      const current = rowToMeta(row);
-      const canAcceptAgentTitle = row.title_overridden !== 1;
-      const patchTitle = params.patch.title?.trim() ?? "";
-      // 斜杠命令不是标题。旧 first_input 已经写成 /plannotator-plan-mode 时，不能再被写回去。
-      const acceptTitle =
-        canAcceptAgentTitle && patchTitle.length > 0 && !isBareSlashCommandTitle(patchTitle);
-      const nextMeta: ZCodeTaskMeta = {
-        ...current,
-        title: acceptTitle ? patchTitle : current.title,
-        titleOverridden: row.title_overridden === 1,
-        updatedAt: params.patch.updatedAt ?? current.updatedAt,
-        status: params.patch.status ?? current.status,
-        lastError: "lastError" in params.patch ? params.patch.lastError : current.lastError,
-        target: "target" in params.patch ? params.patch.target : current.target,
-      };
-      return this.writeRecord({
-        meta: nextMeta,
-        pinned: row.pinned === 1,
-        archived: row.archived === 1,
-        deleted: row.deleted === 1,
-        titleOverridden: row.title_overridden === 1,
-      });
     });
   }
 
@@ -2030,10 +2074,7 @@ export class TaskIndexRepo {
 
     return {
       items: rows.map((row) => {
-        const item = rowToTaskListItem(
-          row,
-          buildSearchSnippetsFromRow(row, normalizedSearchBare),
-        );
+        const item = rowToTaskListItem(row, buildSearchSnippetsFromRow(row, normalizedSearchBare));
         const workspacePurpose = workspacePurposeByKey.get(row.workspace_key);
         return workspacePurpose ? { ...item, workspacePurpose } : item;
       }),

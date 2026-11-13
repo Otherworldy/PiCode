@@ -52,6 +52,8 @@ const taskMetaRealtimeSchema = z.object({
   traceId: nonEmptyString,
   title: z.string(),
   titleOverridden: z.boolean().optional(),
+  // relay 校验不能剥离标题版本，否则 replayable 路径会重新接受旧名称。
+  titleRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
   workspacePath: nonEmptyString,
   workspaceIdentity: nonEmptyString.optional(),
   createdAt: z.number().int().nonnegative(),
@@ -93,7 +95,7 @@ export const taskRealtimeReasonSchema = z.enum([
   "task_meta_changed",
   // 切模型等纯配置变更独立成 reason，避免被当成归属相关 meta 变更触发列表整刷。
   "task_model_changed",
-  // 标题更新（首条消息/自动标题）与归属无关且高频，独立 reason 避免全局 membership 重拉。
+  // 标题变化使用专属 reason；缓存完整 task 行的消费者需刷新，普通活动帧不借此重拉归属。
   "task_title_changed",
   "task_pinned",
   "task_unpinned",

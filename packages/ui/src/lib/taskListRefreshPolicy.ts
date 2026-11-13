@@ -25,8 +25,8 @@ function isTaskListMembershipWorkspaceEvent<
 
 /**
  * 侧栏以 tasks-index 行和 pin/archive/unread 归属为准，sessions-index 只补 detail，
- * 由 membershipVersion 驱动重拉。unread（setTaskUnread）与 rename 等走 task_meta_changed，
- * sessions-index 不携带 unread，故 task_meta_changed 也纳入归属重拉信号（低频）。
+ * 由 membershipVersion 驱动重拉。unread 走 task_meta_changed，显式标题走 task_title_changed；
+ * 缓存包含完整 task 行，因此两者都需要低频重拉，不能只刷新 sessions-index detail。
  * task_created 会增加 tasks-index 的正向行集合，必须在 task row/grouped order 提交后换代读取；
  * 不能只依赖 sessions-index detail 或旧的 query-cache 增量插入。
  * task_model_changed（切模型）与归属无关，显式排除——之前它混在 task_meta_changed
@@ -43,6 +43,8 @@ export function shouldRefetchTaskListMembershipForWorkspaceEvent(
     // 若不换代 membership/task-row Promise，新行虽已落 SQLite，Project 仍会持续显示旧集合。
     event.reason === "task_created" ||
     event.reason === "task_meta_changed" ||
+    // membership Promise 也缓存完整 task 行；显式标题变化后必须重读标题与版本。
+    event.reason === "task_title_changed" ||
     event.reason === "task_deleted"
   );
 }

@@ -3,7 +3,7 @@
 // unread 同为组织态（setTaskUnread 写 tasks-index），与 pin/archive 同类，
 // 不进冻结的 sessions-index schema；这里平行拉取 unreadAt map，列表构建时 join。
 import type { IZCodeTaskService } from "@picode/services";
-import type { ZCodeTaskMeta } from "@picode/shared";
+import { resolveVersionedTaskTitle, type ZCodeTaskMeta } from "@picode/shared";
 import { buildTaskEntityKey } from "@/lib/taskQueryCache.js";
 
 interface TaskListMembershipScope {
@@ -168,7 +168,11 @@ function collectTitleOverrides(
   tasks: ZCodeTaskMeta[],
 ): void {
   for (const task of tasks) {
-    if (task.titleOverridden === true && task.title.trim().length > 0) {
+    if (
+      (task.titleRevision ?? 0) === 0 &&
+      task.titleOverridden === true &&
+      task.title.trim().length > 0
+    ) {
       titleOverrideByTaskId.set(task.taskId, task.title);
     }
   }
@@ -188,7 +192,13 @@ function collectCronAutomationIds(
 function mergeTaskIndexItems(lists: ZCodeTaskMeta[][]): ZCodeTaskMeta[] {
   const itemByEntityKey = new Map<string, ZCodeTaskMeta>();
   for (const task of lists.flat()) {
-    itemByEntityKey.set(buildTaskEntityKey(task), task);
+    const key = buildTaskEntityKey(task);
+    const existing = itemByEntityKey.get(key);
+    // 分区并行读取会在归属切换时重复返回同一 task，不能由遍历次序丢掉已确认标题。
+    itemByEntityKey.set(
+      key,
+      existing ? { ...task, ...resolveVersionedTaskTitle(task, existing) } : task,
+    );
   }
   return [...itemByEntityKey.values()];
 }
@@ -281,8 +291,8 @@ export async function fetchTaskListMembershipSets(params: {
   };
 }
 
-// 差量更新修正：membership（pin/archive/unread）只随归属 mutation 变化（membershipVersion bump），
-// 与 sessions-index 内容帧（title/status/lastActivity）无关。之前每帧都重拉——一次 title 变更
+// 缓存包含完整 task 行；归属 mutation 和显式标题确认均需 bump membershipVersion，
+// sessions-index 的高频 activity/detail 帧则不重拉。之前每帧都重拉——一次 title 变更
 // 会让所有列表实例各发一轮 1+3×scopes 的 RPC（多 workspace 多实例下每帧上百次调用）。
 // 这里按「membershipVersion + endpoints 签名」缓存 in-flight promise，跨 hook 实例共享；
 // 版本 bump 或 endpoint 拓扑变化时自然换 key 重拉。缓存有界，避免历史版本堆积。
@@ -357,11 +367,7 @@ async function fetchTaskListMembershipSetsForEndpoints(
     titleOverrideByTaskId: new Map<string, string>(),
     cronAutomationIdByTaskId: new Map<string, string>(),
   };
-  const taskIndexItemByEntityKey = new Map<string, ZCodeTaskMeta>();
   for (const result of results) {
-    for (const task of result.taskIndexItems) {
-      taskIndexItemByEntityKey.set(buildTaskEntityKey(task), task);
-    }
     for (const taskId of result.pinnedIds) merged.pinnedIds.add(taskId);
     for (const taskId of result.archivedIds) merged.archivedIds.add(taskId);
     for (const taskId of result.deletedIds) merged.deletedIds.add(taskId);
@@ -378,6 +384,6 @@ async function fetchTaskListMembershipSetsForEndpoints(
       merged.cronAutomationIdByTaskId.set(taskId, automationId);
     }
   }
-  merged.taskIndexItems = [...taskIndexItemByEntityKey.values()];
+  merged.taskIndexItems = mergeTaskIndexItems(results.map((result) => result.taskIndexItems));
   return merged;
 }

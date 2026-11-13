@@ -30,6 +30,7 @@ import { ExtensionUiHost } from "./extension-ui-host.js";
 import { HostQueue } from "./host-queue.js";
 import { workspaceKey } from "./identity.js";
 import { readPiJsonl, shouldApplyStoredSessionTitle } from "./jsonl-history.js";
+import { readStoredSessionTitle } from "./jsonl-title-reader.js";
 import { readSessionHeaderId, sessionFileNameMatches } from "./session-file-lookup.js";
 import {
   deliverPlannotatorSessionUrl,
@@ -403,9 +404,8 @@ function assertBranchSummaryIdle(projector: PiToV4Projector): void {
 }
 
 /**
- * 单文件读取上限。超过这个大小的会话只解析前 16MB：`readPiJsonl` 的 summary 是聚合结果，
- * 截断会让最后活动时间/最后一条预览略微失真，但换来的是「列一次会话不会被一个巨大的
- * jsonl 拖垮」。真正的完整性由打开会话时的全量读取负责。
+ * 正文摘要只解析前 1 MiB，截断时沿用 mtime 修正活动时间；名称单独扫描完整元数据，
+ * 避免文件头上限使已经总结的标题回退。打开会话仍按原路径完整重放。
  */
 const MAX_SUMMARY_READ_BYTES = 1024 * 1024;
 const SUMMARY_READ_CONCURRENCY = 4;
@@ -892,7 +892,8 @@ export class HostSessionRegistry {
     const sessionFile = join(dir, file);
     const head = await readFileHead(sessionFile, MAX_SUMMARY_READ_BYTES);
     if (!head) return null;
-    const summary = readPiJsonl(head.content).summary;
+    const sessionTitle = head.truncated ? await readStoredSessionTitle(sessionFile) : undefined;
+    const summary = readPiJsonl(head.content, { sessionTitle }).summary;
     if (!summary) return null;
     // 截断后 summary 的 lastActivityAt 只能看到文件前 1MB 的最后一条消息。jsonl 是 append-only
     // 的，mtime 就是真实的最后活动时间 —— 不修正的话「大而活跃」的会话会在侧栏里被排到很久

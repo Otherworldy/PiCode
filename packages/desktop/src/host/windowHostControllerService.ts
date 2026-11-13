@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- Controller source 聚合、路由、订阅与生命周期属于同一个 Host 边界。 */
 import { Emitter } from "@picode/rpc";
-import type { ZCodeTaskMeta } from "@picode/shared";
+import { resolveVersionedTaskTitle, type ZCodeTaskMeta } from "@picode/shared";
 import type {
   ControllerSubscribeParams,
   WindowHostControllerTaskRow,
@@ -363,26 +363,23 @@ export function createWindowHostControllerRuntime(options: {
         membership: { pinned: boolean; archived: boolean; active: boolean };
       }
     >();
-    for (const task of active) {
-      const normalized = normalizeTaskMeta(task, resolved.scope);
-      membershipByTaskKey.set(taskKey(normalized), {
-        meta: normalized,
-        membership: { pinned: false, archived: false, active: true },
-      });
-    }
-    for (const task of pinned) {
-      const normalized = normalizeTaskMeta(task, resolved.scope);
-      membershipByTaskKey.set(taskKey(normalized), {
-        meta: normalized,
-        membership: { pinned: true, archived: false, active: true },
-      });
-    }
-    for (const task of archived) {
-      const normalized = normalizeTaskMeta(task, resolved.scope);
-      membershipByTaskKey.set(taskKey(normalized), {
-        meta: normalized,
-        membership: { pinned: false, archived: true, active: false },
-      });
+    for (const [tasks, membership] of [
+      [active, { pinned: false, archived: false, active: true }],
+      [pinned, { pinned: true, archived: false, active: true }],
+      [archived, { pinned: false, archived: true, active: false }],
+    ] as const) {
+      for (const task of tasks) {
+        const normalized = normalizeTaskMeta(task, resolved.scope);
+        const key = taskKey(normalized);
+        const existing = membershipByTaskKey.get(key);
+        // 并行分区可能读到同一 task 的不同版本；归属沿用原优先级，标题不能随旧行回退。
+        membershipByTaskKey.set(key, {
+          meta: existing
+            ? { ...normalized, ...resolveVersionedTaskTitle(normalized, existing.meta) }
+            : normalized,
+          membership: { ...membership },
+        });
+      }
     }
     return Array.from(membershipByTaskKey.values());
   }
@@ -517,6 +514,8 @@ export function createWindowHostControllerRuntime(options: {
                   );
                 return {
                   ...(projected?.meta ?? normalized),
+                  // 搜索行可能比缓存投影更新；活动照旧取投影，标题按独立版本选择。
+                  ...resolveVersionedTaskTitle(projected?.meta ?? normalized, normalized),
                   ...(source.scope.kind === "remote"
                     ? { remoteSessionId: source.scope.remoteSessionId }
                     : {}),

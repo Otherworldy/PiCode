@@ -94,6 +94,7 @@ export * from "./account-provider-state.js";
 // re-home：旧协议承重面的幸存文件（消费者继续走 barrel，零感知）
 export * from "./picode-protocol-legacy-types.js";
 export * from "./picode-task-types-core.js";
+export { resolveVersionedTaskTitle } from "./picode-task-title.js";
 export * from "./task-realtime-core.js";
 export * from "./remote-workspace-identity.js";
 export * from "./picode-api-retry-status.js";

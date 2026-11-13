@@ -129,7 +129,7 @@ function replayedUsageFields(
   };
 }
 
-function clip(text: string, max: number): string {
+export function clipJsonlText(text: string, max: number): string {
   const compact = text.trim().replace(/\s+/gu, " ");
   if (compact.length <= max) return compact;
   return `${compact.slice(0, max - 1)}…`;
@@ -192,7 +192,7 @@ function activeEntries(entries: Record<string, unknown>[]): Record<string, unkno
 
 export function readPiJsonl(
   content: string,
-  options?: { settle?: boolean },
+  options?: { settle?: boolean; sessionTitle?: string | null },
 ): {
   summary: PiJsonlSummary | null;
   events: PiHostEvent[];
@@ -244,7 +244,7 @@ export function readPiJsonl(
       continue;
     }
     if (type === "session_info" && typeof entry.name === "string" && entry.name.trim()) {
-      if (!isControlCommandTitle(entry.name)) namedTitle = clip(entry.name, 60);
+      if (!isControlCommandTitle(entry.name)) namedTitle = clipJsonlText(entry.name, 60);
       continue;
     }
     if (type === "branch_summary" && typeof entry.summary === "string" && entry.summary.trim()) {
@@ -339,7 +339,8 @@ export function readPiJsonl(
       const text = messageText(message.content);
       const visible = visibleUserText(text);
       const titleText = visible.trim() ? visible : text;
-      if (!firstUser && titleText.trim() && !isControlCommandTitle(titleText)) firstUser = titleText;
+      if (!firstUser && titleText.trim() && !isControlCommandTitle(titleText))
+        firstUser = titleText;
       endTurn();
       beginTurn(timestamp);
       events.push({
@@ -403,9 +404,11 @@ export function readPiJsonl(
   // 还在跑的子会话文件没有轮次结束标记。提前 settle 会把工时收成重放墙钟（约 1 秒）并折叠工具。
   if (options?.settle !== false) endTurn();
 
+  // 冷列表只解析文件头正文；名称由完整的有界元数据扫描给出，null 表示当前分支没有有效名称。
+  if (options?.sessionTitle !== undefined) namedTitle = options.sessionTitle ?? undefined;
   // 只有扩展命令输出、还没有用户消息时也要重放这些输出。没有标题不等于没有事件。
   if (!firstUser && !namedTitle) return { summary: null, events };
-  const title = namedTitle ?? clip(firstUser, 60);
+  const title = namedTitle ?? clipJsonlText(firstUser, 60);
   const createdAt = headerAt || firstAt || now;
   return {
     summary: {
@@ -417,7 +420,7 @@ export function readPiJsonl(
       ...(cwd ? { cwd } : {}),
       ...(sessionId ? { sessionId } : {}),
       ...(parentSession ? { parentSession } : {}),
-      ...(lastAssistant ? { lastAssistantPreview: clip(lastAssistant, 120) } : {}),
+      ...(lastAssistant ? { lastAssistantPreview: clipJsonlText(lastAssistant, 120) } : {}),
     },
     events,
   };

@@ -44,6 +44,7 @@ interface MembershipBumpEventLike {
   taskMeta?: {
     updatedAt: number;
     unreadAt?: number;
+    titleRevision?: number;
   };
 }
 
@@ -61,6 +62,7 @@ export function bumpTaskListMembershipVersionForWorkspaceEvent(
     event.reason,
     event.taskMeta.updatedAt,
     event.taskMeta.unreadAt ?? "",
+    event.taskMeta.titleRevision ?? "",
   ].join("::");
   const now = Date.now();
   const lastBumpAt = recentBumpAtByKey.get(dedupeKey);

@@ -94,6 +94,8 @@ export function useWorkspaceTaskOptimisticOverlayByWorkspaceKey(
               return [
                 task.taskId,
                 task.title,
+                task.titleOverridden,
+                task.titleRevision,
                 task.createdAt,
                 task.updatedAt,
                 task.status,

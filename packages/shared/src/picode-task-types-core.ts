@@ -275,6 +275,8 @@ export interface ZCodeTaskMeta {
    * 才能在更新 status/target/updatedAt 时避免把手动标题短暂冲掉。
    */
   titleOverridden?: boolean;
+  /** TaskIndexRepo 确认显式标题时分配的版本；活动、状态和自动标题不推进此值。 */
+  titleRevision?: number;
   /** 关联的 workspace 绝对路径 */
   workspacePath: string;
   /**

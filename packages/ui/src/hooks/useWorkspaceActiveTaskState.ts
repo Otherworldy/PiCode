@@ -42,6 +42,7 @@ function areResolvedTaskMetasEqual(left: ZCodeTaskMeta | null, right: ZCodeTaskM
     left.traceId === right.traceId &&
     left.title === right.title &&
     left.titleOverridden === right.titleOverridden &&
+    left.titleRevision === right.titleRevision &&
     left.workspacePath === right.workspacePath &&
     left.workspaceIdentity === right.workspaceIdentity &&
     left.createdAt === right.createdAt &&

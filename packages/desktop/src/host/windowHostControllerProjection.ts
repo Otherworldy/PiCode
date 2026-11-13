@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- 投影状态、V4 帧与离线替换属于同一个一致性边界。 */
 import { isDeepStrictEqual } from "node:util";
-import type { ZCodeTaskMeta } from "@picode/shared";
+import { resolveVersionedTaskTitle, type ZCodeTaskMeta } from "@picode/shared";
 import type { ZCodeArchivedTaskDeletionResult } from "@picode/services";
 import {
   CONTROLLER_TASKS_INDEX_TOPIC,
@@ -148,6 +148,13 @@ function buildSourceRows(source: ControllerSource): Map<string, WindowHostContro
           ...membership.meta,
           ...(shouldUseOverlayTitle ? { title: overlay.title } : {}),
           ...(overlay.titleSource === "custom" ? { titleOverridden: true } : {}),
+          ...resolveVersionedTaskTitle(
+            {
+              title: overlay.title ?? membership.meta.title,
+              titleOverridden: overlay.titleSource === "custom",
+            },
+            membership.meta,
+          ),
           ...(overlay.updatedAt != null ? { updatedAt: overlay.updatedAt } : {}),
           ...(overlay.activity ? { status: statusFromActivity(overlay.activity) } : {}),
           pendingInteraction: overlay.pendingInteraction,

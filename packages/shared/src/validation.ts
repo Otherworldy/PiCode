@@ -1130,6 +1130,7 @@ export const zcodeTaskMetaSchema = z.object({
   traceId: nonEmptyStringSchema,
   title: z.string(),
   titleOverridden: z.boolean().optional(),
+  titleRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
   workspacePath: nonEmptyStringSchema,
   workspaceIdentity: nonEmptyStringSchema.optional(),
   workspacePurpose: z.enum(["project", "conversation"]).optional(),
