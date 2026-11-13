@@ -252,11 +252,12 @@ export class CommandInbox {
     }
   }
 
-  hasPinnedSessionState(sessionId: string): boolean {
+  hasPinnedSessionState(sessionId: string, excludeCommandId?: string): boolean {
     const bucketKey = this.bucketKey(sessionId);
-    return (
-      (this.inFlight.get(bucketKey)?.size ?? 0) > 0 ||
-      (this.liveInputs.get(bucketKey)?.size ?? 0) > 0
+    return [this.inFlight.get(bucketKey), this.liveInputs.get(bucketKey)].some(
+      (entries) =>
+        (entries?.size ?? 0) >
+        (excludeCommandId !== undefined && entries?.has(excludeCommandId) ? 1 : 0),
     );
   }
 

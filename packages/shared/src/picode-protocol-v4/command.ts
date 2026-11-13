@@ -20,6 +20,7 @@ import {
 import {
   zcodeBrowserAmbientContextSchema,
   zcodeProtocolMcpServerSchema,
+  zcodeSessionReloadResultSchema,
 } from "../picode-protocol/index.js";
 import { sharedContextRefSchema } from "./shared-context-ref.js";
 import { conversationInputSourceSchema } from "./input-intent.js";
@@ -267,6 +268,8 @@ export const commandPayloadSchemas = {
     model: z.string().min(1),
     thought: z.string(),
   }),
+  // 只刷新当前会话资源。与输入共享 session admission gate，按执行时真实 busy 事实拒绝。
+  reloadSession: z.object({}).strict(),
   renameSession: z.object({ title: z.string() }),
   deleteSession: z.object({}),
   discardSharedContext: z.object({ contextId: z.string().trim().min(1) }).strict(),
@@ -381,6 +384,7 @@ export type SessionTreeNodeView = z.infer<typeof sessionTreeNodeSchema>;
 
 // ── ACK ──
 export const commandResultSchema = z.discriminatedUnion("type", [
+  zcodeSessionReloadResultSchema,
   z.object({
     type: z.literal("navigateSessionTree"),
     cancelled: z.boolean(),

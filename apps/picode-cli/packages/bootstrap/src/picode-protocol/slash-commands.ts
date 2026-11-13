@@ -29,7 +29,7 @@ export async function listProtocolSlashCommands(
     if (!commands.some((existing) => existing.name === command.name)) commands.push(command);
   }
   // 没有活会话时扩展命令还没注册。已启用的 Plannotator 仍要让计划开关出现。
-  // 已打开的会话只认它自己注册的命令；旧会话要新建后才加载插件。
+  // 已打开的会话只认它自己注册的命令；插件变更要显式重载当前会话或新建后生效。
   if (!options.piCommands && !commands.some((command) => command.name === "plannotator-plan-mode")) {
     const plugins = await listPiPlugins(options.workingDirectory ?? process.cwd()).catch(() => []);
     if (plugins.some(isPlannotatorPiExtension)) {

@@ -106,10 +106,7 @@ export function WorkspaceHeader({
   onToggleSidePane: () => void;
   onSelectBranchGraphTask: (taskId: string, unreadAt?: number) => void;
   toggleSidePaneShortcutLabel?: string;
-  onReloadSession: (options?: {
-    resumeTaskId?: string | null;
-    provider?: ZCodeProvider | null;
-  }) => void | Promise<void>;
+  onReloadSession: (sessionId: string) => void | Promise<void>;
   reloadSessionDisabled?: boolean;
   reloadSessionPending?: boolean;
   onCreateTask: () => void;

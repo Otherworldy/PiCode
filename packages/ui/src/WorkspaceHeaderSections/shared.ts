@@ -14,11 +14,6 @@ export interface WorkspaceHeaderState {
 
 export type WorkspaceHeaderVariant = "task" | "draft";
 
-export interface WorkspaceHeaderReloadSessionOptions {
-  resumeTaskId?: string | null;
-  provider?: ZCodeProvider | null;
-}
-
 export interface WorkspaceHeaderTitleSectionProps {
   variant?: WorkspaceHeaderVariant;
   readOnlyReason?: string;
@@ -44,7 +39,7 @@ export interface WorkspaceHeaderTitleSectionProps {
   nativeSessionLogPath: string | null;
   nativeSessionLogExists: boolean;
   nativeSessionLogLoading: boolean;
-  onReloadSession?: (options?: WorkspaceHeaderReloadSessionOptions) => void | Promise<void>;
+  onReloadSession?: (sessionId: string) => void | Promise<void>;
   reloadSessionDisabled?: boolean;
   reloadSessionPending?: boolean;
   onRefreshGit: () => void;

@@ -256,6 +256,8 @@ export interface PiSessionPort {
   listSkills?(): PiSkillView[];
   /** Pi 自动补全那份斜杠命令：内置、提示词、扩展命令、skill: 。 */
   listSlashCommands?(): PiSlashCommandView[];
+  /** 重载当前 SDK 资源；失败后禁止输入，成功重试后恢复。 */
+  reloadResources?(): Promise<void>;
   prompt(text: string, options?: PiPromptOptions): Promise<PiPromptResult>;
   /** 扩展命令的 notify 原文。只进会话文件，不进模型上下文。 */
   recordExtensionOutput?(command: string, text: string): void;

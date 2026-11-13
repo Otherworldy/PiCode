@@ -13,6 +13,7 @@ import { selectionSideSessionHandlers } from "./selection-side-session.js";
 import { assistantFeedbackHandlers } from "./assistant-feedback.js";
 import { extensionNoticeHandlers } from "./extension-notice.js";
 import { sessionTreeHandlers } from "./session-tree.js";
+import { sessionReloadHandlers } from "./session-reload.js";
 
 export const NATIVE_HANDLERS = {
   ...sessionFlowHandlers,
@@ -27,4 +28,5 @@ export const NATIVE_HANDLERS = {
   ...assistantFeedbackHandlers,
   ...extensionNoticeHandlers,
   ...sessionTreeHandlers,
+  ...sessionReloadHandlers,
 } as const;

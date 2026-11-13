@@ -75,6 +75,7 @@ function fixture() {
   return {
     gateway,
     host,
+    store,
     promotions,
     facts,
     settlements,
@@ -107,6 +108,36 @@ test("handled Pi input records accepted command facts without inventing a transc
     assert.deepEqual(f.settlements, [
       { id: "queue_guide", sessionID: "remote", status: "cancelled", reason: "input.handled" },
     ]);
+  } finally {
+    f.gateway.dispose();
+  }
+});
+
+test("handled Pi input requires readable and writable command facts before settling admission", async () => {
+  const f = fixture();
+  try {
+    const saveSessionEntry = f.store.saveSessionEntry;
+    const sessionEntries = f.store.sessionEntries;
+    const ack = { commandId: "guide", status: "accepted" as const, revisionAtDecision: 1 };
+    for (const unavailable of ["write", "read"] as const) {
+      f.store.saveSessionEntry = unavailable === "write" ? undefined : saveSessionEntry;
+      f.store.sessionEntries = unavailable === "read" ? undefined : sessionEntries;
+      await assert.rejects(
+        f.host.completeHandledPiInput!(
+          "remote",
+          {
+            sourceCommandId: "guide",
+            queueItemId: "queue_guide",
+            clientId: "phone",
+          },
+          ack,
+        ),
+        /fault.command.persistentFactStoreUnavailable/,
+      );
+      assert.deepEqual(f.facts, []);
+      assert.deepEqual(f.settlements, []);
+      assert.equal(f.getInput().status, "admitted");
+    }
   } finally {
     f.gateway.dispose();
   }

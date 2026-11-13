@@ -194,6 +194,7 @@ export interface V4CommandCoreHost {
       feedback: "like" | "dislike" | null;
     },
   ): Promise<void>;
+  reloadSession?(sessionId: string): Promise<Extract<CommandResult, { type: "reloadSession" }>>;
   readSessionTree?(sessionId: string): Promise<CommandResult>;
   navigateSessionTree?(
     sessionId: string,

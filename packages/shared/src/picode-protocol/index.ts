@@ -898,6 +898,13 @@ export const zcodeSlashCommandSchema = z
     source: z.enum(["builtin", "custom", "extension"]).optional(),
   })
   .strict();
+export const zcodeSessionReloadResultSchema = z
+  .object({
+    type: z.literal("reloadSession"),
+    slashCommands: z.array(zcodeSlashCommandSchema),
+  })
+  .strict();
+export type ZCodeSessionReloadResult = z.infer<typeof zcodeSessionReloadResultSchema>;
 export type ZCodeSessionApiRetryStatus = z.infer<typeof zcodeSessionApiRetryStatusSchema>;
 export type ZCodeSessionContextUsage = z.infer<typeof zcodeSessionContextUsageSchema>;
 export const zcodeModelStreamingKindSchema = z.enum([

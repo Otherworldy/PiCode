@@ -48,6 +48,11 @@ export function useWorkspaceShellZCodeState(workspaceAbsPath: string, workspaceI
 
   const reloadSessionDisabled = useZCodeSessionStore((state) => {
     const workspaceState = selectWorkspaceZCodeState(state, workspaceAbsPath, workspaceIdentity);
+    // 已有会话只看自身运行态，其他会话忙碌不应阻止资源重载；最终准入由 Host 裁决。
+    if (workspaceState.activeTaskId) {
+      const status = workspaceState.taskRuntimeByTaskId[workspaceState.activeTaskId]?.status;
+      return status === "creating" || status === "restoring" || status === "streaming";
+    }
     const actionScope = resolveWorkspaceModelConfigSyncScope(workspaceState);
     return hasBusyTaskInWorkspaceProvider(
       actionScope.provider,

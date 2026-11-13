@@ -1,3 +1,4 @@
+import { useSessionResourceRevision } from "@/store/sessionResourceStore.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ZCodePluginReferenceCatalogEntry,
@@ -94,12 +95,13 @@ export function usePluginReferenceCatalog(
   const [runtimeRevision, setRuntimeRevision] = useState(0);
   const requestSeqRef = useRef(0);
   // 身份/隔离语义统一 workspaceKey = workspaceIdentity?.trim() || workspacePath。
+  const resourceRevision = useSessionResourceRevision(workspacePath, workspaceIdentity, sessionId);
   const workspaceKey = workspaceIdentity?.trim() || workspacePath;
   const remoteSessionId =
     resolution.remoteSessionId ?? options?.preferredRemoteSessionId ?? undefined;
   // remote attachment 也是 authority 边界。同一 workspace/session 切换远端 runtime 时
   // 不得复用旧进程冻结的 catalog Promise。
-  const requestKey = `${workspaceKey}|${remoteSessionId ?? "local"}|${sessionId ?? "draft"}|runtime:${runtimeRevision}|refresh:${options?.refreshRevision ?? 0}`;
+  const requestKey = `${workspaceKey}|${remoteSessionId ?? "local"}|${sessionId ?? "draft"}|runtime:${runtimeRevision}|resources:${resourceRevision}|refresh:${options?.refreshRevision ?? 0}`;
   const services = resolution.services;
   const rpcReady = resolution.rpcReady;
 

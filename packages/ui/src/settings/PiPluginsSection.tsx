@@ -196,6 +196,9 @@ export function PiPluginsSection({
   return (
     <div className="mb-6 space-y-4">
       <PiPluginToolNotice tools={tools ?? null} />
+      <p className="text-ui-sm text-foreground-subtle">
+        {intl.formatMessage({ id: "settings.plugins.pi.reloadHint" })}
+      </p>
       {plugins !== null ? (
         <PiPluginMarket
           plugins={plugins}

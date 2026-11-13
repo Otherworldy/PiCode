@@ -143,7 +143,9 @@ export async function savePersistentCommandFact(
   ack: CommandAck,
   metadata?: Record<string, unknown>,
 ): Promise<void> {
-  if (!store.saveSessionEntry) throw new Error("fault.command.persistentFactStoreUnavailable");
+  if (!store.saveSessionEntry || !store.sessionEntries) {
+    throw new Error("fault.command.persistentFactStoreUnavailable");
+  }
   const now = Date.now();
   await store.saveSessionEntry({
     id: `v4_command_fact:${source}:${ack.commandId}`,

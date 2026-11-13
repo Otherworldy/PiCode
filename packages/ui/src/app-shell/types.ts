@@ -203,10 +203,7 @@ export interface WorkspaceShellLayoutProps extends Omit<AppProps, "baseFeedbackS
   platform: IPlatformService;
   reloadSessionDisabled: boolean;
   reloadSessionPending: boolean;
-  handleReloadSession: (options?: {
-    resumeTaskId?: string | null;
-    provider?: ZCodeProvider | null;
-  }) => Promise<void>;
+  handleReloadSession: (sessionId: string) => Promise<void>;
   handleSelectTask: (
     targetWorkspacePath: string,
     taskId: string,

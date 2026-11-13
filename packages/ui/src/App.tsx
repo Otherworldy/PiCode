@@ -711,7 +711,6 @@ export function App({
   );
   const { reloadSessionPending, handleReloadSession } = useWorkspaceSessionReload({
     intl,
-    services,
     workspaceAbsPath,
     reloadSessionDisabled,
   });

@@ -1,6 +1,7 @@
+import { useSessionResourceRevision } from "@/store/sessionResourceStore.js";
 import { useEffect, useRef, useState } from "react";
 import type { ZCodeAgentToolCatalogEntry } from "@picode/shared";
-import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
+import { useWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { logger } from "@/logger.js";
 
 export interface AgentToolCatalogState {
@@ -20,10 +21,13 @@ export function useAgentToolCatalog(options: {
   workspaceIdentity?: string;
   enabled: boolean;
 }): AgentToolCatalogState {
-  const { zcodeAgentService } = useBaseWorkspaceServices();
+  const { enabled, workspacePath, workspaceIdentity } = options;
+  // 远端重载后的工具目录必须从同一 Host 读取，base service 会误扫本机资源。
+  const { zcodeAgentService } = useWorkspaceServices(workspacePath, undefined, workspaceIdentity);
   const [state, setState] = useState<AgentToolCatalogState>(EMPTY_STATE);
   const requestSeqRef = useRef(0);
-  const { enabled, workspacePath, workspaceIdentity } = options;
+
+  const resourceRevision = useSessionResourceRevision(workspacePath, workspaceIdentity);
 
   useEffect(() => {
     if (!enabled || !workspacePath) {
@@ -52,7 +56,7 @@ export function useAgentToolCatalog(options: {
     return () => {
       cancelled = true;
     };
-  }, [enabled, workspacePath, workspaceIdentity, zcodeAgentService]);
+  }, [enabled, workspacePath, workspaceIdentity, zcodeAgentService, resourceRevision]);
 
   return state;
 }

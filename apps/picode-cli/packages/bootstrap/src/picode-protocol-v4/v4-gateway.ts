@@ -278,6 +278,13 @@ export interface V4GatewayHost {
   lookupTimelineCommand?(key: CommandKey): Promise<CommandAck | null> | CommandAck | null;
   lookupChildCommand?(key: CommandKey): Promise<CommandAck | null> | CommandAck | null;
   lookupDiscardedCommand?(key: CommandKey): Promise<CommandAck | null> | CommandAck | null;
+  /** reload 终态沿用 timeline command fact；写入完成后才能 settle Inbox。 */
+  recordPersistentCommandFact?(
+    sessionId: string,
+    source: "timeline" | "child",
+    ack: CommandAck,
+    metadata?: Record<string, unknown>,
+  ): Promise<void>;
   /** transcript 原子 promotion 后同步失效旧 lazy seed，再解除 CommandInbox live pin。 */
   invalidatePersistentCommandFacts?(sessionId: string): void;
   /** Pi 的用户行拿到真实持久 entryId 后，才对账并解除 live pin。 */
@@ -2009,7 +2016,7 @@ export class ConversationV4Gateway {
         ...outcome.ack,
         ...final,
       };
-      outcome.settle(final);
+      if (outcome.envelope.type !== "reloadSession") outcome.settle(final);
       settledAck = ack;
       return ack;
     };
@@ -2038,7 +2045,35 @@ export class ConversationV4Gateway {
         reportError("v4.command.input.release", releaseError);
       }
     };
+    const persistReloadAck = async (sessionId: string, ack: CommandAck): Promise<void> => {
+      try {
+        // reload 没有 transcript/input ledger；先保存完整终态，避免 LRU 淘汰或回收后重复执行 SDK。
+        if (!this.host.recordPersistentCommandFact) {
+          throw new Error("fault.command.persistentFactStoreUnavailable");
+        }
+        await this.host.recordPersistentCommandFact(sessionId, "timeline", ack);
+      } catch (error) {
+        reportError("v4.command.reload.persist", error);
+        throw error;
+      } finally {
+        // 落库失败应拒绝本次 RPC，但保留真实内存终态并释放 FIFO，不能伪造 SDK 结果或挂住后续命令。
+        outcome.settle(ack);
+      }
+    };
     try {
+      // SDK 已接纳但尚未落库的输入可能仍被 pin；Host 空闲不能替代 Inbox 真相，且须排除重载自身。
+      if (
+        outcome.envelope.type === "reloadSession" &&
+        outcome.envelope.sessionId !== null &&
+        this.inbox.hasPinnedSessionState(outcome.envelope.sessionId, outcome.envelope.commandId)
+      ) {
+        return settleOnce({
+          status: "failed",
+          reasonCode: "guard.sessionReloadBusy",
+          message:
+            "The session has pending commands or input reconciliation. Retry after it is idle.",
+        });
+      }
       const admission = {
         admissionSeq: outcome.admissionSeq,
         admittedAt: outcome.admittedAt,
@@ -2146,6 +2181,9 @@ export class ConversationV4Gateway {
         };
         releaseDurableInput(final);
         settleOnce(final);
+      }
+      if (outcome.envelope.type === "reloadSession" && outcome.envelope.sessionId !== null) {
+        await persistReloadAck(outcome.envelope.sessionId, settledAck!);
       }
     }
   }

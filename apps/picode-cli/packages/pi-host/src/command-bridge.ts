@@ -329,8 +329,8 @@ export class CommandBridge {
   }
 
   syncFollowupMode(mode: "queue" | "guide"): void {
-    this.queue.followupMode = mode;
     this.session.setSteeringMode?.(mode === "guide" ? "all" : "one-at-a-time");
     this.session.setFollowUpMode?.(mode === "queue" ? "one-at-a-time" : "all");
+    this.queue.followupMode = mode;
   }
 }

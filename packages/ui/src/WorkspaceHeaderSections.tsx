@@ -1,3 +1,6 @@
+import { SessionReloadMenuItem } from "@/WorkspaceHeaderSections/SessionReloadMenuItem.js";
+import { getTaskListAttention, isTaskListRowActive } from "@/v4/taskListRowActivity.js";
+import { useWorkspaceSessionsIndexItems } from "@/v4/useWorkspaceSessionsIndexItems.js";
 import { WorkspaceContextPath } from "@/WorkspaceHeaderSections/WorkspaceContextPath.js";
 import { WorkspaceLastActivity } from "@/WorkspaceHeaderSections/WorkspaceLastActivity.js";
 /* eslint-disable max-lines -- Header 标题区当前同时承载 task 菜单、路径上下文和 workspace 级状态提示，先保持单文件收口，避免菜单链路迁移时再引入回归。 */
@@ -16,7 +19,10 @@ import { Cloud, Ellipsis, Folder, GitBranch, LoaderIcon } from "lucide-react";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { useDeleteSessionAction } from "@/lib/deleteSessionTask.js";
 import { useGlobalTaskList } from "@/hooks/useGlobalTaskList.js";
-import { useBaseWorkspaceServices, useWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
+import {
+  useBaseWorkspaceServices,
+  useWorkspaceServicesResolution,
+} from "@/hooks/useWorkspaceServices.js";
 import { useTaskListItemContextActions } from "@/useTaskListItemContextActions.js";
 import { TaskActionMenuContent } from "@/TaskActionMenuContent.js";
 import {
@@ -92,6 +98,8 @@ export function WorkspaceHeaderTitleSection({
   nativeSessionLogPath: _nativeSessionLogPath,
   nativeSessionLogExists: _nativeSessionLogExists,
   nativeSessionLogLoading: _nativeSessionLogLoading,
+  onReloadSession,
+  reloadSessionDisabled,
   reloadSessionPending,
   workspaceHeaderState,
   onRefreshGit: _onRefreshGit,
@@ -106,7 +114,11 @@ export function WorkspaceHeaderTitleSection({
   const { intl } = useZCodeIntl();
   const openFeedbackSubmit = useFeedbackStore((state) => state.openSubmit);
   const confirmDialog = useConfirmDialog();
-  const services = useWorkspaceServices(workspaceAbsPath, remoteSessionId, workspaceIdentity);
+  const {
+    services,
+    remoteSessionId: resolvedRemoteSessionId,
+    rpcReady,
+  } = useWorkspaceServicesResolution(workspaceAbsPath, remoteSessionId, workspaceIdentity);
   const baseServices = useBaseWorkspaceServices();
   const removeTaskState = useZCodeSessionStore((state) => state.removeTaskState);
   const upsertOptimisticTaskListItem = useZCodeSessionStore(
@@ -117,6 +129,32 @@ export function WorkspaceHeaderTitleSection({
   );
   const setTaskUnreadIndicator = useZCodeSessionStore((state) => state.setTaskUnreadIndicator);
   const [taskMenuOpen, setTaskMenuOpen] = useState(false);
+  const currentSessionScopes = useMemo(
+    () =>
+      taskMenuOpen && activeTaskId && rpcReady
+        ? [
+            {
+              workspacePath: workspaceAbsPath,
+              workspaceIdentity,
+              endpointKey: resolvedRemoteSessionId ?? undefined,
+              agentService: services.zcodeAgentService,
+            },
+          ]
+        : [],
+    [
+      activeTaskId,
+      resolvedRemoteSessionId,
+      rpcReady,
+      services,
+      taskMenuOpen,
+      workspaceAbsPath,
+      workspaceIdentity,
+    ],
+  );
+  const currentSessionActivity = useWorkspaceSessionsIndexItems(currentSessionScopes).items.find(
+    (item) => item.taskId === activeTaskId,
+  );
+
   const [workspaceContextOpen, setWorkspaceContextOpen] = useState(false);
   const [renamingTaskId, setRenamingTaskId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
@@ -510,6 +548,19 @@ export function WorkspaceHeaderTitleSection({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-48">
+              <SessionReloadMenuItem
+                sessionId={activeTaskId}
+                readOnly={Boolean(readOnlyReason)}
+                busy={Boolean(
+                  reloadSessionDisabled ||
+                  (currentSessionActivity &&
+                    (isTaskListRowActive(currentSessionActivity) ||
+                      getTaskListAttention(currentSessionActivity))),
+                )}
+                pending={Boolean(reloadSessionPending)}
+                onReload={onReloadSession}
+              />
+              <DropdownMenuSeparator />
               {showRemoteSkillSyncAction && remoteTarget ? (
                 <>
                   <RemoteSyncMenuItems

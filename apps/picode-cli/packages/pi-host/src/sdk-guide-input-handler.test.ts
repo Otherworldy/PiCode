@@ -6,7 +6,27 @@ import test from "node:test";
 import { CommandBridge } from "./command-bridge.js";
 import { HostQueue } from "./host-queue.js";
 import { createSdkSessionFactory } from "./session-factory.js";
-import type { PiHostEvent } from "./types.js";
+import type { PiHostEvent, PiSessionPort } from "./types.js";
+
+test("followup mode is not committed when an SDK mode update fails", () => {
+  const queue = new HostQueue();
+  const failure = new Error("session runtime unavailable");
+  const bridge = new CommandBridge(
+    {
+      setSteeringMode() {},
+      setFollowUpMode() {
+        throw failure;
+      },
+    } as unknown as PiSessionPort,
+    queue,
+  );
+
+  assert.throws(
+    () => bridge.syncFollowupMode("guide"),
+    (error) => error === failure,
+  );
+  assert.equal(queue.followupMode, "queue");
+});
 
 for (const action of ["race", "transform", "beforeStart", "handled", "failure"] as const) {
   test(`real SDK guide input handler: ${action}`, { timeout: 20_000 }, async (t) => {

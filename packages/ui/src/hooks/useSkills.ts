@@ -1,3 +1,4 @@
+import { useSessionResourceRevision } from "@/store/sessionResourceStore.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ZCodeSkillReferenceCatalogEntry } from "@picode/shared";
 import { useWorkspaceServicesResolution } from "@/hooks/useWorkspaceServices.js";
@@ -51,12 +52,17 @@ export function useSkills(options: UseSkillsOptions): ConversationSkillCatalogSt
     useState<ScopedConversationSkillCatalogState>(EMPTY_SCOPED_STATE);
   const [runtimeRevision, setRuntimeRevision] = useState(0);
   const requestSeqRef = useRef(0);
+  const resourceRevision = useSessionResourceRevision(
+    options.workspacePath,
+    options.workspaceIdentity,
+    options.sessionId,
+  );
   const workspaceKey = options.workspaceIdentity?.trim() || options.workspacePath;
   const remoteSessionId =
     resolution.remoteSessionId ?? options.preferredRemoteSessionId ?? undefined;
   const services = resolution.services;
   const rpcReady = resolution.rpcReady;
-  const requestKey = `${workspaceKey}|${remoteSessionId ?? "local"}|${options.sessionId ?? "draft"}|runtime:${runtimeRevision}`;
+  const requestKey = `${workspaceKey}|${remoteSessionId ?? "local"}|${options.sessionId ?? "draft"}|runtime:${runtimeRevision}|resources:${resourceRevision}`;
 
   useEffect(() => {
     if (!options.enabled || !options.sessionId || !rpcReady) return;

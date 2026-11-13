@@ -39,7 +39,7 @@ Registry drain 与 V4 提升共用 `HostQueue` 的真实 consumer claim，在模
 
 冷恢复的模型身份、当前思考档位和支持档位均读取 Pi 会话的实时接口，不能以固定 `medium` 或固定档位表覆盖 Pi 从 jsonl 恢复的值。支持档位直接取 `getAvailableThinkingLevels()`：非推理模型只提供 `off`；推理模型遵循 Pi 对缺省档位和 `thinkingLevelMap` 的处理，不能用宿主通用默认表代替。初始化完成后才允许交出首份配置；已有 Composer 草稿仍保留自己的意图，不因恢复过程被回写。
 
-`agent_start` 与 `agent_end` / `agent_settled` 的同一份状态增量必须包含按新运行状态派生的 `inputRouting`：运行时按 followupMode 走 enqueue/guide，完成或中断后空队列回到 startNow，暂停且有队列时为 choice。实时与 jsonl 重放遵守同一规则，不能在提交新 control 前读取旧 phase 导致路由落后一拍。
+`agent_start` 与 `agent_end` / `agent_settled` 的同一份状态增量必须包含按新运行状态派生的 `inputRouting`：运行时按 followupMode 走 enqueue/guide，完成或中断后空队列回到 startNow，暂停且有队列时为 choice。实时与 jsonl 重放遵守同一规则，不能在提交新 control 前读取旧 phase 导致路由落后一拍。`setFollowupMode` 先更新 Pi 的 steering/follow-up modes，全部成功后才提交 `HostQueue.followupMode` 与 projector config；SDK setter 失败时 queue 和 projection 保持原值。
 
 常驻池只卸真正空闲的会话。投影 `phase` 已经离开 `running`，但 Pi 仍在 streaming、压缩或重试（`isStreaming` / `isCompacting` / `isIdle === false`），或队列、后台任务、子会话、分支总结、未决交互还在，都不算空闲。只看 `phase === "running"` 会在超过高水位或空闲超时后把还在跑的 runtime 拆掉，内存里的对话投影一起没了。再点开要冷恢复，界面停在「正在加载会话」。事实归 `HostedSession.hasResidencyBlockingWork`，常驻池只读这一个布尔。
 
@@ -118,7 +118,7 @@ Registry drain 与 V4 提升共用 `HostQueue` 的真实 consumer claim，在模
 
 ## 死面
 
-壳上拆掉：PluginStore、SavedWorkflows、Automations/OffPeak、CUA、Goal、PiCode 子代理 profile、官方 plugin 商店。设置改为已加载 Pi extensions 列表。插件页用 Pi `PackageManager.checkForAvailableUpdates` / `update` 检查并更新 npm、git 包。更新子进程不继承 app-server 的 stdout。本地 extension 文件和钉死版本不更新。装完后下次新建会话生效。
+壳上拆掉：PluginStore、SavedWorkflows、Automations/OffPeak、CUA、Goal、PiCode 子代理 profile、官方 plugin 商店。设置改为已加载 Pi extensions 列表。插件页用 Pi `PackageManager.checkForAvailableUpdates` / `update` 检查并更新 npm、git 包。更新子进程不继承 app-server 的 stdout。本地 extension 文件和钉死版本不更新。插件变更在下一次新建或显式重载当前会话后生效。
 
 壳上新增：输入框 Extension Widget 槽。非计划插件的 status 收成上下文用量圆环左侧的一个 popup，不再平铺 chips，也不再占输入框上方。点开后列表向上展开。
 
@@ -181,7 +181,7 @@ UI 设计模式是输入框模式菜单里的勾选，不是斜杠命令。点�
 
 桌面 `--prepare-storage` 只解析会话库路径，不迁移、也不创建 Pi MCP 文件。这个 Worker 不能改 cwd，Windows 上继承到的目录经常是 `C:\Windows\System32`。在那里创建项目 `.pi` 会 EPERM，进程在写出库路径之前退出，桌面只能看到传输中断。迁移仍只发生在真正的会话进程里，并且用该工作区当项目目录。
 
-会话加载 Pi 的 `codemode`、`tool_search` 和 MCP 扩展，不再注册 PiCode 的 `mcp` 代理工具。插件 MCP 和内置 `node_repl` 不进这两个文件，会话创建时用 `registerMcpServer` 注册。`picode_subagent` 拉起的子会话不挂这三个扩展：子会话的 loader 用 `noExtensions`，只挂权限扩展与白名单需要的扩展文件，不注册这三个内置工厂。白名单同样过滤扩展注册的工具，未列出的插件工具不会由默认注册路径声明给模型（扩展自己调 `setActiveTools` 不在白名单保证内）。子会话显式发 `session_start` 并调 `bindExtensions`，让按需加载的扩展能注册请求期 hook；结束前先发 `session_shutdown` 再 `dispose()`。子会话把文件里的 Pi 设置快照到内存（global 与 project 两个 scope 的 `packages` 都算），重试在 loader 加载后关掉；子会话写设置只落在内存，不写用户文件。对话分叉不是子会话：新会话仍加载它们，`codemode` 和 `mcp__node_repl__js` 不会因为带了父会话 id 而消失。
+会话加载 Pi 的 `codemode`、`tool_search` 和 MCP 扩展，不再注册 PiCode 的 `mcp` 代理工具。插件 MCP 和内置 `node_repl` 不进这两个文件，会话创建及每次完整 `AgentSession.reload()` 在 inline factory 执行前读取当前 runtime server 列表并用 `registerMcpServer` 注册。lazy Chrome 配置和提示词也在完整 reload 前重读；创建时为空可以后续加入，删除或禁用后不沿用旧注册。SDK 后续的 `extendResources()` / `resources_discover` 不刷新这两类配置。显式 reload 将 `ResourceLoader.getExtensions().errors` 中所有诊断（包括扩展加载错误及工具/命令/flag 冲突）视为失败并封锁输入。reload ACK 不保证 MCP server 已连接：Pi MCP 在 `session_start` 后异步连接，连接状态由其现有诊断机制报告。`picode_subagent` 拉起的子会话不挂这三个扩展：子会话的 loader 用 `noExtensions`，只挂权限扩展与白名单需要的扩展文件，不注册这三个内置工厂。白名单同样过滤扩展注册的工具，未列出的插件工具不会由默认注册路径声明给模型（扩展自己调 `setActiveTools` 不在白名单保证内）。子会话显式发 `session_start` 并调 `bindExtensions`，让按需加载的扩展能注册请求期 hook；结束前先发 `session_shutdown` 再 `dispose()`。子会话把文件里的 Pi 设置快照到内存（global 与 project 两个 scope 的 `packages` 都算），重试在 loader 加载后关掉；子会话写设置只落在内存，不写用户文件。对话分叉不是子会话：新会话仍加载它们，`codemode` 和 `mcp__node_repl__js` 不会因为带了父会话 id 而消失。
 
 浏览器和官方鉴权仍走这条 Pi 连接。`node_repl` 的每次请求带 `com.zcode/request-context.session_id`。官方 HTTP 仍用现有的逐请求 JWT fetch；官方 stdio 仍把身份头放进 `_meta`。设置页和侧栏项目 MCP 对话框打开时只读配置，不自动 connect。用户点刷新，或在设置里启用一台服务器时，状态检查仍可能再打开一份 `McpPort`，与会话里的 Pi 连接不是同一个客户端。
 

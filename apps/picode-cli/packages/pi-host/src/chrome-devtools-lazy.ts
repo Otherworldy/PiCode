@@ -29,12 +29,17 @@ function toolInputText(input: unknown): string {
 }
 
 export function createLazyChromeDevtoolsExtension(
-  servers: readonly { name: string; config: McpServerConfig }[],
+  configuredServers:
+    | readonly { name: string; config: McpServerConfig }[]
+    | (() => readonly { name: string; config: McpServerConfig }[]),
 ): InlineExtension {
   return {
     name: "picode-lazy-chrome-devtools",
     hidden: true,
     factory(pi) {
+      // 每个 SDK runtime 使用本轮配置；创建会话时为空也允许重载后补入，pending 不跨重载复用。
+      const servers =
+        typeof configuredServers === "function" ? configuredServers() : configuredServers;
       let pending: Promise<void> | undefined;
       pi.on("tool_call", async (event) => {
         if (servers.length === 0 || !chromeDevtoolsToolWantsServer(event.toolName, event.input)) {

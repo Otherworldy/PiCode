@@ -28,13 +28,7 @@ export function isProviderNotReadyError(error: unknown): boolean {
 interface WorkspacePrepareErrorContext {
   workspacePath: string;
   provider: ZCodeProvider;
-  reason:
-    | "mount"
-    | "retry"
-    | "first-send"
-    | "select-provider"
-    | "reload-session"
-    | "sync-model-config";
+  reason: "mount" | "retry" | "first-send" | "select-provider" | "sync-model-config";
   attempt: number;
   maxAttempts: number;
   taskId?: string;

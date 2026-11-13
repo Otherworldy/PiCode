@@ -12,6 +12,7 @@ import {
   setSessionAutoDrain,
 } from "./session-config.js";
 import { isHostedExtensionCommand } from "./hosted-input.js";
+import { listProtocolSlashCommands } from "./slash-commands.js";
 import { describeHostedTurnFileChanges } from "./hosted-file-rewind.js";
 import { sessionForegroundBusy, sessionThoughtLevels } from "./session-config.js";
 import { legacyApp, sessionIdOf } from "./session-owner.js";
@@ -1124,6 +1125,16 @@ export function createConversationV4Gateway(
       if (!record || !hosted) throw new Error("proto.sessionNotFound");
       hosted.setFeedback(input.entityId, input.feedback);
     },
+    reloadSession: async (sessionId) => {
+      const hosted = context.sessions.get(sessionId)?.hosted;
+      if (!hosted) throw new Error("proto.sessionNotFound");
+      await hosted.reloadResources();
+      const slashCommands = await listProtocolSlashCommands({
+        workingDirectory: hosted.cwd,
+        piCommands: hosted.listSlashCommands(),
+      });
+      return { type: "reloadSession" as const, slashCommands };
+    },
     readSessionTree: async (sessionId) => {
       const hosted = sessionTreeHost(context, sessionId);
       return { type: "sessionTree" as const, tree: hosted.readSessionTree() };
@@ -1669,6 +1680,7 @@ export function createConversationV4Gateway(
       if ((await piAdmittedInput(sessionId, input.sourceCommandId))?.input.status !== "cancelled")
         throw inputLedgerFault("fault.command.inputCancellationNotCommitted");
     },
+    recordPersistentCommandFact: coreHost.recordPersistentCommandFact,
     lookupTimelineCommand: (key) => persistentCommands.lookup("timeline", key),
     lookupChildCommand: (key) => persistentCommands.lookup("child", key),
     lookupDiscardedCommand: (key) => persistentCommands.lookup("discarded", key),

@@ -11,7 +11,11 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import type { PackageSource, ResolvedPaths, SettingsManager } from "@earendil-works/pi-coding-agent";
+import type {
+  PackageSource,
+  ResolvedPaths,
+  SettingsManager,
+} from "@earendil-works/pi-coding-agent";
 import { retainCommandFailure, withFreshGitCheckout } from "./pi-plugin-tools.js";
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
 
@@ -295,34 +299,6 @@ export function applyZcodePluginPlan(
   extensions.splice(0, extensions.length, ...nextExtensions);
   skills.splice(0, skills.length, ...nextSkills);
   prompts.splice(0, prompts.length, ...nextPrompts);
-}
-
-type PlanRetainedLoader = Parameters<typeof applyZcodePluginPlan>[0] & {
-  reload: (options?: unknown) => Promise<void>;
-  extendResources: (paths?: unknown) => void;
-};
-
-/**
- * 关掉的包先从当前数组拿掉。
- * 别的扩展 `resources_discover` 会让 Pi 按原来的技能路径整表重载，只改数组会被盖回去。
- * 因此 `reload` / `extendResources` 返回后再套一次同一份开关。
- */
-export function retainZcodePluginPlan(
-  loader: Parameters<typeof applyZcodePluginPlan>[0],
-  plan: ZcodePluginSessionPlan,
-): void {
-  const retained = loader as PlanRetainedLoader;
-  applyZcodePluginPlan(retained, plan);
-  const reload = retained.reload.bind(retained);
-  const extendResources = retained.extendResources.bind(retained);
-  retained.reload = async (options) => {
-    await reload(options);
-    applyZcodePluginPlan(retained, plan);
-  };
-  retained.extendResources = (paths) => {
-    extendResources(paths);
-    applyZcodePluginPlan(retained, plan);
-  };
 }
 
 /** 只读开关和已配置的包，不 resolve、不加载扩展。技能目录用它掉掉已关闭的包。 */
@@ -658,8 +634,7 @@ export async function installPiPlugin(
     packages,
     normalized,
     scope,
-    () =>
-      packages.installAndPersist(normalized, scope === "project" ? { local: true } : undefined),
+    () => packages.installAndPersist(normalized, scope === "project" ? { local: true } : undefined),
     { acceptExisting: true },
   );
 }

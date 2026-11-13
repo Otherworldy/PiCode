@@ -65,6 +65,7 @@ import { PiToV4Projector } from "./projector.js";
 import type { ToolPermissionCheck } from "./permission-gate.js";
 import { scheduleLiveSessionTitleSummary } from "./session-title-live.js";
 import { completePiPrompt } from "./session-factory.js";
+import { reloadHostedSessionResources } from "./session-resource-reload.js";
 import {
   applyWorkspaceMemoryPatch,
   parseWorkspaceMemoryPatch,
@@ -128,6 +129,7 @@ export interface HostedSession {
   listModels(): Array<{ providerId: string; modelId: string }>;
   listSkills(): PiSkillView[];
   listSlashCommands(): PiSlashCommandView[];
+  reloadResources(): Promise<void>;
   readonly isIdle: boolean;
   /** 常驻池唯一读的忙闲事实。投影 phase 不是 running 时也要算上 Pi 自己还在跑。 */
   readonly hasResidencyBlockingWork: boolean;
@@ -1798,6 +1800,25 @@ export class HostSessionRegistry {
     }
     publishContext();
     let disposing: Promise<void> | undefined;
+    const hasResidencyBlockingWork = () => {
+      const snapshot = projector.getSnapshot();
+      // reload 没有模型回合；consumer 本身也要阻止常驻池把正在重建的 runtime 回收。
+      return (
+        queue.consumerReleased !== undefined ||
+        piHostBlocksResidency({
+          pi,
+          phase: snapshot.control.phase,
+          activeWorkCount: snapshot.control.activeWorks.length,
+          queuedCount: queue.snapshot().items.length,
+          branchSummary: summarizingBranch || projector.isBranchSummaryRunning(),
+          backgroundActive: snapshot.backgroundWorks.some(
+            (work) => work.status === "running" || work.status === "resultPending",
+          ),
+          pendingInteraction: snapshot.pendingInteractions.length > 0,
+          runningSubagents: snapshot.subagents?.running.length ?? 0,
+        })
+      );
+    };
     return {
       sessionId: meta.sessionId,
       identity: meta.identity,
@@ -1820,20 +1841,15 @@ export class HostSessionRegistry {
         return pi.isIdle ?? !pi.isStreaming;
       },
       get hasResidencyBlockingWork() {
-        const snapshot = projector.getSnapshot();
-        return piHostBlocksResidency({
-          pi,
-          phase: snapshot.control.phase,
-          activeWorkCount: snapshot.control.activeWorks.length,
-          queuedCount: queue.snapshot().items.length,
-          branchSummary: summarizingBranch || projector.isBranchSummaryRunning(),
-          backgroundActive: snapshot.backgroundWorks.some(
-            (work) => work.status === "running" || work.status === "resultPending",
-          ),
-          pendingInteraction: snapshot.pendingInteractions.length > 0,
-          runningSubagents: snapshot.subagents?.running.length ?? 0,
-        });
+        return hasResidencyBlockingWork();
       },
+      reloadResources: () =>
+        reloadHostedSessionResources({
+          pi,
+          queue,
+          hasBlockingWork: hasResidencyBlockingWork,
+          afterReload: publishContext,
+        }),
       // 开关随时可改：每次要用时重读项目配置，权限判定、注入与抽取都看到最新值。
       // 能力位为 false 的会话（侧聊、远端）永远不读，避免读到本地同名目录。
       readMemoryEnabled: async () =>

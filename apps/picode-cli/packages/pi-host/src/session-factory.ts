@@ -8,7 +8,8 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { ensurePiSdk, piCoding } from "./pi-sdk.js";
 import { createPiProcessBridge } from "./pi-process-bridge.js";
-import { retainZcodePluginPlan, zcodePluginLoaderExtras } from "./pi-plugins.js";
+import { zcodePluginLoaderExtras } from "./pi-plugins.js";
+import { createSessionResourceLoader } from "./session-resource-loader.js";
 import {
   expandUnloadedPromptTemplate,
   listSessionSlashCommands,
@@ -312,6 +313,7 @@ export async function mutatePiCatalog(input: {
 
 export { branchPiSessionFile };
 
+const SESSION_RELOAD_FAILED = "fault.command.sessionReloadFailed";
 const BUILTIN_SEARCH_TOOLS = ["grep", "find", "ls"] as const;
 
 function isAgentAlreadyProcessing(error: unknown): boolean {
@@ -401,10 +403,6 @@ export function createSdkSessionFactory(
       ? piCoding().SettingsManager.inMemory({ retry: { enabled: false } })
       : piCoding().SettingsManager.create(input.cwd, agentDir);
     const ssh = readProcessSshRemoteSpec(input.cwd);
-    const pluginExtras =
-      !isolated && input.loadExtensions
-        ? await zcodePluginLoaderExtras(input.cwd, agentDir, options.skillPaths?.(input.cwd) ?? [])
-        : undefined;
     const processes = !isolated && input.loadExtensions ? createPiProcessBridge() : undefined;
     // 分叉会带 parentSessionId，用来记父会话。以前用它关掉 codemode / tool_search / MCP，
     // 分支请求里就没有 codemode 和 mcp__node_repl__js。只有子会话显式省略这些扩展。
@@ -413,17 +411,10 @@ export function createSdkSessionFactory(
       loadExtensions: input.loadExtensions,
       omitHostExtensions: input.omitHostExtensions,
     });
-    const mcpRuntime = usePiMcp
-      ? registerableMcpServers(
-          (await options.mcpCompat?.runtimeServers({
-            cwd: input.cwd,
-            sessionId: input.sessionId,
-          })) ?? [],
-        )
-      : [];
+    let mcpRuntime: ReturnType<typeof registerableMcpServers> = [];
     const codingForMcp = usePiMcp ? piCoding() : undefined;
-    const lazyChrome = usePiMcp ? loadLazyChromeDevtoolsServers(agentDir, input.cwd) : [];
-    const extraSystemPrompts = [
+    let lazyChrome: ReturnType<typeof loadLazyChromeDevtoolsServers> = [];
+    const extraSystemPrompts = () => [
       ...(ssh ? [sshWorkspacePrompt(ssh)] : []),
       ...(lazyChrome.length > 0 ? [lazyChromeDevtoolsPrompt(lazyChrome)] : []),
     ];
@@ -442,78 +433,93 @@ export function createSdkSessionFactory(
     const uiDesign = createUiDesignMode(input.cwd, () => {
       designReviewOpened = true;
     });
-    const resourceLoader = new (piCoding().DefaultResourceLoader)({
-      cwd: input.cwd,
-      agentDir,
-      settingsManager,
-      ...(pluginExtras?.loader ?? { additionalSkillPaths: options.skillPaths?.(input.cwd) ?? [] }),
-      extensionFactories: [
-        createPermissionExtension(input.checkPermission),
-        uiDesign.extension,
-        createPlanReviewSignalExtension((text) => {
-          planDecisions.push(text);
-        }),
-        ...(usePiMcp && codingForMcp
-          ? [
-              (pi: {
-                registerMcpServer(
-                  name: string,
-                  config: (typeof mcpRuntime)[number]["config"],
-                ): void;
-              }) => {
-                for (const server of mcpRuntime) pi.registerMcpServer(server.name, server.config);
-              },
-              codingForMcp.createCodemodeExtension(),
-              codingForMcp.createToolSearchExtension(),
-              ...(lazyChrome.length > 0 ? [createLazyChromeDevtoolsExtension(lazyChrome)] : []),
-              codingForMcp.createMcpExtension({
-                loadConfig: () => loadZcodeMcpConfig(agentDir, input.cwd),
-                createTransport: createZcodeMcpTransport({
-                  compat: options.mcpCompat,
-                  sessionId: input.sessionId,
+    const resourceLoader = createSessionResourceLoader(
+      {
+        cwd: input.cwd,
+        agentDir,
+        settingsManager,
+        extensionFactories: [
+          createPermissionExtension(input.checkPermission),
+          uiDesign.extension,
+          createPlanReviewSignalExtension((text) => {
+            planDecisions.push(text);
+          }),
+          ...(usePiMcp && codingForMcp
+            ? [
+                (pi: {
+                  registerMcpServer(
+                    name: string,
+                    config: (typeof mcpRuntime)[number]["config"],
+                  ): void;
+                }) => {
+                  for (const server of mcpRuntime) pi.registerMcpServer(server.name, server.config);
+                },
+                codingForMcp.createCodemodeExtension(),
+                codingForMcp.createToolSearchExtension(),
+                createLazyChromeDevtoolsExtension(() => lazyChrome),
+                codingForMcp.createMcpExtension({
+                  loadConfig: () => loadZcodeMcpConfig(agentDir, input.cwd),
+                  createTransport: createZcodeMcpTransport({
+                    compat: options.mcpCompat,
+                    sessionId: input.sessionId,
+                  }),
                 }),
-              }),
-            ]
-          : []),
-        ...(processes?.factories ?? []),
-        createImageIngestionExtension({
-          autoResize: () => settingsManager.getImageAutoResize(),
-          parentSessionId: input.parentSessionId,
-          onDiagnostic: options.onImageDiagnostic,
-        }),
-        createRequestDiagnosticsExtension({
-          configuredTransport: () => settingsManager.getTransport(),
-          parentSessionId: input.parentSessionId,
-          onDiagnostic: options.onRequestDiagnostic,
-        }),
-        // 必须放最后：handler 要用其它扩展写完的完整 system prompt。
-        // 只在没有记忆根的会话（侧聊、远端）跳过；本地会话一律注册，
-        // 开关由 enabled 回调每轮重读，用户中途打开不必重开会话。
-        ...(input.memoryRoot
-          ? [
-              createWorkspaceMemoryExtension({
-                root: input.memoryRoot,
-                workspacePath: input.memoryWorkspacePath ?? input.cwd,
-                enabled: () => readWorkspaceMemoryEnabled(input.memoryWorkspacePath ?? input.cwd),
-              }),
-            ]
-          : []),
-      ],
-      ...(sshProjectSystemPrompt !== undefined
-        ? { systemPromptOverride: () => sshProjectSystemPrompt }
-        : {}),
-      ...(extraSystemPrompts.length > 0 || sshProjectAppendPrompt !== undefined
-        ? {
-            appendSystemPromptOverride: (base: string[]) => [
-              ...(sshProjectAppendPrompt !== undefined ? [sshProjectAppendPrompt] : base),
-              ...extraSystemPrompts,
-            ],
-          }
-        : {}),
-    });
+              ]
+            : []),
+          ...(processes?.factories ?? []),
+          createImageIngestionExtension({
+            autoResize: () => settingsManager.getImageAutoResize(),
+            parentSessionId: input.parentSessionId,
+            onDiagnostic: options.onImageDiagnostic,
+          }),
+          createRequestDiagnosticsExtension({
+            configuredTransport: () => settingsManager.getTransport(),
+            parentSessionId: input.parentSessionId,
+            onDiagnostic: options.onRequestDiagnostic,
+          }),
+          // 必须放最后：handler 要用其它扩展写完的完整 system prompt。
+          // 只在没有记忆根的会话（侧聊、远端）跳过；本地会话一律注册，
+          // 开关由 enabled 回调每轮重读，用户中途打开不必重开会话。
+          ...(input.memoryRoot
+            ? [
+                createWorkspaceMemoryExtension({
+                  root: input.memoryRoot,
+                  workspacePath: input.memoryWorkspacePath ?? input.cwd,
+                  enabled: () => readWorkspaceMemoryEnabled(input.memoryWorkspacePath ?? input.cwd),
+                }),
+              ]
+            : []),
+        ],
+        ...(sshProjectSystemPrompt !== undefined
+          ? { systemPromptOverride: () => sshProjectSystemPrompt }
+          : {}),
+        ...(usePiMcp || ssh || sshProjectAppendPrompt !== undefined
+          ? {
+              appendSystemPromptOverride: (base: string[]) => [
+                ...(sshProjectAppendPrompt !== undefined ? [sshProjectAppendPrompt] : base),
+                ...extraSystemPrompts(),
+              ],
+            }
+          : {}),
+      },
+      async () => {
+        // 创建时捕获的 MCP 快照不会随 SDK reload 更新；资源加载前重读，避免旧 server 和懒启动参数复活。
+        if (usePiMcp) {
+          mcpRuntime = registerableMcpServers(
+            (await options.mcpCompat?.runtimeServers({
+              cwd: input.cwd,
+              sessionId: input.sessionId,
+            })) ?? [],
+          );
+          lazyChrome = loadLazyChromeDevtoolsServers(agentDir, input.cwd);
+        }
+        const skillPaths = options.skillPaths?.(input.cwd) ?? [];
+        return !isolated && input.loadExtensions
+          ? zcodePluginLoaderExtras(input.cwd, agentDir, skillPaths)
+          : { loader: { additionalSkillPaths: skillPaths } };
+      },
+    );
     await resourceLoader.reload();
-    // 关掉的包技能不能只摘一次：后面的 resources_discover 会整表重载。
-    if (pluginExtras) retainZcodePluginPlan(resourceLoader, pluginExtras.plan);
     // 本地不塞 read/bash/grep/find。Pi 自己有，扩展（pi-fff）才能按原名换掉。
     // SSH 必须换成远端读写，否则这些工具打到本机盘。
     const sshTools = ssh ? piCoding().createCodingTools(input.cwd, sshCodingToolOptions(ssh)) : [];
@@ -605,12 +611,17 @@ export function createSdkSessionFactory(
     });
     live = created.session;
     const session = created.session;
+    let reloadFailure: Error | undefined;
+    const assertResourcesReady = () => {
+      if (reloadFailure) throw reloadFailure;
+    };
     const inputIdentity = bindPiInputIdentity(session);
     // 编辑历史消息会先 abort 再 prompt。abort 的 agent_settled 和插件仍可能在
     // isStreaming 落下之前再进一次 prompt。Pi 抛 already processing，调用方经常不 await，
     // 进程错误边界会把 agent 打退出：模型第一句刚写出会话就没了。这里改成 followUp。
     const rawPrompt = session.prompt.bind(session);
     session.prompt = (async (text: string, options?: Parameters<typeof session.prompt>[1]) => {
+      assertResourcesReady();
       try {
         return await rawPrompt(text, options);
       } catch (error) {
@@ -698,8 +709,38 @@ export function createSdkSessionFactory(
         designReviewOpened = false;
         return opened;
       },
+      reloadResources: async () => {
+        const steeringMode = session.steeringMode;
+        const followUpMode = session.followUpMode;
+        try {
+          try {
+            await session.reload();
+            // SDK 会把扩展初始化异常记入 errors 后正常返回；否则界面会把缺失能力误报为成功。
+            const errors = session.resourceLoader.getExtensions().errors;
+            if (errors.length > 0) {
+              throw new Error(errors.map((error) => `${error.path}: ${error.error}`).join("\n"));
+            }
+          } finally {
+            // SDK 的 session setter 会持久化到全局 settings；这里只恢复当前 Agent 的运行时队列模式。
+            session.agent.steeringMode = steeringMode;
+            session.agent.followUpMode = followUpMode;
+          }
+          reloadFailure = undefined;
+        } catch (cause) {
+          // shutdown 后失败的 runtime 可能只初始化了一半，必须等完整重试成功才能继续输入。
+          reloadFailure = Object.assign(
+            new Error(
+              `Session resource reload failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+              { cause },
+            ),
+            { reasonCode: SESSION_RELOAD_FAILED },
+          );
+          throw reloadFailure;
+        }
+      },
       prompt: (text, options) =>
         new Promise<boolean | "handled" | "queued">((resolve, reject) => {
+          assertResourcesReady();
           const extension = registeredExtensionCommandText(text, listSessionSlashCommands(session));
           // 还在跑就不要进 Pi。裸 prompt 会抛 "already processing"，
           // 推迟执行的那次 rejection 接不住，进程会直接退出。
@@ -743,14 +784,17 @@ export function createSdkSessionFactory(
       },
       waitTurn: () => lastTurn,
       steer: async (text, images) => {
+        assertResourcesReady();
         await session.steer(preparePromptText(text), images);
       },
       followUp: async (text, images) => {
+        assertResourcesReady();
         await session.followUp(preparePromptText(text), images);
       },
       cancelSteering: (input) => inputIdentity.cancelSteering(input),
       abort: () => session.abort(),
       continueAfterError: () => {
+        if (reloadFailure) return Promise.reject(reloadFailure);
         if (session.isStreaming) return Promise.reject(new Error("still running"));
         const prepared = omitFailedAssistantForContinue({
           sessionManager: session.sessionManager,
@@ -792,17 +836,26 @@ export function createSdkSessionFactory(
       readManagedProcessOutput: (workId: string) =>
         processes?.output(workId) ?? Promise.resolve({ kind: "unavailable" as const, workId }),
       compact: async () => {
+        assertResourcesReady();
         await session.compact();
       },
       contextUsage: () => readPiContextUsage(session, piCoding().formatSkillsForPrompt),
-      captureAbandonedBranch: (request) => captureAbandonedBranch(session, request),
-      summarizeAbandonedBranch: (captured, options) =>
-        summarizeAbandonedBranch(
+      captureAbandonedBranch: (request) => {
+        assertResourcesReady();
+        return captureAbandonedBranch(session, request);
+      },
+      summarizeAbandonedBranch: async (captured, options) => {
+        assertResourcesReady();
+        return summarizeAbandonedBranch(
           session,
           captured as Parameters<typeof summarizeAbandonedBranch>[1],
           options,
-        ),
-      navigateTree: (targetId, options) => session.navigateTree(targetId, options),
+        );
+      },
+      navigateTree: async (targetId, options) => {
+        assertResourcesReady();
+        return session.navigateTree(targetId, options);
+      },
       abortBranchSummary: () => {
         session.abortBranchSummary();
       },
@@ -845,6 +898,7 @@ export function createSdkSessionFactory(
       matchUserEntry: (text) =>
         resolveSessionEntry(session.sessionManager, "", { text, role: "user" }),
       setModel: async (provider, modelId, thought) => {
+        assertResourcesReady();
         if (isolated) {
           const next = { providerId: provider, modelId, thought };
           selections.set(session.sessionId, next);
@@ -858,6 +912,7 @@ export function createSdkSessionFactory(
         return true;
       },
       setThinkingLevel: (level) => {
+        assertResourcesReady();
         session.setThinkingLevel(level);
         for (const key of [session.sessionId, input.sessionId]) {
           const current = selections.get(key);
@@ -870,6 +925,14 @@ export function createSdkSessionFactory(
       setSessionName: (name) => {
         session.setSessionName(name);
       },
+      setSteeringMode: (mode) => {
+        assertResourcesReady();
+        session.setSteeringMode(mode);
+      },
+      setFollowUpMode: (mode) => {
+        assertResourcesReady();
+        session.setFollowUpMode(mode);
+      },
       setUiDesignMode: (enabled) => {
         uiDesign.setEnabled(enabled);
       },
@@ -880,7 +943,10 @@ export function createSdkSessionFactory(
       toolLoadout: {
         getToolDefinition: (name) => session.getToolDefinition(name),
         getActiveToolNames: () => session.getActiveToolNames(),
-        setActiveToolsByName: (names) => session.setActiveToolsByName(names),
+        setActiveToolsByName: (names) => {
+          assertResourcesReady();
+          session.setActiveToolsByName(names);
+        },
       },
       bindUi: async (ui) => {
         try {
