@@ -25,6 +25,8 @@
 - 判定先看还有没有在跑的工具；explore 的父阶段会跨过子工具 success，所以这块是当前阶段时，落定的子工具仍报它的动作。没有在跑的工具才取最后一条看得见的行，空的思考行（`reasoning_start/end` 的空 block）不参与。
 - 轮尾运行行是「转圈图标 + 工时 + 次数」，例如 `⟳ 用时 2 分 11 秒 · 调用 20 次工具`（`chat.loading.workStats`）。不再把「工作中」写成文字：转圈本身就够表达在跑，前面再顶一个词只是冗余。工时是本轮净工时，次数按整轮 `assistantWorkRows` 的 `toolCall` 行累计，用户中途插话形成多段也合计整轮。
 - 图标和数字都用中性色阶：图标 `text-foreground-subtle` 实色转圈，数字走与工作块标题同一套扫光（`zcode-working-shimmer`，底色 `foreground-subtle`、高光 `foreground`）。扫光是 `background-clip: text`，只包数字，不能包住图标。秒数走等宽数字位，宽度不跳。
+- 重试提示沿用轮尾运行行的样式：同一个中性色转圈图标、`text-ui-base`、`gap-1.5` 和 `zcode-working-shimmer`，不再额外增加高度、横向内边距、字重或另一套渐变。第一次重试就展示次数，存在失败记录时仍可点击展开详情。
+- 重试提示只读 Host 的 `control.apiRetry`。Host 恢复输出并清空该字段后，当前行立即恢复工时 / 工具次数；UI 不保留重试状态副本，不用计时器或历史正文猜测恢复。历史轮不展示当前会话重试状态。
 - 中断轮的「已停止」挂在最后一块工具块上。
 - 没有可折叠的工具块可切时（例如一轮只有正文），状态行同样只报动作（「正在回答」），工时和次数仍只在轮尾。
 - 时长报的是净工作时间：「这个活干了多久」，不是用户等了多久。权限审批、`ask_user_question` 提问和 workspace hook 审核的等待不算工时。等待区间由 CLI 投影按 `permission_requested`/`permission_resolved`、`workspace_hook_review_requested`/`workspace_hook_review_settled` 的事件时间戳累计，客户端不自行判断谁在等。运行中整轮用 `waitedMs` 加当前 `waitingSince` 继续扣，等待期间秒数不走。

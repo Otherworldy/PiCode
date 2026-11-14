@@ -35,6 +35,7 @@ import { logger } from "@/logger.js";
 import {
   ChevronDownIcon,
   HandIcon,
+  Loader2Icon,
   NotepadText,
   ShieldAlertIcon,
   ShieldCheckIcon,
@@ -121,14 +122,15 @@ export function ChatApiRetryStatus({
 
   return (
     <span
-      className="inline-flex h-7 items-center whitespace-nowrap px-1 text-ui-base"
+      className="inline-flex items-center gap-1.5 text-ui-base text-foreground-subtle"
       title={retryTitle}
     >
-      {/* Retry 需要保留 ToolCall/Thinking 的字号、扫光节奏和低透明度移动低谷，
-      但作为次级运行状态不应使用同等的纯黑/纯白峰值；这里只将峰值降到 secondary 文本色。 */}
-      <span className="animated-gradient-text animated-gradient-text-subtle font-medium">
-        {retryLabel}
-      </span>
+      {/* 重试沿用普通运行行的样式；扫光只包文字，避免图标因文字裁剪而透明。 */}
+      <Loader2Icon
+        aria-hidden
+        className="size-3.5 shrink-0 animate-spin motion-reduce:animate-none"
+      />
+      <span className="zcode-working-shimmer">{retryLabel}</span>
     </span>
   );
 }

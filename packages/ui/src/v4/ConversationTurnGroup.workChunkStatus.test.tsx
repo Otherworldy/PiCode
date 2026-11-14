@@ -1,6 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { ConversationRow, TurnHeaderRow } from "@picode/shared/picode-protocol-v4";
+import type {
+  ApiRetryState,
+  ConversationRow,
+  TurnHeaderRow,
+} from "@picode/shared/picode-protocol-v4";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import zhCN from "@/i18n/locales/zh-CN.js";
 import { DEFAULT_CODE_PREVIEW_SETTINGS } from "@/lib/codePreviewSettings.js";
@@ -97,7 +101,11 @@ function twoChunkRows(): ConversationRow[] {
   ];
 }
 
-function renderTurn(rows: readonly ConversationRow[], nowMs = STARTED_AT + TURN_ACTIVE_MS): string {
+function renderTurn(
+  rows: readonly ConversationRow[],
+  nowMs = STARTED_AT + TURN_ACTIVE_MS,
+  apiRetry: ApiRetryState | null = null,
+): string {
   const unit = buildConversationTurnRenderUnits(rows, { nowMs, sessionPhase: "running" })[0];
   if (!unit) throw new Error("missing render unit");
   const context: ConversationRowRenderContext = {
@@ -107,7 +115,7 @@ function renderTurn(rows: readonly ConversationRow[], nowMs = STARTED_AT + TURN_
   };
   return renderToStaticMarkup(
     <ZCodeIntlProvider initialLocale="zh-CN">
-      <ConversationTurnGroup unit={unit} context={context} />
+      <ConversationTurnGroup unit={unit} context={context} apiRetry={apiRetry} />
     </ZCodeIntlProvider>,
   );
 }
@@ -160,6 +168,51 @@ function loadingSlotHtml(html: string): string {
   const start = html.lastIndexOf("<span class=", marker);
   return html.slice(start, html.indexOf("</div>", marker));
 }
+
+describe("重试状态沿用轮尾运行行", () => {
+  const retry: ApiRetryState = {
+    attempt: 1,
+    maxAttempts: 11,
+    nextRetryAt: STARTED_AT + TURN_ACTIVE_MS + 10_000,
+    reasonCode: "rate_limit",
+  };
+  const statusClass = "inline-flex items-center gap-1.5 text-ui-base text-foreground-subtle";
+  const spinnerClass = "size-3.5 shrink-0 animate-spin motion-reduce:animate-none";
+
+  it.each([undefined, [{ attempt: 1, message: "HTTP 429" }]])(
+    "有无失败记录都从第一次重试起展示相同的中性转圈与文字扫光：%j",
+    (failures) => {
+      const html = renderTurn(twoChunkRows(), undefined, { ...retry, failures });
+      const marker = html.indexOf('data-zcode-chat-loading-slot="true"');
+      expect(marker).toBeGreaterThanOrEqual(0);
+      const slot = html.slice(marker, html.indexOf("</div>", marker));
+
+      expect(slot).toContain(`class="${statusClass}" title="正在重试… 1/10"`);
+      expect(slot).toContain("lucide-loader-circle");
+      expect(slot).toContain(spinnerClass);
+      expect(slot).toContain('<span class="zcode-working-shimmer">正在重试… 1/10</span>');
+      expect(slot).not.toMatch(/h-7|px-1|font-medium|animated-gradient/);
+      expect(slot).not.toMatch(/<svg[^>]*zcode-working-shimmer/);
+      expect(slot.includes("<button")).toBe(Boolean(failures?.length));
+      expect(slot).not.toContain("<ul");
+      expect(html).not.toContain('data-testid="chat-loading"');
+    },
+  );
+
+  it("已有 assistant 正文时，apiRetry 清空就恢复本轮工时和工具次数", () => {
+    const rows = twoChunkRows();
+    const retrying = renderTurn(rows, undefined, retry);
+    expect(retrying).toContain("继续");
+    expect(retrying).toContain("正在重试… 1/10");
+
+    const resumed = renderTurn(rows, undefined, null);
+    expect(resumed).toContain("继续");
+    expect(resumed).not.toContain("正在重试");
+    expect(loadingSlotLabel(resumed)).toBe("用时 14 分 6 秒 · 调用 2 次工具");
+    expect(loadingSlotHtml(resumed)).toContain(statusClass);
+    expect(loadingSlotHtml(resumed)).toContain(spinnerClass);
+  });
+});
 
 describe("工作块折叠标题的工时口径", () => {
   it("整轮还在跑时，工作块标题报当前动作，工时和次数只报在轮尾", () => {

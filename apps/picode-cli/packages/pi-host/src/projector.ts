@@ -586,11 +586,9 @@ export class PiToV4Projector {
       case "auto_retry_start":
         return this.noteRetry(event);
       case "auto_retry_end":
-        if (!event.success || !this.snapshot.control.apiRetry) return [];
+        if (!event.success) return [];
         this.retryFailures = [];
-        return this.applyState({
-          control: { ...this.snapshot.control, apiRetry: null },
-        });
+        return this.clearRetryStatus();
       case "agent_settled":
         return this.settleTurn(event.at);
       case "message_end": {
@@ -602,7 +600,10 @@ export class PiToV4Projector {
         // 两条 delta 的先后不影响行序，但先写正文再写轮头更新更好读。
         const usage = this.recordTurnUsage(event.message);
         const flushed = this.flushAssistant(event.message.content);
-        return usage.length === 0 ? flushed : [...flushed, ...usage];
+        const succeeded =
+          event.message.stopReason !== "error" && event.message.stopReason !== "aborted";
+        if (succeeded) this.retryFailures = [];
+        return [...flushed, ...usage, ...(succeeded ? this.clearRetryStatus() : [])];
       }
       case "message_start":
         if (event.message.role === "assistant") {
@@ -629,7 +630,16 @@ export class PiToV4Projector {
               event.message.picodeInput,
             )
           : this.appendCustomMessageEvent(event);
-      case "message_update":
+      case "message_update": {
+        const delta = event.assistantMessageEvent;
+        const hasOutput =
+          ((delta.type === "text_delta" ||
+            delta.type === "thinking_delta" ||
+            delta.type === "toolcall_delta") &&
+            delta.delta.length > 0) ||
+          ((delta.type === "toolcall_start" || delta.type === "toolcall_delta") &&
+            Boolean(delta.id || delta.toolName)) ||
+          (delta.type === "toolcall_end" && Boolean(delta.toolCall?.id || delta.toolCall?.name));
         // 首 token 时刻只能在这里打点：Pi 给 usage 和 durationMs，但不给首输出
         // 时刻，而吐字速度要用它把等待时间从分母里扣掉。toolCall 也是一种输出，
         // 先调工具再补正文的消息不能等到 text_delta 才算首 token。
@@ -643,7 +653,9 @@ export class PiToV4Projector {
         ) {
           this.firstTokenAt = Date.now();
         }
-        return this.stream(event.assistantMessageEvent);
+        // Pi 到 message_end 才通知重试成功；首个真实输出就应恢复运行提示，失败记录仍留到请求成功。
+        return [...this.stream(delta), ...(hasOutput ? this.clearRetryStatus() : [])];
+      }
       case "tool_execution_start":
         return this.toolStart(event);
       case "tool_execution_update":
@@ -707,6 +719,12 @@ export class PiToV4Projector {
       createdAt: this.stamp ?? Date.now(),
       createdAtSeq: rowId,
     };
+  }
+
+  private clearRetryStatus(): ConversationDelta[] {
+    return this.snapshot.control.apiRetry
+      ? [{ op: "state.updated", patch: { control: { ...this.snapshot.control, apiRetry: null } } }]
+      : [];
   }
 
   private noteRetry(

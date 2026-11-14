@@ -452,7 +452,11 @@ function ConversationTimelineImpl({
   // 每秒一次空转重渲染。带 activeMs / endedAt 的轮次同样不吃 nowMs。
   const liveUnitTickable = useMemo(() => {
     const tail = liveUnitIndex === null ? undefined : renderUnits[liveUnitIndex];
-    return tail !== undefined && tail.header?.activeMs === undefined && tail.header?.endedAt === undefined;
+    return (
+      tail !== undefined &&
+      tail.header?.activeMs === undefined &&
+      tail.header?.endedAt === undefined
+    );
   }, [liveUnitIndex, renderUnits]);
   const turnNavigatorQueryRowIds = useMemo(
     () =>

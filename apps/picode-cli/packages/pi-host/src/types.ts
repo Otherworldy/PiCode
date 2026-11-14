@@ -13,8 +13,8 @@ export type PiAssistantDelta =
   | { type: "thinking_start"; contentIndex: number }
   | { type: "thinking_delta"; contentIndex: number; delta: string }
   | { type: "thinking_end"; contentIndex: number; content?: string }
-  | { type: "toolcall_start"; contentIndex: number; id: string; toolName?: string }
-  | { type: "toolcall_delta"; contentIndex: number; delta: string }
+  | { type: "toolcall_start"; contentIndex: number; id?: string; toolName?: string }
+  | { type: "toolcall_delta"; contentIndex: number; delta: string; id?: string; toolName?: string }
   | {
       type: "toolcall_end";
       contentIndex: number;
@@ -374,7 +374,24 @@ export type CreatePiSession = (input: CreatePiSessionInput) => Promise<PiSession
 
 export function asPiEvent(event: unknown): PiHostEvent | null {
   if (!event || typeof event !== "object" || !("type" in event)) return null;
-  return event as PiHostEvent;
+  const mapped = event as PiHostEvent;
+  if (mapped.type !== "message_update") return mapped;
+  const delta = mapped.assistantMessageEvent;
+  if (!delta || (delta.type !== "toolcall_start" && delta.type !== "toolcall_delta")) return mapped;
+  // Pi 工具身份在 partial 当前块里，不能只断言成顶层字段，否则恢复输出仍挂着重试提示。
+  const partial = (delta as { partial?: { content?: unknown[] } }).partial;
+  const tool = Array.isArray(partial?.content)
+    ? (partial.content[delta.contentIndex] as Record<string, unknown> | undefined)
+    : undefined;
+  if (!tool || tool.type !== "toolCall") return mapped;
+  return {
+    ...mapped,
+    assistantMessageEvent: {
+      ...delta,
+      id: delta.id || (typeof tool.id === "string" ? tool.id : undefined),
+      toolName: delta.toolName || (typeof tool.name === "string" ? tool.name : undefined),
+    },
+  };
 }
 
 /** 上下文环跟着 Pi getContextUsage。流式合并，整轮结束才推就晚了。 */
