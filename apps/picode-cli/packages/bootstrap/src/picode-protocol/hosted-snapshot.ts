@@ -85,7 +85,8 @@ export function hostedProtocolSnapshot(
       model: {
         ...(model ? { current: model, lastUsed: model } : {}),
         available: hosted.listModels().map((item) => ({
-          ref: item,
+          // 目录项含 name；整对象透传会被严格 schema 拒绝，索引缺行后会话无法删除。
+          ref: { providerId: item.providerId, modelId: item.modelId },
           label: item.modelId,
           providerLabel: item.providerId,
           properties: {

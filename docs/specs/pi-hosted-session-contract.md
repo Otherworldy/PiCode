@@ -15,6 +15,7 @@ PiCode 的 Pi 会话协议路径不再通过 `createPiHostedApp` 把 `HostedSess
 - 文件回退、附件 IO、模式持久化、标题与历史恢复属于真实应用行为，应保留在清晰的协议应用操作中；不为它们引入新的总门面。
 - 发送回执表示准入结果，执行完成使用真实 `Promise<void>` 或现有真实结果。不得用 sessionId 冒充新的 turnId 或构造空 `TurnResult`。
 - 模型事实读 `HostedSession.getCurrentModelSelection()`；busy / 常驻回收读 hosted session 的实际事实。扩展命令、设计模式、插件通知、后台工作等直接使用类型明确的能力，移除 `app as { piHosted?: ... }` 逃生口。
+- hosted snapshot 的 `settings.model.available[].ref` 只输出 `ModelSelection` 允许的模型标识字段；模型目录中的 `name` 等展示元数据不能整对象透传到严格的引用 schema。模型列表带名称时，`session/read` 仍应通过客户端校验，让 task-index 回源同步及依赖该索引的删除路由保持可用，不放宽 source/identity 校验。
 
 ```mermaid
 sequenceDiagram
@@ -60,6 +61,7 @@ Desktop `desktop-continuous` 与手机 `web-remote-replayable` 仍从同一会�
 7. SDK 创建或绑定存储读取挂起时，shutdown 保持 pending；创建返回后的真实 dispose 完成、绑定收尾结束后才完成关闭，迟到会话不登记。
 8. 独立旧 Core API 的实际调用者仍可类型检查；不顺带恢复已移除产品功能。
 9. 模型检查后变 busy 的提升不入队、不 steer，原项保持一份；并发提升和已在读模型的 Registry drain 不能重复消费或超车。compact 立即失败时后续项保留且 `autoDrain=false`，释放消费 claim 不重新放行。
+10. 模型目录项包含 `name` 时，Desktop 与 replayable 的既有会话读取均通过完整快照 schema 校验，`available[].ref` 不包含展示字段；有无图片都不改变这一契约。
 
 ## 验证入口
 

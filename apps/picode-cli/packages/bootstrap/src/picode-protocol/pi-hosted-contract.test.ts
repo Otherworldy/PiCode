@@ -182,6 +182,29 @@ test("Pi snapshot reads preserve both delivery profiles without a legacy runtime
   }
 });
 
+test("Pi snapshot model references exclude catalog display metadata for both delivery profiles", async () => {
+  const f = await fixture();
+  try {
+    f.pi.listModels = () => [
+      { providerId: "test", modelId: "initial", name: "Generated model display name" },
+    ];
+    for (const deliveryKind of ["desktop-continuous", "web-remote-replayable"] as const) {
+      const result = zcodeSessionStateSnapshotSchema.parse(
+        await readSession(f.context, {
+          sessionId: f.hosted.sessionId,
+          deliveryKind,
+        }),
+      );
+      assert.deepEqual(result.settings.model.available[0]?.ref, {
+        providerId: "test",
+        modelId: "initial",
+      });
+    }
+  } finally {
+    await f.close();
+  }
+});
+
 test("resident eligibility follows hosted activity even when the projector is draft", async () => {
   const f = await fixture();
   try {
