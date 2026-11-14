@@ -39,14 +39,20 @@ export function extractPrebuiltArchive({ archivePath, archiveExt, extractDir, cw
   mkdirSync(extractDir, { recursive: true });
   if (archiveExt === "zip") {
     if (process.platform === "win32") {
-      runCommand("powershell.exe", [
-        "-NoProfile",
-        "-NonInteractive",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        `Expand-Archive -LiteralPath '${archivePath.replaceAll("'", "''")}' -DestinationPath '${extractDir.replaceAll("'", "''")}' -Force`,
-      ]);
+      // Bugfix: GitHub win x64 runner 的 powershell.exe 会先加载 PowerShell 7 的
+      // Microsoft.PowerShell.Archive，模块内部调用的 ExtractToDirectory 覆盖重载在
+      // Windows PowerShell 5.1 的 .NET Framework 上不存在，Expand-Archive 因此必失败
+      // （win arm64 runner 未装 PS7 模块，同脚本可用）。系统自带 bsdtar 支持 zip，
+      // 用绝对路径调用可避开 PATH 上 Git Bash 的 GNU tar。
+      runCommand(
+        join(
+          process.env.SystemRoot ?? process.env.windir ?? "C:\\Windows",
+          "System32",
+          "tar.exe",
+        ),
+        ["-xf", toTarPosixPath(archivePath), "-C", toTarPosixPath(extractDir)],
+        { cwd: cwd ?? process.cwd() },
+      );
       return;
     }
 
