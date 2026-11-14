@@ -1,5 +1,47 @@
 # Changelog
 
+## [4.0.0](https://github.com/Otherworldy/PiCode/compare/v3.21.1...v4.0.0) (2026-11-14)
+
+### 新功能
+
+* **pi-host** 压缩新图片并记录请求诊断 ([fa99f97](https://github.com/Otherworldy/PiCode/commit/fa99f97dd01b9667f1630e4d5063f380f63922db))
+
+* **pi-host** reload current session resources ([2a7c134](https://github.com/Otherworldy/PiCode/commit/2a7c13454df93ce290ab08c58c86c81ef2789958))
+
+
+### 问题修复
+
+* 统一 PiCode 命令与工程命名 ([d206d7d](https://github.com/Otherworldy/PiCode/commit/d206d7dd0aa100aaa07df0950349c0883717828b))
+  - 主 CLI 使用 picode，Node 包保留同入口 zcode 别名；Server 使用独立 picode-server，Linux 桌面使用 picode-desktop / picode-desktop-preview。
+  - 同步 @picode scope、exports、workspace/构建/CI、架构策略和技能引用，不升级依赖版本。
+  - 安装器保留现有旧命令，通过旧 runner 兼容已有 wrapper；新主命令被无关文件或符号链接占用时拒绝安装。
+  - 保留既有系统服务 launcher、运行时文件名、数据迁移、wire/环境变量、缓存及系统安装身份。
+  - 补充命名 spec，以及安装器、Server 发行兼容和桌面身份测试。
+
+* **pi-host** 模型目录引用不再透传展示字段 ([8a64017](https://github.com/Otherworldy/PiCode/commit/8a64017d3d7b44c1397bb90434e6095bb03e0a11))
+  - Desktop continuous 与手机 replayable 共用同一份快照构造，两条链路都只发模型标识字段。
+  - 补 bootstrap 契约测试：目录带展示名时两种 delivery profile 的 `ref` 仍只含模型标识，整份快照通过校验。
+  - hosted session 契约补该约束与验收条目，明确不放宽 source/identity 校验。
+
+* **pi-host** 修复运行中引导输入的交付与持久化 ([721a9a0](https://github.com/Otherworldy/PiCode/commit/721a9a04ad08bafd7f00e620ec4e55eace91f160))
+
+* **pi-host** 修正冷恢复档位与输入路由 ([e193039](https://github.com/Otherworldy/PiCode/commit/e19303965f2ab91867bd70ab8e89f98fd9f3b0bb))
+
+* **pi-host** 支持取消待生效引导输入 ([d5a91ce](https://github.com/Otherworldy/PiCode/commit/d5a91ce80ed294dfd2f075b15d4e399990d229c6))
+
+* **session** 防止总结后的会话标题回退 ([14ef82f](https://github.com/Otherworldy/PiCode/commit/14ef82f1bc37ff099944deecb7fa131ed0eb8076))
+
+* **ui** 重试提示随恢复输出消失并沿用运行行样式 ([36dc8c1](https://github.com/Otherworldy/PiCode/commit/36dc8c160a84045874577823a65366606aa9b1c6))
+  - 投影器在首个非空正文、思考或工具输出的同批增量里清空 `control.apiRetry`，失败记录保留到请求成功；迟到的成功 `auto_retry_end` 幂等清理，恢复后的 snapshot/resume 不带旧提示。
+  - `asPiEvent` 从当前 partial 工具块补 `id` / `toolName`，保留已有顶层字段兼容；空壳工具事件不清提示，也不再抛错。
+  - 重试提示改用轮尾运行行的中性转圈与文字扫光，去掉额外高度、横向内边距、字重和另一套渐变；扫光只包文字，图标保持实色。
+  - UI 只读 Host 的 `apiRetry`，不保留副本、不用计时器猜恢复；补投影器重试测试与轮尾渲染断言。
+
+
+### 重构
+
+* **pi-host** 移除旧会话应用门面 ([adbd312](https://github.com/Otherworldy/PiCode/commit/adbd3122f2aa2a23b9cd6a4c806eca769050510b))
+
 ## [3.21.1](https://github.com/Otherworldy/PiCode/compare/v3.21.0...v3.21.1) (2026-11-11)
 
 ### 新功能
